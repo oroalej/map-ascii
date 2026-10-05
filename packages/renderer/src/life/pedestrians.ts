@@ -5,6 +5,7 @@ import {
   bodyCorners,
   bodyHitsPolygon,
   corridorDistance,
+  pointInside,
   type Body,
   type Occupancy,
   type Point,
@@ -309,21 +310,15 @@ export class PedestrianCrossings {
    */
   entered(from: Point, to: Point): PedestrianCrossing[] {
     const out: PedestrianCrossing[] = [];
-    // Crossing quads keep their four corners without repeating the first (`prepare`).
-    const inside = (c: PedestrianCrossing, p: Point) => {
-      const ring = c.polygon[0]!;
-      let odd = false;
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        const a = ring[i]!,
-          b = ring[j]!;
-        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x)
-          odd = !odd;
-      }
-      return odd;
-    };
     for (const key of binKeys([to]))
       for (const c of this.index.get(key) ?? [])
-        if (!c.controlled && !out.includes(c) && inside(c, to) && !inside(c, from)) out.push(c);
+        if (
+          !c.controlled &&
+          !out.includes(c) &&
+          pointInside(to, c.polygon) &&
+          !pointInside(from, c.polygon)
+        )
+          out.push(c);
     return out;
   }
   constructor(
@@ -345,7 +340,7 @@ export class PedestrianCrossings {
     for (const area of geo.areas ?? []) {
       yield;
       if (area.kind !== 'crossing') continue;
-      const ring = area.rings[0];
+      const ring = (area.crossingStripes ?? area.rings)[0];
       if (!ring || ring.length < 4) continue;
       const polygon = preparedArea([
         ring.slice(0, 4).map((p) => ({ x: p.x / this.pm, y: p.y / this.pm })),

@@ -86,6 +86,21 @@ export function laneBend(spec: LaneSpec, terrain: LaneTerrain): Float32Array | u
     total += l;
   }
   if (!segments.length) return;
+  // The padded ordinary body sweeps this corridor. Off-road buildings inside the broad bbox
+  // cannot require a bend when no segment's ordinary lane touches them.
+  if (
+    !segments.some((g) =>
+      terrain.hits({
+        x: g.x + (g.hx * g.length) / 2 - g.hy * base,
+        y: g.y + (g.hy * g.length) / 2 + g.hx * base,
+        hx: g.hx,
+        hy: g.hy,
+        length: g.length + length,
+        width,
+      }),
+    )
+  )
+    return;
   const samples = Math.floor(total / LANE_BEND.sampleM) + 1;
   const need = new Float32Array(samples);
   const body: Body = { x: 0, y: 0, hx: 0, hy: 0, length, width };

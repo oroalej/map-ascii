@@ -228,6 +228,8 @@ export type LifeGeometry = {
 };
 
 export type LifeArea = {
+  /** Mapped stripe boundary for crossing decisions; `rings` retains the wider walking cut. */
+  crossingStripes?: TilePoint[][];
   kind:
     'parking' | 'blocked' | 'vehicle-blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
   rings: TilePoint[][];
@@ -524,8 +526,20 @@ export class LifeBuilder {
     }
   }
 
-  area(kind: LifeArea['kind'], rings: readonly (readonly TilePoint[])[], water = false) {
-    this.areas.push({ kind, water, rings: rings.map((r) => r.map((p) => ({ ...p }))) });
+  area(
+    kind: LifeArea['kind'],
+    rings: readonly (readonly TilePoint[])[],
+    water = false,
+    crossingStripes?: readonly (readonly TilePoint[])[],
+  ) {
+    this.areas.push({
+      kind,
+      water,
+      rings: rings.map((r) => r.map((p) => ({ ...p }))),
+      ...(crossingStripes && {
+        crossingStripes: crossingStripes.map((r) => r.map((p) => ({ ...p }))),
+      }),
+    });
   }
 
   roost(p: TilePoint, habitat: Habitat = Habitat.park) {

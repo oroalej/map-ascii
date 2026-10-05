@@ -66,6 +66,7 @@ import {
   TURN_AROUND,
   WALK_ASIDE,
   FILLET,
+  FILLET_RUN_ON_M,
   JUNCTION,
   kinematicsOf,
   laneOffset,
@@ -181,6 +182,7 @@ import {
   PolygonIndex,
   segmentBody,
   memberSize,
+  boundsOf,
   animalSize,
   type Body,
   type Point,
@@ -347,13 +349,15 @@ function acrossVertex(a: number, b: number, x: number): number {
   const delta = b - a;
   if (Math.abs(delta) < 1e-3) return x < 0 ? a : b;
   // A smoothstep's steepest slope is 1.5× its mean.
-  const half = Math.min(
-    LANE_BEND.handoffMaxM / 2,
-    Math.max(1, (0.75 * Math.abs(delta)) / LANE_BEND.slope),
-  );
+  const half = handoffHalf(a, b);
   const u = Math.max(0, Math.min(1, (x + half) / (2 * half)));
   return a + delta * u * u * (3 - 2 * u);
 }
+
+const handoffHalf = (a: number, b: number) =>
+  Math.abs(b - a) < 1e-3
+    ? 0
+    : Math.min(LANE_BEND.handoffMaxM / 2, Math.max(1, (0.75 * Math.abs(b - a)) / LANE_BEND.slope));
 
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
@@ -1026,12 +1030,17 @@ export class TileLife {
   private laneTerrain?: LaneTerrain;
   /** Lane bends by line, direction, vehicle and lane; null when the ordinary lane is clear. */
   private readonly laneBends = new Map<number, Float32Array | null>();
+  private readonly bendIntervals = new WeakMap<Float32Array, readonly [number, number]>();
   /** Per line: 0 not yet looked at, 1 no fixed obstacle anywhere near it, 2 some near it. */
   private laneNear: Uint8Array = new Uint8Array(0);
   /** The same per vertex, for corner curves (`clearCorner`). */
   private cornerNear: Uint8Array = new Uint8Array(0);
   /** Corner curves already checked against fixed obstacles (`clearCorner`). */
   private readonly clearCorners = new Map<string, Curve | null>();
+  private transientCorners = new WeakMap<Mover, { key: string; curve: Curve | undefined }>();
+  private laneQueryRegion?: readonly [number, number, number, number];
+  /** Decisions made after line entry are shared by this mover's clearance retries. */
+  private readonly enteredExits = new Map<number, number>();
   private time = 0;
   private junctions: { x: number; y: number; radius: number }[] = [];
 
@@ -1242,7 +1251,6 @@ export class TileLife {
     return { line, distance };
   }
 
-  /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
   /**
    * A crossing, or another short walking line, joined to no other walking line at either end (no
    * mapped sidewalk): nobody lives there, or they would only pace back and forth across the road.
@@ -1309,6 +1317,7 @@ export class TileLife {
     return Math.abs(half - reach - CROSSING_WALK_PAST_M * this.perMeter) < 0.5 * this.perMeter;
   }
 
+  /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
   private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
@@ -1436,8 +1445,32 @@ export class TileLife {
     this.laneTerrain = terrain;
     this.laneBends.clear();
     this.clearCorners.clear();
+    this.transientCorners = new WeakMap();
     this.laneNear = new Uint8Array(this.geo.kinds.length);
     this.cornerNear = new Uint8Array(this.geo.coords.length / 2);
+  }
+
+  /** All lane and corner queries fit inside these tile-metre bounds. Geometry is immutable. */
+  laneQueryBounds(): readonly [number, number, number, number] {
+    if (this.laneQueryRegion) return this.laneQueryRegion;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
+    for (let line = 0; line < this.geo.kinds.length; line++) {
+      if (this.geo.kinds[line]! > LifeLine.roadMinor) continue;
+      const reach =
+        this.roadWidth(line) / 2 + ROAD_AVOID.shoulder + LONGEST_ROAD_VEHICLE_M + FILLET_RUN_ON_M;
+      for (let v = this.first(line); v <= this.last(line); v++) {
+        const x = this.geo.coords[v * 2]! / this.perMeter,
+          y = this.geo.coords[v * 2 + 1]! / this.perMeter;
+        x0 = Math.min(x0, x - reach);
+        y0 = Math.min(y0, y - reach);
+        x1 = Math.max(x1, x + reach);
+        y1 = Math.max(y1, y + reach);
+      }
+    }
+    return (this.laneQueryRegion = [x0, y0, x1, y1]);
   }
 
   /** How a vehicle's lane bends around fixed obstacles along `line` (lane-clearance.ts). */
@@ -1504,24 +1537,9 @@ export class TileLife {
    * obstacle carries across their shared vertex. At a turn the corner's own curve decides.
    */
   private straightOn(inLine: number, inDir: 1 | -1, outLine: number, outDir: 1 | -1): boolean {
-    const c = this.geo.coords;
-    const a = inDir === 1 ? this.last(inLine) : this.first(inLine);
-    const b = a - inDir;
-    const p = outDir === 1 ? this.first(outLine) : this.last(outLine);
-    const q = p + outDir;
-    const ix = c[a * 2]! - c[b * 2]!,
-      iy = c[a * 2 + 1]! - c[b * 2 + 1]!;
-    const ox = c[q * 2]! - c[p * 2]!,
-      oy = c[q * 2 + 1]! - c[p * 2 + 1]!;
-    const li = Math.hypot(ix, iy),
-      lo = Math.hypot(ox, oy);
-    return li > 0 && lo > 0 && (ix * ox + iy * oy) / (li * lo) > Math.cos(Math.PI / 4);
-  }
-
-  /** A vehicle's ordinary lane on `line`, m right of centre. */
-  private laneBase(m: Mover, line: number): number {
-    const spec = VEHICLES[m.vehicle!];
-    return laneOffset(this.roadWidth(line), spec.width, m.lane, spec.curb);
+    const [ix, iy] = this.endHeading(inLine * 2 + (inDir === 1 ? 1 : 0));
+    const [ox, oy] = this.endHeading(outLine * 2 + (outDir === 1 ? 0 : 1));
+    return -ix * ox - iy * oy > Math.cos(Math.PI / 4);
   }
 
   /** How far a vehicle's lane bends `travelled` metres along `line`, m (lane-clearance.ts). */
@@ -1546,7 +1564,7 @@ export class TileLife {
     next: number | undefined,
   ): number {
     const pm = this.perMeter;
-    const lane = this.laneBase(m, line);
+    const lane = this.mergeLane(m, line);
     let bend = this.bendOn(m, line, dir, travelled),
       shift = 0;
     if (next !== undefined && next >= 0) {
@@ -1555,7 +1573,7 @@ export class TileLife {
       const ahead = this.lineLength(line) / pm - travelled;
       if (this.straightOn(line, dir, outLine, outDir))
         bend = stronger(bend, eased(this.bendOn(m, outLine, outDir, 0), ahead));
-      shift += acrossVertex(lane, this.laneBase(m, outLine), -ahead) - lane;
+      shift += acrossVertex(lane, this.mergeLane(m, outLine), -ahead) - lane;
     }
     if (came !== undefined) {
       const inLine = came >> 1,
@@ -1563,7 +1581,7 @@ export class TileLife {
       const end = this.lineLength(inLine) / pm;
       if (this.straightOn(inLine, inDir, line, dir))
         bend = stronger(bend, eased(this.bendOn(m, inLine, inDir, end), travelled));
-      shift += acrossVertex(this.laneBase(m, inLine), lane, travelled) - lane;
+      shift += acrossVertex(this.mergeLane(m, inLine), lane, travelled) - lane;
     }
     return lane + shift + bend;
   }
@@ -1590,27 +1608,51 @@ export class TileLife {
     );
   }
 
-  /** Whether a vehicle's lane changes along its line or at its hand-offs (bends, lane widths). */
-  offsetVaries(m: Mover): boolean {
+  /** Whether lane variation can affect this entire metre interval around a vehicle. */
+  offsetVaries(m: Mover, ahead = 0, behind = 0): boolean {
     if (m.kind !== 'vehicle' || !m.vehicle || m.train) return false;
-    if (m.roadShift !== undefined || this.laneBendOf(m, m.line, m.dir)) return true;
-    const lane = this.laneBase(m, m.line);
+    if (m.roadShift !== undefined) return true;
+    const length = this.lineLength(m.line) / this.perMeter,
+      travelled = this.travelled(m),
+      low = Math.max(0, travelled - behind),
+      high = Math.min(length, travelled + ahead);
+    const profile = this.laneBendOf(m, m.line, m.dir);
+    if (profile) {
+      let interval = this.bendIntervals.get(profile);
+      if (!interval) {
+        let first = Infinity,
+          last = -Infinity;
+        for (let i = 0; i < profile.length; i++)
+          if (profile[i] !== 0) {
+            first = Math.min(first, (i - 1) * LANE_BEND.sampleM);
+            last = (i + 1) * LANE_BEND.sampleM;
+          }
+        this.bendIntervals.set(profile, (interval = [first, last]));
+      }
+      if (high >= interval[0] && low <= interval[1]) return true;
+    }
+    const lane = this.mergeLane(m, m.line);
     const next = m.routing?.plan?.exit ?? m.next;
     if (next !== undefined && next >= 0) {
-      const outLine = next >> 1;
-      if (
-        this.laneBendOf(m, outLine, next & 1 ? -1 : 1) ||
-        Math.abs(this.laneBase(m, outLine) - lane) > 1e-3
-      )
-        return true;
+      const outLine = next >> 1,
+        outDir = next & 1 ? -1 : 1;
+      let reach = handoffHalf(lane, this.mergeLane(m, outLine));
+      if (this.straightOn(m.line, m.dir, outLine, outDir))
+        reach = Math.max(reach, Math.abs(this.bendOn(m, outLine, outDir, 0)) / LANE_BEND.slope);
+      if (reach > 0 && high >= length - reach) return true;
     }
     const came = m.came;
     if (came === undefined) return false;
     const inLine = came >> 1;
-    return (
-      !!this.laneBendOf(m, inLine, came & 1 ? 1 : -1) ||
-      Math.abs(this.laneBase(m, inLine) - lane) > 1e-3
-    );
+    const inDir = came & 1 ? 1 : -1;
+    let reach = handoffHalf(this.mergeLane(m, inLine), lane);
+    if (this.straightOn(inLine, inDir, m.line, m.dir))
+      reach = Math.max(
+        reach,
+        Math.abs(this.bendOn(m, inLine, inDir, this.lineLength(inLine) / this.perMeter)) /
+          LANE_BEND.slope,
+      );
+    return reach > 0 && low <= reach;
   }
 
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
@@ -1758,8 +1800,8 @@ export class TileLife {
     if (!curve || m.kind !== 'vehicle' || !m.vehicle || !this.laneTerrain) return curve;
     // A turn may run on past its vertex (a long vehicle's rear clears an island before it
     // swings), leaving the outgoing segment's far end to the next fillet.
-    const longest = Math.max(full, Math.min(lo - FILLET.maxM * pm, 2 * FILLET.maxM * pm));
-    return this.clearCorner(m, vertex, inLine, outLine, curve, full, longest, build);
+    const longest = Math.max(full, Math.min(lo - FILLET.maxM * pm, FILLET_RUN_ON_M * pm));
+    return this.clearCorner(m, vertex, inLine, outLine, curve, full, longest, build, sceneOwner);
   }
 
   /**
@@ -1777,12 +1819,13 @@ export class TileLife {
     full: number,
     longest: number,
     build: (before: number, after: number) => Curve | undefined,
+    sceneOwner: Mover,
   ): Curve | undefined {
     const pm = this.perMeter;
     const spec = VEHICLES[m.vehicle!];
     if (this.cornerNear[vertex] === 0) {
       // As far as any corner curve and vehicle reach from it.
-      const reach = 2 * FILLET.maxM + LONGEST_ROAD_VEHICLE_M;
+      const reach = FILLET_RUN_ON_M + LONGEST_ROAD_VEHICLE_M;
       const x = this.geo.coords[vertex * 2]! / pm,
         y = this.geo.coords[vertex * 2 + 1]! / pm;
       this.cornerNear[vertex] = this.laneTerrain!.near(x - reach, y - reach, x + reach, y + reach)
@@ -1790,9 +1833,16 @@ export class TileLife {
         : 1;
     }
     if (this.cornerNear[vertex] === 1) return curve;
-    const steady = m.roadShift === undefined && this.scenes.curbSite(m) === undefined;
-    const key = `${vertex}/${inLine}/${outLine}/${m.vehicle}/${curve.x0}/${curve.y0}/${curve.x2}/${curve.y2}`;
+    const site = this.scenes.curbSite(sceneOwner);
+    const steady = m.roadShift === undefined && site === undefined;
+    const key =
+      `${vertex}/${inLine}/${outLine}/${m.vehicle}/${m.line}/${m.dir}/${m.lane}/${m.came}/${m.routing?.plan?.exit ?? m.next}/${m.roadShift}/${curve.x0}/${curve.y0}/${curve.x1}/${curve.y1}/${curve.x2}/${curve.y2}/${curve.before}/${curve.after}/${longest}` +
+      (site ? `/${site.x}/${site.y}/${m.x}/${m.y}` : '');
     if (steady && this.clearCorners.has(key)) return this.clearCorners.get(key) ?? undefined;
+    if (!steady) {
+      const cached = this.transientCorners.get(m);
+      if (cached?.key === key) return cached.curve;
+    }
     // The guard's own body, with a hair of room so samples between checks stay clear too.
     const body: Body = {
       x: 0,
@@ -1831,6 +1881,7 @@ export class TileLife {
       }
     }
     if (steady) this.clearCorners.set(key, found ?? null);
+    else this.transientCorners.set(m, { key, curve: found });
     return found;
   }
 
@@ -1843,7 +1894,7 @@ export class TileLife {
     out.hy = m.hy;
     if (m.kind === 'vehicle' && m.vehicle && !m.train) {
       // Where the lane moves sideways, the nose points along the way the body actually goes.
-      const slope = (m.roadYaw ?? 0) + (this.offsetVaries(m) ? this.laneSlope(m) : 0);
+      const slope = (m.roadYaw ?? 0) + (this.offsetVaries(m, 0.5, 0.5) ? this.laneSlope(m) : 0);
       if (Math.abs(slope) > 1e-4) {
         const hx = m.hx - m.hy * slope,
           hy = m.hy + m.hx * slope;
@@ -1863,7 +1914,7 @@ export class TileLife {
     }
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
     // A curve can run on past its vertex for up to twice the usual fillet (`clearCorner`).
-    const reach = 2 * FILLET.maxM * this.perMeter;
+    const reach = FILLET_RUN_ON_M * this.perMeter;
     const behind = m.d <= reach ? this.corner(m, m.from, sceneOwner) : undefined;
     if (behind && m.d <= behind.after) return curvePose(behind, m.d, out);
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
@@ -1907,10 +1958,10 @@ export class TileLife {
   private straightPedestrianSegment(m: Mover, range: number, out?: PedestrianSegment) {
     const pm = this.perMeter;
     const remaining = this.segment(m.from, m.from + m.dir) - m.d;
-    const reach = 2 * FILLET.maxM * pm;
+    const reach = FILLET_RUN_ON_M * pm;
     if (
       this.scenes.curbSite(m) === undefined &&
-      !this.offsetVaries(m) &&
+      !this.offsetVaries(m, range) &&
       remaining >= range * pm &&
       (!this.curvable[m.line] || (m.d > reach && remaining - range * pm > reach))
     ) {
@@ -2039,7 +2090,7 @@ export class TileLife {
         cursor.hy = dy / full;
         // A curb scene or a lane that moves sideways changes the offset within a segment; a
         // moving lane is followed a metre at a time so the chords keep to its bends.
-        const bends = this.offsetVaries(cursor);
+        const bends = this.offsetVaries(cursor, Math.min(remaining / pm, range - ahead));
         const vary = curbScenes || bends;
         if (
           vary ||
@@ -3325,7 +3376,12 @@ export class TileLife {
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
-  private advance(m: Mover, distance: number, junctions = true) {
+  private advance(
+    m: Mover,
+    distance: number,
+    junctions = true,
+    enteredExits?: Map<number, number>,
+  ) {
     const { coords } = this.geo;
     let left = distance;
     let moved = 0;
@@ -3362,8 +3418,10 @@ export class TileLife {
           m.d = length;
           break;
         }
-        if (junctions) this.turn(m);
-        else if (!this.continuePopulation(m)) {
+        if (junctions) {
+          this.turn(m);
+          if (enteredExits && m.kind === 'vehicle') this.prepareTurn(m, undefined, enteredExits);
+        } else if (!this.continuePopulation(m)) {
           if (m.kind === 'vehicle' && this.geo.oneway?.[m.line]) {
             m.from -= m.dir;
             m.d = length;
@@ -3473,10 +3531,10 @@ export class TileLife {
   }
 
   /** Plan before speed restrictions, so waiting traffic keeps its original intention. */
-  private prepareTurn(m: Mover, index: number) {
+  private prepareTurn(m: Mover, index?: number, enteredExits?: Map<number, number>) {
     if (!m.vehicle) return;
     if (!this.curvable[m.line]) {
-      if (hasTurnSignals(m.vehicle)) m.routing ??= this.newRouting(index);
+      if (hasTurnSignals(m.vehicle) && index !== undefined) m.routing ??= this.newRouting(index);
       return;
     }
     const vertex = m.dir === 1 ? this.last(m.line) : this.first(m.line);
@@ -3490,11 +3548,18 @@ export class TileLife {
     if (!hasTurnSignals(m.vehicle)) {
       if (remaining <= reach && m.next === undefined) {
         const options = this.exitOptions(m, vertex);
-        m.next = options.length ? options[Math.floor(this.routeRng() * options.length)]! : -1;
+        const key = m.line * 2 + (m.dir === 1 ? 1 : 0);
+        m.next =
+          enteredExits?.get(key) ??
+          (options.length ? options[Math.floor(this.routeRng() * options.length)]! : -1);
+        enteredExits?.set(key, m.next);
       }
       return;
     }
-    m.routing ??= this.newRouting(index);
+    if (!m.routing) {
+      if (index === undefined) return;
+      m.routing = this.newRouting(index);
+    }
     const plan = m.routing.plan;
     if (plan && (plan.line !== m.line || plan.dir !== m.dir))
       m.routing = { ...m.routing, plan: undefined, signal: undefined, indicating: false };
@@ -4056,9 +4121,10 @@ export class TileLife {
     return this.shiftedOffset(m, this.routeLane(m, m.line, m.dir, at, m.came, next));
   }
 
-  private mergeLane(m: Mover): number {
+  /** A vehicle's ordinary lane on `line`, m right of centre. */
+  private mergeLane(m: Mover, line = m.line): number {
     const spec = VEHICLES[m.vehicle!];
-    return laneOffset(this.roadWidth(m.line), spec.width, m.lane, spec.curb);
+    return laneOffset(this.roadWidth(line), spec.width, m.lane, spec.curb);
   }
 
   private mergingOverlap(i: number, j: number, lane: number): boolean {
@@ -4071,8 +4137,8 @@ export class TileLife {
     const mergingA = this.scenes.merging(a),
       mergingB = this.scenes.merging(b);
     // A lane that bends or meets a narrower road moves sideways: compare where it goes next.
-    const bendsA = !mergingA && this.offsetVaries(a),
-      bendsB = !mergingB && this.offsetVaries(b);
+    const bendsA = !mergingA && this.offsetVaries(a, FOLLOW.laneAheadM),
+      bendsB = !mergingB && this.offsetVaries(b, FOLLOW.laneAheadM);
     const width = (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
     if (!mergingA && !mergingB && !bendsA && !bendsB) return false;
     const futureA =
@@ -4138,7 +4204,8 @@ export class TileLife {
       );
       caps[i] = Math.min(caps[i]!, room / dt);
     };
-    const curbScenes = this.scenes.hasCurbScenes || movers.some((m) => this.offsetVaries(m));
+    const curbScenes =
+      this.scenes.hasCurbScenes || movers.some((m) => this.offsetVaries(m, FOLLOW.laneAheadM));
     const overlaps = (i: number, j: number, lane = offsets[i]!) =>
       Math.abs(lane - offsets[j]!) <
         (VEHICLES[movers[i]!.vehicle!].width + VEHICLES[movers[j]!.vehicle!].width) / 2 -
@@ -4500,9 +4567,11 @@ export class TileLife {
         if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
       const distance = speeds[i]! * dt;
+      this.enteredExits.clear();
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
       if (m.vehicle && (!guard || m.kind !== 'vehicle')) {
-        m.v = distance === 0 && m.v === 0 ? 0 : this.advance(m, distance) / dt;
+        m.v =
+          distance === 0 && m.v === 0 ? 0 : this.advance(m, distance, true, this.enteredExits) / dt;
         m.waiting = 0;
         continue;
       }
@@ -4522,7 +4591,10 @@ export class TileLife {
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
         m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
-      let moved = distance === 0 && m.vehicle && m.v === 0 ? 0 : this.advance(m, distance);
+      let moved =
+        distance === 0 && m.vehicle && m.v === 0
+          ? 0
+          : this.advance(m, distance, true, this.enteredExits);
       // Standalone animal callers still enforce terrain without a world guard.
       const fitsGround: GroundGuard =
         guard ??
@@ -4533,7 +4605,9 @@ export class TileLife {
             this.roadTerrain.access.allows(this.groundBodies(next))));
       if (m.kind === 'vehicle' || walking) {
         terrainRejected = false;
+        this.trialYaw(m, before, moved);
         let fits = fitsGround(m, before, rejected);
+        const forwardTerrainRejected = terrainRejected;
         if (!fits) {
           // Vehicles creep; walkers also step aside, preferring the same side on successive
           // steps so detours don't oscillate. Each try is [side, share of the step].
@@ -4561,7 +4635,8 @@ export class TileLife {
               m.avoid = Math.max(-limit, Math.min(limit, (before.avoid ?? 0) + side! * dt * 1.5));
               m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             }
-            moved = this.advance(m, distance * share!);
+            moved = this.advance(m, distance * share!, true, this.enteredExits);
+            this.trialYaw(m, before, moved);
             if ((fits = fitsGround(m, before, rejected))) break;
           }
         }
@@ -4587,7 +4662,8 @@ export class TileLife {
               if (Math.abs(shift) < 1e-9) continue;
               Object.assign(m, before);
               m.roadShift = (before.roadShift ?? 0) + shift;
-              moved = this.advance(m, distance * share);
+              moved = this.advance(m, distance * share, true, this.enteredExits);
+              this.trialYaw(m, before, moved);
               if ((fits = fitsGround(m, before))) break;
             }
             if (fits) break;
@@ -4595,6 +4671,7 @@ export class TileLife {
         }
         if (!fits) {
           Object.assign(m, before);
+          m.roadYaw = before.roadYaw;
           if (m.kind === 'vehicle') m.roadShift = before.roadShift;
           moved = 0;
         }
@@ -4605,7 +4682,7 @@ export class TileLife {
         // A curb, wall or planter won't move: turn back from it at once, unless the last turn
         // back was just now (blocked both ways). Waiting is for people and traffic.
         const walledIn =
-          terrainRejected &&
+          forwardTerrainRejected &&
           (m.turnedAt === undefined ||
             (m.walked ?? 0) - m.turnedAt >= WALK_RECOVERY.terrainMinWalkM);
         if (
@@ -4630,32 +4707,37 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
-      if (
-        (m.kind === 'vehicle' && (m.roadShift !== undefined || m.roadYaw !== undefined)) ||
-        (walking && (m.avoid !== before.avoid || m.roadYaw !== undefined))
-      ) {
-        // The nose, or the walker, follows a sideways shift.
-        const forward = moved / this.perMeter;
-        const sideways =
-          m.kind === 'vehicle'
-            ? (m.roadShift ?? 0) - (before.roadShift ?? 0)
-            : (m.avoid ?? 0) - (before.avoid ?? 0);
-        const target =
-          forward > 1e-4
-            ? Math.max(-2 * ROAD_AVOID.slope, Math.min(2 * ROAD_AVOID.slope, sideways / forward))
-            : 0;
-        // Eased by distance travelled, so a stopped vehicle doesn't swivel.
-        const yaw = (m.roadYaw ?? 0) + (target - (m.roadYaw ?? 0)) * Math.min(1, forward * 1.5);
-        m.roadYaw =
-          (m.kind === 'vehicle' ? m.roadShift === undefined : !m.avoid) && Math.abs(yaw) < 1e-3
-            ? undefined
-            : yaw;
-      }
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
     if (!pass) this.finishEffects(clock, dt, env?.wind);
+  }
+
+  /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
+  private trialYaw(m: Mover, before: Mover, moved: number) {
+    m.roadYaw = before.roadYaw;
+    if (
+      !(m.kind === 'vehicle' && (m.roadShift !== undefined || before.roadYaw !== undefined)) &&
+      !(isWalker(m.kind) && (m.avoid !== before.avoid || before.roadYaw !== undefined))
+    )
+      return;
+    const forward = moved / this.perMeter;
+    const sideways =
+      m.kind === 'vehicle'
+        ? (m.roadShift ?? 0) - (before.roadShift ?? 0)
+        : (m.avoid ?? 0) - (before.avoid ?? 0);
+    const target =
+      forward > 1e-4
+        ? Math.max(-2 * ROAD_AVOID.slope, Math.min(2 * ROAD_AVOID.slope, sideways / forward))
+        : 0;
+    const previous = before.roadYaw ?? 0;
+    // Distance easing leaves stopped actors' headings unchanged.
+    const yaw = previous + (target - previous) * Math.min(1, forward * 1.5);
+    m.roadYaw =
+      (m.kind === 'vehicle' ? m.roadShift === undefined : !m.avoid) && Math.abs(yaw) < 1e-3
+        ? undefined
+        : yaw;
   }
 
   private pedestrianLimiter(
@@ -4716,7 +4798,6 @@ export class TileLife {
     return pedestrianView(occupied, 0);
   }
 
-  /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
   /**
    * Whether a step would take someone off the curb onto a crossing in front of a vehicle that
    * couldn't stop for them. One that can stop yields (pedestrians.ts), and they cross.
@@ -4755,6 +4836,7 @@ export class TileLife {
     m.turning = { hx, hy, left: TURN_AROUND.seconds };
   }
 
+  /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
   private turnBack(m: Mover) {
     const to = m.from + m.dir;
     m.d = this.segment(m.from, to) - m.d;
@@ -5601,10 +5683,21 @@ export class LifeWorld {
     TileLife,
     {
       origin: string;
+      laneBounds: readonly [number, number, number, number];
       blocked: Polygon[];
       vehicleBlocked: Polygon[];
       water: Polygon[];
       trees: Polygon[];
+    }
+  >();
+  private readonly laneReaders = new WeakMap<
+    TileLife,
+    {
+      ref: TileLife | undefined;
+      origin: string;
+      sources: TileLife[];
+      seasonal: string;
+      reader: LaneTerrain;
     }
   >();
   /** Weak ownership releases evicted agents. A stored body never aliases the next trial. */
@@ -6103,7 +6196,14 @@ export class LifeWorld {
       const key = `${o.x},${o.y},${o.scale}`;
       let cached = this.metricTerrain.get(life);
       if (!cached || cached.origin !== key) {
-        cached = { origin: key, blocked: [], vehicleBlocked: [], water: [], trees: [] };
+        cached = {
+          origin: key,
+          laneBounds: [Infinity, Infinity, -Infinity, -Infinity],
+          blocked: [],
+          vehicleBlocked: [],
+          water: [],
+          trees: [],
+        };
         const metric = (polygon: Polygon) =>
           polygon.map((ring) =>
             ring.map((p) => ({
@@ -6116,6 +6216,17 @@ export class LifeWorld {
           if (a.kind === 'blocked') (a.water ? cached.water : cached.blocked).push(metric(a.rings));
           if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(metric(a.rings));
         }
+        const bounds = [Infinity, Infinity, -Infinity, -Infinity];
+        for (const polygons of [cached.blocked, cached.vehicleBlocked])
+          for (const polygon of polygons)
+            for (const ring of polygon)
+              for (const p of ring) {
+                bounds[0] = Math.min(bounds[0]!, p.x);
+                bounds[1] = Math.min(bounds[1]!, p.y);
+                bounds[2] = Math.max(bounds[2]!, p.x);
+                bounds[3] = Math.max(bounds[3]!, p.y);
+              }
+        cached.laneBounds = [bounds[0]!, bounds[1]!, bounds[2]!, bounds[3]!];
         this.metricTerrain.set(life, cached);
       }
       yield;
@@ -6344,17 +6455,56 @@ export class LifeWorld {
 
   /** The guard's fixed vehicle obstacles, seen from one tile in its metres (lane bends). */
   private laneTerrain(life: TileLife): LaneTerrain | undefined {
-    const { blocked, vehicleBlocked, origins } = this.groundTerrain!;
+    const { seasonal, origins, ref } = this.groundTerrain!;
     const o = origins.get(life);
     if (!o) return;
+    const [x0, y0, x1, y1] = life.laneQueryBounds();
+    if (!Number.isFinite(x0)) return;
+    const bounds: [number, number, number, number] = [
+      o.x + x0 * o.scale,
+      o.y + y0 * o.scale,
+      o.x + x1 * o.scale,
+      o.y + y1 * o.scale,
+    ];
+    const touches = ([a0, b0, a1, b1]: readonly number[]) =>
+      a0! <= bounds[2] + 0.01 &&
+      a1! >= bounds[0] - 0.01 &&
+      b0! <= bounds[3] + 0.01 &&
+      b1! >= bounds[1] - 0.01;
+    const sources = [...this.tiles.values()].filter((other) => {
+      const cached = this.metricTerrain.get(other),
+        at = origins.get(other);
+      // Missing/mismatched preparation metadata is conservatively retained as a dependency.
+      return (
+        !cached ||
+        !at ||
+        cached.origin !== `${at.x},${at.y},${at.scale}` ||
+        touches(cached.laneBounds)
+      );
+    });
+    const seasonalKey = JSON.stringify(
+      seasonal.polygons.filter((polygon) => touches(boundsOf(polygon[0]!))),
+    );
+    const originKey = `${o.x}/${o.y}/${o.scale}`;
+    const previous = this.laneReaders.get(life);
+    if (
+      previous &&
+      previous.ref === ref &&
+      previous.origin === originKey &&
+      previous.seasonal === seasonalKey &&
+      previous.sources.length === sources.length &&
+      previous.sources.every((source, i) => source === sources[i])
+    )
+      return previous.reader;
     const sample: Body[] = [{ x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 }];
-    return {
+    const reader: LaneTerrain = {
       near: (x0, y0, x1, y1) => {
         const ax = o.x + x0 * o.scale,
           ay = o.y + y0 * o.scale,
           bx = o.x + x1 * o.scale,
           by = o.y + y1 * o.scale;
-        return blocked.near(ax, ay, bx, by) || vehicleBlocked.near(ax, ay, bx, by);
+        const current = this.groundTerrain!;
+        return current.blocked.near(ax, ay, bx, by) || current.vehicleBlocked.near(ax, ay, bx, by);
       },
       hits: (body) => {
         const b = sample[0]!;
@@ -6364,9 +6514,12 @@ export class LifeWorld {
         b.hy = body.hy;
         b.length = body.length * o.scale;
         b.width = body.width * o.scale;
-        return blocked.hits(sample) || vehicleBlocked.hits(sample);
+        const current = this.groundTerrain!;
+        return current.blocked.hits(sample) || current.vehicleBlocked.hits(sample);
       },
     };
+    this.laneReaders.set(life, { ref, origin: originKey, sources, seasonal: seasonalKey, reader });
+    return reader;
   }
 
   private *groundGuardSteps(

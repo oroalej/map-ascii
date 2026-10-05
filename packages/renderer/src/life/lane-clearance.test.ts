@@ -25,6 +25,28 @@ const road = { points: [0, 0, 60 * perMeter, 0], perMeter, base: 2, lo: -4, hi: 
 const car = { ...road, length: 4.4, width: 1.8 };
 
 describe('lane bends', () => {
+  it('skips profile samples for a long clear lane beside off-road buildings', () => {
+    const terrain = boxTerrain(20, 30, 6, 10);
+    let near = 0,
+      hits = 0;
+    const bend = laneBend(
+      { ...car, points: [0, 0, 1000 * perMeter, 0] },
+      {
+        near: (...bounds) => {
+          near++;
+          return terrain.near(...bounds);
+        },
+        hits: (body) => {
+          hits++;
+          return terrain.hits(body);
+        },
+      },
+    );
+    expect(bend).toBeUndefined();
+    expect(near).toBeLessThanOrEqual(2);
+    expect(hits).toBeLessThanOrEqual(2);
+  });
+
   it('leaves a clear lane alone', () => {
     expect(laneBend(car, boxTerrain(20, 30, 10, 12))).toBeUndefined();
   });

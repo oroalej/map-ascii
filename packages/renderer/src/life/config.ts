@@ -152,6 +152,8 @@ export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
+/** A terrain-cleared corner may run this far past its vertex, m. */
+export const FILLET_RUN_ON_M = 2 * FILLET.maxM;
 export const JUNCTION = {
   linkedLookaheadM: 60,
   gap: 1.5,

@@ -3,7 +3,12 @@ import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type Mover } from './simulate';
 import { worldTiles } from './testing/scenarios';
 import { pedestrianEntry, pedestrianTile } from './testing/pedestrians';
-import { metersPerUnit } from '../raster/geometry';
+import {
+  buildTileGeometry,
+  createIdRegistry,
+  metersPerUnit,
+  type TileFeatureLike,
+} from '../raster/geometry';
 import { TURN_AROUND, WALK_RECOVERY } from './config';
 
 const tile = pedestrianTile;
@@ -21,18 +26,25 @@ function crossingWorld(sidewalks: boolean) {
         { x: 4096, y: 2000 },
       ],
       LifeLine.roadMajor,
-      14,
+      18,
     );
     b.line(
       [
-        // As raster/geometry.ts draws it: 1.5 m past the walkable cut at each end.
-        { x: 2000, y: 2000 - 8.5 * pm },
-        { x: 2000, y: 2000 + 8.5 * pm },
+        // Longer than the ordinary isolated-line threshold, still a crossing joined to nothing.
+        { x: 2000, y: 2000 - 12 * pm },
+        { x: 2000, y: 2000 + 12 * pm },
       ],
       LifeLine.path,
       3,
     );
-    b.area('crossing', entry.life.areas!.find((a) => a.kind === 'crossing')!.rings);
+    b.area('crossing', [
+      [
+        { x: 2000 - 1.5 * pm, y: 2000 - 10.5 * pm },
+        { x: 2000 + 1.5 * pm, y: 2000 - 10.5 * pm },
+        { x: 2000 + 1.5 * pm, y: 2000 + 10.5 * pm },
+        { x: 2000 - 1.5 * pm, y: 2000 + 10.5 * pm },
+      ],
+    ]);
     entry.life = b.finish();
   }
   const world = new LifeWorld();
@@ -78,6 +90,97 @@ const car = (x: number, speed: number): Mover => ({
 });
 
 describe('people at crossings', () => {
+  it('lets a sidewalk walker pass parallel to mapped stripes beside fast traffic', () => {
+    const p = (x: number, y = 0) => ({ x: 2000 + x * pm, y: 2000 + y * pm });
+    const layer = (features: TileFeatureLike[]) => ({
+      extent: 4096,
+      length: features.length,
+      feature: (i: number) => features[i]!,
+    });
+    const geometry = buildTileGeometry(
+      {
+        roads: layer([
+          {
+            type: 2,
+            properties: {
+              id: 'road',
+              class: 'road_minor',
+              width: 8,
+              sidewalk: 'both',
+              sidewalk_src: 'mapped',
+            },
+            loadGeometry: () => [[p(-100), p(100)]],
+          },
+        ]),
+        poi: layer([
+          {
+            type: 1,
+            properties: {
+              id: 'crossing',
+              class: 'furniture',
+              variant: 'crossing',
+              crossing_bearing: 90,
+              crossing_width: 8,
+            },
+            loadGeometry: () => [[p(0)]],
+          },
+        ]),
+      },
+      createIdRegistry(),
+      tile,
+    );
+    const world = new LifeWorld(undefined, undefined, { enabled: false });
+    world.sync([{ key: 'mapped', tile, life: geometry.life }]);
+    const life = worldTiles(world).get('mapped')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.pending.length = 0;
+    life.scenes.sites.length = 0;
+    (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+    const sidewalk = Array.from(life.geo.kinds).findIndex((kind, line) => {
+      const first = life.geo.starts[line]!,
+        last = life.geo.starts[line + 1]! - 1;
+      return (
+        kind === LifeLine.path &&
+        life.geo.coords[first * 2 + 1]! > 2000 &&
+        life.geo.coords[first * 2 + 1] === life.geo.coords[last * 2 + 1]
+      );
+    });
+    expect(sidewalk).toBeGreaterThanOrEqual(0);
+    const from = life.geo.starts[sidewalk]!,
+      start = p(-1.6).x;
+    const walker: Mover = {
+      ...person(0, 1),
+      line: sidewalk,
+      from,
+      d: start - life.geo.coords[from * 2]!,
+      x: start,
+      y: life.geo.coords[from * 2 + 1]!,
+      hx: 1,
+      hy: 0,
+    };
+    life.movers.push(walker, car(-6, 12));
+    world.step(0.1, undefined, 21);
+    expect(walker.x).toBeGreaterThan(start);
+    expect(walker.turning).toBeUndefined();
+  });
+
+  it('waits for forward occupancy even when a failed side probe touches terrain', () => {
+    const { life } = crossingWorld(true);
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+    const walker = person(-30, 1);
+    life.movers.push(walker);
+    life.step(0.1, undefined, undefined, undefined, undefined, (next, _previous, reject) => {
+      reject?.('kind' in next && (next.avoid ?? 0) > 0 ? 'terrain' : 'occupancy');
+      return false;
+    });
+    expect(walker.dir).toBe(1);
+    expect(walker.turning).toBeUndefined();
+    expect(walker.waiting).toBeCloseTo(0.1);
+    expect(walker.roadYaw).toBeUndefined();
+  });
+
   it('lives on a crossing only where it joins the walking network', () => {
     const joined = crossingWorld(true).life,
       lone = crossingWorld(false).life;
@@ -85,6 +188,22 @@ describe('people at crossings', () => {
       life.movers.filter((m) => m.kind === 'person' && m.line === 1).length;
     expect(lone.movers.filter((m) => m.kind === 'person')).toHaveLength(0);
     expect(residents(joined)).toBeGreaterThan(0);
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 1000, y: 1000 },
+        { x: 3000, y: 1000 },
+      ],
+      LifeLine.path,
+      3,
+    );
+    const world = new LifeWorld();
+    world.sync([{ key: 'long-walk', tile, life: builder.finish() }]);
+    expect(
+      worldTiles(world)
+        .get('long-walk')!
+        .movers.some((m) => m.kind === 'person'),
+    ).toBe(true);
   });
 
   it('waits at the curb for a car that could not stop, and crosses once it has passed', () => {
@@ -98,11 +217,15 @@ describe('people at crossings', () => {
     life.movers.push(walker, fast);
     let waited = false;
     for (let frame = 0; frame < 120; frame++) {
+      const before = walker.y;
       world.step(0.05, undefined, 18);
       // Its rear clears the crossing's near edge 2.2 m past the walker's line.
       const passed = fast.x > 2000 + 2.2 * pm;
       if (!passed && walker.y > 2000 - 7 * pm) throw new Error('stepped out in front');
-      waited ||= !passed && walker.v === undefined && walker.y < 2000 - 7 * pm;
+      waited ||=
+        !passed &&
+        before + walker.speed * 0.05 >= 2000 - 7 * pm &&
+        Math.abs(walker.y - before) < 1e-9;
     }
     expect(waited).toBe(true);
     expect(fast.x).toBeGreaterThan(2000);

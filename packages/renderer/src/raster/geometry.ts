@@ -1054,15 +1054,16 @@ export function buildTileGeometry(
                 const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
                 const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
                 const along = 1.5 / unitMeters;
+                const a = { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along };
+                const b = { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along };
                 // The walkable cut runs past the mapped width: the carriageway's corners and
                 // inferred widths can reach further, which would strand walkers mid-crossing.
-                life.area('crossing', [
-                  stripRing(
-                    { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along },
-                    { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along },
-                    halfWidth + CROSSING_CUT_M / unitMeters,
-                  ),
-                ]);
+                life.area(
+                  'crossing',
+                  [stripRing(a, b, halfWidth + CROSSING_CUT_M / unitMeters)],
+                  false,
+                  [stripRing(a, b, halfWidth)],
+                );
                 // Give a whole group room to clear the road before turning at an unattached end.
                 const reach = halfWidth + (CROSSING_CUT_M + CROSSING_WALK_PAST_M) / unitMeters;
                 walkingLines.push({
