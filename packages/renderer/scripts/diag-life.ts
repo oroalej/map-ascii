@@ -160,6 +160,7 @@ const expectedCases = [17, 16, 18, 15, 19].flatMap((zoom) =>
   ),
 );
 const selectedCases = expectedCases.filter((key) => key.startsWith(prefix));
+if (!selectedCases.length) throw new Error(`No diagnostic cases match ${JSON.stringify(prefix)}`);
 let priorRuntime = 0;
 const cases: {
   key: string;
@@ -237,6 +238,7 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
     roadShift: m.roadShift,
     curveLengthM: m.curveLengthM,
     bodies: life.groundBodies(m),
+    moverState: structuredClone(m),
     junction: {
       movement: state.junctions.movement(m),
       granted: state.junctions.granted(m),

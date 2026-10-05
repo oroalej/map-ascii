@@ -549,6 +549,23 @@ it('keeps a servicing vehicle snapshot at its previous curb blend', () => {
   expect(life.groundBodies(before)[0]!.y).not.toBe(body[0]!.y);
 });
 
+it('rejects a predicted seam reservation with an inherited future collision', () => {
+  const { world, life } = fixture(LifeLine.roadMajor, 8);
+  const follower = mover('vehicle', 50, 1),
+    leader = mover('vehicle', 74, 1);
+  life.movers.push(follower, leader);
+  const guard = (
+    world as unknown as { groundGuard(minimum: number): WorldGroundGuard }
+  ).groundGuard(2.9);
+  const future = { ...follower, x: 1000 + 70 * pm, d: 70 * pm };
+  const preview = { ...future, x: future.x - 0.1 * pm, d: future.d - 0.1 * pm };
+  const before = structuredClone(life.movers);
+  expect(guard(life, preview, future, undefined, false, follower)).toBe(true);
+  expect(guard.clearSeam(life, preview, follower)).toBe(false);
+  expect(guard(life, preview, follower, undefined, false, follower)).toBe(false);
+  expect(life.movers).toEqual(before);
+});
+
 it('backs away before reversing beside a physical wall, while retaining the swept guard', () => {
   const { world, life } = fixture(LifeLine.path, 3, false, (b) => {
     b.area('blocked', rectangle(1000 + 70.46 * pm, 2048 - 5 * pm, 1000 + 73 * pm, 2048 + 5 * pm));

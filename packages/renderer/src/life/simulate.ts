@@ -211,6 +211,12 @@ export type WorldGroundGuard = ((
 ) => boolean) & {
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
+  clearSeam(
+    life: TileLife,
+    preview: Mover,
+    identity: Mover,
+    reject?: (reason: ContinuityRejection) => void,
+  ): boolean;
   contact(life: TileLife, mover: Mover): void;
   yielding(mover: Mover): Mover | undefined;
   holding(life: TileLife, mover: Mover): boolean;
@@ -5066,6 +5072,7 @@ export class LifeWorld {
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
     const reservations = new Map<GroundAgent, readonly Body[]>();
+    const physicalReservations = new Map<GroundAgent, readonly Body[]>();
     const key = this.terrainKey([...this.tiles.keys()]);
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
@@ -5104,8 +5111,8 @@ export class LifeWorld {
         shapes = life.groundBodies(owner as GroundAgent).map((p) => toRef(origin(life), p));
         physicalShapes.set(owner, shapes);
       }
-      const p = shapes[i];
-      if (!p) return b; // Extra seam reservations remain conservatively inflated.
+      const p = shapes[i] ?? physicalReservations.get(owner as GroundAgent)?.[i - shapes.length];
+      if (!p) return b;
       p.x = b.x;
       p.y = b.y;
       p.hx = b.hx;
@@ -5113,7 +5120,9 @@ export class LifeWorld {
       return p;
     };
     const bodies = (life: TileLife, owner: GroundAgent, out: Body[], identity = owner) => {
-      owners.set(identity, life);
+      // A detached preview can be in a destination frame while its actor still
+      // belongs to the source. Physical dimensions and yielding use that owner.
+      if (owner === identity || !owners.has(identity)) owners.set(identity, life);
       const o = origin(life);
       life.groundBodies(owner, minimum, out, identity);
       for (const b of out) toRef(o, b);
@@ -5124,8 +5133,13 @@ export class LifeWorld {
     const diagnostics = this.profiler?.lifeDiagnostics;
     const diagnoseOccupancy =
       diagnostics &&
-      ((owner: GroundAgent, next: readonly Body[], ignore?: object) => {
-        const blocker = occupied.firstConflict(owner, next, ignore);
+      ((owner: GroundAgent, next: readonly Body[], ignore?: object, physicalOnly = false) => {
+        const blocker = occupied.firstConflict(
+          owner,
+          next,
+          ignore,
+          physicalOnly ? physicalShape : undefined,
+        );
         const tags: string[] = [];
         if (blocker && 'kind' in blocker) {
           const m = blocker as Mover;
@@ -5418,11 +5432,37 @@ export class LifeWorld {
     const remove = (owner: object) => {
       occupied.delete(owner);
       reservations.delete(owner as GroundAgent);
+      physicalReservations.delete(owner as GroundAgent);
     };
     const reserveSeam = (life: TileLife, preview: Mover, identity: Mover) => {
       const reserved = bodies(life, preview, []).map((b) => ({ ...b }));
       reservations.set(identity, reserved);
+      physicalReservations.set(
+        identity,
+        life.groundBodies(preview).map((b) => toRef(origin(life), b)),
+      );
       occupied.set(identity, [...occupied.bodies(identity), ...reserved]);
+    };
+    const clearSeam = (
+      life: TileLife,
+      preview: Mover,
+      identity: Mover,
+      reject?: (reason: ContinuityRejection) => void,
+    ) => {
+      const physical = life.groundBodies(preview).map((b) => toRef(origin(life), b));
+      // The predicted boundary is future space, so it cannot inherit conflicts
+      // from another predicted pose through the ordinary escape exception.
+      if (blocked.hits(physical)) {
+        diagnostics?.reject(identity, 'building');
+        reject?.('terrain');
+        return false;
+      }
+      if (occupied.firstConflict(identity, physical, undefined, physicalShape)) {
+        diagnoseOccupancy?.(identity, physical, undefined, true);
+        reject?.('occupancy');
+        return false;
+      }
+      return true;
     };
     const contact = (life: TileLife, m: Mover) => {
       if (this.inspection?.owner === m || m.speed <= 0) return;
@@ -5545,6 +5585,7 @@ export class LifeWorld {
       return Object.assign(check, {
         remove,
         reserveSeam,
+        clearSeam,
         contact,
         yielding,
         holding,
@@ -5561,7 +5602,7 @@ export class LifeWorld {
           this.profiler!.add('clearanceChecks', this.profiler!.time() - start);
         }
       },
-      { remove, reserveSeam, contact, yielding, holding, passing, cancelYield },
+      { remove, reserveSeam, clearSeam, contact, yielding, holding, passing, cancelYield },
     );
   }
 
@@ -5775,7 +5816,8 @@ export class LifeWorld {
           target &&
           (m.kind === 'boat'
             ? this.boatRoom(target, preview, m, intents)
-            : guard(target, preview, seam.preview, undefined, false, m, reject, source));
+            : guard.clearSeam(target, preview, m, reject) &&
+              guard(target, preview, seam.preview, undefined, false, m, reject, source));
         if (safe && target && preview) {
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);

@@ -367,6 +367,55 @@ describe('runtime geographic seam handover', () => {
     expect(after.y).toBeCloseTo(before.y);
   });
 
+  it.each([1, -1] as const)(
+    'lets the leading vehicle clear a predicted seam reservation in direction %s',
+    (dir) => {
+      const { world, lives } = fixture([
+        continuityTile(left, LifeLine.roadMajor, 77, 0, dir),
+        continuityTile(right, LifeLine.roadMajor, 77, 0, dir),
+      ]);
+      const source = lives[dir === 1 ? 0 : 1]!,
+        target = lives[dir === 1 ? 1 : 0]!,
+        pm = source.perMeter;
+      for (const life of lives) {
+        life.parked.length = life.stalls.length = life.gatherers.length = 0;
+        life.scenes.sites.length = 0;
+      }
+      const follower = continuityMover(source, dir === 1 ? 4096 - 8 * pm : 8 * pm),
+        leader = continuityMover(target, dir === 1 ? 0.5 * pm : 4096 - 0.5 * pm);
+      for (const m of [follower, leader]) {
+        Object.assign(m, {
+          dir,
+          from: dir === 1 ? 0 : 1,
+          d: dir === 1 ? m.x + 100 : 4196 - m.x,
+          hx: dir,
+          vehicle: 'jeepney',
+          speed: 5 * pm,
+          v: 0,
+        });
+      }
+      source.movers.push(follower);
+      target.movers.push(leader);
+      const start = target.pose(leader);
+      for (let frame = 0; frame < 12 * 30; frame++) {
+        world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 7);
+        expect(lives.filter((life) => life.movers.includes(follower))).toHaveLength(1);
+        expect(lives.filter((life) => life.movers.includes(leader))).toHaveLength(1);
+        const owner = source.movers.includes(follower) ? source : target;
+        const p = owner.pose(follower),
+          q = target.pose(leader),
+          frame = frameBetween(owner.tile, target.tile);
+        expect(
+          Math.hypot(q.x - (frame.x + p.x * frame.scale), q.y - p.y * frame.scale) / pm,
+        ).toBeGreaterThanOrEqual(VEHICLES.jeepney.length);
+      }
+      expect(((target.pose(leader).x - start.x) * dir) / pm).toBeGreaterThan(10);
+      expect(target.movers).toContain(follower);
+      expect(follower.dir).toBe(dir);
+      expect(follower.routing?.turns).toBe(7);
+    },
+  );
+
   it('crosses an exactly clipped west endpoint and continues through successive owners', () => {
     const a = continuityTile(left),
       b = continuityTile(right),
