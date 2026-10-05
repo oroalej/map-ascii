@@ -2,6 +2,7 @@
 import type { PlaceKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
 import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
+import type { SeasonEmojiEntry } from './emoji';
 export * from './seasonal-record';
 
 /** Selected source ways, optionally trimmed to the frontage of an OSM feature. */
@@ -35,6 +36,7 @@ export type SeasonConfig = {
   title: LocalizedText;
   window: SeasonWindow;
   includes?: string[];
+  emoji?: SeasonEmojiEntry[];
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
@@ -100,13 +102,24 @@ export type RuntimeSeasonConfig = Omit<
   };
 };
 export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
-  const { id, title, window, includes, fireworks, lanterns, bunting, stalls, installations } =
-    season;
+  const {
+    id,
+    title,
+    window,
+    includes,
+    emoji,
+    fireworks,
+    lanterns,
+    bunting,
+    stalls,
+    installations,
+  } = season;
   return {
     id,
     title,
     window,
     ...(includes && { includes }),
+    ...(emoji && { emoji }),
     ...(fireworks && { fireworks }),
     ...(lanterns && { lanterns }),
     ...(stalls && { stalls }),
@@ -158,6 +171,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       season.installations,
       included.map((s) => s.installations),
     );
+    const emoji = composeSeasonInstallations(
+      season.emoji,
+      included.map((s) => s.emoji),
+    );
     return {
       ...season,
       ...(lanterns && { lanterns }),
@@ -168,6 +185,7 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       ...(stalls && { stalls }),
       ...(fireworks && { fireworks }),
       ...(installations.length && { installations }),
+      ...(emoji.length && { emoji }),
     };
   });
 }

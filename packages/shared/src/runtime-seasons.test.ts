@@ -71,6 +71,22 @@ describe('season client payload', () => {
   it('layers the real Christmas runtime decorations onto New Year alongside fireworks', () => {
     const newYear = runtime.seasons!.find((s) => s.id === 'new-year')!;
     const christmas = runtime.seasons!.find((s) => s.id === 'christmas')!;
+    expect(newYear.emoji).toEqual([
+      ...life.seasons!.find((s) => s.id === 'new-year')!.emoji!,
+      ...christmas.emoji!,
+    ]);
+    expect(newYear.emoji!.map((entry) => entry.mood)).toEqual([
+      'fireworks',
+      'party',
+      'scared',
+      'gift',
+      'love',
+      'tree',
+      'star',
+      'music',
+      'feast',
+    ]);
+    expect(newYear.emoji).toHaveLength(9);
     expect(newYear.includes).toEqual(['christmas']);
     expect(newYear.buntingSeasonId).toBe('christmas');
     expect(newYear.fireworks).toEqual(life.seasons!.find((s) => s.id === 'new-year')!.fireworks);
