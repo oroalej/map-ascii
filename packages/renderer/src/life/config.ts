@@ -8,6 +8,7 @@ import {
   curveAt,
   SHOP_POINT_RADIUS_M,
   PLACE_KINDS,
+  VEHICLE_TYPES,
   placeShare,
   rhythmFor,
   type CityLifeConfig,
@@ -16,6 +17,7 @@ import {
 } from '@atlas/shared';
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
+import { VEHICLES } from './vehicles';
 
 export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog' | 'cat';
 
@@ -32,6 +34,9 @@ export const LIFE_ZOOM: Readonly<Record<AgentKind, ZoomBand>> = {
   dog: { min: 17 },
   cat: { min: 17 },
 };
+
+/** Life agents come from tiles at least this deep; the shallowest band starts at 13.5. */
+export const LIFE_TILE_MIN_ZOOM = 13;
 
 /** At most this many agents are drawn, those nearest the view's center first. */
 export const MAX_VISIBLE_AGENTS = 1200;
@@ -110,6 +115,7 @@ export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
 export const JUNCTION = {
+  linkedLookaheadM: 60,
   gap: 1.5,
   margin: 1,
   tie: 1,
@@ -249,6 +255,18 @@ export const PEOPLE = { groups: [0.62, 0.88, 0.97, 1] as const, child: 0.4, stri
  */
 export const UMBRELLA = { base: 0.02, rain: 0.75, sun: 0.3, sunFrom: 35, sunFull: 65 } as const;
 
+/** Close-up canopy timing (seconds) and widths; distant figures keep their instant look. */
+export const UMBRELLA_MOTION = {
+  zoom: 19,
+  open: 0.7,
+  close: 0.9,
+  stagger: 1.5,
+  lost: 0.5,
+  folded: 0.3,
+  stageCutoff: 0.5,
+  stages: [0.45, 0.75],
+} as const;
+
 /** The share of adults under an umbrella for `rain` (0–1) and the sun's altitude (degrees). */
 export function umbrellaShare(rain: number, sunAltitude: number): number {
   const sun = Math.min(
@@ -372,6 +390,16 @@ export const BIRDS = {
   flocksPerTile: 5,
   stay: [15, 45] as const,
 };
+
+/** Ground feeding: bounded spot searches, visit seconds, nearby tree rests and landing blend. */
+export const FORAGE = {
+  attempts: 8,
+  /** Search radius in metres for both reachable shoreline and a nearby resting tree. */
+  reach: 40,
+  visit: [60, 180],
+  returnChance: 0.8,
+  settleSeconds: 1,
+} as const;
 
 /**
  * Birds in trees: a flock picking where to go next lands in a tree (a perch, raster/geometry.ts)
@@ -629,3 +657,9 @@ export const SIGNAL = {
   /** Additional radius for associating crossing quads with signal controllers, m. */
   crossingMargin: 3.5,
 } as const;
+
+/** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */
+export const ROAD_SPLIT_CLEARANCE_M =
+  Math.max(SIGNAL.lookahead, FILLET.lookaheadM, JUNCTION.linkedLookaheadM) +
+  SIGNAL.gap +
+  Math.max(...VEHICLE_TYPES.map((vehicle) => VEHICLES[vehicle].length / 2));

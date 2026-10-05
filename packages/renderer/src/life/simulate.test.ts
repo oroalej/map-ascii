@@ -13,6 +13,7 @@ import {
   PARKED,
   ROAD_MARGIN_M,
   UMBRELLA,
+  UMBRELLA_MOTION,
   VENDORS,
 } from './config';
 import { BirdPose, Habitat } from './birds';
@@ -31,6 +32,8 @@ import {
   type Train,
 } from './simulate';
 import { BOAT_PAINTS_AVOID, resolveTraffic, VEHICLES } from './vehicles';
+import { worldTiles } from './testing/scenarios';
+import type { PersonLook } from './people';
 
 /** A z16 tile over Naga's Centro (about 600 m across). */
 const tile = { z: 16, x: 55192, y: 30266 };
@@ -89,6 +92,144 @@ describe('random', () => {
       expect(n).toBeGreaterThanOrEqual(0);
       expect(n).toBeLessThan(1);
     }
+  });
+});
+
+describe('road population across routing splits', () => {
+  it('preserves complete path stalls after split minor-road candidates across fixed seeds', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 1000 },
+        { x: 1000, y: 1000 },
+        { x: 2200, y: 1000 },
+        { x: 4095, y: 1000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      77,
+    );
+    for (const x of [1000, 2200])
+      b.line(
+        [
+          { x, y: 1000 },
+          { x, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        10,
+        x,
+      );
+    b.line(
+      [
+        { x: 100, y: 3000 },
+        { x: 4095, y: 3000 },
+      ],
+      LifeLine.path,
+      3,
+      99,
+    );
+    b.market({ x: 2000, y: 1000 });
+    const original = b.finish();
+    b.splitRoadJunctions(perMeter, 40);
+    const split = b.finish();
+    let stalls = 0;
+    for (let seed = 0; seed < 20; seed++) {
+      const before = new TileLife(tile, original, seed);
+      const after = new TileLife(tile, split, seed);
+      stalls += after.stalls.length;
+      expect(after.stalls).toEqual(before.stalls);
+    }
+    expect(stalls).toBeGreaterThan(0);
+  });
+
+  for (const flow of [-1, 1] as const)
+    it(`preserves near-junction one-way placements in ${flow} flow`, () => {
+      const b = new LifeBuilder();
+      const vertices = Array.from({ length: 9 }, (_, i) => ({ x: 100 + i * 480, y: 2000 }));
+      b.line(vertices, LifeLine.roadMajor, 12, 77, flow);
+      for (const [i, p] of vertices.slice(1, -1).entries())
+        b.line([{ x: p.x, y: 100 }, p, { x: p.x, y: 3900 }], LifeLine.roadMinor, 6, 100 + i);
+      const original = b.finish();
+      b.splitRoadJunctions(perMeter, 40);
+      const split = b.finish();
+      const sample = (life: TileLife) =>
+        life.movers.map((m) => ({
+          id: life.geo.lineIds![m.line],
+          dir: m.dir,
+          x: m.x,
+          y: m.y,
+          vehicle: m.vehicle,
+          rank: m.rank,
+        }));
+      for (let seed = 0; seed < 40; seed++) {
+        const before = sample(new TileLife(tile, original, seed));
+        const after = sample(new TileLife(tile, split, seed));
+        expect(after).toHaveLength(before.length);
+        after.forEach(({ x, y, ...attributes }, i) => {
+          const { x: bx, y: by, ...expected } = before[i]!;
+          expect(attributes).toEqual(expected);
+          expect(x).toBeCloseTo(bx, 10);
+          expect(y).toBeCloseTo(by, 10);
+        });
+      }
+    });
+
+  it('preserves counts, positions, attributes and later spawn draws for the same seed', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 2000, y: 2000 },
+        { x: 4095, y: 2000 },
+      ],
+      LifeLine.roadMid,
+      8,
+      77,
+    );
+    b.line(
+      [
+        { x: 2000, y: 0 },
+        { x: 2000, y: 2000 },
+        { x: 2000, y: 4095 },
+      ],
+      LifeLine.roadMid,
+      8,
+      88,
+      1,
+    );
+    b.line(
+      [
+        { x: 300, y: 300 },
+        { x: 1700, y: 300 },
+      ],
+      LifeLine.path,
+      3,
+      99,
+    );
+    const original = b.finish();
+    b.splitRoadJunctions(perMeter, 40);
+    const split = b.finish();
+    const sample = (life: TileLife) =>
+      life.movers.map((m) => ({
+        kind: m.kind,
+        id: life.geo.lineIds![m.line],
+        dir: m.dir,
+        vehicle: m.vehicle,
+        paint: m.paint,
+        lane: m.lane,
+        rank: m.rank,
+        speed: m.speed,
+        x: m.x,
+        y: m.y,
+        hx: m.hx,
+        hy: m.hy,
+        routing: m.routing,
+        group: m.group,
+      }));
+    for (let seed = 0; seed < 8; seed++)
+      expect(sample(new TileLife(tile, split, seed))).toEqual(
+        sample(new TileLife(tile, original, seed)),
+      );
   });
 });
 
@@ -469,7 +610,25 @@ describe('birds and the world', () => {
 
   it('lands pigeons on the ground, and flushes them when someone walks by', () => {
     const { life, flock } = withFlock('pigeon');
-    Object.assign(flock, { landed: true, x: park[0], y: park[1], stay: 1000 });
+    Object.assign(flock, {
+      landed: true,
+      x: park[0],
+      y: park[1],
+      lx: park[0],
+      ly: park[1],
+      feeding: true,
+      bout: 20,
+      stay: 1000,
+    });
+    for (const bird of flock.birds)
+      Object.assign(bird, {
+        gx: bird.ox,
+        gy: bird.oy,
+        tx: bird.ox,
+        ty: bird.oy,
+        face: bird.phase * 6,
+        wait: 1,
+      });
     const levels = activityLevels(1);
     life.step(0.1, undefined, onlyBirds, undefined, { levels, rain: 0 });
     expect(flock.landed).toBe(true);
@@ -949,6 +1108,82 @@ describe('parked vehicles', () => {
   ]);
   const seeds = Array.from({ length: 20 }, (_, i) => i + 1);
 
+  const splitWay = () => {
+    const b = new LifeBuilder();
+    for (const [a, z] of [
+      [0, 1500],
+      [1500, 2800],
+      [2800, 4095],
+    ])
+      b.line(
+        [
+          { x: a!, y: 2048 },
+          { x: z!, y: 2048 },
+        ],
+        LifeLine.roadMajor,
+        14,
+        77,
+      );
+    return b.finish();
+  };
+
+  it('uses one curb-parking decision for all pieces of a way', () => {
+    const decisions: boolean[] = [];
+    for (const seed of seeds) {
+      const life = new TileLife(tile, splitWay(), seed);
+      const offsets = [0, 1, 2].map((line) =>
+        life.offsetOf({ kind: 'vehicle', vehicle: 'car', line, lane: 0 } as Mover),
+      );
+      expect(new Set(offsets).size).toBe(1);
+      const parked = offsets[0] === laneOffset(14 - 2 * PARKED.strip, VEHICLES.car.width, 0);
+      decisions.push(parked);
+      for (const [a, z] of [
+        [0, 1500],
+        [1500, 2800],
+        [2800, 4095],
+      ])
+        expect(life.parked.some((p) => p.x > a! && p.x < z!)).toBe(parked);
+    }
+    expect(new Set(decisions).size).toBe(2);
+  });
+
+  it('keeps the lane offset and lateral pose when a car crosses a parked straight split', () => {
+    const life = seeds
+      .map((seed) => new TileLife(tile, splitWay(), seed))
+      .find((life) => life.parked.length)!;
+    expect(life).toBeDefined();
+    life.movers.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const d = 1500 - 20 * perMeter;
+    const m: Mover = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d,
+      speed: 2 * perMeter,
+      v: 2 * perMeter,
+      paint: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+      x: d,
+      y: 2048,
+      hx: 1,
+      hy: 0,
+    };
+    life.movers.push(m);
+    const offset = life.offsetOf(m),
+      y = life.pose(m).y;
+    for (let frame = 0; frame < 200 && m.line === 0; frame++) {
+      life.step(0.1);
+      expect(life.offsetOf(m)).toBe(offset);
+      expect(life.pose(m).y).toBeCloseTo(y, 8);
+    }
+    expect(m.line).toBe(1);
+  });
+
   it('park along the curbs of some wide roads only, and narrow the lanes there', () => {
     const parkedOn = seeds.map((seed) => new TileLife(tile, wide, seed));
     const withParking = parkedOn.filter((life) => life.parked.length > 0);
@@ -1416,6 +1651,118 @@ describe('people', () => {
     expect(share(0, -10)).toBeLessThanOrEqual(UMBRELLA.base + 0.1);
   });
 
+  it('staggers close-up opening and closing while preserving distant instant changes', () => {
+    for (const zoom of [18, 19]) {
+      const world = new LifeWorld();
+      world.sync([{ key: 'motion', tile, life: across(LifeLine.path) }]);
+      const life = worldTiles(world).get('motion')!;
+      const m = life.movers.find((m) => m.group)!;
+      life.movers.splice(0, life.movers.length, m);
+      life.stalls.length = 0;
+      life.flocks.length = 0;
+      m.pause = 100;
+      m.rank = 0;
+      m.group = [0.1, 0.4, 0.8, 0.1].map((umbrella, i) => ({
+        figure: i === 3 ? 'child' : 'adult',
+        umbrella,
+        shirt: i + 1,
+        canopy: i + 5,
+        lateral: i % 2,
+        back: Math.floor(i / 2),
+        step: 0,
+      }));
+      const looks = (rain: number) =>
+        world.visible(zoom, 1, center, { rain, sunAltitude: 20 })[0]!.people!;
+      const dry = looks(0);
+      let wet = looks(1);
+      if (zoom === 18) {
+        expect(wet.map((p) => p.figure)).toEqual(['umbrella', 'umbrella', 'adult', 'child']);
+        expect(looks(0)).toEqual(dry);
+        continue;
+      }
+      expect(wet).toEqual(dry);
+      const progress = new Map<number, number>();
+      const frames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.open) / 0.05) + 1;
+      for (let frame = 0; frame < frames; frame++) {
+        world.step(0.05);
+        wet = looks(1);
+        wet.forEach((look, i) => {
+          if (!look.canopy) return;
+          expect(look.canopy.open).toBeGreaterThanOrEqual(progress.get(i) ?? 0);
+          expect(look.canopy.figure).toBe('adult');
+          expect(look.canopy.paint).toBe(m.group![i]!.shirt);
+          progress.set(i, look.canopy.open);
+        });
+      }
+      expect(progress.size).toBe(2);
+      expect(wet.map((p) => p.figure)).toEqual(['umbrella', 'umbrella', 'adult', 'child']);
+      expect(wet.every((p) => !Object.hasOwn(p, 'canopy'))).toBe(true);
+      expect(looks(0)).toEqual(wet);
+      const folding = new Map<number, number>();
+      const closingProgress = new Map<number, number>();
+      const closingFrames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
+      for (let frame = 0; frame < closingFrames; frame++) {
+        world.step(0.05);
+        const closed = looks(0);
+        const elapsed = (frame + 1) * 0.05;
+        closed.forEach((look, i) => {
+          if (i > 1) {
+            expect(look).toEqual(wet[i]);
+            return;
+          }
+          const delay = ((m.group![i]!.umbrella * 7919.123) % 1) * UMBRELLA_MOTION.stagger;
+          if (elapsed <= delay) expect(look).toEqual(wet[i]);
+          else if (elapsed < delay + UMBRELLA_MOTION.close) {
+            expect(look.canopy).toBeDefined();
+            if (!folding.has(i)) {
+              expect(elapsed).toBeLessThanOrEqual(delay + 0.05);
+              folding.set(i, elapsed);
+            }
+          } else expect(look).toEqual(dry[i]);
+          const open = look.canopy?.open ?? Number(look.figure === 'umbrella');
+          expect(open).toBeLessThanOrEqual(closingProgress.get(i) ?? 1);
+          closingProgress.set(i, open);
+        });
+        if (frame === closingFrames - 1) expect(closed).toEqual(dry);
+      }
+      expect(folding.size).toBe(2);
+    }
+  });
+
+  it('snaps rapid and same-clock close-view reentries to the distant weather in both directions', () => {
+    for (const initialRain of [0, 1])
+      for (const gap of [0, 0.1]) {
+        const world = new LifeWorld();
+        world.sync([{ key: 'reentry', tile, life: across(LifeLine.path) }]);
+        const life = worldTiles(world).get('reentry')!;
+        const m = life.movers.find((m) => m.group)!;
+        life.movers.splice(0, life.movers.length, m);
+        life.stalls.length = 0;
+        life.flocks.length = 0;
+        m.pause = 100;
+        m.rank = 0;
+        m.group = [{ ...m.group![0]!, figure: 'adult', umbrella: 0.23, lateral: 0, back: 0 }];
+        const looks = (zoom: number, rain: number) =>
+          world.visible(zoom, 1, center, { rain, sunAltitude: 20 })[0]!.people!;
+        const original = looks(19, initialRain);
+        expect(looks(19, 1 - initialRain)).toEqual(original);
+        const distant = looks(18, 1 - initialRain);
+        expect(distant[0]!.figure).toBe(initialRain ? 'adult' : 'umbrella');
+        if (gap) world.step(gap);
+        expect(looks(19, 1 - initialRain)).toEqual(distant);
+        expect(looks(19, initialRain)).toEqual(distant);
+        let animated = false;
+        const frames = Math.ceil((UMBRELLA_MOTION.stagger + UMBRELLA_MOTION.close) / 0.05) + 1;
+        for (let frame = 0; frame < frames; frame++) {
+          world.step(0.05);
+          const people = looks(19, initialRain);
+          animated ||= !!people[0]!.canopy;
+          if (frame === frames - 1) expect(people).toEqual(original);
+        }
+        expect(animated).toBe(true);
+      }
+  });
+
   it('sets up carts beside walking paths, more of them near a market, and omits road vendors', () => {
     const road = new TileLife(tile, across(LifeLine.roadMinor, 8, [[2048, 2100]]), 3);
     expect(road.stalls).toHaveLength(0);
@@ -1538,6 +1885,51 @@ describe('people at places', () => {
     expect(before.length).toBeLessThanOrEqual(2);
     for (let i = 0; i < 100; i++) life.step(0.1);
     expect(life.gatherers.map((g) => [g.x, g.y])).toEqual(before);
+  });
+
+  it('opens and folds over a seated adult without losing the seated figure or shirt', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'bench-motion', tile, life: withPlaces([['bench', 0]]) }]);
+    const life = worldTiles(world).get('bench-motion')!;
+    const gatherer = life.gatherers.find((g) => g.walker.figure === 'adult')!;
+    expect(gatherer).toBeDefined();
+    life.gatherers.splice(0, life.gatherers.length, gatherer);
+    gatherer.rank = 0;
+    gatherer.walker = { ...gatherer.walker, umbrella: 0.23 };
+    const look = (rain: number): PersonLook =>
+      world.visible(19, 1, center, { rain, sunAltitude: 20 })[0]!.people![0]!;
+    const dry = look(0);
+    expect(dry.figure).toBe('seated');
+    expect(look(1)).toEqual(dry);
+    const stages: PersonLook[] = [];
+    for (let frame = 0; frame < 50; frame++) {
+      world.step(0.05);
+      const next = look(1);
+      if (next.canopy) stages.push(next);
+    }
+    expect(stages.length).toBeGreaterThan(0);
+    for (const stage of stages) {
+      expect(stage.canopy!.figure).toBe('seated');
+      expect(stage.canopy!.paint).toBe(dry.paint);
+    }
+    expect(look(1)).toMatchObject({ figure: 'umbrella', paint: gatherer.walker.canopy });
+    expect(look(1).canopy).toBeUndefined();
+    const folding: PersonLook[] = [];
+    let previous = 1;
+    for (let frame = 0; frame < 50; frame++) {
+      world.step(0.05);
+      const next = look(0);
+      const open = next.canopy?.open ?? Number(next.figure === 'umbrella');
+      expect(open).toBeLessThanOrEqual(previous);
+      previous = open;
+      if (next.canopy) folding.push(next);
+    }
+    expect(folding.length).toBeGreaterThan(0);
+    for (const stage of folding) {
+      expect(stage.canopy!.figure).toBe('seated');
+      expect(stage.canopy!.paint).toBe(dry.paint);
+    }
+    expect(look(0)).toEqual(dry);
   });
 
   it('work the fields with carabao in the morning, not at night', () => {

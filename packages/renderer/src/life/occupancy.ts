@@ -29,6 +29,21 @@ export const BODY_KIND = { human: 1, vehicle: 2, fixed: 4, animal: 8 } as const;
 export type Point = { x: number; y: number };
 export type Polygon = readonly (readonly Point[])[];
 
+/** Thin swept segment; padding is total added length, in the caller's metric coordinates. */
+export function segmentBody(a: Point, b: Point, padding = 0): Body {
+  const dx = b.x - a.x,
+    dy = b.y - a.y;
+  const distance = Math.hypot(dx, dy);
+  return {
+    x: (a.x + b.x) / 2,
+    y: (a.y + b.y) / 2,
+    hx: distance ? dx / distance : 1,
+    hy: distance ? dy / distance : 0,
+    length: Math.max(distance + padding, 0.01),
+    width: 0.01,
+  };
+}
+
 /** The bounds of `points`: [minX, minY, maxX, maxY]. A loop, so long rings can't overflow a spread. */
 export function boundsOf(points: readonly Point[]): [number, number, number, number] {
   let x0 = Infinity,

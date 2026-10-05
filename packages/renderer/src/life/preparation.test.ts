@@ -8,7 +8,8 @@ import { tileToLngLat } from '../raster/geometry';
 import type { LifeViewContext } from './births';
 import { activityLevels } from './config';
 import { FrameProfiler } from '../profile';
-import { LifeLine } from './geometry';
+import { LifeBuilder, LifeLine } from './geometry';
+import { prepareForageTerrain, prepareForageTerrainSteps } from './forage';
 
 const context = (tile = left): LifeViewContext => {
   const [west, north] = tileToLngLat(tile, { x: 0, y: 0 });
@@ -26,6 +27,30 @@ const finish = (jobs: LifePreparation) => {
 };
 
 describe('cooperative life preparation', () => {
+  it('uses a separate shared-clearance cache without copying buildings into world forage terrain', () => {
+    const builder = new LifeBuilder();
+    builder.roost({ x: 2000, y: 2000 });
+    builder.area('blocked', [
+      [
+        { x: 2100, y: 2100 },
+        { x: 2200, y: 2100 },
+        { x: 2200, y: 2200 },
+        { x: 2100, y: 2200 },
+        { x: 2100, y: 2100 },
+      ],
+    ]);
+    const entry = { key: 'forage-cache', tile: left, life: builder.finish() };
+    const world = new LifeWorld();
+    const prepared = complete(world.prepareTile(entry));
+    const cached = prepareForageTerrainSteps(entry.life, prepared.perMeter, 'world').next();
+    expect(cached.done).toBe(true);
+    const shared = prepareForageTerrain(entry.life, prepared.perMeter, 'world');
+    expect(shared.blocked.polygons).toHaveLength(0);
+    const local = prepareForageTerrain(entry.life, prepared.perMeter);
+    expect(local).not.toBe(shared);
+    expect(local.blocked.polygons).toHaveLength(1);
+    expect(prepareForageTerrain(entry.life, prepared.perMeter, 'world')).toBe(shared);
+  });
   it('preserves complete generation and future RNG behavior across arbitrary yields', () => {
     for (const kind of ['crossroads', 'rain', 'sparse', 'transit'] as const) {
       const entry = scenarioTiles(kind, 1)[0]!;

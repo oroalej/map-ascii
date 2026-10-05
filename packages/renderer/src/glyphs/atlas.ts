@@ -206,10 +206,15 @@ const sextantMasks = new Map<string, number>(
  * A sextant: the cell split into 2 columns and 3 rows, each sixth solid or empty. The splits are
  * rounded the same way in every cell, so neighboring sextants meet without seams or gaps.
  */
+/** Pixel boundaries shared by sextant drawing and procedural figure coverage. */
+export const sextantSplits = (w: number, h: number) => ({
+  xs: [0, Math.round(w / 2), w] as const,
+  ys: [0, Math.round(h / 3), Math.round((2 * h) / 3), h] as const,
+});
+
 function drawSextant(slot: Slot, mask: number) {
   const { w, h } = slot;
-  const xs = [0, Math.round(w / 2), w];
-  const ys = [0, Math.round(h / 3), Math.round((2 * h) / 3), h];
+  const { xs, ys } = sextantSplits(w, h);
   for (let bit = 0; bit < 6; bit++) {
     if (!(mask & (1 << bit))) continue;
     const col = bit % 2;
