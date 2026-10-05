@@ -61,6 +61,7 @@ import {
   LIFE_ZOOM,
   MAX_STEP_S,
   RETIRE,
+  RUN,
   ADOPT,
   MAX_TILE_AGENTS,
   MAX_TILE_GATHERERS,
@@ -74,6 +75,7 @@ import {
   spawnRules,
   TRAIN,
   umbrellaShare,
+  underUmbrella,
   UMBRELLA_MOTION,
   usableLines,
   VENDORS,
@@ -117,6 +119,7 @@ import {
 } from './forage';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { runPace } from './running';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
@@ -294,6 +297,8 @@ export type Mover = {
   /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
   trot?: number;
   lying?: boolean;
+  /** People: seconds left of a run (config.ts `RUN`). */
+  run?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -634,6 +639,7 @@ export class TileLife {
   signals!: SignalControl;
   scenes!: LocalScenes;
   private readonly catRng: () => number;
+  private readonly runRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
   readonly pending: PendingSeed[] = [];
@@ -938,6 +944,7 @@ export class TileLife {
     this.forageRng = random(seed ^ 0x4f1bbcdc);
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
+    this.runRng = random(seed ^ 0xcc9e2d51);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
@@ -3212,6 +3219,18 @@ export class TileLife {
         (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
         a.i - b.i,
     );
+    // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
+    // the cap in stable mover order.
+    let running = 0;
+    for (let i = 0; i < this.movers.length; i++) {
+      const m = this.movers[i]!;
+      if ((m.run ?? 0) <= 0) continue;
+      else if (this.scenes.visits.has(m)) this.stopRun(m);
+      else if (this.eligible[i]) {
+        if (running < RUN.maxPerTile) running++;
+        else this.stopRun(m);
+      }
+    }
     for (const { i, m } of order) {
       if (this.inspected === m) continue;
       if (!this.eligible[i]) continue;
@@ -3298,19 +3317,26 @@ export class TileLife {
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
+          running -= Number(this.stopRun(m));
           continue;
         }
         const idle = this.canIdle(m);
-        if (!idle) m.pause = 0;
+        const dash = this.scenes.dashPace(m);
+        const dashing = dash !== undefined;
+        if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
-          continue;
-        }
-        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
+          const pause = between(this.walkerRng, PERSON_PAUSE.seconds);
+          if (!dashing) {
+            m.pause = pause;
+            running -= Number(this.stopRun(m));
+            continue;
+          }
+        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+          running -= Number(this.stopRun(m));
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -3318,6 +3344,11 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+        const was = (m.run ?? 0) > 0;
+        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const pace = dash ?? randomPace;
+        running += Number((m.run ?? 0) > 0) - Number(was);
+        if (pace !== undefined) speeds[i] = pace;
       }
       const walking = isWalker(m.kind);
       if (walking) {
@@ -3427,6 +3458,35 @@ export class TileLife {
     m.d = this.segment(m.from, to) - m.d;
     m.from = to;
     m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /** Cancel a live run, reporting whether it occupied a running slot. */
+  private stopRun(m: Mover): boolean {
+    if ((m.run ?? 0) <= 0) return false;
+    m.run = 0;
+    return true;
+  }
+
+  /**
+   * A random run's pace (config.ts `RUN`), or undefined while walking or in rain. Someone
+   * walking alone now and then runs a few seconds while there is `room` (fewer than
+   * `RUN.maxPerTile` in the tile running). A run ends early when held up or rain starts.
+   */
+  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
+    if (this.scenes.raining) {
+      if (m.run) m.run = 0;
+      return;
+    }
+    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
+    else if (
+      room &&
+      (m.waiting ?? 0) <= 0 &&
+      m.group?.length === 1 &&
+      m.group[0]!.figure === 'adult' &&
+      this.runRng() < RUN.chance * dt
+    )
+      m.run = between(this.runRng, RUN.seconds);
+    return (m.run ?? 0) > 0 ? runPace(m, RUN.speed, this.perMeter) : undefined;
   }
 
   /**
@@ -5690,7 +5750,7 @@ export class LifeWorld {
     clock: number,
   ): PersonLook {
     if (walker.figure !== 'adult') return look;
-    const want = walker.umbrella < share;
+    const want = underUmbrella(walker, share);
     const open =
       zoom >= UMBRELLA_MOTION.zoom ? this.umbrellas.look(walker, want, clock) : Number(want);
     if (open > 0) {
