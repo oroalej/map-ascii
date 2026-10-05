@@ -8,6 +8,7 @@ import {
   shopHours,
   shopOpen,
   resolveSeason,
+  eventOccurrence,
   dialogueChoices,
   type ShopHours,
 } from '@atlas/shared';
@@ -885,7 +886,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const lifeView = () => lifePause.view(host.latest());
   const reportProcession = () => {
     const run = lifeView()?.procession;
-    const key = run ? `${run.id} ${run.live}` : '';
+    const key = run ? `${run.id} ${run.live} ${run.time?.day ?? ''}/${run.time?.minute ?? ''}` : '';
     if (key === processionKey) return;
     processionKey = key;
     emit('procession', run ?? null);
@@ -1396,7 +1397,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     else livePause.reset();
     host.setLive(live?.id, live?.progress, occurrence);
     // The moment the map shows: now, or today at the fixed time in the city.
-    const moment = life.time === 'live' ? now() : atCityMinutes(now(), zone, life.time);
+    const playedTime = lifeActive() ? lifeView()?.procession?.time : undefined;
+    const moment = playedTime
+      ? new Date(playedTime.instantMs)
+      : life.time === 'live'
+        ? now()
+        : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
     const next = daylightAt(position.altitude);
     const nextMoon = moonlight(moment, camera.lng, camera.lat);
@@ -1894,7 +1900,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       reducedMotion = enabled;
       lifeHover.pointer(null);
       lifePause.tick(performance.now(), lifeRunning());
-      if (enabled) host.clearTiles();
+      if (enabled) {
+        host.stop();
+        host.clearTiles();
+        reportProcession();
+      }
       lastSun = -Infinity;
       cellDirty = true;
       cellsFor = null;
@@ -1938,7 +1948,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       updateSeason();
       lifePause.tick(performance.now(), lifeRunning());
       speech.clear();
-      if (!lifeActive()) host.clearTiles();
+      if (!lifeActive()) {
+        host.stop();
+        host.clearTiles();
+        reportProcession();
+      }
       lastSun = -Infinity;
       // Spawn or drop agents for the tiles on screen.
       cellDirty = true;
@@ -1947,9 +1961,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getLife: () => ({ ...life }),
     getSeason: () => seasonSnapshot,
     playProcession(id) {
-      if (!lifeActive() || !host.play(id)) return false;
+      const route = processions.find((p) => p.id === id);
+      if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
+        return false;
       lifeHover.pointer(null);
       lastSun = -Infinity;
+      reportProcession();
       drawDirty = true;
       return true;
     },
@@ -1957,6 +1974,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeHover.pointer(null);
       lastSun = -Infinity;
       host.stop();
+      reportProcession();
       drawDirty = true;
     },
     setYear() {

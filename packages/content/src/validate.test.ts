@@ -1,12 +1,67 @@
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
 import { contentRoot, loadCityPacks } from './validate';
 
 const badRoot = fileURLToPath(new URL('./__fixtures__/bad', import.meta.url));
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on pack edits.
 import.meta.glob('../cities/**/*.json');
+vi.mock('node:fs/promises', async (load) => {
+  const actual = await load<typeof fs>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 describe('loadCityPacks', () => {
+  it.each(['season', 'missing', 'self', 'cycle'] as const)(
+    'reports an invalid %s reference at its procession file',
+    async (kind) => {
+      const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+      vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+        const text = await original(...args);
+        if (typeof args[0] !== 'string') return text;
+        const path = args[0].replaceAll('\\', '/');
+        if (
+          !path.endsWith('/processions/cathedral-arrival-mass.json') &&
+          !(kind === 'cycle' && path.endsWith('/processions/penafrancia-traslacion.json'))
+        )
+          return text;
+        const value = JSON.parse(String(text)) as {
+          id: string;
+          season?: string;
+          schedule: unknown;
+        };
+        if (kind === 'season') value.season = 'missing-season';
+        else
+          value.schedule = {
+            follows:
+              kind === 'missing'
+                ? 'procession/missing'
+                : kind === 'self'
+                  ? value.id
+                  : value.id === 'procession/penafrancia-traslacion'
+                    ? 'procession/cathedral-arrival-mass'
+                    : 'procession/penafrancia-traslacion',
+            duration_min: 90,
+          };
+        return JSON.stringify(value);
+      });
+      try {
+        const { errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+        expect(errors).toContainEqual({
+          file: 'cities/naga/processions/cathedral-arrival-mass.json',
+          message: expect.stringMatching(
+            kind === 'season'
+              ? /unknown season/
+              : kind === 'missing'
+                ? /missing predecessor/
+                : /cyclic follows/,
+          ) as string,
+        });
+      } finally {
+        vi.mocked(fs.readFile).mockImplementation(original);
+      }
+    },
+  );
   it('passes on the repository city packs', async () => {
     const { packs, errors } = await loadCityPacks(contentRoot);
     expect(errors).toEqual([]);

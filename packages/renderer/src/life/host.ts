@@ -1,6 +1,12 @@
 import * as Comlink from 'comlink';
 import { simulationSeasons } from './seasonal-simulation';
-import type { RuntimeCityLife, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import {
+  eventTime,
+  type EventTiming,
+  type RuntimeCityLife,
+  type ProcessionRoute,
+  type TrafficMix,
+} from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
@@ -34,7 +40,7 @@ export interface LifeHost {
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
   setLive(id: string | undefined, progress?: number, occurrence?: string): void;
-  play(id: string): boolean;
+  play(id: string, timing?: EventTiming): boolean;
   stop(): void;
   dispose(): void;
 }
@@ -104,7 +110,7 @@ export function createInlineHost(
       };
     },
     setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
-    play: (id) => world.play(id),
+    play: (id, timing) => world.play(id, timing),
     stop: () => world.stop(),
     dispose: () => {
       disposed = true;
@@ -158,6 +164,7 @@ export function createWorkerHost(
   let viewContext: LifeViewContext | undefined;
   let live: { id: string | undefined; progress?: number; occurrence?: string } = { id: undefined };
   let played: string | undefined;
+  let playedTiming: EventTiming | undefined;
   const sent = new Set<string>();
   const release = () => {
     remote[Comlink.releaseProxy]();
@@ -171,7 +178,7 @@ export function createWorkerHost(
     fallback = inline();
     fallback.sync(tiles, focus, viewContext);
     fallback.setLive(live.id, live.progress, live.occurrence);
-    if (played) fallback.play(played);
+    if (played) fallback.play(played, playedTiming);
   };
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
@@ -312,17 +319,36 @@ export function createWorkerHost(
       if (fallback) fallback.setLive(id, progress, occurrence);
       else void remote.setLive(id, progress, occurrence).catch(fail);
     },
-    play(id) {
+    play(id, timing) {
       if (disposed || !processions.some((route) => route.id === id)) return false;
+      agentEpoch++;
       played = id;
+      playedTiming = timing;
       playedFrom = frames;
-      if (fallback) return fallback.play(id);
-      void remote.play(id).catch(fail);
+      const procession: ProcessionRun = {
+        id,
+        progress: 0,
+        live: false,
+        ...(timing && { time: eventTime(timing, 0) }),
+      };
+      view = {
+        generation,
+        agents: [],
+        puffs: EMPTY_PUFFS,
+        signalClock: view?.signalClock ?? 0,
+        cellGuard: () => undefined,
+        procession,
+      };
+      if (fallback) return fallback.play(id, timing);
+      void remote.play(id, timing).catch(fail);
       return true;
     },
     stop() {
       if (disposed) return;
+      agentEpoch++;
       played = undefined;
+      playedTiming = undefined;
+      if (view) view = { ...view, procession: undefined, agents: [], puffs: EMPTY_PUFFS };
       if (fallback) fallback.stop();
       else void remote.stop().catch(fail);
     },

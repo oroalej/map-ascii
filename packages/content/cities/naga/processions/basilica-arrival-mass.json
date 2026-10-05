@@ -1,0 +1,44 @@
+{
+  "id": "procession/basilica-arrival-mass",
+  "title": {
+    "en": "Mass after the fluvial procession"
+  },
+  "story": {
+    "en": "TODO(verify): The Mass follows the fluvial landing. The illustrative 18:30 start inherits the selected 15:00–18:30 afternoon simulation and the original Archdiocese listing. The later 2026 advisory instead gives 21:00 fluvial start and approximately 23:00 Mass; this replay retains the owner’s afternoon choice. Ninety-minute duration, gathering geometry and density are schematic."
+  },
+  "status": "draft",
+  "kind": "mass",
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Mass at the Basilica"
+  },
+  "site": "osm:way/23670362",
+  "grounds": ["osm:way/838935827"],
+  "radius_m": 150,
+  "schedule": {
+    "follows": "procession/penafrancia-fluvial",
+    "duration_min": 90
+  },
+  "sources": [
+    {
+      "title": "Archdiocese of Caceres: Peñafrancia calendar",
+      "url": "https://www.archdioceseofcaceres.org/caceresevents",
+      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+    },
+    {
+      "title": "Naga Tourism: updated 2026 fluvial schedule",
+      "url": "https://tourism.naga.gov.ph/public-advisory-updated-schedule-for-the-fluvial-procession/",
+      "note": "The later 2026 advisory moved boarding/start to 21:00 and estimated concluding Mass at 23:00. This simulation retains the owner-selected usual afternoon window 15:00–18:30 and inherited 18:30 Basilica Mass from the original listings; it does not depict the final actual 2026 schedule. TODO(verify)."
+    },
+    {
+      "title": "City of Naga: 2022 fluvial procession",
+      "url": "https://www2.naga.gov.ph/fluvial-procession-highlights-festival/",
+      "note": "Cathedral-to-Danlugan foot procession after afternoon Mass, then fluvial procession and a concluding Mass. Supports Danlugan departure; river path, 210-minute window and formation are illustrative TODO(verify)."
+    },
+    {
+      "title": "OpenStreetMap: event anchors and grounds",
+      "url": "https://www.openstreetmap.org/way/23670362",
+      "note": "Mapped anchors: osm:way/23670362, osm:way/838935827. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+    }
+  ]
+}

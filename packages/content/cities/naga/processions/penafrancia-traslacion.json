@@ -1,0 +1,50 @@
+{
+  "id": "procession/penafrancia-traslacion",
+  "title": {
+    "en": "Peñafrancia Traslación"
+  },
+  "story": {
+    "en": "TODO(verify): The image is carried from the Old Peñafrancia Shrine to the Metropolitan Cathedral at the published noon start. The carried image, voyadores, candles and marshals illustrate the event; the routed street path, four-hour duration and formation are schematic."
+  },
+  "status": "draft",
+  "kind": "procession",
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Procession"
+  },
+  "route": {
+    "from": "osm:way/606888524",
+    "to": "osm:way/23666715"
+  },
+  "schedule": {
+    "month": 9,
+    "weekday": 6,
+    "nth": 3,
+    "offset_days": -8,
+    "start": "12:00",
+    "duration_min": 240,
+    "timezone": "Asia/Manila"
+  },
+  "formation": {
+    "bearers": 8,
+    "ranks": 12,
+    "marshals": 4
+  },
+  "sources": [
+    {
+      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
+      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+    },
+    {
+      "title": "GMA Regional TV: Traslación 2024",
+      "url": "https://www.gmanetwork.com/regionaltv/features/103997/over-900t-devotees-gather-for-traslacion-in-peafrancia-2024/story",
+      "note": "Confirms Old Shrine to Metropolitan Cathedral endpoints; does not establish this schematic street route or formation."
+    },
+    {
+      "title": "OpenStreetMap: event anchors and grounds",
+      "url": "https://www.openstreetmap.org/way/606888524",
+      "note": "Mapped anchors: osm:way/606888524, osm:way/23666715. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+    }
+  ]
+}

@@ -25,7 +25,9 @@ export const step: Step = {
     );
     for (const r of routes) {
       console.log(
-        `  ${r.id}: ${r.length_m} m along the river, ${r.route.length} points (${r.status})`,
+        r.kind === 'mass'
+          ? `  ${r.id}: gathering at ${r.site.id} (${r.status})`
+          : `  ${r.id}: ${r.length_m} m ${r.kind}, ${r.route.length} points (${r.status})`,
       );
     }
   },

@@ -4,7 +4,7 @@
     "en": "Peñafrancia fluvial procession"
   },
   "story": {
-    "en": "TODO(verify): The image of Our Lady of Peñafrancia leaves Danlugan ni Ina on a pagoda barge, towed by voyadores in paddle boats, and goes up the Naga River to near the Peñafrancia Basilica. The route is from the project owner and needs a published source; the date and times are placeholders."
+    "en": "TODO(verify): The image leaves Danlugan ni Ina on a pagoda barge and follows the Naga River toward the Peñafrancia Basilica. Danlugan departure and the concluding Mass are sourced; the river path, formation and 210-minute duration are illustrative. The simulation retains the original usual-afternoon window 15:00–18:30 and following 18:30 Mass by owner choice. The updated 2026 advisory instead moved boarding/start to 21:00 and estimated Mass at 23:00; this is not the final actual 2026 schedule."
   },
   "status": "draft",
   "kind": "fluvial",
@@ -14,18 +14,42 @@
   },
   "schedule": {
     "month": 9,
-    "weekday": 0,
+    "weekday": 6,
     "nth": 3,
-    "offset_days": -1,
+    "offset_days": 0,
     "start": "15:00",
-    "duration_min": 180,
+    "duration_min": 210,
     "timezone": "Asia/Manila"
   },
   "sources": [
     {
-      "title": "OpenStreetMap",
+      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
+      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+    },
+    {
+      "title": "Naga Tourism: updated 2026 fluvial schedule",
+      "url": "https://tourism.naga.gov.ph/public-advisory-updated-schedule-for-the-fluvial-procession/",
+      "note": "The later 2026 advisory moved boarding/start to 21:00 and estimated concluding Mass at 23:00. This simulation retains the owner-selected usual afternoon window 15:00–18:30 and inherited 18:30 Basilica Mass from the original listings; it does not depict the final actual 2026 schedule. TODO(verify)."
+    },
+    {
+      "title": "City of Naga: 2022 fluvial procession",
+      "url": "https://www2.naga.gov.ph/fluvial-procession-highlights-festival/",
+      "note": "Cathedral-to-Danlugan foot procession after afternoon Mass, then fluvial procession and a concluding Mass. Supports Danlugan departure; river path, 210-minute window and formation are illustrative TODO(verify)."
+    },
+    {
+      "title": "Archdiocese of Caceres: Peñafrancia calendar",
+      "url": "https://www.archdioceseofcaceres.org/caceresevents",
+      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+    },
+    {
+      "title": "OpenStreetMap: event anchors and grounds",
       "url": "https://www.openstreetmap.org/node/6791580317",
-      "note": "Locations and names only: Danlugan ni Ina (node/6791580317) and the Peñafrancia Basilica (way/23670362). The route between them, the schedule, and the formation are unsourced."
+      "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. Street endpoints are snapped within 200 m. Outdoor gathering regions, overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
     }
-  ]
+  ],
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Fluvial"
+  }
 }

@@ -59,8 +59,11 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 7. **`07-processions`**
-   - For each of the pack's `processions`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 300 m of a river; the route ends at the river point nearest each (an end may be a landmark a short walk from the river).
+   - For `fluvial`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 300 m of a river; the route ends at the river point nearest each (an end may be a landmark a short walk from the river).
    - Resample the route to points at most 10 m apart and measure, at each, how far the water reaches to its left and right (`banks`, from the `water_area` polygons; left out where the river is mapped only as a line).
+   - For `procession` and `parade`, route along connected eligible roads and paths, optionally restricted to `via` way IDs. Snap endpoints within 200 m, exclude steps and prohibited access, and require enough explicit/conservative width for the selected formation and vehicles. Emit samples at most 10 m apart with aligned source identities, widths and sidewalks. Seasonal bunting shares this graph without changing its ordering.
+   - For `mass`, resolve the church and authored grounds from complete merged geography. Bake connected outdoor gathering cells and approaches within the overflow radius, excluding roofs, water and barriers, and select a safe outdoor anchor. The generated Mass has a `site`, without a route or length.
+   - Resolve `follows` dependencies by ID, independent of file order, carrying predecessor duration across midnight into the annual offset. Generated schedules are explicit and retain predecessor IDs for crowd handover. Missing references and cycles fail validation.
    - Write `<city>.processions.json` (the `CityProcessions` schema), published with the tiles. Cities without processions get no file.
 
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
@@ -222,15 +225,23 @@ Procession {                     // cities/<slug>/processions/*.json
   title: LocalizedText;
   story: LocalizedText;          // may hold "TODO(verify)" while draft
   status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources
-  kind: 'fluvial';
-  route: { to: string; from?: string; upstream_m?: number };  // OSM ids; exactly one of from / upstream_m
+  season?: string;               // city life season ID; requires label.en
+  label?: LocalizedText;         // short menu title
+  kind: 'fluvial' | 'procession' | 'parade' | 'mass';
+  // fluvial only: exactly one of from / upstream_m
+  route?: { to: string; from?: string; upstream_m?: number }
+        | { from: string; to: string; via?: string[] }; // street kinds, OSM way pins
+  site?: string; grounds?: string[]; radius_m?: number; // mass only, no route
   schedule: {                    // offset_days after the nth weekday (0 = Sunday) of month
     month: number; weekday: number; nth: number; offset_days: number;
     start: string;               // "HH:MM", local
     duration_min: number;
     timezone: string;            // IANA, e.g. "Asia/Manila"
-  };
-  formation?: { columns?: number; ranks?: number; escorts?: number };
+  } | { follows: string; duration_min: number };
+  formation?: { columns?: number; ranks?: number; escorts?: number } // fluvial
+            | { bearers?: number; ranks?: number; marshals?: number } // procession
+            | { contingents?: number; ranks?: number; band?: number;
+                color_guard?: number; vehicles?: ('car' | 'truck' | 'motorcycle')[] }; // parade
   sources?: Source[];
 }
 

@@ -155,6 +155,32 @@ describe('Procession', () => {
     expect(at({ timezone: 'Manila' })).toBe(false);
   });
 
+  it('discriminates street formations and route-less Masses', () => {
+    const street = {
+      ...procession,
+      kind: 'procession',
+      route: { from: 'osm:way/1', to: 'osm:way/2' },
+      season: 'fiesta',
+      label: { en: 'Procession' },
+    };
+    expect(ok(street)).toBe(true);
+    expect(ok({ ...street, formation: { columns: 3 } })).toBe(false);
+    expect(ok({ ...street, label: undefined })).toBe(false);
+    const { route: _route, ...base } = street;
+    const mass = {
+      ...base,
+      kind: 'mass',
+      site: 'osm:way/2',
+      grounds: ['osm:way/3'],
+      radius_m: 100,
+      schedule: { follows: 'procession/river', duration_min: 90 },
+    };
+    expect(ok(mass)).toBe(true);
+    expect(ok({ ...mass, route: street.route })).toBe(false);
+    expect(ok({ ...mass, schedule: { ...mass.schedule, start: '16:00' } })).toBe(false);
+    expect(ok({ ...mass, status: 'verified' })).toBe(false);
+  });
+
   it('is verified only without placeholders and with sources', () => {
     const verified = { ...procession, status: 'verified' };
     expect(ok(verified)).toBe(false);

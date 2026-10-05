@@ -143,8 +143,8 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - [x] M5a — Festive decorations: sourced illustrative pack calendars, preview chip, star lanterns, bunting, temporary stalls, residential fireworks, Christmas installations and seasonal carnivals (`life.seasons`); automatic real city date and reduced-motion behavior. Generated dense corridors, installations and carnivals are implemented with local tiles; archive publication remains pending.
 - [ ] M5b — Fiesta crowds in September, separately from decorative fixtures and vendor carts.
 
-- [ ] M6 — Street processions: a `street` procession kind routed over walkable ways; Naga's Traslación (draft).
-- [ ] M7 — Penitensya: Holy Week penitents as a pack-gated `street` procession (hooded walkers and cross-bearers, nothing graphic); Naga's only once a source confirms the practice there.
+- [x] M6 — Street events: `procession` and `parade` kinds routed over eligible ways, plus connected outdoor `mass` gatherings. Naga's draft Traslación, military parade and Cathedral/Basilica arrival Masses share the fiesta menu with the fluvial; playback drives event time and bounded physical crowd/traffic reservations.
+- [ ] M7 — Penitensya: Holy Week penitents as a pack-gated `procession`-kind record (hooded walkers and cross-bearers, nothing graphic); Naga's only once a source confirms the practice there.
 
 **Accept when**
 - **(Naga)** At 08:00 the Centro is visibly busier than at 14:00, and dusk falls at Naga's dusk from any visitor time zone.

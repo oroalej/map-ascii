@@ -230,7 +230,8 @@ export class LifeInspection {
       }
     }
     view.inspectionId = actor.id;
-    if (view.candle) view.candleSeed = actor.id & 31;
+    if (view.candle && (!view.eventGround || view.candleSeed === undefined))
+      view.candleSeed = actor.id & 31;
     if (view.candle && (this.held(owner) || actor.effects > 0))
       view.effectClock = this.held(owner)
         ? heldClock(this.selected!.effects - actor.effects)

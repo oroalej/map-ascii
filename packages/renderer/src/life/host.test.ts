@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProcessionRoute } from '@atlas/shared';
+import { eventOccurrence, eventTime, type ProcessionRoute } from '@atlas/shared';
 import { FrameProfiler } from '../profile';
 import { createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
@@ -436,5 +436,39 @@ describe('pipelined Life host', () => {
     await failOver(ended);
     expect(ended.latest()?.procession).toBeUndefined();
     ended.dispose();
+  });
+  it('invalidates event timing immediately on Stop and rejects late playback frames', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, [route]);
+    host.sync(s.tiles);
+    await flush();
+    const timing = eventOccurrence(route.schedule, new Date('2026-06-01'));
+    host.play(route.id, timing);
+    expect(host.latest()?.procession?.time).toEqual(eventTime(timing, 0));
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.stop();
+    expect(host.latest()?.procession).toBeUndefined();
+    resolve({
+      ...result(1),
+      procession: { id: route.id, progress: 0.5, live: false, time: eventTime(timing, 0.5) },
+    });
+    await flush();
+    expect(host.latest()?.procession).toBeUndefined();
+    host.play(route.id, timing);
+    mock.frame.mockResolvedValueOnce({
+      ...result(2),
+      procession: { id: route.id, progress: 0.25, live: false, time: eventTime(timing, 0.25) },
+    });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.procession?.time?.minute).toBe(15 * 60 + 15);
+    host.dispose();
   });
 });

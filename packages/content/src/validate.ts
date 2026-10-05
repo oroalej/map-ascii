@@ -7,6 +7,7 @@ import {
   dialogueCatalog,
   type DialogueCatalog,
   TilesLock,
+  processionReferenceErrors,
 } from '@atlas/shared';
 import type { z } from 'zod';
 
@@ -176,6 +177,9 @@ export async function loadCityPacks(
         (content[name] as unknown[]).push(record);
       }
     }
+
+    for (const issue of processionReferenceErrors(content.processions, city.life?.seasons ?? []))
+      errors.push({ file: seenIds.get(issue.id) ?? configFile, message: issue.message });
 
     const dialoguePath = join(dir, 'dialogue.json');
     const dialogue = (await exists(dialoguePath))

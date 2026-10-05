@@ -9,6 +9,9 @@ import { MOMENTS } from './moments';
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
 import { makeCellGuard } from './cell-guard';
+import { GroundProcessionScene } from './procession-street';
+import type { EventGround } from './ground-events';
+import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
 import {
@@ -691,8 +694,11 @@ export class TileLife {
     stalls: SuppressedActors<Stall>;
     parked: SuppressedActors<Parked>;
   };
+  eventPopulation = 0;
   get population() {
-    return this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0);
+    return (
+      this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0) + this.eventPopulation
+    );
   }
   get hasSuppressedActors() {
     return (
@@ -4624,7 +4630,9 @@ export type VisibleAgent = {
   candleSeed?: number;
   speech?: SpeechCue;
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
-  prop?: 'ball';
+  prop?: 'ball' | 'event';
+  eventActor?: string;
+  eventGround?: EventGround;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -4688,7 +4696,7 @@ export type LifeLineShape = {
 };
 
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
-export type ProcessionRun = { id: string; progress: number; live: boolean };
+export type ProcessionRun = { id: string; progress: number; live: boolean; time?: EventTime };
 
 type GroundTerrain = {
   key: string;
@@ -5028,10 +5036,12 @@ export class LifeWorld {
   private covers = new Map<TileLife, readonly TileId[]>();
   private mixedZoom = false;
   private traffic: ResolvedTraffic;
-  private readonly scenes = new Map<string, ProcessionScene>();
+  private readonly scenes = new Map<string, ProcessionScene | GroundProcessionScene>();
   /** Seconds simulated, for played processions. */
   private clock = 0;
-  private played: { id: string; start: number } | undefined;
+  private played: { id: string; start: number; elapsed: number; timing?: EventTiming } | undefined;
+  private eventAgents: VisibleAgent[] = [];
+  private eventOwners = new Map<string, object>();
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
@@ -5842,6 +5852,79 @@ export class LifeWorld {
           occupied.set(g, bodies(life, g, buffer(g).live));
       }
     }
+    const run = this.procession();
+    const scene = run && this.scenes.get(run.id);
+    for (const life of this.tiles.values()) life.eventPopulation = 0;
+    this.eventAgents = [];
+    if (ref && run && scene instanceof GroundProcessionScene) {
+      const scope = run.live
+        ? `live/${this.live?.occurrence ?? run.id}`
+        : `play/${this.played?.start}`;
+      const candidates = scene.agents(run.progress, this.clock, {
+        scope,
+        inspection: this.inspection,
+        owner: (id) => {
+          let owner = this.eventOwners.get(id);
+          if (!owner) this.eventOwners.set(id, (owner = {}));
+          return owner;
+        },
+      });
+      const tiles = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
+      const toMetric = (q: [number, number]) => {
+        const at = lngLatToTile(ref.tile, q[0], q[1]);
+        return { x: at.x / ref.perMeter, y: at.y / ref.perMeter };
+      };
+      for (const agent of candidates) {
+        const owner = tiles.find((life) => {
+          const at = lngLatToTile(life.tile, agent.lng, agent.lat);
+          return at.x >= 0 && at.x < EXTENT && at.y >= 0 && at.y < EXTENT && this.owns(life, at);
+        });
+        if (!owner || owner.population >= MAX_TILE_AGENTS) continue;
+        const at = toMetric([agent.lng, agent.lat]),
+          ahead = toMetric(agent.ahead!),
+          dx = ahead.x - at.x,
+          dy = ahead.y - at.y,
+          d = Math.hypot(dx, dy) || 1;
+        const spec = agent.vehicle && VEHICLES[agent.vehicle];
+        const body: Body = {
+          ...at,
+          hx: dx / d,
+          hy: dy / d,
+          length: spec ? spec.length : agent.prop ? 3 : 0.9,
+          width: spec ? spec.width : agent.prop ? 2.4 : 1,
+          kind: agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human,
+        };
+        let token = this.eventOwners.get(agent.eventActor!);
+        if (!token) this.eventOwners.set(agent.eventActor!, (token = {}));
+        if (occupied.conflicts(token, [body]) > 0 || blocked.hits([body]) || water.hits([body]))
+          continue;
+        occupied.set(token, [body]);
+        owner.eventPopulation++;
+        this.eventAgents.push(agent);
+      }
+      const retained = new Set(this.eventAgents.map((a) => a.eventActor!));
+      for (const id of this.eventOwners.keys()) if (!retained.has(id)) this.eventOwners.delete(id);
+      // Human-class reservations feed existing pedestrian braking and all movement guards.
+      for (const span of scene.spans(run.progress)) {
+        const a = toMetric(span.a),
+          b = toMetric(span.b),
+          dx = b.x - a.x,
+          dy = b.y - a.y,
+          length = Math.hypot(dx, dy);
+        if (!length) continue;
+        occupied.set(span, [
+          {
+            x: (a.x + b.x) / 2,
+            y: (a.y + b.y) / 2,
+            hx: dx / length,
+            hy: dy / length,
+            length,
+            width: span.width,
+            kind: BODY_KIND.human,
+          },
+        ]);
+      }
+    }
     if (buildStart !== undefined)
       this.profiler!.add('clearanceBuild', this.profiler!.time() - buildStart);
     const check = (
@@ -6022,6 +6105,9 @@ export class LifeWorld {
       for (const tile of this.tiles.values())
         tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
+    // Timed playback follows accepted viewer time, while physical movement keeps its safe step.
+    // Otherwise a slow drawing frame stretches the scheduled event and its displayed clock.
+    if (this.played?.timing) this.played.elapsed += Math.max(0, dt);
     this.effectCellMeters = effectCellMeters;
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
@@ -6421,23 +6507,68 @@ export class LifeWorld {
   /** The city's processions (its `<slug>.processions.json`). */
   setProcessions(routes: readonly ProcessionRoute[]) {
     this.scenes.clear();
-    for (const route of routes) this.scenes.set(route.id, new ProcessionScene(route));
+    for (const route of routes)
+      this.scenes.set(
+        route.id,
+        route.kind === 'fluvial' ? new ProcessionScene(route) : new GroundProcessionScene(route),
+      );
     if (this.played && !this.scenes.has(this.played.id)) this.played = undefined;
   }
 
   /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
-  play(id: string): boolean {
+  play(id: string, timing?: EventTiming): boolean {
     if (!this.scenes.has(id)) return false;
-    this.played = { id, start: this.clock };
+    const adopted = this.handover(id);
+    this.played = { id, start: this.clock, elapsed: 0, timing };
+    this.releaseEventActors(false, adopted);
     return true;
   }
 
   stop() {
     this.played = undefined;
+    this.releaseEventActors();
+  }
+
+  private handover(id: string) {
+    const previous = this.procession();
+    const next = this.scenes.get(id);
+    if (
+      next instanceof GroundProcessionScene &&
+      next.route.kind === 'mass' &&
+      previous &&
+      next.route.follows === previous.id
+    ) {
+      const old = this.scenes.get(previous.id);
+      const scope = previous.live
+        ? `live/${this.live?.occurrence ?? previous.id}`
+        : `play/${this.played?.start}`;
+      next.adopt(
+        old instanceof ProcessionScene
+          ? old.arrivalCrowd(previous.progress, this.clock, scope, this.inspection)
+          : this.eventAgents,
+      );
+      if (old instanceof ProcessionScene)
+        for (const [id, owner] of old.arrivalOwners(scope)) this.eventOwners.set(id, owner);
+      return true;
+    } else if (next instanceof GroundProcessionScene) next.reset();
+    return false;
+  }
+
+  private releaseEventActors(reset = true, retainOwners = false) {
+    this.eventAgents = [];
+    if (!retainOwners) this.eventOwners.clear();
+    for (const life of this.tiles.values()) life.eventPopulation = 0;
+    if (reset)
+      for (const scene of this.scenes.values())
+        if (scene instanceof GroundProcessionScene) scene.reset();
   }
 
   /** The procession under way by its schedule, and how far through it is; or none. */
   setLive(id: string | undefined, progress = 0, occurrence?: string) {
+    if (id !== this.live?.id || occurrence !== this.live?.occurrence) {
+      const adopted = !this.played && id ? this.handover(id) : false;
+      if (!this.played) this.releaseEventActors(false, adopted);
+    }
     this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
   }
 
@@ -6445,9 +6576,17 @@ export class LifeWorld {
   procession(): ProcessionRun | undefined {
     if (this.played) {
       const duration = this.scenes.get(this.played.id)!.playDuration;
-      const progress = (this.clock - this.played.start) / duration;
-      if (progress < 1) return { id: this.played.id, progress, live: false };
+      const progress =
+        (this.played.timing ? this.played.elapsed : this.clock - this.played.start) / duration;
+      if (progress < 1)
+        return {
+          id: this.played.id,
+          progress,
+          live: false,
+          ...(this.played.timing && { time: eventTime(this.played.timing, progress) }),
+        };
       this.played = undefined;
+      this.releaseEventActors();
     }
     return this.live && { id: this.live.id, progress: this.live.progress, live: true };
   }
@@ -6527,18 +6666,34 @@ export class LifeWorld {
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
     const scene = run && this.scenes.get(run.id)!;
-    const staged = scene
-      ? scene.agents(run.progress, this.clock, {
-          boats: shows('boat'),
-          crowds: zoom >= PROCESSION.crowdZoom,
-          crews: zoom >= PROCESSION.crewZoom,
-          bounds,
-          inspection,
-          scope: run.live
-            ? `live/${this.live?.occurrence ?? run.id}`
-            : `play/${this.played?.start}`,
-        })
-      : [];
+    const staged =
+      scene instanceof GroundProcessionScene
+        ? this.eventAgents
+            .filter(
+              (a) =>
+                shows(a.kind) &&
+                (!bounds ||
+                  (a.lng >= bounds[0] &&
+                    a.lng <= bounds[2] &&
+                    a.lat >= bounds[1] &&
+                    a.lat <= bounds[3])),
+            )
+            .slice(0, maxAgents)
+            .map((a) =>
+              inspection ? inspection.present(this.eventOwners.get(a.eventActor!)!, a) : a,
+            )
+        : scene
+          ? scene.agents(run.progress, this.clock, {
+              boats: shows('boat'),
+              crowds: zoom >= PROCESSION.crowdZoom,
+              crews: zoom >= PROCESSION.crewZoom,
+              bounds,
+              inspection,
+              scope: run.live
+                ? `live/${this.live?.occurrence ?? run.id}`
+                : `play/${this.played?.start}`,
+            })
+          : [];
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
@@ -6546,7 +6701,7 @@ export class LifeWorld {
         if (!this.owns(life, m)) continue;
         if (life.scenes.hidden(m)) continue;
         if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
-        if (scene && m.kind === 'boat') continue;
+        if (scene instanceof ProcessionScene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
           if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
@@ -6868,7 +7023,11 @@ export class LifeWorld {
       const kept = new Set(admitted);
       // The cap counts ordinary records. Procession prefix and trains are protected.
       let count = 0;
-      for (let i = staged.length; i < admitted.length; i++)
+      for (
+        let i = scene instanceof GroundProcessionScene ? 0 : staged.length;
+        i < admitted.length;
+        i++
+      )
         if (admitted[i]!.kind !== 'train') count++;
       let spare = Math.max(0, maxAgents - count);
       for (const ball of balls) {
@@ -6882,7 +7041,8 @@ export class LifeWorld {
       }
       return admitted;
     };
-    if (out.length <= maxAgents) {
+    const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
+    if (out.length + eventCount <= maxAgents) {
       const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
       return inspection?.finish(result) ?? result;
     }
@@ -6900,7 +7060,7 @@ export class LifeWorld {
     }
     const nearest = [...groups.values()].sort((a, b) => a.d - b.d);
     const kept = staged.slice();
-    let count = 0;
+    let count = eventCount;
     for (const group of nearest) {
       if (group.agents[0]!.kind === 'train') {
         kept.push(...group.agents);

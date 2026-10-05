@@ -343,10 +343,10 @@ function drawAgent(
   const { cols, rows, toCell } = grid;
   if (agent.line) return drawLine(out, grid, agent.line, glyphIndex) ? 1 : 0;
   const [col, row] = toCell(agent.lng, agent.lat);
-  if (agent.prop === 'ball') {
+  if (agent.prop === 'ball' || agent.prop === 'event') {
     const c = Math.floor(col),
       r = Math.floor(row),
-      index = glyphIndex('•');
+      index = glyphIndex(agent.prop === 'event' ? agent.glyph! : '•');
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
@@ -355,8 +355,8 @@ function drawAgent(
       at,
       index,
       classId(lifeClassFor.person),
-      CellBit.person,
-      personByte(PAINT_NONE, PersonPart.figure),
+      agent.eventGround ? CellBit.person | CellBit.vehicle : CellBit.person,
+      personByte(agent.paint ?? PAINT_NONE, PersonPart.figure),
     );
     return 1;
   }
@@ -499,7 +499,11 @@ function drawPeople(
   const across = fx !== 0;
   const cls = classId(lifeClassFor.person);
   // People in a boat stand over the water; others where people may.
-  const bits = agent.aboard ? CellBit.boat : CellBit.person;
+  const bits = agent.aboard
+    ? CellBit.boat
+    : agent.eventGround
+      ? CellBit.person | CellBit.vehicle
+      : CellBit.person;
   const stroke = agent.stroke ?? 0;
   // A paddler's glyphs head up or right; turned half round, they are the other side's paddler at
   // the other end of the stroke (life/people.ts `ROWER`).

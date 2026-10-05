@@ -113,6 +113,56 @@ for (const city of cities) {
           await expect(page.getByText(season.lanterns!.label, { exact: true })).toBeVisible();
         }
         expect(query(page)).toEqual(before);
+        const eventsSeason = city.seasons.find(
+          (s) =>
+            city.processions.some(
+              (p) => p.season === s.id && (p.kind === 'procession' || p.kind === 'parade'),
+            ) && city.processions.some((p) => p.season === s.id && p.kind === 'mass'),
+        );
+        if (eventsSeason) {
+          await page.emulateMedia({ reducedMotion: 'no-preference' });
+          for (let i = 0; i <= city.seasons.length; i++) {
+            const control = page.getByRole('button', { name: /^Season:/ });
+            if ((await control.getAttribute('aria-label')) === `Season: ${eventsSeason.title.en}`)
+              break;
+            await control.click();
+          }
+          const street =
+            city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'procession') ??
+            city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'parade')!;
+          const mass = city.processions.find(
+            (p) => p.season === eventsSeason.id && p.kind === 'mass',
+          )!;
+          const viewerTime = page.getByRole('button', { name: /^Time:/ }),
+            choice = await viewerTime.textContent();
+          for (const event of [street, mass]) {
+            const button = page.getByRole('button', { name: `▶ ${event.label!.en}`, exact: true });
+            await expect(button).toBeEnabled();
+            await button.click();
+            await page.mouse.move(-10, -10);
+            const generated = city.generatedProcessions.find((p) => p.id === event.id)!;
+            const [lng, lat] =
+              generated.kind === 'mass' ? generated.site.anchor : generated.route[0]!;
+            // Observe playback after its camera flight has settled at the generated start.
+            await expect
+              .poll(() => Math.hypot(Number(query(page).lng) - lng, Number(query(page).lat) - lat))
+              .toBeLessThan(0.0001);
+            const clock = page.getByRole('button', { name: /^\d\d:\d\d · event$/ });
+            await expect(clock).toBeDisabled();
+            const initial = await clock.textContent();
+            await expect(
+              page.getByRole('status').filter({ hasText: `${event.title.en} (simulated)` }),
+            ).toBeVisible();
+            await expect.poll(() => clock.textContent()).not.toBe(initial);
+            await page.getByRole('button', { name: 'Stop', exact: true }).click();
+            await expect(page.getByRole('button', { name: choice!, exact: true })).toBeEnabled();
+          }
+          const withoutCamera = (value: Record<string, string>) =>
+            Object.fromEntries(
+              Object.entries(value).filter(([key]) => !['lat', 'lng', 'z'].includes(key)),
+            );
+          expect(withoutCamera(query(page))).toEqual(withoutCamera(before));
+        }
         expect(errors).toEqual([]);
       });
 

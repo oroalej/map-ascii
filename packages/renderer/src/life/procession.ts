@@ -10,7 +10,7 @@
  * boats setting off first and the pagoda and the flotilla following a moment later, and every
  * boat swaying a little on its own.
  */
-import { nthWeekdayDay, type ProcessionRoute, type ProcessionSchedule } from '@atlas/shared';
+import { nthWeekdayDay, type FluvialRoute, type ProcessionSchedule } from '@atlas/shared';
 import { localTime } from './clock';
 import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
@@ -24,6 +24,8 @@ export const PROCESSION = {
    * taking at least `playSeconds`.
    */
   playSpeed: 10,
+  eventActors: 300,
+  eventSpectators: 90,
   playSeconds: 180,
   columns: 3,
   ranks: 8,
@@ -71,6 +73,7 @@ export const PROCESSION = {
 type Point = [number, number];
 
 type Person = {
+  id: number;
   s: number;
   side: number;
   back: number;
@@ -200,7 +203,7 @@ export class ProcessionScene {
   /** The pagoda's lag behind the lead, as a share of the run. */
   private readonly pagodaLag: number;
 
-  constructor(readonly route: ProcessionRoute) {
+  constructor(readonly route: FluvialRoute) {
     const [lng0, lat0] = route.route[0]!;
     this.origin = [lng0, lat0];
     this.kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
@@ -311,7 +314,20 @@ export class ProcessionScene {
         const phase = rng() * 6.28;
         const { x, y, tx, ty, left, right } = this.at(s);
         const off = side > 0 ? right + back : -(left + back);
-        this.people.push({ s, side, back, rank, candle, phase, x, y, tx, ty, off });
+        this.people.push({
+          id: this.people.length,
+          s,
+          side,
+          back,
+          rank,
+          candle,
+          phase,
+          x,
+          y,
+          tx,
+          ty,
+          off,
+        });
       }
     }
   }
@@ -513,6 +529,26 @@ export class ProcessionScene {
    * from `PROCESSION.crowdZoom`, the crowds. With `bounds`, the crowds and crews outside the view
    * are left out.
    */
+  arrivalCrowd(
+    progress: number,
+    time: number,
+    scope: string,
+    inspection?: LifeInspection,
+  ): VisibleAgent[] {
+    return this.agents(progress, time, {
+      boats: false,
+      crowds: true,
+      crews: false,
+      scope,
+      inspection,
+    }).filter((a) => a.kind === 'person' && !a.aboard);
+  }
+  arrivalOwners(scope: string) {
+    return new Map(
+      this.people.map((p) => [`${scope}/${this.route.id}/crowd/${p.id}`, this.owner(scope, p)]),
+    );
+  }
+
   agents(
     progress: number,
     time: number,
@@ -610,7 +646,8 @@ export class ProcessionScene {
         const agent: VisibleAgent = {
           kind: 'person',
           inspectionId: undefined,
-          candleSeed: undefined,
+          candleSeed: hashString(`${this.route.id}/crowd/${p.id}`),
+          eventActor: `${scope}/${this.route.id}/crowd/${p.id}`,
           effectClock: undefined,
           lng,
           lat,

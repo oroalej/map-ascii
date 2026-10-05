@@ -56,6 +56,12 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   roof_plan?: string;
   /** Original road classification, independent of display tag precedence. */
   highway?: string;
+  foot?: string;
+  access?: string;
+  motor_vehicle?: string;
+  motorcar?: string;
+  motorcycle?: string;
+  hgv?: string;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
@@ -269,7 +275,18 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
-    if (cls.startsWith('road_') && tags.highway) properties.highway = tags.highway;
+    if (cls.startsWith('road_') || cls === 'path') {
+      for (const tag of [
+        'highway',
+        'foot',
+        'access',
+        'motor_vehicle',
+        'motorcar',
+        'motorcycle',
+        'hgv',
+      ] as const)
+        if (tags[tag]) properties[tag] = tags[tag];
+    }
     if (cls.startsWith('building')) {
       const frontage = fromRegion.has(item)
         ? frontageOf(tags)
@@ -294,6 +311,10 @@ export function normalize(
     if (cls === 'tree') Object.assign(properties, treeSize(tags));
     const width = roadWidth(tags, cls);
     if (width !== undefined) properties.width = width;
+    if (cls === 'path') {
+      const pathWidth = Number.parseFloat(tags.width ?? '');
+      if (Number.isFinite(pathWidth) && pathWidth > 0) properties.width = pathWidth;
+    }
     if (cls.startsWith('road_')) {
       const sidewalk = sidewalkOf(tags);
       if (sidewalk)
