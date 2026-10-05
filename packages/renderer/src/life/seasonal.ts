@@ -249,7 +249,7 @@ export function seasonalFixtures(
       else if (
         r.kind === 'bunting' &&
         buntingVisible &&
-        r.season === season.id &&
+        r.season === (season.buntingSeasonId ?? season.id) &&
         corridors.get(r.corridor)?.ways.includes(r.road)
       )
         dense.set(r.id, r);

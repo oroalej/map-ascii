@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIREWORK_VARIANTS, resolveSeason, epochDay, type SeasonConfig } from '@atlas/shared';
+import { FIREWORK_VARIANTS, RuntimeCityLifeSchema, resolveSeason, epochDay } from '@atlas/shared';
 import city from '../../content/cities/naga/city.json';
 import {
   FIREWORKS,
@@ -558,7 +558,7 @@ describe('bounded New Year shells', () => {
   });
 
   it('the real city pack selects New Year automatically and explicitly, without replacing Christmas previews', () => {
-    const seasons = city.life.seasons as SeasonConfig[];
+    const seasons = RuntimeCityLifeSchema.parse(city.life).seasons!;
     expect(
       resolveSeason(seasons, 'auto', 2026, epochDay(2026, 12, 31))?.fireworks?.variants,
     ).toEqual(FIREWORK_VARIANTS);
@@ -566,5 +566,14 @@ describe('bounded New Year shells', () => {
     expect(resolveSeason(seasons, 'auto', 2027, epochDay(2027, 1, 2))?.id).toBe('christmas');
     expect(resolveSeason(seasons, 'new-year', 2026, epochDay(2026, 7, 10))?.id).toBe('new-year');
     expect(resolveSeason(seasons, 'christmas', 2026, epochDay(2026, 12, 31))?.id).toBe('christmas');
+    const christmas = seasons.find((season) => season.id === 'christmas')!;
+    for (const newYear of [
+      resolveSeason(seasons, 'auto', 2027, epochDay(2027, 1, 1))!,
+      resolveSeason(seasons, 'new-year', 2026, epochDay(2026, 7, 10))!,
+    ]) {
+      expect(newYear.fireworks?.variants).toEqual(FIREWORK_VARIANTS);
+      for (const field of ['installations', 'lanterns', 'bunting', 'stalls'] as const)
+        expect(newYear[field]).toEqual(christmas[field]);
+    }
   });
 });

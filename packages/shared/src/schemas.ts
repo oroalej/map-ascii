@@ -19,12 +19,11 @@ import {
 import {
   FIREWORK_VARIANTS,
   validMonthDay,
-  runtimeSeason,
+  composeSeasonInstallations,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
   type SeasonWindow,
-  type RuntimeSeasonConfig,
 } from './seasons';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
@@ -1083,16 +1082,17 @@ export const FireworksSchema = z.strictObject({
     .max(FIREWORK_VARIANTS.length)
     .refine((v) => new Set(v).size === v.length, 'duplicate firework variants'),
 }) satisfies z.ZodType<FireworksConfig>;
+const SeasonId = z
+  .string()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
+  .refine((id) => id !== 'auto', 'auto is reserved');
+const MAX_SEASON_INSTALLATIONS = 32;
 export const Season = z
   .strictObject({
-    id: z
-      .string()
-      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
-      .refine((id) => id !== 'auto', 'auto is reserved'),
+    id: SeasonId,
     title: LocalizedText,
-    status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
-    note: z.string().trim().min(1).optional(),
+    includes: z.array(SeasonId).min(1).optional(),
     fireworks: FireworksSchema.optional(),
     grounds: z
       .array(SeasonGroundsSchema)
@@ -1158,15 +1158,17 @@ export const Season = z
             mount: z.literal('canopy').optional(),
             bulb_spacing_m: z.number().min(0.3).max(3).optional(),
             palette: z.enum(['warm', 'christmas']).optional(),
+            exclude_tree_crowns: z.boolean().optional(),
           }),
           z.strictObject({
             ...SeasonInstallationBase,
             kind: z.literal('decorated-canopy'),
+            trees: z.enum(['inside', 'overlapping']).optional(),
           }),
         ]),
       )
       .min(1)
-      .max(32)
+      .max(MAX_SEASON_INSTALLATIONS)
       .refine((v) => new Set(v.map((i) => i.id)).size === v.length, 'duplicate installation ids')
       .optional(),
     lanterns: z
@@ -1248,27 +1250,9 @@ export const Season = z
       !season.fireworks
     )
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
-    const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
-      v.includes(TODO_VERIFY),
-    );
-    if (season.status === 'verified' && todo)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a verified season cannot contain ${TODO_VERIFY}`,
-      });
-    if (season.status === 'draft' && !season.note?.includes(TODO_VERIFY))
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a draft season needs a ${TODO_VERIFY} note`,
-      });
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
-export const RuntimeSeasonSchema = Season.transform(
-  runtimeSeason,
-) satisfies z.ZodType<RuntimeSeasonConfig>;
 export const CityLife = z.strictObject({
   seasons: z
     .array(Season)
@@ -1276,6 +1260,50 @@ export const CityLife = z.strictObject({
       (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
       'duplicate season id',
     )
+    .superRefine((seasons, ctx) => {
+      const byId = new Map(seasons.map((season) => [season.id, season]));
+      for (const [index, season] of seasons.entries()) {
+        if (!season.includes) continue;
+        const seen = new Set<string>();
+        const includedInstallations: (typeof season.installations)[] = [];
+        for (const [includeIndex, id] of season.includes.entries()) {
+          const included = byId.get(id);
+          const message = !included
+            ? 'included season must exist'
+            : id === season.id
+              ? 'a season cannot include itself'
+              : seen.has(id)
+                ? 'duplicate included season'
+                : included.includes
+                  ? 'included seasons cannot include another season'
+                  : undefined;
+          if (message)
+            ctx.addIssue({
+              code: 'custom',
+              path: [index, 'includes', includeIndex],
+              message,
+            });
+          else if (included) includedInstallations.push(included.installations);
+          seen.add(id);
+        }
+        const installations = composeSeasonInstallations(
+          season.installations,
+          includedInstallations,
+        );
+        if (new Set(installations.map((i) => i.id)).size !== installations.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: 'composed installations must have unique ids',
+          });
+        if (installations.length > MAX_SEASON_INSTALLATIONS)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: `a composed season accepts at most ${MAX_SEASON_INSTALLATIONS} installations`,
+          });
+      }
+    })
     .optional(),
   signals: z
     .strictObject({

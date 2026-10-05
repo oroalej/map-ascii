@@ -5,13 +5,61 @@ import { FIREWORK_VARIANTS } from './seasons';
 const season = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
-  note: 'TODO(verify): annual dates and placement',
   lanterns: { label: 'Lanterns', shape: 'star' },
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('validates optional pipeline-only tree crown clipping on light strings', () => {
+    const installation = {
+      id: 'yard',
+      anchor: 'osm:way/1',
+      kind: 'light-string' as const,
+      layout: 'perimeter' as const,
+      label: 'Lights',
+      sources: season.sources,
+      spacing_m: 3,
+    };
+    for (const exclude_tree_crowns of [undefined, false, true])
+      expect(
+        Season.safeParse({ ...season, installations: [{ ...installation, exclude_tree_crowns }] })
+          .success,
+      ).toBe(true);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...installation, exclude_tree_crowns: 'yes' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...installation, kind: 'decorated-canopy', exclude_tree_crowns: true }],
+      }).success,
+    ).toBe(false);
+  });
+  it('accepts center-inside and overlapping crown selection only for decorated canopies', () => {
+    const canopy = {
+      id: 'lights',
+      kind: 'decorated-canopy',
+      anchor: 'osm:way/1',
+      label: 'Lights',
+      sources: season.sources,
+    };
+    for (const trees of [undefined, 'inside', 'overlapping'])
+      expect(Season.safeParse({ ...season, installations: [{ ...canopy, trees }] }).success).toBe(
+        true,
+      );
+    expect(
+      Season.safeParse({ ...season, installations: [{ ...canopy, trees: 'all' }] }).success,
+    ).toBe(false);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...canopy, kind: 'christmas-tree', radius_m: 3, trees: 'overlapping' }],
+      }).success,
+    ).toBe(false);
+  });
   it('requires sourced, bounded access routes in matching grounds', () => {
     const grounds = {
       id: 'lot',
@@ -202,32 +250,67 @@ describe('season content validation', () => {
     ])
       expect(Season.safeParse({ ...only, installations }).success).toBe(false);
   });
-  it('accepts sourced drafts and fully verified records', () => {
+  it('requires sources, decorations, and a nonreserved id', () => {
     expect(Season.safeParse(season).success).toBe(true);
-    expect(
-      Season.safeParse({ ...season, status: 'verified', note: 'Confirmed calendar' }).success,
-    ).toBe(true);
-  });
-  it('requires sources, decorations, and a draft verification note', () => {
-    for (const change of [
-      { sources: [] },
-      { lanterns: undefined },
-      { note: undefined },
-      { note: 'Unconfirmed' },
-      { id: 'auto' },
-    ])
+    for (const change of [{ sources: [] }, { lanterns: undefined }, { id: 'auto' }])
       expect(Season.safeParse({ ...season, ...change }).success).toBe(false);
   });
-  it('rejects verified TODOs in any title language or note', () => {
-    expect(Season.safeParse({ ...season, status: 'verified' }).success).toBe(false);
+  it('accepts one-level includes and rejects unknown, self, duplicate, and nested references', () => {
+    const next = { ...season, id: 'new-year', includes: ['winter'] };
+    const parse = (seasons: unknown[]) => CityLife.safeParse({ source: 'Calendar', seasons });
+    expect(parse([next, season]).success).toBe(true);
+    for (const includes of [['missing'], ['new-year'], ['winter', 'winter'], [], ['auto']])
+      expect(parse([{ ...next, includes }, season]).success).toBe(false);
     expect(
-      Season.safeParse({
-        ...season,
-        status: 'verified',
-        note: undefined,
-        title: { en: 'Winter', fil: 'TODO(verify)' },
-      }).success,
+      parse([next, { ...season, includes: ['feast'] }, { ...season, id: 'feast' }]).success,
     ).toBe(false);
+    expect(parse([next, { ...season, includes: ['new-year'] }]).success).toBe(false);
+  });
+  describe('composed installations', () => {
+    const tree = (id: string) => ({
+      id,
+      anchor: 'osm:way/1',
+      label: 'Tree',
+      kind: 'christmas-tree',
+      radius_m: 4,
+      sources: season.sources,
+    });
+    const parse = (seasons: unknown[]) => CityLife.safeParse({ source: 'Calendar', seasons });
+
+    it.each(['own', 'sibling'])('rejects installation ids shared with %s content', (origin) => {
+      const base = { ...season, installations: [tree('shared')] };
+      const next = {
+        ...season,
+        id: 'new-year',
+        includes: origin === 'own' ? ['winter'] : ['winter', 'feast'],
+        installations: origin === 'own' ? [tree('shared')] : undefined,
+      };
+      const sibling = { ...base, id: 'feast' };
+      for (const authored of [base, next, sibling])
+        expect(Season.safeParse(authored).success).toBe(true);
+      expect(parse([next, base, ...(origin === 'sibling' ? [sibling] : [])]).success).toBe(false);
+    });
+
+    it.each([32, 33])('bounds the composed list with %s installations', (count) => {
+      const base = {
+        ...season,
+        installations: Array.from({ length: count - 1 }, (_, i) => tree(`tree-${i}`)),
+      };
+      const next = {
+        ...season,
+        id: 'new-year',
+        includes: ['winter'],
+        installations: [tree('own-tree')],
+      };
+      expect(Season.safeParse(base).success).toBe(true);
+      expect(Season.safeParse(next).success).toBe(true);
+      expect(parse([next, base]).success).toBe(count === 32);
+    });
+
+    it('allows installation id reuse between unrelated seasons', () => {
+      const base = { ...season, installations: [tree('shared')] };
+      expect(parse([base, { ...base, id: 'feast' }]).success).toBe(true);
+    });
   });
   it('rejects unknown keys, impossible dates, duplicate IDs, and incomplete placement filters', () => {
     expect(Season.safeParse({ ...season, extra: true }).success).toBe(false);

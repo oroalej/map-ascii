@@ -11,7 +11,6 @@ it('labels atmospheric fireworks independently of Life and removes them below th
   const season = {
     id: 'new-year',
     title: 'New Year',
-    status: 'draft' as const,
     labels: { fireworks: 'Fireworks and smoke' },
   };
   for (const theme of ['dark', 'light'] as const) {
@@ -36,7 +35,6 @@ it('names visible installations with Life off and drops the entry after leaving 
   const season = {
     id: 'winter',
     title: 'Winter',
-    status: 'draft' as const,
     labels: { installations: 'Christmas trees and lights' },
   };
   const fixtures = {
@@ -66,7 +64,6 @@ it('reports seasonal hardware with Life off and temporary vendors only where pat
   const season = {
     id: 'winter',
     title: 'Winter',
-    status: 'draft' as const,
     labels: { lanterns: 'Parols', bunting: 'Pennants', stalls: 'Fair carts' },
   };
   const fixtures = {
