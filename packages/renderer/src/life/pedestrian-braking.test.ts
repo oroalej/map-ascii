@@ -1509,3 +1509,93 @@ describe('unsignalised pedestrian crossings', () => {
     expect(result.holds?.[0]?.elapsed).toBe(0.2);
   });
 });
+
+describe('pedestrian lookahead through directed interior road entries', () => {
+  it.each([
+    { sourceDir: 1, targetDir: 1 },
+    { sourceDir: 1, targetDir: -1 },
+    { sourceDir: -1, targetDir: 1 },
+    { sourceDir: -1, targetDir: -1 },
+  ] as const)(
+    'follows the actual entry from $sourceDir to $targetDir without mutation',
+    ({ sourceDir, targetDir }) => {
+      const pm = 1 / metersPerUnit(tile),
+        builder = new LifeBuilder();
+      const junction = { x: 1000, y: 2048 },
+        previous = { x: 1000 - 30 * pm, y: 2048 };
+      builder.line(
+        sourceDir === 1 ? [previous, junction] : [junction, previous],
+        LifeLine.roadMajor,
+        14,
+      );
+      builder.line(
+        [
+          { x: junction.x, y: junction.y - 50 * pm },
+          junction,
+          { x: junction.x, y: junction.y + 50 * pm },
+        ],
+        LifeLine.roadMajor,
+        14,
+      );
+      const life = new StandaloneLife(tile, builder.finish(), 42);
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+      const from = sourceDir === 1 ? 0 : 1,
+        endpoint = from + sourceDir;
+      const car: Mover = {
+        ...person(life),
+        kind: 'vehicle',
+        vehicle: 'car',
+        group: undefined,
+        from,
+        dir: sourceDir,
+        d: Math.abs(life.geo.coords[endpoint * 2]! - life.geo.coords[from * 2]!) - pm,
+        x: life.geo.coords[endpoint * 2]! - pm,
+        y: junction.y,
+        hx: 1,
+        hy: 0,
+        speed: 5 * pm,
+        v: 0,
+        pause: 0,
+        next: targetDir === 1 ? 2 : 3,
+      };
+      const tracer = life as unknown as {
+        pedestrianPath(m: Mover, range: number): Iterable<PedestrianSegment>;
+        pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+        advance(m: Mover, distance: number): number;
+        rng(): number;
+        walkerRng(): number;
+        routeRng(): number;
+      };
+      const original = structuredClone(car);
+      const randomSpies = ['rng', 'walkerRng', 'routeRng'].map((key) =>
+        vi.spyOn(tracer, key as 'rng' | 'walkerRng' | 'routeRng'),
+      );
+      const path = [...tracer.pedestrianPath(car, 15)];
+      expect(tracer.pedestrianSegments(car, 15, 15)).toEqual(path);
+      expect(tracer.pedestrianSegments(car, 15, 15)).toEqual(path);
+      expect(car).toEqual(original);
+      for (const spy of randomSpies) {
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+      }
+      const pose = life.pose(car);
+      expect(path[0]!.x).toBeCloseTo(pose.x / pm, 10);
+      expect(path[0]!.y).toBeCloseTo(pose.y / pm, 10);
+      expect(path.some((p) => p.line === 1)).toBe(true);
+      expect(path.every((p) => Object.values(p).every(Number.isFinite))).toBe(true);
+      expect(path.every((p) => p.hy * targetDir >= -1e-6)).toBe(true);
+      const moved = structuredClone(car);
+      tracer.advance(moved, 2 * pm);
+      expect(moved.line).toBe(1);
+      expect(moved.from).toBe(3);
+      expect(moved.dir).toBe(targetDir);
+      expect(moved.entered).toMatchObject({
+        vertex: 3,
+        x: life.geo.coords[from * 2]!,
+        y: life.geo.coords[from * 2 + 1]!,
+      });
+      expect(life.pose(moved).hy * targetDir).toBeGreaterThan(0);
+    },
+  );
+});

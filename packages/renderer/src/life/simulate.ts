@@ -1607,8 +1607,8 @@ export class TileLife {
           } else {
             const code = exits ? exits[exitIndex++] : exitIndex++ === 0 ? firstExit : undefined;
             if (code === undefined || code < 0) break;
-            const target = this.directedExit(code, cursor.from);
-            const previous = cursor.from - cursor.dir;
+            const target = this.directedExit(code, vertex);
+            const previous = cursor.from;
             const entered = {
               vertex: target.vertex,
               x: c[previous * 2]!,
