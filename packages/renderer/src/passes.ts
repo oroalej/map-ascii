@@ -690,7 +690,7 @@ export function lifePass(
 }
 
 /**
- * Put the streetlights and floodlights, the moving vehicles' headlight beams, and the candles
+ * Put the streetlights and floodlights, the moving vehicles' headlight beams and brake glow, and the candles
  * people carry on the cell grid (life/lights.ts) and upload them to the light texture. The lamps
  * are packed again only with `repack` (the grid moved, or they came on or went) or when the
  * grid's size changed.

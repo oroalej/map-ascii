@@ -648,7 +648,8 @@ void main() {
   bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
   poolColor = brakeGlow ? vec3(${BRAKE_COLOR.night.map(float).join(', ')}) :
     flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
-  float poolR = texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
+  // Brake falloff belongs to its own cone; filtering must not borrow neighboring light strength.
+  float poolR = brakeGlow ? light.r : texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
   float pool = 0.0;
   if (poolR > 0.01 && light.a > 0.5 && lampLight > 0.0) {

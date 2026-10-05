@@ -213,15 +213,45 @@ describe('bounded cone reuse', () => {
       admitted = new Uint8Array([1]);
     const probe = empty();
     packBrakeGlow(probe, grid, [car], admitted, scratch);
+    expect(scratch.entries[0]!.ready).toBe(false);
+    expect(scratch.entries[0]!.count).toBe(0);
     const blocked = empty();
     for (const { col, row } of litCells(probe)) blocked[(row * grid.cols + col) * 4 + 2] = 255;
     const before = blocked.slice();
     packBrakeGlow(blocked, grid, [car], admitted, scratch);
+    expect(scratch.entries[0]!.ready).toBe(true);
+    expect(scratch.entries[0]!.count).toBeGreaterThan(0);
+    const storage = scratch.entries[0]!.offsets;
     expect(sameBytes(blocked, before)).toBe(true);
     const redrawn = empty();
     packBrakeGlow(redrawn, grid, [{ ...car }], admitted, scratch);
     expect(sameBytes(redrawn, probe)).toBe(true);
+    expect(scratch.entries[0]!.offsets).toBe(storage);
     expect(packBrakeGlow(empty(), grid, [car], new Uint8Array([0]), scratch)).toBe(0);
+  });
+
+  it('packs continuously moving misses without recording geometry or losing competition', () => {
+    const scratch = createConePackingScratch(),
+      admitted = new Uint8Array([1]);
+    for (let frame = 0; frame < 10; frame++) {
+      const car = {
+        ...braking(),
+        lng: 32 + frame / 10,
+        ahead: [33 + frame / 10, 48] as [number, number],
+      };
+      const cached = empty(),
+        fresh = empty();
+      if (frame % 2) {
+        cached.fill(255);
+        fresh.fill(255);
+      }
+      packBrakeGlow(cached, grid, [car], admitted, scratch);
+      packBrakeGlow(fresh, grid, [car], admitted);
+      expect(sameBytes(cached, fresh)).toBe(true);
+      expect(scratch.entries[0]!.ready).toBe(false);
+      expect(scratch.entries[0]!.count).toBe(0);
+      expect(scratch.entries[0]!.offsets.length).toBe(0);
+    }
   });
 
   it('invalidates for pose, craft, projection, target size and cone direction', () => {

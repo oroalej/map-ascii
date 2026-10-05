@@ -115,13 +115,13 @@ export class VehicleEffectTracker {
         if (c.state.exhaust) shiftEmitter(c.state.exhaust, gap);
         c.wake += gap;
       }
+    this.tile.puffs.advance(clock, dt, wind, this.tile.perMeter);
     if (this.minimum > MAX_MOTOR_LENGTH) {
       if (this.enabled) this.pause(clock - dt);
       this.enabled = false;
       return false;
     }
     this.enabled = true;
-    this.tile.puffs.advance(clock, dt, wind, this.tile.perMeter);
     return true;
   }
 

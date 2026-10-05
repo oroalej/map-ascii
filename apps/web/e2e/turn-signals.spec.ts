@@ -254,6 +254,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
             cells: Array.from({ length: n }, (_, x) => pixel(x)),
             crownEdge: pixel(6, input.cw - 1),
             brakeEdge: [pixel(29), pixel(29, input.cw - 1)],
+            neighborEdge: pixel(21, input.cw - 1),
           };
         };
         const day = render(1),
@@ -274,10 +275,34 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         const light = new Uint8Array(n * 4);
         for (let x = 21; x < n; x++) light.set([77, input.brakeGlow, 0, 255], x * 4);
         activeLight = texture(n, 1, light);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
         const brakeNight = render(0),
           brakeDay = render(1);
+        const withNeighbor = (kind: number, ownStrength = 77) => {
+          light.set([ownStrength, input.brakeGlow, 0, 255], 21 * 4);
+          light.set([255, kind, 0, 255], 22 * 4);
+          gl.bindTexture(gl.TEXTURE_2D, activeLight);
+          gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, n, 1, gl.RGBA, gl.UNSIGNED_BYTE, light);
+          return render(0).neighborEdge;
+        };
+        const neighborHeadlight = withNeighbor(input.headlightBeam),
+          neighborStreetlight = withNeighbor(input.streetlightPool),
+          belowThreshold = withNeighbor(input.headlightBeam, 2);
         if (gl.getError() !== gl.NO_ERROR) throw new Error('WebGL error');
-        return { day, night, off, brakeNight, brakeDay, focusedDay, focusedNight, mapFocused };
+        return {
+          day,
+          night,
+          off,
+          brakeNight,
+          brakeDay,
+          focusedDay,
+          focusedNight,
+          mapFocused,
+          neighborHeadlight,
+          neighborStreetlight,
+          belowThreshold,
+        };
       },
       {
         vertex: fullscreenVertex,
@@ -311,6 +336,8 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         puff: PersonPart.puff,
         brake: BRAKE_LAMP,
         brakeGlow: lightByte(LampState.beam, BRAKE_GLOW.seed),
+        headlightBeam: lightByte(LampState.beam, 0),
+        streetlightPool: lightByte(LampState.working, 0),
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
@@ -337,6 +364,9 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
     );
     expect(result.off).toEqual(result.day.cells[1]);
     const redness = (pixel: number[]) => pixel[0]! - (pixel[1]! + pixel[2]!) / 2;
+    expect(result.neighborHeadlight).toEqual(result.brakeNight.neighborEdge);
+    expect(result.neighborStreetlight).toEqual(result.brakeNight.neighborEdge);
+    expect(result.belowThreshold).toEqual(result.night.neighborEdge);
     expect(redness(result.brakeNight.cells[21]!)).toBeGreaterThan(
       redness(result.night.cells[21]!) + 10,
     );

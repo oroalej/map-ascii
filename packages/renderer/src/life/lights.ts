@@ -234,8 +234,10 @@ type CachedCone = {
   sideLng: number;
   sideLat: number;
   cast: boolean;
-  offsets: number[];
-  values: number[];
+  ready: boolean;
+  count: number;
+  offsets: Int32Array;
+  values: Uint8Array;
 };
 /** Bounded by the current actor array; retains only numbers, never workers or mover graphs. */
 export type ConePackingScratch = {
@@ -304,7 +306,13 @@ function cachedCone(
     cached.sideLng === agent.side[0] &&
     cached.sideLat === agent.side[1]
   ) {
-    for (let i = 0; i < cached.offsets.length; i++) {
+    if (!cached.ready) {
+      cached.count = 0;
+      cached.cast = packCone(out, grid, agent, direction, cone, minCells, g, cached);
+      cached.ready = true;
+      return cached.cast;
+    }
+    for (let i = 0; i < cached.count; i++) {
       const at = cached.offsets[i]!,
         value = cached.values[i]!;
       if (out[at + 2] !== 0 || value <= out[at]!) continue;
@@ -324,8 +332,10 @@ function cachedCone(
       sideLng: 0,
       sideLat: 0,
       cast: false,
-      offsets: [],
-      values: [],
+      ready: false,
+      count: 0,
+      offsets: new Int32Array(0),
+      values: new Uint8Array(0),
     };
   cached.revision = scratch.revision;
   cached.vehicle = agent.vehicle;
@@ -335,8 +345,10 @@ function cachedCone(
   cached.aheadLat = agent.ahead[1];
   cached.sideLng = agent.side[0];
   cached.sideLat = agent.side[1];
-  cached.offsets.length = cached.values.length = 0;
-  cached.cast = packCone(out, grid, agent, direction, cone, minCells, g, cached);
+  cached.ready = false;
+  cached.count = 0;
+  // Moving poses retain their metadata, but use the cheap competing-light early-out.
+  cached.cast = packCone(out, grid, agent, direction, cone, minCells, g);
   return cached.cast;
 }
 
@@ -489,8 +501,17 @@ function packCone(
       const strength = intensity * (1 - (right / limit) ** 2);
       const value = Math.round(255 * strength);
       if (cached && value > 0) {
-        cached.offsets.push(at);
-        cached.values.push(value);
+        if (cached.count === cached.offsets.length) {
+          const capacity = Math.min(MAX_POOL_CELLS, Math.max(32, cached.count * 2));
+          const offsets = new Int32Array(capacity),
+            values = new Uint8Array(capacity);
+          offsets.set(cached.offsets);
+          values.set(cached.values);
+          cached.offsets = offsets;
+          cached.values = values;
+        }
+        cached.offsets[cached.count] = at;
+        cached.values[cached.count++] = value;
       }
       if (out[at + 2] !== 0 || value <= out[at]!) continue;
       out[at] = value;

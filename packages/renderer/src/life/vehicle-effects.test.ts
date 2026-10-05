@@ -3,16 +3,8 @@ import { TileLife, LifeWorld, type VisibleAgent } from './simulate';
 import { continuityMover, continuityTile, left, right, parent } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import { BRAKE, BRAKE_LAMP } from './lamps';
-import {
-  emitter,
-  PUFF,
-  stepEmitter,
-  PUFF_STRIDE,
-  PUFF_AGE_MASK,
-  PUFF_KIND_BIT,
-  puffGlyph,
-  stoppedFor,
-} from './exhaust';
+import { emitter, PUFF, stepEmitter, PUFF_STRIDE, puffGlyph, stoppedFor } from './exhaust';
+import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
 import { PersonPart, personByte } from './people';
@@ -236,7 +228,7 @@ describe('accepted vehicle effects', () => {
     expect(vehicleEffects(b)?.brake).toBe(0);
     expect(vehicleEffects(b)?.inactiveAt).toBeCloseTo(0.1);
   });
-  it('freezes coarse-scale deadlines and particles once, then resumes without catch-up', () => {
+  it('pauses coarse-scale emitters while existing particles expire', () => {
     const life = new TileLife(left, continuityTile(left).life, 1);
     life.movers.length = 0;
     const m = continuityMover(life, 1000);
@@ -264,14 +256,44 @@ describe('accepted vehicle effects', () => {
     for (let frame = 2; frame <= 102; frame++)
       expect(tracker.begin(frame / 10, 0.1, 100, undefined)).toBe(false);
     expect(state.brake).toBe(0);
-    expect(advance).not.toHaveBeenCalled();
+    expect(advance).toHaveBeenCalledTimes(101);
     expect(state.exhaust!.nextIdle).toBe(deadline);
     tracker.begin(10.3, 0.1, 0, undefined);
     tracker.capture(m, 0, true, 0, 0, false);
     tracker.finish(10.3, 0.1, undefined);
     expect(state.exhaust!.emitted).toBe(0);
     expect(state.exhaust!.nextIdle).toBeCloseTo(deadline + 10.1);
-    expect(life.puffs.snapshot(10.3)[0]!.t0).toBeCloseTo(10.2);
+    expect(life.puffs.snapshot(10.3)).toEqual([]);
+  });
+  it('never restores an old plume after a moving tile zooms out and back in', () => {
+    const life = new TileLife(left, continuityTile(left).life, 1);
+    life.movers.length = 0;
+    const m = continuityMover(life, 1000);
+    m.vehicle = 'bus';
+    m.v = 3 * life.perMeter;
+    life.movers.push(m);
+    life.step(0.1, undefined, undefined, undefined, { rain: 0, clock: 0.1, effectCellMeters: 0 });
+    const start = [m.x, m.y];
+    life.puffs.add({
+      sourceId: vehicleEffects(m)!.sourceId!,
+      vehicle: 'bus',
+      kind: 'diesel',
+      x: m.x,
+      y: m.y,
+      vx: 0,
+      vy: 0,
+      t0: 0.1,
+      life: 2,
+    });
+    for (let frame = 2; frame <= 102; frame++)
+      life.step(0.1, undefined, undefined, undefined, {
+        rain: 0,
+        clock: frame / 10,
+        effectCellMeters: 100,
+      });
+    expect([m.x, m.y]).not.toEqual(start);
+    life.step(0.1, undefined, undefined, undefined, { rain: 0, clock: 10.3, effectCellMeters: 0 });
+    expect(life.puffs.snapshot(10.3)).toEqual([]);
   });
   it('honors the rounded render-cell gate and omits serialized lamps on mini craft', () => {
     const {
