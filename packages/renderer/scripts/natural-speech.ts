@@ -36,6 +36,7 @@ export async function naturalSpeech(
       dialogue: dialogueChoices(catalog),
       periods: catalog.periods,
     });
+    world.setShopSchedule(city.life?.schedules?.shops);
     world.sync(tiles);
     const scheduled = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, camera.zoom));
     const w = size.width <= 640 ? Math.max(6, scheduled.width) : scheduled.width;
@@ -62,7 +63,7 @@ export async function naturalSpeech(
           bounds,
           wind: undefined,
           cellMeters: cell.w * metersPerCssPx(camera),
-          weather: { rain: 0, minutes: 720, cityLife: city.life },
+          weather: { rain: 0, minutes: 720 },
         },
         visible: [
           camera.zoom,

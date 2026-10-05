@@ -19,6 +19,7 @@ import {
 import { birdGlyphs } from '../life/birds';
 import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
+import { PUFF_GLYPHS } from '../life/puff-style';
 import {
   FIGURE_TONE,
   figureGlyph,
@@ -313,6 +314,7 @@ describe('glyph set', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
+        ...PUFF_GLYPHS,
         ...fixtureGlyphs,
         ...arrowGlyphs,
         ...SEASONAL_GLYPHS,

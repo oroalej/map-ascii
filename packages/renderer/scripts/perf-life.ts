@@ -3,15 +3,16 @@ import { deepStrictEqual } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, getPriority } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { viewportFor } from '../src/camera';
 import { LifeBuilder, LifeLine } from '../src/life/geometry';
-import * as current from '../src/life/simulate';
+import type * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
 import type { LngLatBounds } from '../src/life/procession';
-import { snapshotRevision } from './snapshot';
+import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
+import { pairedRuns, pooledSummary, summary, withinControl } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const revision =
@@ -21,10 +22,21 @@ const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9)
 const baselineFile = process.argv.find((arg) => arg.startsWith('--baseline-file='))?.slice(16);
 const candidates = process.argv.includes('--candidates');
 const following = process.argv.includes('--following');
+const control = process.argv.includes('--control');
+const interleaved = process.argv.includes('--interleaved');
+if (control && (baselineFile || candidates || following))
+  throw new Error('--control requires two unchanged complete source graphs');
 const allowDiff = process.argv.includes('--allow-diff');
 if (allowDiff) console.log('behavior differs from baseline: timing only');
 const casePrefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
-const scratchRoot = resolve(tmpdir());
+const samples = Number(process.argv.find((arg) => arg.startsWith('--samples='))?.slice(10) ?? 160);
+const runs = Number(process.argv.find((arg) => arg.startsWith('--runs='))?.slice(7) ?? 6);
+if (![samples, runs].every((n) => Number.isInteger(n) && n > 0) || runs % 2)
+  throw new Error('Use positive sample and even paired run counts');
+const scratchRoot = resolve(
+  process.argv.find((arg) => arg.startsWith('--scratch='))?.slice(10) ?? tmpdir(),
+);
+await mkdir(scratchRoot, { recursive: true });
 const temporary = await mkdtemp(join(scratchRoot, 'atlas-life-perf-'));
 async function removeBenchmarkDirectory() {
   if (
@@ -68,54 +80,43 @@ const boundsFor = (width: number, height: number): LngLatBounds => {
   ];
   return [west, south, east, north];
 };
-const quantile = (values: number[], q: number) => {
-  const sorted = values.slice().sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))]!;
-};
-function measure(action: () => unknown, warmup: number, batch: number) {
-  for (let i = 0; i < warmup; i++) action();
-  const samples: number[] = [];
-  for (let i = 0; i < 160; i++) {
-    const start = performance.now();
-    for (let i = 0; i < batch; i++) action();
-    samples.push((performance.now() - start) / batch);
-  }
-  return { median: quantile(samples, 0.5), p95: quantile(samples, 0.95) };
-}
-function compare(before: () => unknown, after: () => unknown) {
+function compare(before: () => () => unknown, after: () => () => unknown) {
   const cost = (action: () => unknown) => {
     const start = performance.now();
     for (let i = 0; i < 20; i++) action();
     return (performance.now() - start) / 20;
   };
-  const estimatedMs = Math.max(cost(before), cost(after), 0.001);
+  const estimatedMs = Math.max(cost(before()), cost(after()), 0.001);
   const batch = Math.max(1, Math.min(50, Math.ceil(1 / estimatedMs)));
-  const warmup = Math.max(10, Math.min(500, Math.ceil(40 / estimatedMs)));
-  const old: ReturnType<typeof measure>[] = [],
-    next: ReturnType<typeof measure>[] = [];
-  for (let run = 0; run < 5; run++) {
-    if (run % 2) {
-      next.push(measure(after, warmup, batch));
-      old.push(measure(before, warmup, batch));
-    } else {
-      old.push(measure(before, warmup, batch));
-      next.push(measure(after, warmup, batch));
-    }
-  }
-  const result = (runs: typeof old) => ({
-    median: quantile(
-      runs.map((r) => r.median),
-      0.5,
-    ),
-    p95: quantile(
-      runs.map((r) => r.p95),
-      0.5,
-    ),
-  });
-  const baseline = result(old),
-    changed = result(next);
+  const warmup = Math.max(90, Math.min(500, Math.ceil(40 / estimatedMs)));
+  const sample = (action: () => unknown, retained?: number[]) => {
+    const start = retained ? performance.now() : 0;
+    for (let i = 0; i < batch; i++) action();
+    if (retained) retained.push((performance.now() - start) / batch);
+  };
+  const arm = (factory: () => () => unknown) => {
+    const action = factory(),
+      retained: number[] = [];
+    return {
+      sample(_frame: number, keep: boolean) {
+        sample(action, keep ? retained : undefined);
+      },
+      result() {
+        return { ...summary(retained), samples: retained };
+      },
+    };
+  };
+  const { oldRuns: old, currentRuns: next } = pairedRuns(
+    () => arm(before),
+    () => arm(after),
+    { calibration: 250, warmup, samples, runs, interleaved },
+  );
+  const baseline = pooledSummary(old, (run) => run.samples),
+    changed = pooledSummary(next, (run) => run.samples);
   return {
     baseline,
+    oldRuns: old,
+    currentRuns: next,
     current: changed,
     medianGain: 1 - changed.median / baseline.median,
     p95Change: changed.p95 / baseline.p95 - 1,
@@ -125,12 +126,21 @@ function compare(before: () => unknown, after: () => unknown) {
 }
 
 try {
+  const currentHash = await currentSourceHash(root);
+  const frozenCurrent = await snapshotWorkingTree(root, join(temporary, 'current-snapshot'));
+  const current = (await import(frozenCurrent.path('life/simulate.ts'))) as Simulation;
   const sourcePath = 'packages/renderer/src/life/simulate.ts';
   const frozenRoot = join(temporary, 'baseline-snapshot');
-  const frozen = baselineFile ? undefined : await snapshotRevision(root, revision, frozenRoot);
+  const frozen = baselineFile
+    ? undefined
+    : control
+      ? await snapshotWorkingTree(root, frozenRoot)
+      : await snapshotRevision(root, revision, frozenRoot);
   const rawSource = baselineFile
     ? await readFile(resolve(root, baselineFile), 'utf8')
-    : execFileSync('git', ['show', `${revision}:${sourcePath}`], { cwd: root, encoding: 'utf8' });
+    : control
+      ? await readFile(join(root, sourcePath), 'utf8')
+      : execFileSync('git', ['show', `${revision}:${sourcePath}`], { cwd: root, encoding: 'utf8' });
   const source = rawSource.replace(/\r\n/g, '\n');
   const rewrite = (source: string) =>
     source.replace(
@@ -250,7 +260,10 @@ try {
       }
       const action = (world: current.LifeWorld) => () =>
         world.visible(18, 1, center, undefined, bounds);
-      const timings = compare(action(old), action(next));
+      const timings = compare(
+        () => action(make(baseline)),
+        () => action(make(changed)),
+      );
       const name = `visible/${view}/${count}`;
       rows.push({ name, timings });
       console.log(
@@ -303,16 +316,28 @@ try {
       if (!allowDiff) deepStrictEqual(next.movers, old.movers);
     }
     const timings = compare(
-      () => old.step(1 / 30),
-      () => next.step(1 / 30),
+      () => {
+        const life = make(baseline);
+        return () => life.step(1 / 30);
+      },
+      () => {
+        const life = make(changed);
+        return () => life.step(1 / 30);
+      },
     );
     rows.push({ name: `traffic/${count}`, timings });
     console.log(
       `traffic/${count}: median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
     );
   }
+  if (!rows.length) throw new Error('No fixtures matched --case');
   const report = {
     baseline: baselineFile ?? revision,
+    control,
+    interleaved,
+    currentHash,
+    currentGraphHash: frozenCurrent.hash,
+    controlPass: control ? rows.every((r) => withinControl(r.timings)) : undefined,
     allowDiff,
     baselineGraphHash: frozen?.hash,
     candidates,
@@ -320,14 +345,20 @@ try {
     baselineHash: createHash('sha256').update(source).digest('hex'),
     sourceHash: createHash('sha256').update(changedSource).digest('hex'),
     node: process.version,
+    processPriority: getPriority(),
     platform: process.platform,
     arch: process.arch,
     fixture: 'seeded plazas and mixed traffic; over-cap duplicates tile positions deliberately',
-    repetitions: 5,
-    samples: 160,
-    calibration: '20 calls per variant, shared batch targeting 1 ms, shared warmup targeting 40 ms',
+    repetitions: runs,
+    samples,
+    calibration:
+      '20 cost calls per arm; 250 discarded paired batches; shared batch targeting 1 ms; at least 90 warmup batches per fresh pair',
+    pairing: `${interleaved ? 'interleaved samples' : 'isolated arm blocks'}; ${runs / 2} A-first and ${runs / 2} B-first runs`,
+    aggregation: `median and p95 of all ${runs * samples} retained samples; raw runs preserved`,
     rows,
   };
+  if ((await currentSourceHash(root)) !== currentHash)
+    throw new Error('Runtime changed during benchmark');
   if (output) {
     const path = resolve(root, output);
     await mkdir(dirname(path), { recursive: true });

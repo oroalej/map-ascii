@@ -3,6 +3,7 @@ import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
 import { figureOf, personGlyphs } from './life/people';
+import { PUFF_GLYPHS } from './life/puff-style';
 import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
 import { ACCESS_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
@@ -576,6 +577,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...ACCESS_GLYPHS,
     // Canopy stages follow all earlier glyphs, retaining fixture, pose and parking indices.
     ...personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined),
+    ...PUFF_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];
