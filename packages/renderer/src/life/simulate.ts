@@ -3025,12 +3025,19 @@ export class TileLife {
           a.i - b.i,
       );
     const rain = env?.rain ?? 0;
-    // Runners held out of view keep their run but not their place among those running.
+    // Frozen runners retain their timer, but only those stepped here occupy running slots.
     let running = 0;
     for (const m of this.movers)
       if ((m.run ?? 0) <= 0) continue;
       else if (this.scenes.visits.has(m)) m.run = 0;
-      else if (!near || near(m.x, m.y)) running++;
+      else if (
+        m !== this.inspected &&
+        (!pass?.owns || pass.owns(m)) &&
+        (!shows || shows(m.kind)) &&
+        (!near || near(m.x, m.y)) &&
+        (!env?.levels || m.rank < env.levels[m.kind])
+      )
+        running++;
     for (const { i, m } of order) {
       if (this.inspected === m) continue;
       if (pass?.owns && !pass.owns(m)) continue;
@@ -3121,31 +3128,25 @@ export class TileLife {
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
-          if (m.run) {
-            m.run = 0;
-            running--;
-          }
+          running -= Number(this.stopRun(m));
           continue;
         }
         const idle = this.canIdle(m);
-        if (!idle) m.pause = 0;
+        const dashing = this.scenes.raining && exposed(m.group, rain);
+        if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
-          if (m.run) {
-            m.run = 0;
-            running--;
+          const pause = between(this.walkerRng, PERSON_PAUSE.seconds);
+          if (!dashing) {
+            m.pause = pause;
+            running -= Number(this.stopRun(m));
+            continue;
           }
-          continue;
-        }
-        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
-          if (m.run) {
-            m.run = 0;
-            running--;
-          }
+        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+          running -= Number(this.stopRun(m));
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -3153,8 +3154,6 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
-      }
-      if (m.kind === 'person') {
         const was = (m.run ?? 0) > 0;
         const pace = this.runSpeed(m, dt, rain, running < RUN.maxPerTile);
         running += Number((m.run ?? 0) > 0) - Number(was);
@@ -3269,6 +3268,13 @@ export class TileLife {
     m.dir = m.dir === 1 ? -1 : 1;
   }
 
+  /** Cancel a live run, reporting whether it occupied a running slot. */
+  private stopRun(m: Mover): boolean {
+    if ((m.run ?? 0) <= 0) return false;
+    m.run = 0;
+    return true;
+  }
+
   /**
    * How fast a person runs this step (config.ts `RUN`), or undefined while they walk. In the rain
    * anyone with no umbrella runs; otherwise someone walking alone now and then runs a few
@@ -3280,7 +3286,7 @@ export class TileLife {
       if (m.run) m.run = 0;
       return exposed(m.group, rain) ? runPace(m, RUN.dash, this.perMeter) : undefined;
     }
-    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : m.run! - dt;
+    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
     else if (
       room &&
       m.group?.length === 1 &&
