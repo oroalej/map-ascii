@@ -14,9 +14,7 @@
       {
         "id": "saints",
         "title": { "en": "Saints" },
-        "status": "draft",
         "window": { "from": { "month": 11, "day": 1 }, "to": { "month": 11, "day": 2 } },
-        "note": "TODO(verify): fixture",
         "congregations": {
           "label": "Mass-goers",
           "landmarks": ["landmark/missing-church"],

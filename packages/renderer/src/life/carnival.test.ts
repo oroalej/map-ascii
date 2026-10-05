@@ -1,9 +1,15 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import * as shared from '@atlas/shared';
 import { CARNIVAL_STYLES, type SeasonalCarnivalRecord, type SeasonConfig } from '@atlas/shared';
 import { packCarnival } from './carnival';
 import { SeasonalPart } from './seasonal-glyphs';
 import { seasonalFixtures } from './seasonal';
-import { LifeBuilder } from './geometry';
+import {
+  LifeBuilder,
+  encodeSeasonalPayload,
+  seasonalRecords,
+  physicalSeasonalRecords,
+} from './geometry';
 import { LifeWorld } from './simulate';
 import { simulationSeasons } from './seasonal-simulation';
 import {
@@ -14,6 +20,7 @@ import {
   createIdRegistry,
 } from '../raster/geometry';
 const tile = { z: 16, x: 55192, y: 30266 };
+afterEach(() => vi.restoreAllMocks());
 const ride: SeasonalCarnivalRecord = {
   version: 1,
   kind: 'carnival',
@@ -29,9 +36,7 @@ const ride: SeasonalCarnivalRecord = {
 };
 const season: SeasonConfig = {
   id: 'winter',
-  status: 'draft',
   title: { en: 'Winter' },
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: [],
   installations: [
@@ -193,6 +198,40 @@ it('blocks solid ride footprints only while active and leaves the midway walkabl
   choose(null);
   expect(world.cellTerrain()!.trees.hits([body(ride)])).toBe(false);
 });
+it('lazily supplies physical obstacles when already loaded raw tiles acquire an active season', () => {
+  const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+  const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season]));
+  world.sync([
+    {
+      key: 'raw-fair',
+      tile,
+      life: {
+        ...new LifeBuilder().finish(),
+        seasonalPayload: encodeSeasonalPayload([
+          JSON.stringify(ride),
+          '{',
+          JSON.stringify({ ...ride, version: 2 }),
+        ]),
+      },
+    },
+  ]);
+  expect(parse).not.toHaveBeenCalled();
+  const p = lngLatToTile(tile, ...ride.at);
+  const body = {
+    x: p.x * metersPerUnit(tile),
+    y: p.y * metersPerUnit(tile),
+    hx: 1,
+    hy: 0,
+    length: 1,
+    width: 1,
+  };
+  for (const id of ['winter', null, 'winter']) {
+    world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: id });
+    expect(world.cellTerrain()!.trees.hits([body])).toBe(id === 'winter');
+    expect(parse).toHaveBeenCalledTimes(3);
+  }
+});
 it.each([true, false])(
   'rejects prepared carnival terrain after the season changes (prepared active: %s)',
   (active) => {
@@ -247,6 +286,6 @@ it('decodes exact neighboring payloads and transfers only solid rides to Life', 
     }),
   };
   const result = buildTileGeometry({ seasons: layer }, createIdRegistry(), tile, 16);
-  expect(result.seasonal).toHaveLength(2);
-  expect(result.life.seasonalRides).toEqual([ride]);
+  expect(seasonalRecords(result.seasonal)).toHaveLength(2);
+  expect(physicalSeasonalRecords(result.life)).toEqual([ride]);
 });

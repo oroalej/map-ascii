@@ -28,6 +28,8 @@ import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
+import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
+import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
   CROWN_LIGHT,
   EDGE_INK,
@@ -290,6 +292,9 @@ vec3 vehicleColor(int byte, float night) {
     return mix(daylit(mix(paint, vec3(1.0, 0.97, 0.86), 0.6)), vec3(1.0, 0.93, 0.7), lit);
   }
   if (part == ${VehiclePart.taillight}) {
+    if ((index & ${BRAKE_LAMP}) != 0 && (byte & 128) == 0)
+      return mix(daylit(vec3(${BRAKE_COLOR.day.map(float).join(', ')})),
+        vec3(${BRAKE_COLOR.night.map(float).join(', ')}) * ${float(BRAKE_COLOR.glow)}, lit);
     return mix(daylit(vec3(0.78, 0.14, 0.1)), vec3(1.0, 0.22, 0.14), lit);
   }
   if (part == ${VehiclePart.mini}) return mix(color, vec3(1.0, 0.95, 0.8), lit * 0.7);
@@ -303,6 +308,10 @@ vec3 personColor(int byte, float coverage) {
   vec3 paint = index < ${PAINT_COUNT} ? u_paints[min(index, ${PAINT_COUNT - 1})] : u_colors[u_person];
   int part = (byte >> 4) & 7;
   // A stamped figure's cells say which ink they show (life/draw.ts stampFigure).
+  if (part == ${PersonPart.puff}) {
+    vec3 smoke = (index & ${PUFF_KIND_BIT}) == 0 ? vec3(${PUFF_COLOR.diesel.map(float).join(', ')}) : vec3(${PUFF_COLOR.twoStroke.map(float).join(', ')});
+    return mix(daylit(smoke), smoke * 0.65, lamps() * 0.7);
+  }
   if (part == ${PersonPart.skin}) return daylit(u_colors[u_person]);
   if (part == ${PersonPart.rib}) return daylit(paint * 0.6);
   bool tone = coverage < 0.7;
@@ -628,6 +637,7 @@ void main() {
   vec4 light = texelFetch(u_light, cell, 0);
   float lampsNow = lamps() * u_lampShow;
   int lampG = int(light.g * 255.0 + 0.5);
+  bool brakeGlow = (lampG & 7) == ${LampState.beam} && (lampG >> 3) == ${BRAKE_GLOW.seed};
   float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
   float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock) * switchedOn(lampG) * u_lampShow : 0.0;
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
@@ -637,17 +647,28 @@ void main() {
   // Floods, candles, and open shops light their own place, whatever it is.
   bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
   poolColor = flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
-  float poolR = texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
+  vec3 brakeColor = vec3(${BRAKE_COLOR.night.map(float).join(', ')});
+  // Brake falloff belongs to its own cone; filtering must not borrow neighboring light strength.
+  float poolR = brakeGlow ? light.r : texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
   float pool = 0.0;
   if (poolR > 0.01 && light.a > 0.5 && lampLight > 0.0) {
-    pool = poolR * lampLight * (everywhere ? 1.0 : groundMask(grid / u_cell));
+    if (brakeGlow) {
+      // Like ground agents, the glow uses the visible subcell surface beneath canopy edges;
+      // trunks remain occluders. Only road pixels receive the red spill.
+      int surface = cls == u_vehicleOccluders.x ? cls :
+        int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+      if ((u_cellBits[surface] & ${CellBit.vehicle}) != 0) pool = poolR * lampLight;
+    } else {
+      pool = poolR * lampLight * (everywhere ? 1.0 : groundMask(grid / u_cell));
+    }
   }
-  rainLight = pool;
+  // Road spill never recolors fixture ink or rain streaks.
+  rainLight = brakeGlow ? 0.0 : pool;
   // On water, the lamps along the bank reflect.
   bool water = (u_cellBits[cls] & ${CellBit.boat}) != 0;
   float refl = water && lampsNow > 0.0 ? reflection(grid / u_cell, cell) : 0.0;
-  vec3 glow = poolColor * pool * poolGlow() + LAMP * refl * 0.9;
+  vec3 glow = (brakeGlow ? vec3(0.0) : poolColor * pool * poolGlow()) + LAMP * refl * 0.9;
   // Under the moon, water glints linger on staggered beats (still with reduced motion).
   if (water && u_moon > 0.0 && night > 0.0) {
     ivec2 world = u_origin + cell;
@@ -657,7 +678,8 @@ void main() {
     uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
-  back += glow;
+  // A colour wash also reads on the light theme's paper, where additive red would clip white.
+  back = (brakeGlow ? mix(back, brakeColor, pool * poolGlow()) : back) + glow;
   vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
@@ -682,6 +704,7 @@ void main() {
     int lifeByte = int(life.a * 255.0 + 0.5);
     bool painted = lifeClass == u_vehicle || lifeClass == u_boat || lifeClass == u_train;
     bool person = lifeClass == u_person;
+    bool puff = person && ((lifeByte >> 4) & 7) == ${PersonPart.puff};
     bool bird = lifeClass == u_bird;
     vec3 color = painted
       ? vehicleColor(lifeByte, night)
@@ -690,7 +713,7 @@ void main() {
     if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)
       color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.
-    if (person || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
+    if ((person && !puff) || (bird && (lifeByte & ${BIRD_SILHOUETTE_BIT}) != 0)) {
       coverage = coverage > 0.0 ? 1.0 : 0.0;
     }
     if (person && (lifeByte & ${CANDLE_BIT}) != 0) {
@@ -699,7 +722,8 @@ void main() {
       float flicker = u_shimmer ? 0.85 + 0.15 * sin(effectTime(cell, 0) * beat) : 1.0;
       color = mix(color, vec3(1.0, 0.78, 0.4) * flicker, lamps());
     }
-    color = lampLit(color, pool);
+    color = lampLit(color, brakeGlow ? 0.0 : pool);
+    if (puff) color = mix(back, color, 1.0 - float(lifeByte & ${PUFF_AGE_MASK}) / ${float(PUFF_AGE_MASK)});
     if (u_focus) {
       color = (lifeFlags & ${LIFE_FOCUS_BIT}) != 0 ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
       if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
@@ -771,7 +795,10 @@ void main() {
   }
   // The feature's own fill takes its highlight too, so a selected footprint lights up whole.
   // (Its streetlight pool too, which that just replaced.)
-  if (!edge && bgClass == cls) back = fillOf(cls, color) * shade + glow;
+  if (!edge && bgClass == cls) {
+    vec3 fill = fillOf(cls, color) * shade;
+    back = (brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow;
+  }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});

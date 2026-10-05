@@ -7,8 +7,8 @@ import { REGION_TILE_MAX_ZOOM, type CameraState } from '@atlas/shared';
 import type { Size } from './camera';
 import type { FrameProfiler } from './profile';
 import { deleteTile, uploadTile, type GL, type TileMesh } from './gpu';
-import type { UtilityRecord, SeasonalRecord } from '@atlas/shared';
-import type { LifeGeometry } from './life/geometry';
+import type { UtilityRecord } from '@atlas/shared';
+import type { LifeGeometry, SeasonalPayload } from './life/geometry';
 import type { TileLabel } from './raster/geometry';
 import type { ResidentialSites } from './fireworks-sites';
 import {
@@ -36,7 +36,7 @@ export type LoadedTile = {
   labels: TileLabel[];
   life: LifeGeometry;
   utilities?: readonly UtilityRecord[];
-  seasonal?: readonly SeasonalRecord[];
+  seasonal?: SeasonalPayload;
 };
 
 export class TileCache {

@@ -1,0 +1,4 @@
+interface:
+  display_name: 'Review Handoff'
+  short_description: 'Review a handoff with Codex, then Claude and Codex.'
+  default_prompt: 'Use $review-handoff on this task: '

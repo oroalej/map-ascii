@@ -1,15 +1,15 @@
 ---
 name: review-pr
-description: Review an ASCII Atlas pull request, branch, or diff for correctness, code quality, reuse, performance, test/CI cost, and AGENTS.md project rules. Reports verified, ranked findings with path:line and suggested fixes, then offers to fix them. Use when asked to review a PR, a branch, or the current changes.
-argument-hint: '[PR number | branch]'
+description: Review an ASCII Atlas pull request, branch, or diff for correctness, code quality, reuse, performance, test/CI cost, and AGENTS.md project rules. Reports verified, ranked findings with path:line and suggested fixes, then fixes the blockers and should-fix items (report only with --report-only). Use when asked to review a PR, a branch, or the current changes.
+argument-hint: '[PR number | branch] [--report-only]'
 allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr list:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(git merge-base:*), Bash(git rev-parse:*), Read, Grep, Glob, Agent
 ---
 
 # Review a pull request
 
-Target: `$ARGUMENTS` (a PR number, a branch name, or empty for the current branch).
+Target: `$ARGUMENTS` (a PR number, a branch name, or empty for the current branch, optionally followed by `--report-only`).
 
-Review only. Make no edits, comments, commits, or pushes until the user accepts the fix offer (step 6).
+Steps 1–5 are review only: no edits, comments, commits or pushes. Step 6 then fixes the findings, unless `--report-only` was given. `$review-pr` passes `--report-only`, because its validator and fixer run separately and its baseline check expects this process to leave the checkout unchanged.
 
 The detailed checks for each review area are in [checklist.md](checklist.md). Read it before reviewing.
 
@@ -109,11 +109,9 @@ Write the report in chat, in this shape:
 - Use `path:line` so the references are clickable.
 - If CI is failing or pending, say so above the verdict.
 
-## 6. Offer to fix, then stop
+## 6. Fix
 
-End with one line offering to fix the blockers and should-fix items, or a subset the user picks. Wait for the answer.
-
-If the user accepts:
+With `--report-only`, stop after the report. Otherwise fix the blockers and should-fix items now, without asking. Don't wait for an answer, and don't offer a choice of subsets:
 
 1. Work on the PR's head branch. If another worktree already has it checked out (`git worktree list`), work there. `<main-checkout>` is the first entry of `git worktree list`. Only if no worktree has it, add one with `git worktree add "<main-checkout>/worktrees/<short>" <headRef>`. In the new worktree, run `pnpm install --frozen-lockfile --prefer-offline`, then `pnpm exec tsx "<skill-checkout>/scripts/claude-worktree-settings.ts"`, then `pnpm data:fetch` before making fixes or running checks. `<skill-checkout>` is the repository root containing this loaded skill; use its initializer even if the reviewed branch predates it. This excludes the main checkout's instructions while preserving personal Claude settings.
 2. Make the fixes, scoped to the findings.
@@ -123,4 +121,4 @@ If the user accepts:
 6. Report:
    - which findings were fixed or skipped, and why
    - which checks ran and which were left to CI
-   - whether a worktree was created, and remove it if the user agrees
+   - whether a worktree was created. Leave it in place; `$merge-pr` removes it after the PR merges

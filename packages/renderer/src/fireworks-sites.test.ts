@@ -214,6 +214,43 @@ describe('mapped residential fireworks', () => {
     expect(sample({ left: 0, top: 0, right: 512, bottom: 512 }, rng, new Set([1, 2]))?.id).toBe(3);
     expect(rng).toHaveBeenCalledTimes(2);
   });
+  it('bounds dense neighborhood sampling work and observes mutations of the same occupancy set', () => {
+    const homes = Array.from({ length: 6700 }, (_, id) => ({
+      id,
+      x: (id % 100) * 40 + 20,
+      y: Math.floor(id / 100) * 60 + 20,
+    }));
+    const sample = residentialFireworkSites([{ tile: { z: 12, x: 0, y: 0 }, sites: homes }], 12);
+    const area = { left: 120, top: 120, right: 390, bottom: 390 };
+    const occupied = new Set<number>();
+    const has = vi.spyOn(occupied, 'has');
+    const rng = vi.fn(random(19));
+    for (let i = 0; i < 50; i++) {
+      const site = sample(area, rng, occupied)!;
+      expect(site).toBeDefined();
+      expect(site.x).toBeGreaterThanOrEqual(area.left);
+      expect(site.x).toBeLessThanOrEqual(area.right);
+      expect(site.y).toBeGreaterThanOrEqual(area.top);
+      expect(site.y).toBeLessThanOrEqual(area.bottom);
+      expect(occupied).not.toContain(site.id);
+      occupied.add(site.id);
+    }
+    expect(has.mock.calls.length).toBeLessThan((50 * homes.length) / 3);
+    expect(rng.mock.calls.length).toBeLessThan(50_000);
+    has.mockRestore();
+    const all = { left: 0, top: 0, right: 512, bottom: 512 };
+    occupied.clear();
+    for (const home of homes) occupied.add(home.id);
+    expect(sample(all, random(1), occupied)).toBeUndefined();
+    occupied.delete(3001);
+    expect(sample(all, random(1), occupied)?.id).toBe(3001);
+    occupied.delete(3002);
+    expect(new Set(Array.from({ length: 100 }, () => sample(all, rng, occupied)!.id))).toEqual(
+      new Set([3001, 3002]),
+    );
+    occupied.add(3001);
+    expect(sample(all, rng, occupied)?.id).toBe(3002);
+  });
   it('admits compact roof clusters along residential streets, excluding isolated roofs and nonresidential roads', () => {
     const houses = [1000, 1150, 1300].map((x, i) =>
       feature(`untyped/${i}`, 'building=yes', [square(x, 1000, 60)]),

@@ -1,6 +1,6 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import type { SearchIndexFile, SeasonConfig } from '@atlas/shared';
+import { RuntimeCityLifeSchema, type SearchIndexFile, type CityLifeConfig } from '@atlas/shared';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */
@@ -12,7 +12,7 @@ export const cities = readdirSync(citiesDir)
     const city = JSON.parse(readFileSync(new URL(`${slug}/city.json`, citiesDir), 'utf8')) as {
       name: { en: string };
       smoke_landmark: string;
-      life?: { seasons?: SeasonConfig[] };
+      life?: CityLifeConfig;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
     // Use the configured smoke landmark instead of assuming the city's focus is pickable.
@@ -46,7 +46,7 @@ export const cities = readdirSync(citiesDir)
       smokePlace,
       hasMeta,
       tours,
-      seasons: city.life?.seasons ?? [],
+      seasons: city.life ? (RuntimeCityLifeSchema.parse(city.life).seasons ?? []) : [],
     };
   });
 

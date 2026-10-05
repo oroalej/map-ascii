@@ -6,6 +6,7 @@
 import { classId } from '../classes';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
+import { drawProcedural, sextantSplits } from '../glyphs/atlas';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
 import {
@@ -15,6 +16,7 @@ import {
   LIFE_SHADOW,
   lifeClassFor,
   isWalker,
+  UMBRELLA_MOTION,
   type AgentKind,
 } from './config';
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
@@ -33,6 +35,9 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
+import { BRAKE_LAMP } from './lamps';
+import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
+import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
   LINE_GLYPHS,
   PART_GLYPHS,
@@ -56,6 +61,8 @@ export type LifeGrid = {
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
+  /** Successful detailed vehicle stamps, indexed by this frame's final agent array. */
+  stampedVehicles?: Uint8Array;
 };
 /** Per-person packing, independent of cart and group owner identity. */
 export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, number]> };
@@ -64,8 +71,13 @@ export type SpeakerGrid = { members: Uint8Array; points: Map<number, [number, nu
  * A vehicle's or boat's paint (bits 0–3), part (4–6), and whether it is parked (bit 7: lamps
  * off), in the texel's last byte.
  */
-export const vehicleByte = (paint: number, part: VehiclePart, parked = false) =>
-  (paint & 15) | (part << 4) | (parked ? 128 : 0);
+export const vehicleByte = (paint: number, part: VehiclePart, parked = false, brake = false) =>
+  ((part === VehiclePart.taillight
+    ? (paint & ~BRAKE_LAMP) | (brake && !parked ? BRAKE_LAMP : 0)
+    : paint) &
+    15) |
+  (part << 4) |
+  (parked ? 128 : 0);
 
 /**
  * A vehicle drawn from its plan may hang over open ground at a narrow road's edge, but never
@@ -96,6 +108,8 @@ export type LifeGlyphs = { parts: Uint16Array };
 let journal:
   | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
   | undefined;
+let fallbackStampedVehicles = new Uint8Array(0);
+let detailedStamp = false;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
 let drawingFocus = 0;
@@ -128,6 +142,37 @@ function writeCell(
 let groundCells = new Uint8Array(0);
 let drawingSpeakers: SpeakerGrid | undefined;
 let drawingMember = 0;
+/** Reused while one transitioning person's underlying figure is drawn synchronously. */
+const figureCoverage = new Map<number, number>();
+const figureMasks = new Map<string, number>();
+let coverageWidth = 0;
+let coverageHeight = 0;
+let coveragePixels = new Uint8Array(0);
+
+/** Conservative sixths of the actual procedural glyph, cached at the current atlas size. */
+function figureCellMask(glyph: string, w: number, h: number): number {
+  if (w !== coverageWidth || h !== coverageHeight) {
+    coverageWidth = w;
+    coverageHeight = h;
+    coveragePixels = new Uint8Array(w * h);
+    figureMasks.clear();
+  }
+  const cached = figureMasks.get(glyph);
+  if (cached !== undefined) return cached;
+  coveragePixels.fill(0);
+  drawProcedural({ data: coveragePixels, stride: w, x0: 0, y0: 0, w, h }, glyph);
+  let mask = 0;
+  const { xs, ys } = sextantSplits(w, h);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (!coveragePixels[y * w + x]) continue;
+      const row = y < ys[1] ? 0 : y < ys[2] ? 1 : 2;
+      mask |= 1 << (row * 2 + Number(x >= xs[1]));
+    }
+  figureMasks.set(glyph, mask);
+  return mask;
+}
+
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
@@ -176,12 +221,19 @@ export function packLife(
   sun?: Sun | null,
   glyphs: LifeGlyphs = buildLifeGlyphs(glyphIndex),
   metadata: LifePackMetadata = {},
+  puffs: Float64Array = EMPTY_PUFFS,
 ): number {
   const cells = grid.cols * grid.rows;
   drawingOwners = metadata.owners ?? grid.owners;
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
+  if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
+    throw new RangeError('Wrong stamped vehicle mask size');
+  if (!grid.stampedVehicles && fallbackStampedVehicles.length < agents.length)
+    fallbackStampedVehicles = new Uint8Array(agents.length);
+  const stampedVehicles = grid.stampedVehicles ?? fallbackStampedVehicles;
+  stampedVehicles.fill(0);
   drawingOwners?.fill(0);
   drawingOwner = 0;
   drawingFocus = 0;
@@ -211,6 +263,7 @@ export function packLife(
         drawingMember = 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
+        detailedStamp = false;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
         if (journal && grid.allowsGroundCell)
           for (const at of journal.before.keys())
@@ -231,8 +284,12 @@ export function packLife(
         else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+          if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
         }
       }
+    journal = undefined;
+    drawingOwner = 0;
+    drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
     journal = undefined;
@@ -242,6 +299,35 @@ export function packLife(
     drawingFocus = 0;
     drawingSpeakers = undefined;
     drawingMember = 0;
+  }
+}
+
+/** Decorative ink fills empty cells only after its detailed source was successfully admitted. */
+function drawPuffs(
+  out: Uint8Array,
+  grid: LifeGrid,
+  puffs: Float64Array,
+  glyphIndex: (g: string) => number,
+  stampedVehicles: Uint8Array,
+) {
+  for (let i = 0; i + PUFF_STRIDE <= puffs.length; i += PUFF_STRIDE) {
+    if (!stampedVehicles[puffs[i]!]) continue;
+    const [x, y] = grid.toCell(puffs[i + 1]!, puffs[i + 2]!);
+    const col = Math.floor(x),
+      row = Math.floor(y);
+    if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) continue;
+    const at = (row * grid.cols + col) * 4;
+    if (out[at + 2] !== 0) continue;
+    const age = Math.max(0, Math.min(1, puffs[i + 3]!));
+    const glyph = glyphIndex(puffGlyph(age));
+    if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
+    [out[at], out[at + 1]] = packGlyph(glyph, classId('life_person'));
+    out[at + 2] = CellBit.vehicle | CellBit.person;
+    out[at + 3] = personByte(
+      Math.min(PUFF_AGE_MASK, Math.floor(age * (PUFF_AGE_MASK + 1))) |
+        (puffs[i + 4] === 1 ? PUFF_KIND_BIT : 0),
+      PersonPart.puff,
+    );
   }
 }
 
@@ -292,10 +378,18 @@ function drawAgent(
         agent.kind === 'vehicle' &&
         !agent.parked &&
         hasTurnSignals(agent.vehicle) &&
-        agent.turnSignal?.on &&
+        (agent.lamps?.kind === 'hazard' ? agent.lamps.on : agent.turnSignal?.on) &&
         Math.hypot(...across) * spec.width >= 2
-          ? { side: agent.turnSignal.side, glyph: parts[VehiclePart.headlight]! }
+          ? {
+              sides:
+                agent.lamps?.kind === 'hazard'
+                  ? (['left', 'right'] as const)
+                  : [agent.turnSignal!.side],
+              glyph: parts[VehiclePart.headlight]!,
+            }
           : undefined;
+      const brake =
+        agent.kind === 'vehicle' && hasTurnSignals(agent.vehicle) && agent.lamps?.kind === 'brake';
       const stamped = stamp(
         out,
         grid,
@@ -308,10 +402,11 @@ function drawAgent(
           parts[agent.kind === 'boat' ? VehiclePart.body : part]!,
           classId(cls),
           bits,
-          vehicleByte(agent.paint ?? 0, part, agent.parked),
+          vehicleByte(agent.paint ?? 0, part, agent.parked, brake),
         ],
         indicator,
       );
+      detailedStamp = stamped;
       // The vendor stands clear of the cart's side.
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
@@ -382,6 +477,7 @@ function drawPeople(
   let [fx, fy] = [0, -1];
   let along: [number, number] = [0, 0];
   let right: [number, number] = [0, 0];
+  let cellsPerMeter = 1;
   let fits = looks.map(() => figureFit('adult', 1));
   if (agent.ahead) {
     const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
@@ -397,7 +493,7 @@ function drawPeople(
     } else {
       right = [-y / cellWidth, x / cellHeight];
     }
-    const cellsPerMeter = Math.hypot(x, y) / cellWidth;
+    cellsPerMeter = Math.hypot(x, y) / cellWidth;
     fits = looks.map((look) => figureFit(look.figure, FIGURE_SIZE_M[look.figure] * cellsPerMeter));
   }
   const across = fx !== 0;
@@ -408,6 +504,9 @@ function drawPeople(
   // A paddler's glyphs head up or right; turned half round, they are the other side's paddler at
   // the other end of the stroke (life/people.ts `ROWER`).
   const turned = fx < 0 || fy > 0;
+  const stageOf = (look: PersonLook): 0 | 1 | undefined =>
+    look.canopy ? (look.canopy.open < UMBRELLA_MOTION.stageCutoff ? 0 : 1) : undefined;
+  let coverage: Map<number, number> | undefined;
   const byteOf = (look: PersonLook, tone = false) => {
     const umbrella = look.figure === 'umbrella';
     const part = tone
@@ -425,6 +524,7 @@ function drawPeople(
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
     writeCell(out, at, index, cls, bits, byte);
+    coverage?.set(at, figureCellMask(glyph, cellWidth, cellHeight));
     return true;
   };
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
@@ -442,10 +542,38 @@ function drawPeople(
         pull,
         headingOf(fx, fy),
         look.pose,
+        stageOf(look),
       );
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
+  };
+  const drawFit = (look: PersonLook, fit: ReturnType<typeof figureFit>, cx: number, cy: number) => {
+    if (fit === 'stamp')
+      return stampFigure(
+        out,
+        grid,
+        [cx, cy],
+        along,
+        right,
+        look,
+        stroke,
+        glyphIndex,
+        (tone) => [cls, bits, byteOf(look, tone)],
+        coverage ? { coverage } : undefined,
+      );
+    if (fit === 'big') return putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
+    const glyph = figureGlyph(
+      look.figure,
+      across,
+      look.flap === 1 ? 1 : 0,
+      { scale: fit },
+      0,
+      headingOf(fx, fy),
+      look.pose,
+      stageOf(look),
+    );
+    return put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
   };
   let drawn = 0;
 
@@ -464,27 +592,39 @@ function drawPeople(
       if (agent.speech && (agent.speech.member ?? 0) === i)
         drawingSpeakers?.points.set(drawingOwner, [cx, cy]);
       const fit = fits[i]!;
-      const frame = look.flap === 1 ? 1 : 0;
       let any: boolean;
-      if (fit === 'stamp') {
-        any = stampFigure(out, grid, [cx, cy], along, right, look, stroke, glyphIndex, (tone) => [
-          cls,
-          bits,
-          byteOf(look, tone),
-        ]);
-      } else if (fit === 'big') {
-        any = putBig(look, Math.round(cx) - 1, Math.round(cy) - 1);
-      } else {
-        const glyph = figureGlyph(
-          look.figure,
-          across,
-          frame,
-          { scale: fit },
-          0,
-          headingOf(fx, fy),
-          look.pose,
+      if (fit === 'stamp' && look.canopy) {
+        const under = {
+          ...look,
+          figure: look.canopy.figure,
+          paint: look.canopy.paint,
+          canopy: undefined,
+        };
+        const underFit = figureFit(under.figure, FIGURE_SIZE_M[under.figure] * cellsPerMeter);
+        figureCoverage.clear();
+        coverage = figureCoverage;
+        any = drawFit(under, underFit, cx, cy);
+        coverage = undefined;
+        const canopy = stampFigure(
+          out,
+          grid,
+          [cx, cy],
+          along,
+          right,
+          look,
+          stroke,
+          glyphIndex,
+          (tone) => [cls, bits, byteOf(look, tone)],
+          {
+            size:
+              (UMBRELLA_MOTION.folded + (1 - UMBRELLA_MOTION.folded) * look.canopy.open) *
+              FIGURE_SIZE_M.umbrella,
+            underneath: figureCoverage,
+          },
         );
-        any = put(Math.floor(cx), Math.floor(cy), glyph, byteOf(look));
+        any = canopy || any;
+      } else {
+        any = drawFit(look, fit, cx, cy);
       }
       if (any) drawn++;
     });
@@ -522,6 +662,7 @@ function drawPeople(
         0,
         headingOf(fx, fy),
         look.pose,
+        stageOf(look),
       );
       // In a 2×2 slot: its cell nearest the first of the group.
       const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
@@ -531,6 +672,12 @@ function drawPeople(
   });
   return drawn;
 }
+
+type StampOptions = {
+  size?: number;
+  underneath?: ReadonlyMap<number, number>;
+  coverage?: Map<number, number>;
+};
 
 /**
  * Stamp a figure at its real size (life/people.ts `FIGURE_SIZE_M`), like a vehicle from its plan
@@ -549,6 +696,7 @@ function stampFigure(
   stroke: 0 | 1,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
+  options?: StampOptions,
 ): boolean {
   const frame = look.flap === 1 ? 1 : 0;
   // A canopy's thin ribs show in a cell where they are a third of its ink.
@@ -559,11 +707,12 @@ function stampFigure(
     center,
     along,
     right,
-    FIGURE_SIZE_M[look.figure],
+    options?.size ?? FIGURE_SIZE_M[look.figure],
     (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
     toneShare,
     glyphIndex,
     texel,
+    options,
   );
 }
 
@@ -586,6 +735,7 @@ function stampMaster(
   toneShare: number,
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
+  options?: Pick<StampOptions, 'underneath' | 'coverage'>,
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
@@ -618,12 +768,21 @@ function stampMaster(
         if (mark === 'o') tone++;
       }
       if (mask === 0) continue;
+      const at = (r * cols + c) * 4;
+      const underMask = options?.underneath?.get(at) ?? 0;
+      // Count only newly covered sixths; retain the canopy's actual rib samples.
+      let added = underMask & ~mask;
+      while (added) {
+        inked++;
+        added &= added - 1;
+      }
+      mask |= underMask;
       const [cls, bits, byte] = texel(tone > inked * toneShare);
       const index = glyphIndex(sextantGlyphs[mask]!);
       if (index <= 0 || index > MAX_GLYPHS) continue;
-      const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, index, cls, bits, byte);
+      options?.coverage?.set(at, mask);
       any = true;
     }
   }
@@ -806,7 +965,7 @@ function stamp(
   across: [number, number],
   spec: VehicleSpec,
   texel: (part: VehiclePart) => [number, number, number, number],
-  indicator?: { side: TurnSide; glyph: number },
+  indicator?: { sides: readonly TurnSide[]; glyph: number },
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -829,12 +988,23 @@ function stamp(
   let any = false;
   // Nearest existing cells to front/rear corners: never enlarge the vehicle's footprint.
   const lamps = indicator
-    ? [
-        { at: -1, score: Infinity, forward: -length * 0.4 },
-        { at: -1, score: Infinity, forward: length * 0.4 },
-      ]
+    ? indicator.sides.flatMap((side) => [
+        {
+          at: -1,
+          score: Infinity,
+          forward: -length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+        {
+          at: -1,
+          score: Infinity,
+          forward: length * 0.4,
+          side,
+          right: (side === 'left' ? -1 : 1) * spec.width * 0.4,
+        },
+      ])
     : undefined;
-  const lampRight = indicator?.side === 'left' ? -spec.width * 0.4 : spec.width * 0.4;
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       // The cell's center in meters forward and to the right of the vehicle's center.
@@ -850,11 +1020,12 @@ function stamp(
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, glyph, cls, bits, byte);
-      if (lamps && (indicator!.side === 'left' ? right < 0 : right > 0))
+      if (lamps)
         for (const lamp of lamps) {
+          if (lamp.side === 'left' ? right >= 0 : right <= 0) continue;
           // Keep front and rear lamps on their own half, even when viewport clipping hides one.
           if (forward * lamp.forward <= 0) continue;
-          const score = (forward - lamp.forward) ** 2 + (right - lampRight) ** 2;
+          const score = (forward - lamp.forward) ** 2 + (right - lamp.right) ** 2;
           if (score < lamp.score) {
             lamp.at = at;
             lamp.score = score;

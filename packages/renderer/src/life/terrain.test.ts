@@ -10,7 +10,7 @@ import {
   transformPolygon,
 } from './terrain';
 import { metersPerUnit, sidewalkLine } from '../raster/geometry';
-import type { Body } from './occupancy';
+import { segmentBody, type Body } from './occupancy';
 
 const road = stripRing({ x: 0, y: 0 }, { x: 100, y: 0 }, 5);
 const crossing = stripRing({ x: 48.5, y: 0 }, { x: 51.5, y: 0 }, 5);
@@ -24,6 +24,15 @@ const body = (x: number, y: number, length = 0.9, width = 1): Body => ({
 });
 
 describe('carriageway access', () => {
+  it('preserves navigation endpoints while forage padding includes nearby road edges', () => {
+    const access = new RoadAccess([[road]], []);
+    const a = { x: 20, y: 10 },
+      b = { x: 20, y: 5.003 };
+    expect(access.clear(a, b)).toBe(true);
+    expect(access.allows([segmentBody(a, b, 0.01)])).toBe(false);
+    expect(access.clear({ x: 20, y: 6 }, { x: 20, y: 6 })).toBe(true);
+    expect(access.clear({ x: 20, y: 0 }, { x: 20, y: 0 })).toBe(false);
+  });
   it('rejects a hairpin bevel that would cut back through the carriageway', () => {
     const way = [
       { x: 0, y: 0 },

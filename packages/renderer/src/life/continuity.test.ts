@@ -13,6 +13,7 @@ import {
 } from './testing/scenarios';
 import { continuityMover, continuityTile, left, parent, right } from './testing/continuity';
 import { trainLimits } from './train-motion';
+import { withoutDecorations } from '../../scripts/decorations';
 
 const entry = continuityTile(parent);
 function fixture(kind: LifeLine = LifeLine.roadMajor) {
@@ -46,7 +47,7 @@ function assertUnique(world: LifeWorld) {
 }
 
 describe('tile retirement', () => {
-  it('freezes all state, draws nothing, and revives the original instance after cloned geometry returns', () => {
+  it('freezes retired state, draws nothing, and revives original motion after cloned geometry returns', () => {
     const { world, life, source } = fixture();
     world.step(0.1);
     const saved = structuredClone(scenarioState(world));
@@ -59,7 +60,7 @@ describe('tile retirement', () => {
     expect(world.visible(18, activityLevels(1), [123, 13])).toEqual([]);
     world.sync([structuredClone(source)]);
     expect(worldTiles(world).get(source.key)).toBe(life);
-    expect(scenarioState(world)).toEqual(saved);
+    expect(withoutDecorations(scenarioState(world))).toEqual(withoutDecorations(saved));
     expect(retiredTiles(world).size).toBe(0);
   });
 
@@ -239,6 +240,56 @@ describe('cross-zoom continuity', () => {
 });
 
 describe('transactional adoption', () => {
+  it('hands a split road vehicle across a tile seam onto the matching way piece', () => {
+    const entries = [left, right].map((tile) => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: -100, y: 2000 },
+          { x: 2000, y: 2000 },
+          { x: 4196, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        6,
+        77,
+      );
+      b.line(
+        [
+          { x: 2000, y: 1000 },
+          { x: 2000, y: 2000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+        88,
+      );
+      b.splitRoadJunctions(1 / metersPerUnit(tile), 40);
+      return { key: `${tile.z}/${tile.x}/${tile.y}`, tile, life: b.finish() };
+    });
+    const world = new LifeWorld({ road_major: { car: 1 } });
+    world.sync(entries);
+    const source = worldTiles(world).get(entries[0]!.key)!;
+    const target = worldTiles(world).get(entries[1]!.key)!;
+    for (const life of [source, target]) {
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+    }
+    const m = continuityMover(source, 4090);
+    m.line = 1;
+    m.from = source.geo.starts[1]!;
+    m.d = m.x - 2000;
+    const routing = structuredClone(m.routing);
+    source.movers.push(m);
+    for (let frame = 0; frame < 100 && !target.movers.includes(m); frame++)
+      world.step(0.1, undefined, 18);
+    expect(source.movers).not.toContain(m);
+    expect(target.movers).toContain(m);
+    expect(m.line).toBe(0);
+    expect(target.geo.lineIds![m.line]).toBe(77);
+    expect(m.routing?.seed).toBe(routing?.seed);
+    expect(m.routing?.turns).toBe(routing?.turns);
+    expect(m.x).toBeGreaterThanOrEqual(0);
+    assertUnique(world);
+  });
   function pair(targetEntry = continuityTile(left)) {
     const { life, movers } = fixture();
     const target = new TileLife(targetEntry.tile, targetEntry.life, 42);

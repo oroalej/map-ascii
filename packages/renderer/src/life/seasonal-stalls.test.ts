@@ -1,6 +1,11 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { describe, expect, it, vi } from 'vitest';
-import type { SeasonConfig } from '@atlas/shared';
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type SeasonalDisplayRecord,
+} from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
 import { MAX_TILE_AGENTS, activityLevels } from './config';
@@ -13,8 +18,6 @@ const tile = { z: 16, x: 55192, y: 30266 };
 const season: SeasonConfig = {
   id: 'feast',
   title: { en: 'Feast' },
-  status: 'draft',
-  note: 'TODO(verify)',
   sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
   window: { from: { month: 9, day: 1 }, to: { month: 9, day: 20 } },
   stalls: { label: 'Food carts', near: ['worship'], radius_m: 300, per_tile: 12 },
@@ -50,6 +53,78 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  function physicalPreview() {
+    const result = setup();
+    const display: SeasonalDisplayRecord = {
+      version: 1,
+      kind: 'christmas-tree',
+      id: 'tree',
+      installation: 'tree',
+      season: season.id,
+      anchor: 'osm:way/1',
+      seed: 1,
+      radius_m: 5,
+      at: tileToLngLat(tile, { x: 20, y: 20 }),
+    };
+    result.tiles[0]!.life.seasonalTrees = [display];
+    result.world.setSeasons(
+      simulationSeasons([
+        {
+          ...season,
+          installations: [
+            {
+              id: 'tree',
+              kind: 'christmas-tree',
+              anchor: display.anchor,
+              label: 'Tree',
+            },
+          ],
+        },
+      ]),
+    );
+    return { ...result, display };
+  }
+  it('leaves off-footprint closed carts and seated gatherers alone despite hidden-body overlaps', () => {
+    const { world, life } = physicalPreview();
+    const cart = life.stalls[0]!,
+      walker = life.movers.find((m) => m.kind === 'person')!;
+    expect(cart).toBeDefined();
+    expect(walker).toBeDefined();
+    cart.open = false;
+    walker.x = cart.x;
+    walker.y = cart.y;
+    const seated = life.gatherers[0]!;
+    expect(seated).toBeDefined();
+    seated.behavior = 'sit';
+    seated.x = walker.x;
+    seated.y = walker.y;
+    for (const id of [season.id, null]) {
+      select(world, id);
+      expect(life.stalls).toContain(cart);
+      expect(life.gatherers).toContain(seated);
+      expect(life.movers).toContain(walker);
+    }
+  });
+  it('restores obstructed actors and cart sites after deselection, including retirement and revival', () => {
+    const { world, life, tiles, display } = physicalPreview();
+    const cart = life.stalls[0]!;
+    display.at = tileToLngLat(tile, cart);
+    const population = life.population;
+    select(world);
+    expect(life.stalls).not.toContain(cart);
+    expect(life.canIdle(cart)).toBe(false);
+    expect(life.scenes.sites.some((site) => site.stall === cart)).toBe(false);
+    expect(life.population).toBe(population);
+    world.sync([]);
+    select(world, null);
+    world.sync(tiles);
+    select(world, null);
+    expect(world.active(tiles[0]!.key)).toBe(life);
+    expect(life.stalls).toContain(cart);
+    expect(life.scenes.sites.some((site) => site.stall === cart)).toBe(true);
+    expect(life.canIdle(cart)).toBe(true);
+    expect(life.population).toBe(population);
+  });
   it('skips anchorless and unchanged candidate searches after unrelated tile arrivals', () => {
     for (const anchored of [false, true]) {
       const { world, life, tiles } = setup(false, anchored, anchored);
@@ -97,6 +172,114 @@ describe('seasonal stall lifecycle', () => {
     expect(life.seasonalStalls).toContain(stall);
     expect(life.scenes.visits.get(customer)).toBe(visit);
     expect(visit.state).toBe('purchase');
+  });
+
+  it.each([false, true])(
+    'retains a purchasing customer across equivalent seasons (retired: %s)',
+    (retired) => {
+      const { world, life, tiles } = setup();
+      const included = { ...season, id: 'new-year', includes: [season.id] };
+      world.setSeasons(simulationSeasons([season, included]));
+      select(world);
+      const stall = life.seasonalStalls[0]!;
+      const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+      const customer = life.movers.find(
+        (m) => m.kind === 'person' && life.scenes.reserve(m, site),
+      )!;
+      const visit = life.scenes.visits.get(customer)!;
+      visit.state = 'purchase';
+      if (retired) world.sync([]);
+      select(world, included.id);
+      if (retired) {
+        world.sync(tiles);
+        select(world, included.id);
+      }
+      expect(life.seasonalStalls).toContain(stall);
+      expect(life.scenes.visits.get(customer)).toBe(visit);
+      expect(visit.state).toBe('purchase');
+      select(world, null);
+      expect(life.seasonalStalls).toEqual([]);
+      expect(visit.state).toBe('return');
+    },
+  );
+
+  it('keeps terrain, carts and purchasing customers across equivalent physical previews', () => {
+    const { world, life, display } = physicalPreview();
+    const physical: SeasonConfig = {
+      ...season,
+      installations: [
+        {
+          id: display.installation,
+          kind: 'christmas-tree',
+          anchor: display.anchor,
+          label: 'Tree',
+          radius_m: display.radius_m,
+          sources: season.sources,
+        },
+      ],
+    };
+    world.setSeasons(
+      simulationSeasons(
+        expandSeasons([
+          runtimeSeason(physical),
+          runtimeSeason({
+            ...physical,
+            id: 'new-year',
+            includes: [season.id],
+            installations: undefined,
+            stalls: undefined,
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          }),
+        ]),
+      ),
+    );
+    select(world);
+    const terrain = world.cellTerrain()!.version;
+    const stall = life.seasonalStalls[0]!;
+    const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+    const customer = life.movers.find((m) => m.kind === 'person' && life.scenes.reserve(m, site))!;
+    const visit = life.scenes.visits.get(customer)!;
+    visit.state = 'purchase';
+    for (const id of ['new-year', season.id]) {
+      select(world, id);
+      expect(world.cellTerrain()!.version).toBe(terrain);
+      expect(life.seasonalStalls).toContain(stall);
+      expect(life.scenes.visits.get(customer)).toBe(visit);
+      expect(visit.state).toBe('purchase');
+    }
+  });
+
+  it('rechecks physical admission when an equivalent stall season adds an obstacle', () => {
+    const { world, life, tiles } = setup();
+    select(world);
+    const stall = life.seasonalStalls[0]!;
+    const display: SeasonalDisplayRecord = {
+      version: 1,
+      kind: 'christmas-tree',
+      id: 'new-year-tree',
+      installation: 'tree',
+      season: 'new-year',
+      anchor: 'osm:way/1',
+      seed: 1,
+      radius_m: 5,
+      at: tileToLngLat(tile, stall),
+    };
+    tiles[0]!.life.seasonalTrees = [display];
+    world.setSeasons(
+      simulationSeasons([
+        season,
+        {
+          ...season,
+          id: 'new-year',
+          installations: [
+            { id: 'tree', kind: 'christmas-tree', anchor: display.anchor, label: 'Tree' },
+          ],
+        },
+      ]),
+    );
+    select(world, 'new-year');
+    expect(life.seasonalStalls).not.toContain(stall);
+    expect(life.scenes.sites.some((site) => site.stall === stall)).toBe(false);
   });
 
   it('invalidates only carts ceded to a new finer owner and preserves the remaining identities', () => {

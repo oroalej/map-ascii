@@ -4,6 +4,7 @@ import {
   bandVisibility,
   CLASS_ZOOM,
   UTILITY_ZOOM,
+  SEASON_ZOOM,
   shopHours,
   shopOpen,
   resolveSeason,
@@ -14,7 +15,7 @@ import { sameReferenceMembers } from './cache-inputs';
 import type {
   BBox,
   CameraState,
-  CityLifeConfig,
+  RuntimeCityLife,
   ClimateConfig,
   DialogueCatalog,
   RuntimeDialogueCatalog,
@@ -87,6 +88,7 @@ import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
   activityLevels,
+  LIFE_TILE_MIN_ZOOM,
   FLOOD,
   SHOP,
   STREETLIGHT,
@@ -166,8 +168,6 @@ export { cityTime, type LocalTime } from './life/clock';
 export type SeasonState = Readonly<{
   id: string;
   title: string;
-  status: 'draft' | 'verified';
-  note?: string;
   labels: Readonly<{
     lanterns?: string;
     bunting?: string;
@@ -258,7 +258,7 @@ export type AtlasOptions = {
    */
   timezone?: string;
   /** The city's daily rhythm (its pack's `life`); default: `DEFAULT_RHYTHM`. */
-  cityLife?: CityLifeConfig;
+  cityLife?: RuntimeCityLife;
   /** The clock for the live time of day (tests pin it). */
   now?: () => Date;
   /**
@@ -406,8 +406,6 @@ const sameCamera = (a: CameraState, b: CameraState) =>
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
 const SUN_MS = 1000;
-/** Life agents come from tiles at least this deep (the shallowest life zoom band is 13.5). */
-const LIFE_TILE_MIN_ZOOM = 13;
 /** Smoothing for the timing stats: each new sample's weight. */
 const STATS_WEIGHT = 0.1;
 const smooth = (average: number, sample: number) =>
@@ -481,8 +479,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? Object.freeze({
           id: season.id,
           title: season.title.en,
-          status: season.status,
-          ...(season.note ? { note: season.note } : {}),
           labels: Object.freeze({
             ...(season.fireworks ? { fireworks: season.fireworks.label } : {}),
             ...(season.lanterns ? { lanterns: season.lanterns.label } : {}),
@@ -974,6 +970,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             wind: worldWind(time),
             weather: { rain: currentRain(), minutes: cityMinutes, season: season?.id ?? null },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
+            effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
           },
           visible: [
             camera.zoom,
@@ -1016,6 +1013,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       focus.life,
       itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
       trackSpeech ? speechSpeakers : undefined,
+      drawnLife?.puffs,
     );
     lifeShown = agents.length > 0;
     lifeAgents = agents;
@@ -1232,7 +1230,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const showUtilities =
       options.utilities?.derive === true && bandVisibility(UTILITY_ZOOM, camera.zoom) > 0;
     const displaysShown = camera.zoom >= 18;
-    const buntingShown = bandVisibility({ min: 18 }, camera.zoom) > 0;
+    const buntingShown = bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0;
     if (
       displaysShown === fixtureDisplaysShown &&
       buntingShown === fixtureBuntingShown &&
@@ -1521,9 +1519,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!programs || lost || destroyed) return;
     const seasonal =
       !!season &&
-      ((!!season.lanterns && bandVisibility({ min: 17 }, camera.zoom) > 0) ||
-        (!!season.bunting && bandVisibility({ min: 18 }, camera.zoom) > 0) ||
-        (!!season.installations?.length && bandVisibility({ min: 18 }, camera.zoom) > 0));
+      ((!!season.lanterns && bandVisibility(SEASON_ZOOM.lanterns, camera.zoom) > 0) ||
+        (!!season.bunting && bandVisibility(SEASON_ZOOM.bunting, camera.zoom) > 0) ||
+        (!!season.installations?.length &&
+          bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0));
     prewarmGlyphPrograms(
       gl,
       programs,

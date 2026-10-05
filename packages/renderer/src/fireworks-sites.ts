@@ -9,6 +9,15 @@ export const isResidentialBuilding = (kind: unknown): boolean =>
   /^building=(house|residential|apartments|terrace|detached|semidetached_house|bungalow|dormitory|static_caravan)$/.test(
     kind,
   );
+export const isResidentialStreet = (className: unknown, kind: unknown): boolean =>
+  className === 'road_minor' &&
+  (kind === 'highway=residential' || kind === 'highway=living_street');
+export const isRoofCandidate = (
+  className: unknown,
+  kind: unknown,
+  height: number,
+  landmark: boolean,
+): boolean => className === 'building' && kind === 'building=yes' && height > 0 && !landmark;
 
 export type ResidentialSite = TilePoint & { id: number };
 /** Triples of feature id and tile-local x/y; transferred without object cloning. */
@@ -184,10 +193,9 @@ export function residentialFireworkSites(
       if (Number.isFinite(x) && Number.isFinite(y)) sites.set(id, { id, x, y });
     }
   }
-  const cell = worldSize / 2 ** 12;
+  const cell = worldSize / 2 ** 16;
   const bins: Bins<ResidentialSite> = new Map();
   const owner = new Map<number, { members: ResidentialSite[]; index: number }>();
-  const blocked: number[] = [];
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -204,6 +212,15 @@ export function residentialFireworkSites(
     maxY = Math.max(maxY, y);
   }
   return (bounds, random, occupied) => {
+    // Rebuild from the mutable set so same-set additions/removals cannot stale a count.
+    const blockedByBin = new Map<ResidentialSite[], number[]>();
+    for (const id of occupied) {
+      const entry = owner.get(id);
+      if (!entry) continue;
+      let blocked = blockedByBin.get(entry.members);
+      if (!blocked) blockedByBin.set(entry.members, (blocked = []));
+      blocked.push(entry.index);
+    }
     // Uniform reservoir sampling over homes, independent of tile/feature order.
     let chosen: ResidentialSite | undefined,
       count = 0;
@@ -221,11 +238,7 @@ export function residentialFireworkSites(
           y * cell >= bounds.top &&
           (y + 1) * cell <= bounds.bottom
         ) {
-          blocked.length = 0;
-          for (const id of occupied) {
-            const entry = owner.get(id);
-            if (entry?.members === members) blocked.push(entry.index);
-          }
+          const blocked = blockedByBin.get(members) ?? [];
           const available = members.length - blocked.length;
           if (!available) continue;
           count += available;

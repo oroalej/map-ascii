@@ -1,5 +1,10 @@
 import type { LifeSiteConfig } from './life-sites';
-import type { SeasonConfig } from './seasons';
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type RuntimeSeasonConfig,
+} from './seasons';
 
 /**
  * A city's daily rhythm, as far as the map shows it (SPEC.md §4 "Life layer"): how much of each
@@ -31,6 +36,9 @@ export const PLACE_KINDS = [
   'farm',
 ] as const;
 export type PlaceKind = (typeof PLACE_KINDS)[number];
+/** Seasonal proximity anchors include mapped cemeteries without changing place storage. */
+export const SEASON_ANCHOR_KINDS = [...PLACE_KINDS, 'cemetery'] as const;
+export type SeasonAnchorKind = (typeof SEASON_ANCHOR_KINDS)[number];
 
 /** Services at places of worship: on these weekdays (0 = Sunday), at these local times. */
 export type WorshipSchedule = { weekdays: number[]; times: string[] };
@@ -72,6 +80,11 @@ export type CityLifeConfig = {
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };
+export type RuntimeCityLife = Omit<CityLifeConfig, 'seasons'> & { seasons?: RuntimeSeasonConfig[] };
+export function runtimeCityLife(life: CityLifeConfig): RuntimeCityLife {
+  const { seasons, ...general } = life;
+  return { ...general, ...(seasons && { seasons: expandSeasons(seasons.map(runtimeSeason)) }) };
+}
 
 /**
  * The rhythm when a city gives none: a generic working day, with morning and evening rush
@@ -141,8 +154,10 @@ export function curveAt(curve: RhythmCurve, minutes: number): number {
 }
 
 /** A city's curve for `kind`, or the default. */
-export const rhythmFor = (life: CityLifeConfig | undefined, kind: RhythmKind): RhythmCurve =>
-  life?.rhythm?.[kind] ?? DEFAULT_RHYTHM[kind];
+export const rhythmFor = (
+  life: Pick<CityLifeConfig, 'rhythm'> | undefined,
+  kind: RhythmKind,
+): RhythmCurve => life?.rhythm?.[kind] ?? DEFAULT_RHYTHM[kind];
 
 /** School hours when a city gives none: weekdays, 07:00 to 16:00. An impression. */
 export const DEFAULT_SCHOOL: SchoolSchedule = {
@@ -175,7 +190,7 @@ function unitOf(seed: number, salt: number): number {
  * open up to 2½ hours late, and 3% are open all night. With the default, about nine in ten are
  * closed by 21:00. An impression, not data about any shop.
  */
-export function shopHours(seed: number, life?: CityLifeConfig): ShopHours {
+export function shopHours(seed: number, life?: Pick<CityLifeConfig, 'schedules'>): ShopHours {
   const typical = life?.schedules?.shops ?? DEFAULT_SHOPS;
   const day = (m: number) => ((Math.round(m) % 1440) + 1440) % 1440;
   const which = unitOf(seed, 2);
@@ -266,7 +281,7 @@ export type LifeClock = { minutes: number; weekday: number };
 export function placeShare(
   kind: PlaceKind,
   clock: LifeClock,
-  life: CityLifeConfig | undefined,
+  life: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined,
 ): number {
   const { minutes, weekday } = clock;
   switch (kind) {

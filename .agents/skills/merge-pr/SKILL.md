@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, then clean up after it — delete its task scratch in .plans with pnpm plans:clean (keeping handoff.md and keep files), update the task's .plans row, and remove the local branch and its worktree folder with pnpm worktree:remove. The remote branch stays. Use when the user invokes $merge-pr [<branch>] [Head: <sha>], or when $sync-review reaches its merge step.
+description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, merging origin/main into the branch first whenever main has moved and fixing CI when it fails, then clean up after it — delete its task scratch in .plans with pnpm plans:clean (keeping handoff.md and keep files), update the task's .plans row, and remove the local branch and its worktree folder with pnpm worktree:remove. The remote branch stays. Use when the user invokes $merge-pr [<branch>] [Head: <sha>], or when $sync-review reaches its merge step.
 ---
 
 # Merge a PR, then clean up its scratch, branch and worktree
@@ -11,48 +11,57 @@ Usage: `$merge-pr [<branch>] [Head: <sha>]`. Without a branch, it uses the curre
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 
+- merging `origin/main` into its branch and pushing, whenever `main` has moved (step 2.3), resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`
+- fixing failing CI on its branch (gate 4) and running `$review-pr` on commits pushed after the caller's review (gate 2)
+- creating and removing a detached work tree for those commits when the branch's worktree can't be used
+- commenting on its PR with the conflict decisions that merge made
 - merging its PR into `main`, which deploys to production through Vercel
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
 - deleting its local branch and its worktree folder
 
-Don't ask for confirmation between steps. Stop only where this skill says to stop.
+Don't ask for confirmation between steps. Never pause. The only ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no PR, a closed PR, or `main` as the branch) or a missing tool. Retry, Detached work tree and the other cases there apply here too.
 
 ## Rules
 
-- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, commit, or pass `--no-verify`. This skill never changes the branch's content.
+- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, or pass `--no-verify`. The only commits this skill makes are main-sync merges (gate 3) and CI fixes (gate 4); `$review-pr` makes its own.
+- **Main moves on; keep going.** Other sessions merge into `main` all the time. A PR that is behind or conflicting gets `origin/main` merged in here, not sent back to `$review-pr`.
 - **Remote branch stays:** never pass `--delete-branch` to `gh pr merge`, and never run `git push --delete` or `git push origin :<branch>`.
 - **Deleting:** delete only with `pnpm plans:clean` and `pnpm worktree:remove`. Never delete files or folders with shell commands (`Remove-Item`, `rm`, `del`, `rmdir`): Codex rejects recursive deletes as "blocked by policy".
 - **Working directory:** run steps 4–6 with `<main-checkout>` as the command working directory. On Windows, also determine the session process's own directory, using its startup context (not a child command's directory). If that directory is inside `<wt>`, or cannot be established, defer the actual removal in step 6. A child command running in main does not release the session's handle on `<wt>`.
-- **On "stop with `<status>`"**, skip straight to step 7 with that status and a `stopReason`.
+- **On "end with `error`"**, skip straight to step 7 with that status and a `stopReason`. Only the "Ends" cases do this.
+- **Work tree:** `<work>` is where this skill commits. It is `<wt>` when that worktree exists, is clean, and its `HEAD` equals the PR's head. Otherwise it is a detached work tree at `origin/<branch>` (review-pr Shared patterns), pushing with `git push origin HEAD:<branch>`. `<wt>` is never touched in that case.
 
 ## 1. Resolve
 
-1. Take the branch from the argument, stripping a leading `origin/`, or from `git branch --show-current`. If it's `main`, stop with `error`.
-2. Run `git worktree list --porcelain`. `<main-checkout>` is the first entry. `<wt>` is the entry with this branch, if any. If the branch is checked out in `<main-checkout>`, stop with `error`.
+1. Take the branch from the argument, stripping a leading `origin/`, or from `git branch --show-current`. If it's `main`, end with `error` (nothing to do).
+2. Run `git worktree list --porcelain`. `<main-checkout>` is the first entry. `<wt>` is the entry with this branch, if any. If the branch is checked out in `<main-checkout>`, there is no `<wt>`: `<work>` is a detached work tree, and cleanup skips step 6.
 3. Run `gh pr view <branch> --json number,state,headRefOid,mergeable,mergeStateStatus,url`.
    - Record `headRefOid` as `<cleanup-head>` for every cleanup command, including already-merged reruns.
-   - No PR → stop with `error` (`No PR for <branch>`).
+   - No PR → end with `error` (`No PR for <branch>`: nothing to do).
    - `state` is `MERGED` → a rerun after a cleanup failure. Take the merge commit from `gh pr view <N> --json mergeCommit` and go to step 4, which checks for newer local work before anything is cleaned.
-   - `state` is `CLOSED` → stop with `error`.
+   - `state` is `CLOSED` → end with `error` (nothing to do).
 
 ## 2. Gate
 
-Check every condition. If one fails, stop with `stopped`, naming it.
+Each gate either passes or gets solved; none ends the run. `<skill-dir>` is the absolute folder of this `SKILL.md`.
 
-1. `<wt>` exists and `git -C <wt> status --porcelain` is empty. Uncommitted work belongs to the user or `$sync-review`, not this skill.
-2. `git -C <wt> fetch origin <branch>`, then `git -C <wt> rev-parse HEAD` equals `origin/<branch>` and the PR's `headRefOid`. Everything local is pushed.
-   - With `Head: <sha>`, `headRefOid` must also equal `<sha>`. If it doesn't, something was pushed after the caller's review: stop.
-   - Call this SHA `<gated-sha>`.
-3. CI passes on `<gated-sha>`. Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. Any failing check stops the run. This skill doesn't fix CI; `$review-pr` does.
-4. `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. Conflicts stop the run and point to `$review-pr`, then rerun `$merge-pr`. A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; step 3 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
+1. **Pick `<work>`** (Rules). Uncommitted files in `<wt>` belong to the user or another session: they never block the merge, and a detached work tree keeps them untouched. Step 4's dry-run reports them for cleanup.
+2. **Pin the head.** Fetch `origin/<branch>` (with Retry). The PR's `headRefOid` is what gets merged; local-only commits in `<wt>` stay local, and cleanup reports them.
+   - With `Head: <sha>`, `headRefOid` must equal `<sha>`, or `<sha>` must be an ancestor of it and every commit in `git rev-list --first-parent <sha>..<headRefOid>` must be a main-sync merge: a merge commit whose message starts with `🔀 merge(` and whose second parent is an ancestor of `origin/main` (such as one an earlier `$merge-pr` run pushed). If anything else was pushed after the caller's review, run `$review-pr <N>` (`<skill-dir>/../review-pr/SKILL.md`, following it exactly) so the new commits get reviewed, then use its result's `headSha` as `<sha>` and repeat this gate.
+   - Set `<gated-sha>` to the verified `headRefOid`, including when the caller's `<sha>` is older.
+3. **Sync with main.** Run `git -C <work> fetch origin main`. If `git -C <work> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise make sure `<work>` is at `<gated-sha>` (fast-forward it, or switch to a detached work tree), then follow `<skill-dir>/../review-pr/SKILL.md` step 1.7 (items 2–7) in `<work>` as `<pr-checkout>`, with an empty baseline. It merges `origin/main`, resolves every conflict and pushes. If git refuses because the merge would overwrite uncommitted files, switch to a detached work tree and merge there. It ends only with that procedure's `merge tool unavailable` (`error`). This merge comes after the PR's review, so if its commit has a `Conflict decisions:` body, post that list as a PR comment (`gh pr comment <N> --body-file <file>`, the file in the OS temp folder) and include it in the report. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`.
+4. **CI passes on `<gated-sha>`.** Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. If a check fails, run `<skill-dir>/../review-pr/SKILL.md` step 6 (the CI gate) in `<work>` until CI is green, including its review round when a CI fix touched non-test source code. Then set `<gated-sha>` to the new head and go back to gate 3.
+5. **Mergeable.** `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. If it shows `CONFLICTING`, `main` moved again: go back to gate 3. If it shows `UNKNOWN`, wait and query again (Retry). A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; §3 step 1 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
+
+Initialize `mainSyncs` to 0. There is no sync cap: when `main` keeps moving, keep syncing and re-checking CI until the merge lands.
 
 ## 3. Merge
 
-1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. Both must succeed. If the head lacks current `main`, stop with `stopped` and point to `$review-pr` to synchronize and review it, followed by rerunning `$merge-pr`; do not merge merely because GitHub says `CLEAN`.
-2. `gh pr merge <N> --merge --match-head-commit <gated-sha>`. GitHub refuses the merge if the head moved after the gate; then stop with `stopped`. Never use `--delete-branch`, `--squash`, `--rebase`, `--admin` or `--auto`.
-3. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED`, stop with `error`. Record the merge commit `<sha>`.
+1. Immediately before merging, after CI passes, run `git -C <wt> fetch origin main`, then `git -C <wt> merge-base --is-ancestor origin/main <gated-sha>`. If the head lacks current `main`, go back to gate 3 to sync it; don't merge merely because GitHub says `CLEAN`.
+2. `gh pr merge <N> --merge --match-head-commit <gated-sha>`. GitHub refuses the merge if the head moved after the gate; then go back to gate 2 with the new head. Retry a network failure. Never use `--delete-branch`, `--squash`, `--rebase`, `--admin` or `--auto`.
+3. Confirm with `gh pr view <N> --json state,mergeCommit`. If it isn't `MERGED` yet, query again with Retry, and go back to gate 2 if the PR is still open. Record the merge commit `<sha>`.
 
-From here on the merge is done. A cleanup failure in steps 4–6 is reported, not retried, and doesn't change the status from `merged`.
+From here on the merge is done. A cleanup failure in steps 4–6 doesn't change the status from `merged`. A busy file (`Could not relocate`, EBUSY) is retried as step 6 says; other cleanup refusals are reported.
 
 ## 4. Check for newer local work
 
@@ -97,6 +106,7 @@ Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associate
    - Never drop or change a keep path just to make the command pass.
    - Set the row's Keep column to what the command kept.
 3. If `.plans/active/pr<N>-review-fixes/` (or that folder under another status) exists, run `pnpm plans:clean pr<N>-review-fixes`. It deletes the folder too, since nothing in it is kept.
+4. If `git worktree list --porcelain` shows detached work trees this PR used (`<main-checkout>/worktrees/pr<N>` and its `-<k>` variants, or the ones a review result's `workTree` names) and each one's `git status --porcelain` is empty, remove each with `git -C <main-checkout> worktree remove <path>`. Report a dirty one and leave it.
 
 ## 6. Worktree and local branch
 
@@ -110,7 +120,7 @@ pnpm worktree:remove <branch> --head <cleanup-head>
 
 It repeats step 4's checks, records recovery information, and renames the worktree to a unique sibling folder before deleting its contents. It then removes only its Git registration and deletes the local branch. The remote branch stays.
 
-- If it reports `Could not relocate`, a process is holding the original directory; its contents and branch were kept. If it reports `Partially deleted`, the recorded sibling folder needs recovery. In either case, don't retry or prune worktree metadata. Report the path, so the user can close the process and run `$merge-pr <branch>` again. The rerun uses the recorded folder and refuses a recreated original path.
+- If it reports `Could not relocate` (a process is holding the original directory; its contents and branch were kept), rerun the same command after 1, 2 and 4 minutes, since the holder often lets go. If it still fails, report the path as deferred so the user can close the process and run `$merge-pr <branch>` again. If it reports `Partially deleted`, rerun the same command the same way: it resumes from the recorded sibling folder and refuses a recreated original path. Never prune worktree metadata.
 - If an already-merged rerun has no worktree (step 1 found none), it deletes only the local branch. An open PR still requires a worktree at gate 2.1.
 
 ## 7. Report
@@ -129,6 +139,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
   "pr": 12,
   "mergeCommit": "abc1234",
   "headSha": "def5678",
+  "mainSyncs": 0,
   "cleanup": {
     "plans": ["done/stable-labels: deleted 12, kept 3", "pr12-review-fixes: deleted 4, removed folder"],
   "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
@@ -138,6 +149,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
 }
 ```
 
-- `status`: `merged` (the PR is merged, even if some cleanup failed), `stopped` (a step-2 gate or the head-commit match failed, nothing changed), or `error`.
+- `status`: `merged` (the PR is merged, even if some cleanup failed), or `error` (only an "Ends" case: nothing to do, or a missing tool; nothing merged into `main`, though a main-sync merge may have been pushed to the branch).
 - `headSha`: the `<gated-sha>` that was merged.
+- `mainSyncs`: how many times gate 3 merged `origin/main` into the branch. The report lists each sync's `Conflict decisions:`, if any.
 - A cleanup entry that failed or was skipped says why, e.g. `"worktree": "partially deleted: in use by another process"` or `"plans": ["skipped: codex/x has local commits after the merge"]`.

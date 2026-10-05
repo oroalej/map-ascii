@@ -1,13 +1,11 @@
 import { expect, it } from 'vitest';
-import type { SeasonConfig } from '@atlas/shared';
+import { runtimeCityLife, runtimeSeason, type SeasonConfig } from '@atlas/shared';
 import { simulationSeasons } from './seasonal-simulation';
 
 it('sends only stall admission and physical installation identities, omitting layout and prose', () => {
   const season: SeasonConfig = {
     id: 'winter',
     title: { en: 'Winter' },
-    status: 'draft',
-    note: 'Reference only',
     window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
     sources: [{ title: 'Calendar', url: 'https://example.com/' }],
     stalls: { label: 'Carts', near: ['worship'], radius_m: 300, per_tile: 12 },
@@ -53,6 +51,26 @@ it('sends only stall admission and physical installation identities, omitting la
       ],
     },
   ]);
+  expect(simulationSeasons([runtimeSeason(season)])).toEqual(table);
+  const runtime = runtimeCityLife({
+    source: 'Synthetic calendar',
+    seasons: [
+      {
+        id: 'new-year',
+        title: { en: 'New Year' },
+        window: season.window,
+        includes: ['winter'],
+        fireworks: { label: 'Fireworks', variants: ['peony'] },
+        sources: season.sources,
+      },
+      season,
+    ],
+  });
+  expect(simulationSeasons(runtime.seasons)[0]).toEqual({
+    ...table[0],
+    id: 'new-year',
+    includes: ['winter'],
+  });
   expect(
     simulationSeasons([
       { ...season, stalls: undefined, installations: [season.installations![2]!] },

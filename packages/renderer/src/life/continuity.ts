@@ -4,6 +4,7 @@ import { frameBetween } from './frames';
 import { VEHICLES } from './vehicles';
 import type { Mover, TileLife } from './simulate';
 import type { ContinuityRejection } from './diagnostics';
+import { copyVehicleEffects } from './vehicle-effects';
 
 export type AdoptionOptions = {
   snapM?: number;
@@ -220,6 +221,7 @@ export function projectMover(
       return;
     }
   }
+  copyVehicleEffects(m, preview);
   return preview;
 }
 

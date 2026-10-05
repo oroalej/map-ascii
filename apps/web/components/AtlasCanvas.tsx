@@ -3,7 +3,7 @@
 import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
-  type CityLifeConfig,
+  type RuntimeCityLife,
   type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
@@ -111,7 +111,7 @@ export function AtlasCanvas({
   traffic?: TrafficMix | undefined;
   climate?: ClimateConfig | undefined;
   timezone?: string | undefined;
-  cityLife?: CityLifeConfig | undefined;
+  cityLife?: RuntimeCityLife | undefined;
   dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

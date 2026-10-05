@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as shared from '@atlas/shared';
 import type { SeasonConfig, UtilityRecord } from '@atlas/shared';
-import { LifeBuilder, LifeLine } from './geometry';
+import { LifeBuilder, LifeLine, encodeSeasonalPayload } from './geometry';
 import {
   collectSeasonAnchors,
   createSeasonalFixtureCache,
@@ -15,7 +16,7 @@ import {
   type LegacyStreetFixture,
 } from './fixtures';
 import { LampState } from './lights';
-import { tileToLngLat } from '../raster/geometry';
+import { lngLatToTile, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { mapGlyphs, themes } from '../theme';
 import { drawProcedural } from '../glyphs/atlas';
 import { utilityFixtures } from './utilities';
@@ -24,8 +25,6 @@ const tile = { z: 16, x: 55192, y: 30266 };
 const season: SeasonConfig = {
   id: 'winter',
   title: { en: 'Winter' },
-  status: 'draft',
-  note: 'TODO(verify)',
   window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   sources: [{ title: 'Calendar', url: 'https://example.com/calendar' }],
   lanterns: { label: 'Stars', shape: 'star' },
@@ -54,6 +53,22 @@ const pack = (fixtures: Parameters<typeof packFixtures>[2], zoom = 20) =>
   packFixtures(new Uint8Array(40000), grid, fixtures, zoom, index, 0);
 
 describe('seasonal fixtures', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('does not validate raw records while inactive and reuses decoding through season changes', () => {
+    const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+    const payload = encodeSeasonalPayload(['{', JSON.stringify({ version: 2 })]);
+    const groups = [
+      { tile, life: new LifeBuilder().finish(), fixtures: [lamp], seasonal: payload },
+    ];
+    const cache = createSeasonalFixtureCache();
+    expect(cache(groups, undefined, 13.6)).toEqual([]);
+    expect(parse).not.toHaveBeenCalled();
+    expect(cache(groups, season, 13.6).map((f) => f.kind)).toEqual(['season-lantern']);
+    expect(parse).toHaveBeenCalledTimes(2);
+    cache(groups, undefined, 13.6);
+    cache(groups, season, 13.6);
+    expect(parse).toHaveBeenCalledTimes(2);
+  });
   it('skips hidden bunting preparation and invalidates eligibility while retaining lanterns', () => {
     const b = new LifeBuilder();
     b.line(
@@ -148,6 +163,7 @@ describe('seasonal fixtures', () => {
     b.line(
       [
         { x: 0, y: 2000 },
+        { x: 2500, y: 2000 },
         { x: 4096, y: 2000 },
       ],
       LifeLine.roadMinor,
@@ -185,12 +201,13 @@ describe('seasonal fixtures', () => {
     expect(preferred).toMatchObject([{ kind: 'season-bunting', id: 'crossing' }]);
     b.line(
       [
-        { x: 0, y: 2500 },
-        { x: 4096, y: 2500 },
+        { x: 2500, y: 2000 },
+        { x: 2500, y: 4096 },
       ],
       LifeLine.roadMinor,
       8,
     );
+    b.splitRoadJunctions(1 / metersPerUnit(tile), 40);
     const partial = seasonalFixtures(
       [{ tile, life: b.finish(), fixtures, utilities: [crossing] }],
       season,
@@ -200,6 +217,15 @@ describe('seasonal fixtures', () => {
     expect(partial.some((f) => f.kind === 'season-bunting' && f.id.startsWith('fallback/'))).toBe(
       true,
     );
+    for (const fixture of partial) {
+      if (fixture.kind !== 'season-bunting' || !fixture.id.startsWith('fallback/')) continue;
+      const midpoint = lngLatToTile(
+        tile,
+        (fixture.from[0] + fixture.to[0]) / 2,
+        (fixture.from[1] + fixture.to[1]) / 2,
+      );
+      expect(midpoint.x).toBeCloseTo(2500, 4);
+    }
     const fallback = seasonalFixtures([{ tile, life, fixtures }], season, 13.6);
     expect(fallback.length).toBeGreaterThan(1);
     expect(fallback).toEqual(seasonalFixtures([{ tile, life, fixtures }], season, 13.6));

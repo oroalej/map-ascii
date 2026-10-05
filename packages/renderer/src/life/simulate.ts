@@ -46,6 +46,7 @@ import {
   type Activity,
   BIRD_WEATHER,
   BIRDS,
+  FORAGE,
   CARABAO_SHARE,
   CAT,
   DOG,
@@ -60,6 +61,7 @@ import {
   LIFE_ZOOM,
   MAX_STEP_S,
   RETIRE,
+  RUN,
   ADOPT,
   MAX_TILE_AGENTS,
   MAX_TILE_GATHERERS,
@@ -73,6 +75,8 @@ import {
   spawnRules,
   TRAIN,
   umbrellaShare,
+  underUmbrella,
+  UMBRELLA_MOTION,
   usableLines,
   VENDORS,
   COMMERCE,
@@ -87,11 +91,37 @@ import {
   pickSpecies,
   type BirdSpecies,
 } from './birds';
-import { inTile, LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import {
+  inTile,
+  LifeLine,
+  PLACE_CODES,
+  PLACE_STRIDE,
+  vertexKey,
+  sharedRoadVertexRecorder,
+  physicalSeasonalRecords,
+  type LifeGeometry,
+} from './geometry';
 import { DOG_PAINTS } from './dogs';
+import {
+  FORAGE_SPECIES,
+  forageable,
+  forageMovement,
+  forageOffsets,
+  forageSpot,
+  isForager,
+  prepareForageTerrainSteps,
+  rebaseForagers,
+  stepForager,
+  type ForageTerrain,
+  type ForageContext,
+  type ForageMode,
+  type GroundForager,
+} from './forage';
 import { CAT_PAINTS } from './cats';
 import { LocalScenes } from './interactions';
+import { runPace } from './running';
 import { LifeInspection } from './inspection';
+import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
@@ -113,6 +143,10 @@ import {
 } from './vehicles';
 import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
+import { visibleLamps, type VehicleLamps } from './lamps';
+import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
+import { PuffStore, PuffSelector, EMPTY_PUFFS } from './exhaust';
+import { STAMP_MIN_CELLS } from './vehicles';
 import { collectSeasonAnchors, seasonProximity, type SeasonAnchor } from './seasonal';
 import { admitsInstallation } from './seasonal-installations';
 import {
@@ -130,9 +164,11 @@ import {
   segmentCrossing,
   Occupancy,
   PolygonIndex,
+  segmentBody,
   memberSize,
   animalSize,
   type Body,
+  type Point,
   type Polygon,
 } from './occupancy';
 import {
@@ -148,6 +184,41 @@ export { hashString, random } from './random';
 const NO_MOVERS: readonly Mover[] = [];
 type GroundAgent = Mover | Gatherer | Stall;
 type GroundGuard = (owner: GroundAgent, before?: GroundAgent) => boolean;
+type SuppressedActors<T extends object> = {
+  hidden: T[];
+  order: WeakMap<T, number>;
+  next: number;
+};
+function suppressedActors<T extends object>(): SuppressedActors<T> {
+  return { hidden: [], order: new WeakMap(), next: 0 };
+}
+/** Keep actor identity and original array order when a temporary display occupies its site. */
+function reconcileActors<T extends object>(
+  active: T[],
+  state: SuppressedActors<T>,
+  blocked: (actor: T) => boolean,
+  hide?: (actor: T) => void,
+  restore?: (actor: T) => void,
+) {
+  for (const actor of active) if (!state.order.has(actor)) state.order.set(actor, state.next++);
+  let restored = false;
+  for (let i = state.hidden.length - 1; i >= 0; i--) {
+    const actor = state.hidden[i]!;
+    if (blocked(actor)) continue;
+    state.hidden.splice(i, 1);
+    active.push(actor);
+    restore?.(actor);
+    restored = true;
+  }
+  if (restored) active.sort((a, b) => state.order.get(a)! - state.order.get(b)!);
+  for (let i = active.length - 1; i >= 0; i--) {
+    const actor = active[i]!;
+    if (!blocked(actor)) continue;
+    active.splice(i, 1);
+    state.hidden.push(actor);
+    hide?.(actor);
+  }
+}
 export type WorldGroundGuard = ((
   life: TileLife,
   owner: GroundAgent,
@@ -160,11 +231,16 @@ export type WorldGroundGuard = ((
   remove(owner: object): void;
   reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
 };
+type SeamLimit = {
+  room: number;
+  crossing: boolean;
+  boundary?: Pick<Mover, 'line' | 'dir'>;
+};
 export type StepPass = {
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
   owns?: (p: { x: number; y: number }) => boolean;
-  seams?: ReadonlyMap<Mover, { room: number; crossing: boolean }>;
+  seams?: ReadonlyMap<Mover, SeamLimit>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
 };
 
@@ -221,6 +297,8 @@ export type Mover = {
   /** Dogs: seconds left trotting, and whether their pause is lying down (config.ts `DOG`). */
   trot?: number;
   lying?: boolean;
+  /** People: seconds left of a run (config.ts `RUN`). */
+  run?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -252,10 +330,13 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
+  effectCellMeters?: number;
+  nextSourceId?: () => number;
   inspecting?: object;
   clock?: number;
   minutes?: number;
-  cityLife?: CityLifeConfig;
+  cityLife?: Pick<CityLifeConfig, 'schedules'>;
   season?: string | null;
   levels?: Activity;
   rain: number;
@@ -431,7 +512,13 @@ export type Parked = {
   paint: number;
 };
 
-export type Bird = { ox: number; oy: number; phase: number };
+export type Bird = {
+  ox: number;
+  oy: number;
+  phase: number;
+  /** Rendered offset retained when departing, independent of a replacement landing layout. */
+  departure?: Point;
+} & Partial<GroundForager>;
 
 export type Flock = {
   species: BirdSpecies;
@@ -447,9 +534,24 @@ export type Flock = {
   perch: number;
   /** Sitting in that tree. */
   perched: boolean;
-  /** Flying down to its roost to settle on the ground there, and settled (life/birds.ts `ground`). */
+  /** Approaching a prepared suitable ground patch, and settled there (birds.ts `ground`). */
   landing: boolean;
   landed: boolean;
+  /** Feeding rather than resting during a ground visit. */
+  feeding: boolean;
+  /** Seconds left in the current feeding or ground-rest bout. */
+  bout: number;
+  /** Fixed landing-patch anchor, in tile units, retained through a tree rest. */
+  lx: number;
+  ly: number;
+  /** Saved roost index for a tree return; -1 outside a committed tree rest. */
+  home: number;
+  /** Ground preparation was tried for this destination; bounds failed rain retries. */
+  landingAttempted: boolean;
+  /** Approach offset blend from 0 to 1; completed before touchdown. */
+  landingBlend: number;
+  /** Departure offset blend from 1 to 0, independent of approach preparation. */
+  departureBlend?: number;
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -462,6 +564,64 @@ export type Flock = {
 
 /** The agents of one tile. */
 export class TileLife {
+  readonly puffs = new PuffStore();
+  readonly effects = new VehicleEffectTracker(this, () => this.routingSeed);
+  private eligible = new Uint8Array(0);
+
+  private captureEffects(
+    clock: number,
+    dt: number,
+    env?: LifeEnv,
+    shows?: (kind: AgentKind) => boolean,
+    near?: (x: number, y: number) => boolean,
+    pass?: StepPass,
+  ) {
+    const enabled = this.effects.begin(
+      clock,
+      dt,
+      env?.effectCellMeters ?? 0,
+      env?.wind,
+      env?.nextSourceId,
+    );
+    const visits = this.scenes.visits.size > 0;
+    const services = this.scenes.services.size > 0;
+    const movers = this.movers;
+    if (this.eligible.length < movers.length) this.eligible = new Uint8Array(movers.length);
+    const eligible = this.eligible;
+    const unfiltered = !this.inspected && !pass?.owns && !shows && !near && !env?.levels && !visits;
+    if (unfiltered) eligible.fill(1, 0, movers.length);
+    for (let i = 0; i < movers.length; i++) {
+      const m = movers[i]!;
+      if (!unfiltered)
+        eligible[i] = Number(
+          this.inspected !== m &&
+            (!pass?.owns || pass.owns(m)) &&
+            (!shows || shows(m.kind)) &&
+            (!near || m.train || near(m.x, m.y)) &&
+            (!env?.levels || m.train || m.rank < env.levels[m.kind]) &&
+            (!visits || !this.scenes.visits.has(m)),
+        );
+      if (enabled) {
+        if (this.inspected === m) {
+          const state = vehicleEffects(m);
+          if (state && state.inactiveAt === undefined) state.inactiveAt = clock - dt;
+          continue;
+        }
+        this.effects.capture(m, i, !!eligible[i], this.speeds[i]!, this.caps[i]!, services);
+      }
+    }
+  }
+
+  finishEffects(
+    clock: number,
+    dt: number,
+    wind: LifeEnv['wind'],
+    owners?: ReadonlyMap<Mover, TileLife>,
+  ) {
+    this.effects.finish(clock, dt, wind, owners);
+  }
+
+  private readonly sharedRoadVertices = new Set<number>();
   private inspected?: object;
   readonly momentHost: MomentHost;
   private readonly walkerRng: () => number;
@@ -479,6 +639,7 @@ export class TileLife {
   signals!: SignalControl;
   scenes!: LocalScenes;
   private readonly catRng: () => number;
+  private readonly runRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
   readonly pending: PendingSeed[] = [];
@@ -492,6 +653,53 @@ export class TileLife {
   /** Temporary carts use their own population and never consume legacy random streams. */
   readonly seasonalStalls: Stall[] = [];
   private seasonalCandidates?: readonly Stall[];
+  private suppressedGround?: {
+    movers: SuppressedActors<Mover>;
+    gatherers: SuppressedActors<Gatherer>;
+    stalls: SuppressedActors<Stall>;
+    parked: SuppressedActors<Parked>;
+  };
+  get population() {
+    return this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0);
+  }
+  get hasSuppressedActors() {
+    return (
+      !!this.suppressedGround &&
+      Object.values(this.suppressedGround).some((state) => state.hidden.length > 0)
+    );
+  }
+  *residentMovers() {
+    yield* this.movers;
+    yield* this.suppressedGround?.movers.hidden ?? [];
+  }
+  reconcileSeasonalActors(
+    blocked: (owner: GroundAgent) => boolean,
+    parkedBlocked: (owner: Parked) => boolean,
+    active: boolean,
+  ) {
+    if (!active && !this.hasSuppressedActors) return;
+    const state = (this.suppressedGround ??= {
+      movers: suppressedActors<Mover>(),
+      gatherers: suppressedActors<Gatherer>(),
+      stalls: suppressedActors<Stall>(),
+      parked: suppressedActors<Parked>(),
+    });
+    reconcileActors(
+      this.stalls,
+      state.stalls,
+      blocked,
+      (stall) => this.scenes.removeStall(stall),
+      (stall) => this.scenes.addStall(stall),
+    );
+    reconcileActors(this.gatherers, state.gatherers, blocked);
+    reconcileActors(
+      this.movers,
+      state.movers,
+      (m) => (m.kind === 'vehicle' || isWalker(m.kind)) && blocked(m),
+      (m) => this.scenes.release(m),
+    );
+    reconcileActors(this.parked, state.parked, parkedBlocked);
+  }
 
   *allStalls() {
     yield* this.stalls;
@@ -508,7 +716,7 @@ export class TileLife {
     guard: GroundGuard,
   ) {
     const near = seasonProximity(this.tile, anchors, config.near, config.radius_m, true);
-    const limit = Math.min(config.per_tile, Math.max(0, MAX_TILE_AGENTS - this.movers.length));
+    const limit = Math.min(config.per_tile, Math.max(0, MAX_TILE_AGENTS - this.population));
     for (const stall of (this.seasonalCandidates ??= this.prepareSeasonalCandidates())) {
       if (this.seasonalStalls.length >= limit) break;
       if (
@@ -579,7 +787,7 @@ export class TileLife {
       options.reject?.('localScene');
       return false;
     }
-    if (this.movers.length - (replace ? 1 : 0) >= MAX_TILE_AGENTS) {
+    if (this.population - (replace ? 1 : 0) >= MAX_TILE_AGENTS) {
       options.reject?.('capQuota');
       return false;
     }
@@ -604,6 +812,7 @@ export class TileLife {
     m.routing = preview.routing;
     m.train = preview.train;
     this.movers.push(m);
+    this.effects.adopt(m);
     return true;
   }
 
@@ -632,6 +841,77 @@ export class TileLife {
   private readonly placeRng: () => number;
   /** Birds' species, landings, and bats: their own stream, so no one else moves for them. */
   private readonly birdRng: () => number;
+  /** Ground choices cannot change flight, traffic, or walking random streams. */
+  private readonly forageRng: () => number;
+  private forageTerrain?: ForageTerrain;
+  private forageGuard?: (from: Point, to: Point) => boolean;
+  private readonly forageContext: ForageContext & {
+    species: BirdSpecies;
+    habitat: Habitat;
+    terrain?: ForageTerrain;
+  } = {
+    x: 0,
+    y: 0,
+    lx: 0,
+    ly: 0,
+    perMeter: 1,
+    species: 'pigeon',
+    habitat: Habitat.park,
+    ok: (from, to) => {
+      this.forageCheckCount++;
+      const { species, habitat, terrain, perMeter } = this.forageContext;
+      return (
+        !!terrain &&
+        forageMovement(species, habitat, from, to, terrain, perMeter) &&
+        (!this.forageGuard || this.forageGuard(from, to))
+      );
+    },
+  };
+  private forageCheckCount = 0;
+  /** Includes centre/layout candidates and complete ground movement validations. */
+  get forageChecks() {
+    return this.forageCheckCount;
+  }
+
+  /** Seasonal footprints change independently of immutable tile terrain. */
+  setForageGuard(guard: ((from: Point, to: Point) => boolean) | undefined) {
+    this.forageGuard = guard;
+    if (!guard) return;
+    for (const flock of this.flocks) {
+      if (!flock.landed && !flock.landing) continue;
+      let unsafe = false;
+      for (const bird of flock.birds) {
+        if (!isForager(bird)) continue;
+        const p = {
+          x: (flock.landing ? flock.lx : flock.x) + bird.gx,
+          y: (flock.landing ? flock.ly : flock.y) + bird.gy,
+        };
+        const to = {
+          x: (flock.landing ? flock.lx : flock.x) + bird.tx,
+          y: (flock.landing ? flock.ly : flock.y) + bird.ty,
+        };
+        this.forageCheckCount++;
+        if (!guard(p, to)) {
+          const moving = bird.tx !== bird.gx || bird.ty !== bird.gy;
+          if (moving) this.forageCheckCount++;
+          if (!moving || !guard(p, p)) unsafe = true;
+          else {
+            bird.tx = bird.gx;
+            bird.ty = bird.gy;
+          }
+        }
+      }
+      if (unsafe) {
+        this.beginDeparture(flock);
+        flock.landed = false;
+        this.pickDestination(flock, { prepare: false });
+        flock.perch = -1;
+        flock.landing = false;
+        flock.landingAttempted = false;
+        flock.scatter = PERCH.scatter;
+      }
+    }
+  }
   /** Dogs: their own stream, so no one else moves for them. */
   private readonly dogRng: () => number;
   /** Road lines with vehicles parked along their curbs; traffic drives on what is left. */
@@ -651,6 +931,7 @@ export class TileLife {
     private readonly traffic: ResolvedTraffic = resolveTraffic(),
     deferred = false,
     momentOptions?: MomentOptions,
+    private readonly forageMode: ForageMode = 'standalone',
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
@@ -660,8 +941,10 @@ export class TileLife {
     this.looks = random(seed ^ 0xc2b2ae35);
     this.placeRng = random(seed ^ 0x27d4eb2f);
     this.birdRng = random(seed ^ 0x165667b1);
+    this.forageRng = random(seed ^ 0x4f1bbcdc);
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
+    this.runRng = random(seed ^ 0xcc9e2d51);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
@@ -675,11 +958,20 @@ export class TileLife {
   *prepare(): Generator<void, TileLife, void> {
     const { tile, geo, routingSeed: seed } = this;
     const lines = geo.kinds.length;
+    const recordRoadVertex = sharedRoadVertexRecorder(
+      geo.coords,
+      geo.kinds,
+      this.sharedRoadVertices,
+    );
     this.roadTerrain = yield* prepareRoadTerrainSteps(geo, this.perMeter);
+    if (geo.roosts.length)
+      this.forageTerrain = yield* prepareForageTerrainSteps(geo, this.perMeter, this.forageMode);
     for (let line = 0; line < lines; line++) {
       this.addEnd(this.first(line), line * 2);
       this.addEnd(this.last(line), line * 2 + 1);
+      recordRoadVertex(this.first(line), line);
       for (let v = this.first(line) + 1; v <= this.last(line); v++) {
+        recordRoadVertex(v, line);
         this.along[v] = this.along[v - 1]! + this.segment(v - 1, v);
         if ((v & 127) === 0) yield;
       }
@@ -700,7 +992,11 @@ export class TileLife {
     yield* this.findJunctions();
     yield* this.spawnParked(random(seed ^ 0x9e3779b9));
     yield* this.spawnStandby(random(seed ^ 0x85ebca6b));
-    for (let line = 0; line < lines; line++) yield* this.spawnOn(line);
+    for (let line = 0; line < lines;) {
+      const { end } = this.populationRange(line);
+      yield* this.spawnOn(line, false, end);
+      line = end;
+    }
     // Dogs last, on their own stream: they don't change who else is out.
     for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
     yield* this.spawnStalls();
@@ -729,9 +1025,7 @@ export class TileLife {
   }
 
   private endKey(vertex: number) {
-    const x = Math.round(this.geo.coords[vertex * 2]!) + 32768;
-    const y = Math.round(this.geo.coords[vertex * 2 + 1]!) + 32768;
-    return x * 65536 + y;
+    return vertexKey(this.geo.coords[vertex * 2]!, this.geo.coords[vertex * 2 + 1]!);
   }
 
   private addEnd(vertex: number, code: number) {
@@ -739,6 +1033,21 @@ export class TileLife {
     const list = this.ends.get(key);
     if (list) list.push(code);
     else this.ends.set(key, [code]);
+  }
+
+  /** Connected road ends are off-screen entrances, never in-view replacement spawn points. */
+  continuesRoad(line: number, atStart: boolean): boolean {
+    const vertex = atStart ? this.first(line) : this.last(line);
+    const endpoint = line * 2 + (atStart ? 0 : 1);
+    return (
+      (this.sharedRoadVertices.has(this.endKey(vertex)) ||
+        this.ends
+          .get(this.endKey(vertex))
+          ?.some(
+            (code) => code !== endpoint && this.geo.kinds[code >> 1]! <= LifeLine.roadMinor,
+          )) ??
+      false
+    );
   }
 
   private segment(a: number, b: number) {
@@ -751,12 +1060,46 @@ export class TileLife {
     return this.along[this.last(line)]!;
   }
 
+  populationRange(line: number): { first: number; end: number } {
+    let first = line;
+    let end = line + 1;
+    const group = this.geo.spawnGroups?.[line];
+    while (group !== undefined && first > 0 && this.geo.spawnGroups![first - 1] === group) first--;
+    while (
+      group !== undefined &&
+      end < this.geo.kinds.length &&
+      this.geo.spawnGroups![end] === group
+    )
+      end++;
+    return { first, end };
+  }
+
+  /** Combined length of a population's contiguous routing pieces, in tile units. */
+  populationLength(first: number, end: number): number {
+    let length = 0;
+    for (let piece = first; piece < end; piece++) length += this.lineLength(piece);
+    return length;
+  }
+
+  /** Locate a distance measured from the chosen end of a population line. */
+  populationPiece(first: number, end: number, distance: number, dir: 1 | -1) {
+    let line = dir === 1 ? first : end - 1;
+    for (let count = 1; count < end - first; count++) {
+      const length = this.lineLength(line);
+      if (distance < length) break;
+      distance -= length;
+      line += dir;
+    }
+    return { line, distance };
+  }
+
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
-  private *spawnOn(line: number, dogs = false): Generator<void, void, void> {
+  private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
-    const meters = this.lineLength(line) / this.perMeter;
+    const length = this.populationLength(line, endLine);
+    const meters = length / this.perMeter;
     if (!rules || meters === 0) return;
     const rng = dogs ? this.dogRng : this.rng;
     for (const rule of rules) {
@@ -764,7 +1107,7 @@ export class TileLife {
       if (rule.kind === 'cat') continue;
       if ((rule.kind === 'dog') !== dogs) continue;
       const count = Math.floor(meters / rule.spacing + rng());
-      for (let i = 0; i < count && this.movers.length < MAX_TILE_AGENTS; i++) {
+      for (let i = 0; i < count && this.population < MAX_TILE_AGENTS; i++) {
         yield;
         let dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
         const flow = this.geo.oneway?.[line];
@@ -813,8 +1156,11 @@ export class TileLife {
           mover.walked = this.looks() * 2 * PEOPLE.stride;
         }
         if (rule.kind === 'dog') mover.walked = rng() * 2 * DOG.stride;
-        // Start somewhere along the line.
-        this.advance(mover, rng() * this.lineLength(line), false);
+        // Routing splits keep the original population and random draws in their original order.
+        const position = this.populationPiece(line, endLine, rng() * length, dir);
+        mover.line = position.line;
+        mover.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+        this.advance(mover, position.distance, false);
         if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
@@ -1138,9 +1484,7 @@ export class TileLife {
         for (let i = 0; i < count; i++) {
           yield;
           if (
-            shoppers
-              ? this.movers.length >= MAX_TILE_AGENTS
-              : this.stalls.length >= VENDORS.maxPerTile
+            shoppers ? this.population >= MAX_TILE_AGENTS : this.stalls.length >= VENDORS.maxPerTile
           )
             break;
           const dir = rng() < 0.5 ? 1 : -1;
@@ -1227,7 +1571,7 @@ export class TileLife {
       const cats = Math.floor(length / this.perMeter / rule.spacing + rng());
       for (
         let i = 0;
-        i < cats && count < CAT.maxPerTile && this.movers.length < MAX_TILE_AGENTS;
+        i < cats && count < CAT.maxPerTile && this.population < MAX_TILE_AGENTS;
         i++
       ) {
         yield;
@@ -1367,17 +1711,22 @@ export class TileLife {
       return false;
     };
     const paints = VEHICLES.cart.paints;
-    for (let line = 0; line < geo.kinds.length; line++) {
+    for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
+      end = this.populationRange(line).end;
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
-      const length = this.along[this.last(line)]!;
+      const length = this.populationLength(line, end);
       if (!spacing || length === 0) continue;
-      const middle = this.pointAt(line, length / 2);
+      const point = (distance: number) => {
+        const position = this.populationPiece(line, end, distance, 1);
+        return this.pointAt(position.line, position.distance);
+      };
+      const middle = point(length / 2);
       const boost = nearMarket(middle.x, middle.y) ? VENDORS.marketBoost : 1;
       const count = Math.floor(((length / perMeter) * boost) / spacing + looks());
       for (let i = 0; i < count && this.stalls.length < VENDORS.maxPerTile; i++) {
         yield;
-        const p = this.pointAt(line, looks() * length);
+        const p = point(looks() * length);
         const side = looks() < 0.5 ? 1 : -1;
         // Right of the line's direction for `side` 1; the vendor stands on the far side.
         const o = VENDORS.beside * perMeter * side;
@@ -1425,7 +1774,13 @@ export class TileLife {
         Math.floor(rule.base + (rule.perMeter * radius) / perMeter + rng()),
       );
       const row = rng() * Math.PI;
-      for (let n = 0; n < count && this.gatherers.length < MAX_TILE_GATHERERS; n++) {
+      for (
+        let n = 0;
+        n < count &&
+        this.gatherers.length + (this.suppressedGround?.gatherers.hidden.length ?? 0) <
+          MAX_TILE_GATHERERS;
+        n++
+      ) {
         yield;
         const figure = place === 'school' && rng() < 0.6 ? 'child' : 'adult';
         const g: Gatherer = {
@@ -1642,7 +1997,12 @@ export class TileLife {
       width: VEHICLES[vehicle].width * perMeter,
     });
     const park = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => {
-      if (this.parked.length >= MAX_TILE_AGENTS || !inTile({ x, y })) return;
+      if (
+        this.parked.length + (this.suppressedGround?.parked.hidden.length ?? 0) >=
+          MAX_TILE_AGENTS ||
+        !inTile({ x, y })
+      )
+        return;
       const body = bodyOf(x, y, hx, hy, vehicle);
       sample[0] = {
         ...body,
@@ -1677,11 +2037,19 @@ export class TileLife {
         park(x, y, hx, hy, vehicle);
       }
     }
+    const curbParking = new Map<number, boolean>();
     for (let line = 0; line < geo.kinds.length; line++) {
       const road = trafficRoadFor[geo.kinds[line]! as LifeLine];
       const width = geo.widths[line] ?? 0;
       const onWater = road === 'river' || road === 'canal';
-      if (!road || onWater || width < PARKED.minWidth || rng() >= PARKED.chance) continue;
+      if (!road || onWater || width < PARKED.minWidth) continue;
+      const id = geo.lineIds?.[line] ?? 0;
+      let chosen = id ? curbParking.get(id) : undefined;
+      if (chosen === undefined) {
+        chosen = rng() < PARKED.chance;
+        if (id) curbParking.set(id, chosen);
+      }
+      if (!chosen) continue;
       this.parkingLines.add(line);
       const length = this.along[this.last(line)]!;
       for (const side of [1, -1]) {
@@ -1806,8 +2174,7 @@ export class TileLife {
 
   /** Admit a complete train on a running line, with enough trail for every coach. */
   arrive(line: number, rng: () => number, owns?: (m: Mover) => boolean): boolean {
-    if (this.geo.kinds[line] !== LifeLine.rail || this.movers.length >= MAX_TILE_AGENTS)
-      return false;
+    if (this.geo.kinds[line] !== LifeLine.rail || this.population >= MAX_TILE_AGENTS) return false;
     const cars = consist(Math.round(between(rng, TRAIN.coaches)));
     const length = trainLength(cars) * this.perMeter;
     if (this.lineLength(line) < length + 10 * this.perMeter) return false;
@@ -1884,6 +2251,13 @@ export class TileLife {
         perched: inTree,
         landing: false,
         landed: false,
+        feeding: false,
+        bout: 0,
+        lx: NaN,
+        ly: NaN,
+        home: -1,
+        landingAttempted: false,
+        landingBlend: 0,
         scatter: 0,
         angle: rng() * 2 * Math.PI,
         radius: between(rng, spec.orbit) * this.perMeter,
@@ -1918,6 +2292,13 @@ export class TileLife {
         perched: false,
         landing: false,
         landed: false,
+        feeding: false,
+        bout: 0,
+        lx: NaN,
+        ly: NaN,
+        home: -1,
+        landingAttempted: false,
+        landingBlend: 0,
         scatter: 0,
         angle: brng() * 2 * Math.PI,
         radius: between(brng, spec.orbit) * this.perMeter,
@@ -1931,12 +2312,71 @@ export class TileLife {
   /** Room before a one-way endpoint with no legal continuation, including the front bumper. */
   private oneWayEndRoom(m: Mover, junctions = true): number | undefined {
     if (m.kind !== 'vehicle' || !this.geo.oneway?.[m.line]) return;
-    if (this.seamLimits?.get(m)?.crossing) return;
+    if (this.crossesSeamLine(m)) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
-    if (junctions && this.exitOptions(m, end).length) return;
+    if (
+      junctions
+        ? this.exitOptions(m, end).length
+        : this.populationContinuation(m, end) !== undefined
+    )
+      return;
     const length = m.vehicle ? VEHICLES[m.vehicle].length : 0;
     const setback = (length / 2 + FOLLOW.minGap) * this.perMeter;
     return Math.max(0, m.dir * (this.along[end]! - this.along[m.from]!) - m.d - setback);
+  }
+
+  /** A legal continuation on the original population line, without changing a cursor or RNG. */
+  private populationContinuation(m: Mover, end: number): number | undefined {
+    const group = this.geo.spawnGroups?.[m.line];
+    const line = m.line + m.dir;
+    if (group === undefined || this.geo.spawnGroups?.[line] !== group) return;
+    const vertex = m.dir === 1 ? this.first(line) : this.last(line);
+    if (this.endKey(end) !== this.endKey(vertex)) return;
+    const code = line * 2 + (m.dir === 1 ? 0 : 1);
+    if (this.exitOptions(m, end).includes(code)) return code;
+  }
+
+  /** Initial settlement follows the original line without choosing a random junction exit. */
+  private continuePopulation(m: Mover): boolean {
+    const code = this.populationContinuation(m, m.from);
+    if (code === undefined) return false;
+    const line = code >> 1;
+    const vertex = code & 1 ? this.last(line) : this.first(line);
+    m.line = line;
+    m.from = vertex;
+    m.next = undefined;
+    if (m.routing) m.routing = { ...m.routing, plan: undefined };
+    return true;
+  }
+
+  /** Read the committed next exit, or the only legal exit, without advancing a random stream. */
+  seamExit(m: Mover, line: number, dir: 1 | -1): number | undefined {
+    const end = dir === 1 ? this.last(line) : this.first(line);
+    const current = line === m.line && dir === m.dir;
+    const cursor = current ? m : { kind: m.kind, line, dir };
+    const exits = this.exitOptions(cursor, end);
+    const route = m.junctionRoute?.exits;
+    const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
+    const routeIndex = current ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
+    const reserved = routeIndex >= 0 ? route?.[routeIndex] : undefined;
+    const plan = m.routing?.plan;
+    const planned =
+      current && plan?.line === line && plan.dir === dir && plan.vertex === end
+        ? plan.exit
+        : undefined;
+    return (
+      this.committedExit(exits, reserved, planned, current ? m.next : undefined) ??
+      (exits.length === 1 ? exits[0] : undefined)
+    );
+  }
+
+  /** An accepted boundary belongs to its actual routing piece, rather than earlier junctions. */
+  private crossesSeamLine(m: Mover): boolean {
+    const seam = this.seamLimits?.get(m);
+    return (
+      !!seam?.crossing &&
+      (!seam.boundary || (seam.boundary.line === m.line && seam.boundary.dir === m.dir))
+    );
   }
 
   /** Move along legal lines; one-way dead ends hold instead of reversing. */
@@ -1972,13 +2412,20 @@ export class TileLife {
       const atEnd = m.dir === 1 ? to === this.last(m.line) : to === this.first(m.line);
       if (atEnd) {
         // The clipped line end is a geographic seam, not a route choice.
-        if (this.seamLimits?.get(m)?.crossing) {
+        if (this.crossesSeamLine(m)) {
           m.from -= m.dir;
           m.d = length;
           break;
         }
         if (junctions) this.turn(m);
-        else m.dir = m.dir === 1 ? -1 : 1;
+        else if (!this.continuePopulation(m)) {
+          if (m.kind === 'vehicle' && this.geo.oneway?.[m.line]) {
+            m.from -= m.dir;
+            m.d = length;
+            break;
+          }
+          m.dir = m.dir === 1 ? -1 : 1;
+        }
         // A train at the end of the track stops there (`step` turns it round).
         if (m.train?.reverse || m.train?.edge) break;
       }
@@ -1996,7 +2443,7 @@ export class TileLife {
     return moved;
   }
 
-  private exitOptions(m: Mover, vertex: number): number[] {
+  private exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[] {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const usable = usableLines[m.kind];
     return (this.ends.get(this.endKey(vertex)) ?? []).filter(
@@ -2098,7 +2545,7 @@ export class TileLife {
 
   private prepareSignalRoute(m: Mover) {
     if (!this.junctionIndex.hasLinked || m.kind !== 'vehicle' || m.junctionRoute) return;
-    const movement = this.junctionIndex.movement(m, 60 * this.perMeter);
+    const movement = this.junctionIndex.movement(m, JUNCTION.linkedLookaheadM * this.perMeter);
     if (!movement?.junction.linked || movement.ahead < 0) return;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
     const options = this.exitOptions(m, end);
@@ -2109,7 +2556,8 @@ export class TileLife {
       code =
         options[
           Math.floor(
-            (hashString(`${this.routingSeed}/${m.line}/${m.dir}`) / 0x1_0000_0000) * options.length,
+            (hashString(`${this.routingSeed}/${m.rank}/${m.line}/${m.dir}`) / 0x1_0000_0000) *
+              options.length,
           )
         ];
       m.next = code;
@@ -2139,7 +2587,8 @@ export class TileLife {
         this.plannedExit(future, vertex, next)?.exit ??
         next[
           Math.floor(
-            (hashString(`${this.routingSeed}/${line}/${dir}`) / 0x1_0000_0000) * next.length,
+            (hashString(`${this.routingSeed}/${future.rank}/${line}/${dir}`) / 0x1_0000_0000) *
+              next.length,
           )
         ]!;
     }
@@ -2199,29 +2648,28 @@ export class TileLife {
       }
       return;
     }
-    const reserved = m.junctionRoute?.exits[0];
     const code =
-      reserved !== undefined && options.includes(reserved)
-        ? reserved
-        : plan
-          ? plan.exit
-          : m.vehicle && m.next !== undefined && options.includes(m.next)
-            ? m.next
-            : m.train
-              ? this.straightest(m, options)
-              : options[
-                  Math.floor(
-                    (m.vehicle
-                      ? this.routeRng()
-                      : m.kind === 'cat'
-                        ? this.catRng()
-                        : m.kind === 'dog'
-                          ? this.dogRng()
-                          : m.kind === 'person'
-                            ? this.walkerRng()
-                            : this.rng()) * options.length,
-                  )
-                ]!;
+      this.committedExit(
+        options,
+        m.junctionRoute?.exits[0],
+        plan?.exit,
+        m.vehicle ? m.next : undefined,
+      ) ??
+      (m.train
+        ? this.straightest(m, options)
+        : options[
+            Math.floor(
+              (m.vehicle
+                ? this.routeRng()
+                : m.kind === 'cat'
+                  ? this.catRng()
+                  : m.kind === 'dog'
+                    ? this.dogRng()
+                    : m.kind === 'person'
+                      ? this.walkerRng()
+                      : this.rng()) * options.length,
+            )
+          ]!);
     m.next = undefined;
     if (m.junctionRoute)
       m.junctionRoute =
@@ -2232,6 +2680,18 @@ export class TileLife {
     const fromStart = (code & 1) === 0;
     m.from = fromStart ? this.first(m.line) : this.last(m.line);
     m.dir = fromStart ? 1 : -1;
+  }
+
+  /** Reservations, valid plans and remembered exits share the same legal priority. */
+  private committedExit(
+    options: readonly number[],
+    reserved: number | undefined,
+    planned: number | undefined,
+    remembered: number | undefined,
+  ): number | undefined {
+    if (reserved !== undefined && options.includes(reserved)) return reserved;
+    if (planned !== undefined && options.includes(planned)) return planned;
+    if (remembered !== undefined && options.includes(remembered)) return remembered;
   }
 
   /** Of the line ends meeting at a mover's vertex, the one carrying on straightest. */
@@ -2747,24 +3207,33 @@ export class TileLife {
       table.resolve(clock);
     }
     const speeds = this.followLimits(dt, table);
+    // Scenes can begin/end visits in this step. Share the main loop's eligibility after that.
+    this.captureEffects(clock, dt, env, shows, near, pass);
     const trains = pass?.trains ?? trainLimits([this], dt);
     const limit = { target: 0, cap: Infinity };
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
-    const order = this.movers
-      .map((m, i) => ({ m, i }))
-      .sort(
-        (a, b) =>
-          Number(isWalker(b.m.kind)) - Number(isWalker(a.m.kind)) ||
-          (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
-          a.i - b.i,
-      );
+    const order = this.movers.map((m, i) => ({ m, i }));
+    order.sort(
+      (a, b) =>
+        Number(isWalker(b.m.kind)) - Number(isWalker(a.m.kind)) ||
+        (b.m.waiting ?? 0) - (a.m.waiting ?? 0) ||
+        a.i - b.i,
+    );
+    // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
+    // the cap in stable mover order.
+    let running = 0;
+    for (let i = 0; i < this.movers.length; i++) {
+      const m = this.movers[i]!;
+      if ((m.run ?? 0) <= 0) continue;
+      else if (this.scenes.visits.has(m)) this.stopRun(m);
+      else if (this.eligible[i]) {
+        if (running < RUN.maxPerTile) running++;
+        else this.stopRun(m);
+      }
+    }
     for (const { i, m } of order) {
       if (this.inspected === m) continue;
-      if (pass?.owns && !pass.owns(m)) continue;
-      if (shows && !shows(m.kind)) continue;
-      if (near && !m.train && !near(m.x, m.y)) continue;
-      if (env?.levels && !m.train && m.rank >= env.levels[m.kind]) continue;
-      if (this.scenes.visits.has(m)) continue;
+      if (!this.eligible[i]) continue;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
@@ -2848,19 +3317,26 @@ export class TileLife {
       if (m.kind === 'person') {
         if (this.momentHost.moments.busy(m)) {
           m.pause = Math.max(0, m.pause - dt);
+          running -= Number(this.stopRun(m));
           continue;
         }
         const idle = this.canIdle(m);
-        if (!idle) m.pause = 0;
+        const dash = this.scenes.dashPace(m);
+        const dashing = dash !== undefined;
+        if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
           m.pause -= dt;
           continue;
         }
         if (idle && this.walkerRng() < PERSON_PAUSE.chance * dt) {
-          m.pause = between(this.walkerRng, PERSON_PAUSE.seconds);
-          continue;
-        }
-        if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt) {
+          const pause = between(this.walkerRng, PERSON_PAUSE.seconds);
+          if (!dashing) {
+            m.pause = pause;
+            running -= Number(this.stopRun(m));
+            continue;
+          }
+        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+          running -= Number(this.stopRun(m));
           this.turnBack(m);
           // The group turns round where it stands: the one on the right is now on the left.
           for (const walker of m.group ?? []) {
@@ -2868,6 +3344,11 @@ export class TileLife {
             walker.back = -walker.back;
           }
         }
+        const was = (m.run ?? 0) > 0;
+        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const pace = dash ?? randomPace;
+        running += Number((m.run ?? 0) > 0) - Number(was);
+        if (pace !== undefined) speeds[i] = pace;
       }
       const walking = isWalker(m.kind);
       if (walking) {
@@ -2968,6 +3449,7 @@ export class TileLife {
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
 
   /** Turn a walker back where it stands: now heading for the vertex it was walking away from. */
@@ -2976,6 +3458,35 @@ export class TileLife {
     m.d = this.segment(m.from, to) - m.d;
     m.from = to;
     m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /** Cancel a live run, reporting whether it occupied a running slot. */
+  private stopRun(m: Mover): boolean {
+    if ((m.run ?? 0) <= 0) return false;
+    m.run = 0;
+    return true;
+  }
+
+  /**
+   * A random run's pace (config.ts `RUN`), or undefined while walking or in rain. Someone
+   * walking alone now and then runs a few seconds while there is `room` (fewer than
+   * `RUN.maxPerTile` in the tile running). A run ends early when held up or rain starts.
+   */
+  private runSpeed(m: Mover, dt: number, room: boolean): number | undefined {
+    if (this.scenes.raining) {
+      if (m.run) m.run = 0;
+      return;
+    }
+    if ((m.run ?? 0) > 0) m.run = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.run! - dt);
+    else if (
+      room &&
+      (m.waiting ?? 0) <= 0 &&
+      m.group?.length === 1 &&
+      m.group[0]!.figure === 'adult' &&
+      this.runRng() < RUN.chance * dt
+    )
+      m.run = between(this.runRng, RUN.seconds);
+    return (m.run ?? 0) > 0 ? runPace(m, RUN.speed, this.perMeter) : undefined;
   }
 
   /**
@@ -3013,20 +3524,181 @@ export class TileLife {
    * `BirdSpec.perch`, or always if the tile has no roost), else a roost to circle, more likely
    * one of a habitat its species favors.
    */
-  private pickDestination(flock: Flock) {
+  private pickDestination(flock: Flock, { prepare = true }: { prepare?: boolean } = {}) {
     const roosts = this.geo.roosts.length / 2;
     const perches = this.geo.perches.length / 2;
     const spec = BIRD_SPECIES[flock.species];
-    flock.stay = between(this.rng, BIRDS.stay);
+    flock.stay = between(this.birdRng, BIRDS.stay);
     flock.landing = false;
-    if (perches > 0 && !spec.nocturnal && (roosts === 0 || this.rng() < spec.perch)) {
-      flock.perch = Math.floor(this.rng() * perches);
+    flock.feeding = false;
+    flock.home = -1;
+    flock.landingAttempted = false;
+    flock.landingBlend = 0;
+    if (perches > 0 && !spec.nocturnal && (roosts === 0 || this.birdRng() < spec.perch)) {
+      flock.perch = Math.floor(this.birdRng() * perches);
     } else {
       flock.perch = -1;
-      if (roosts > 1) flock.roost = this.pickRoost(flock.species, this.rng);
-      // Some settle on the ground there: pigeons in a park, egrets at the water's edge.
-      if (roosts > 0 && spec.ground > 0 && this.birdRng() < spec.ground) flock.landing = true;
+      if (roosts > 1) flock.roost = this.pickRoost(flock.species, this.birdRng);
+      if (roosts > 0 && spec.ground > 0 && this.birdRng() < spec.ground && prepare)
+        this.prepareLanding(flock);
     }
+  }
+
+  /** Stage a complete safe layout before changing the flock or any of its bird identities. */
+  private prepareLanding(flock: Flock, preferred?: Point): boolean {
+    flock.landingAttempted = true;
+    const spec = FORAGE_SPECIES[flock.species];
+    if (!spec || !this.geo.roosts.length) return false;
+    const terrain = this.forageTerrain;
+    if (!terrain) return false;
+    const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
+    const ok = (p: Point) => {
+      this.forageCheckCount++;
+      return (
+        forageable(flock.species, habitat, p.x, p.y, terrain, this.perMeter) &&
+        (!this.forageGuard || this.forageGuard(p, p))
+      );
+    };
+    const origin = {
+      x: this.geo.roosts[flock.roost * 2]!,
+      y: this.geo.roosts[flock.roost * 2 + 1]!,
+    };
+    const centre = forageSpot(
+      flock.species,
+      habitat,
+      origin,
+      terrain,
+      this.perMeter,
+      this.forageRng,
+      // A tree return retains the exact saved patch. An unsafe saved anchor declines the return.
+      (p) => ok(p) && (!preferred || (p.x === preferred.x && p.y === preferred.y)),
+      preferred,
+    );
+    if (!centre) return false;
+    const patch = spec.patch * this.perMeter;
+    const pickOffset = forageOffsets(
+      flock.species,
+      habitat,
+      centre,
+      terrain,
+      this.perMeter,
+      this.forageRng,
+    );
+    const placements: Point[] = [];
+    for (const bird of flock.birds) {
+      const turn = bird.phase * 6;
+      let offset = {
+        x: bird.ox * Math.cos(turn) - bird.oy * Math.sin(turn),
+        y: bird.ox * Math.sin(turn) + bird.oy * Math.cos(turn),
+      };
+      const fits = (p: Point) =>
+        ok({ x: centre.x + p.x, y: centre.y + p.y }) && Math.hypot(p.x, p.y) <= patch;
+      if (!fits(offset)) {
+        let found = false;
+        for (let attempt = 0; attempt < FORAGE.attempts; attempt++) {
+          const candidate = pickOffset();
+          if (!candidate) continue;
+          offset = candidate;
+          if (fits(offset)) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) return false;
+      }
+      placements.push(offset);
+    }
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!,
+        p = placements[i]!;
+      bird.gx = bird.tx = p.x;
+      bird.gy = bird.ty = p.y;
+      bird.face = bird.phase * 2 * Math.PI;
+      bird.wait = 0;
+    }
+    flock.lx = centre.x;
+    flock.ly = centre.y;
+    flock.landing = true;
+    flock.landingBlend = 0;
+    flock.landed = flock.perched = false;
+    flock.perch = -1;
+    return true;
+  }
+
+  /** Capture the visible layout before destination selection can replace ground offsets. */
+  private beginDeparture(flock: Flock): void {
+    if (!flock.landed && !flock.landing) return;
+    const approach = flock.landed ? 1 : flock.landingBlend;
+    const departure = flock.departureBlend ?? 0;
+    const spread = flock.landed ? 1 : 1 + (3 * flock.scatter) / PERCH.scatter;
+    for (const bird of flock.birds) {
+      const turn = (flock.landed ? 0 : this.time * 0.8) + bird.phase * 6;
+      const cos = Math.cos(turn) * spread,
+        sin = Math.sin(turn) * spread;
+      const ox = bird.ox * cos - bird.oy * sin,
+        oy = bird.ox * sin + bird.oy * cos;
+      let x = ox + ((bird.gx ?? ox) - ox) * approach,
+        y = oy + ((bird.gy ?? oy) - oy) * approach;
+      if (bird.departure && departure > 0) {
+        x += (bird.departure.x - x) * departure;
+        y += (bird.departure.y - y) * departure;
+      }
+      bird.departure = { x, y };
+    }
+    flock.departureBlend = 1;
+  }
+
+  private stepGroundFlock(flock: Flock, dt: number): void {
+    const spec = FORAGE_SPECIES[flock.species];
+    if (!spec) return;
+    flock.bout -= dt;
+    if (flock.bout <= 0) {
+      flock.feeding = !flock.feeding;
+      flock.bout = between(this.forageRng, flock.feeding ? spec.feed : spec.rest);
+      if (!flock.feeding) {
+        for (const bird of flock.birds)
+          if (isForager(bird)) {
+            bird.tx = bird.gx;
+            bird.ty = bird.gy;
+          }
+        let nearest = -1,
+          reach = FORAGE.reach * this.perMeter;
+        if (spec.treeRest > 0 && this.geo.perches.length > 0 && this.forageRng() < spec.treeRest)
+          for (let i = 0; i < this.geo.perches.length / 2; i++) {
+            const distance = Math.hypot(
+              this.geo.perches[i * 2]! - flock.x,
+              this.geo.perches[i * 2 + 1]! - flock.y,
+            );
+            if (distance <= reach) {
+              nearest = i;
+              reach = distance;
+            }
+          }
+        if (nearest >= 0) {
+          this.beginDeparture(flock);
+          flock.home = flock.roost;
+          flock.landed = flock.perched = flock.landing = false;
+          flock.perch = nearest;
+          return;
+        }
+      }
+    }
+    if (!flock.feeding) return;
+    const terrain = this.forageTerrain;
+    if (!terrain) return;
+    const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
+    const context = this.forageContext;
+    context.x = flock.x;
+    context.y = flock.y;
+    context.lx = flock.lx;
+    context.ly = flock.ly;
+    context.perMeter = this.perMeter;
+    context.species = flock.species;
+    context.habitat = habitat;
+    context.terrain = terrain;
+    for (const bird of flock.birds)
+      if (isForager(bird)) stepForager(bird, spec, dt, this.forageRng, context);
+    rebaseForagers(flock, flock.birds, spec.patch * this.perMeter);
   }
 
   /**
@@ -3077,7 +3749,7 @@ export class TileLife {
   /**
    * Move the flocks on. A sitting flock (in a tree, or on the ground) stays its while, unless a
    * gust through the crown or someone coming near flushes it; in the rain (`env`) it sits it out,
-   * and flying flocks that perch head for the trees, those that land settle at their roost. The
+   * and flying flocks that perch head for the trees, those that land seek a safe ground patch. The
    * wind pushes circling flocks downwind, and faster round the downwind side. Bats flit.
    */
   private stepFlocks(
@@ -3096,46 +3768,69 @@ export class TileLife {
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (flock.departureBlend)
+        flock.departureBlend = Math.max(0, flock.departureBlend - dt / FORAGE.settleSeconds);
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
       flock.scatter = Math.max(0, flock.scatter - dt);
       // Sitting out the rain, a flock doesn't count down its stay.
-      if (!(sheltering && sitting)) flock.stay -= dt;
+      const committed = flock.landing || (flock.home >= 0 && flock.perch >= 0 && !flock.perched);
+      if (!(sheltering && sitting) && !committed) flock.stay -= dt;
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
         const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels);
-        if (flushed || flock.stay <= 0) {
+        if (flushed || (!sheltering && flock.stay <= 0)) {
+          if (!flushed && flock.perched && flock.home >= 0) {
+            flock.roost = flock.home;
+            if (
+              this.forageRng() < FORAGE.returnChance &&
+              this.prepareLanding(flock, { x: flock.lx, y: flock.ly })
+            ) {
+              flock.home = -1;
+              continue;
+            }
+          }
+          this.beginDeparture(flock);
           flock.perched = false;
           flock.landed = false;
           if (flushed) flock.scatter = PERCH.scatter;
-          this.pickDestination(flock);
+          this.pickDestination(flock, { prepare: !flushed });
           // Flushed, it keeps clear a while (circling a roost, or hovering where it is if the
           // tile has none) before settling again.
           if (flushed) {
             flock.perch = -1;
             flock.landing = false;
+            flock.landingAttempted = false;
           }
+        } else if (flock.landed && !sheltering) {
+          this.stepGroundFlock(flock, dt);
         }
         continue;
       }
-      if (flock.stay <= 0 && (count > 1 || perches.length > 0 || (spec.ground > 0 && count > 0))) {
+      if (
+        !committed &&
+        flock.stay <= 0 &&
+        (count > 1 || perches.length > 0 || (spec.ground > 0 && count > 0))
+      ) {
         this.pickDestination(flock);
       }
-      // Rain: those that perch head for the trees, those that land settle at their roost.
+      // Rain: those that perch head for the trees, those that land seek a safe ground patch.
       if (sheltering && flock.scatter === 0 && flock.perch < 0 && !flock.landing) {
         if (spec.perch > 0 && perches.length > 0) {
           flock.perch = Math.floor(this.birdRng() * (perches.length / 2));
-        } else if (spec.ground > 0 && count > 0) {
-          flock.landing = true;
+        } else if (spec.ground > 0 && count > 0 && !flock.landingAttempted) {
+          this.prepareLanding(flock);
         }
       }
-      // Flying to a tree, or down to its roost: straight there, nudged downwind, then settle.
+      if (flock.landing)
+        flock.landingBlend = Math.min(1, flock.landingBlend + dt / FORAGE.settleSeconds);
+      // Flying to a tree or prepared ground patch: straight there, nudged downwind, then settle.
       const to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
           : flock.landing && count > 0
-            ? { x: roosts[flock.roost * 2]!, y: roosts[flock.roost * 2 + 1]! }
+            ? { x: flock.lx, y: flock.ly }
             : undefined;
       if (to) {
         const dx = to.x - flock.x;
@@ -3145,10 +3840,24 @@ export class TileLife {
         if (distance <= step) {
           flock.x = to.x;
           flock.y = to.y;
-          if (flock.perch >= 0) flock.perched = true;
-          else {
+          if (flock.perch >= 0) {
+            flock.perched = true;
+            if (flock.home >= 0)
+              flock.stay = between(this.forageRng, FORAGE_SPECIES[flock.species]!.rest);
+          } else if (flock.landingBlend === 1) {
             flock.landed = true;
             flock.landing = false;
+            const forage = FORAGE_SPECIES[flock.species]!;
+            flock.stay = between(this.forageRng, FORAGE.visit);
+            flock.feeding = true;
+            flock.bout = between(this.forageRng, forage.feed);
+            for (const bird of flock.birds)
+              if (isForager(bird)) {
+                bird.tx = bird.gx;
+                bird.ty = bird.gy;
+                bird.face = this.forageRng() * 2 * Math.PI;
+                bird.wait = between(this.forageRng, forage.peck);
+              }
           }
         } else {
           // Less as it comes in, so it still arrives.
@@ -3250,6 +3959,7 @@ export type VisibleAgent = {
   parked?: boolean;
   /** Detailed motor vehicles only: local side and simulation-clock blink phase. */
   turnSignal?: TurnSignal;
+  lamps?: VehicleLamps;
   /** People: holding a candle (lit at dusk and night). */
   candle?: boolean;
   /**
@@ -3297,6 +4007,7 @@ export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 type GroundTerrain = {
   key: string;
+  seasonalKey: string;
   blocked: PolygonIndex;
   seasonal: PolygonIndex;
   water: PolygonIndex;
@@ -3305,16 +4016,27 @@ type GroundTerrain = {
   origins: Map<TileLife, { x: number; y: number; scale: number }>;
   ref?: TileLife;
 };
-
 export class LifeWorld {
-  private cityLife: CityLifeConfig | undefined;
+  private sourceSerial = 0;
+  private readonly nextSourceId = () => ++this.sourceSerial;
+  private puffPacket = EMPTY_PUFFS;
+  private effectCellMeters = 0;
+  private readonly puffSources = new Map<number, number>();
+  private readonly actorSources = new Map<VisibleAgent, number>();
+  private readonly puffSelector = new PuffSelector();
+  /** Reply-owned storage: transferring a frame cannot detach simulation state. */
+  get visiblePuffs() {
+    return this.puffPacket;
+  }
+  private readonly umbrellas = new UmbrellaMotion();
+  private umbrellaMotionVisible = false;
+  private cityLife: Pick<CityLifeConfig, 'schedules'> | undefined;
   setShopSchedule(shops: ShopSchedule | undefined) {
-    this.cityLife = shops
-      ? { source: 'Simulation shop schedule', schedules: { shops } }
-      : undefined;
+    this.cityLife = shops ? { schedules: { shops } } : undefined;
   }
   private seasons: readonly SimulationSeason[] = [];
   private seasonalConfig: SimulationSeason | undefined;
+  private seasonalTerrainKey = '';
   setSeasons(seasons: readonly SimulationSeason[]) {
     if (seasons === this.seasons) return;
     this.seasons = seasons;
@@ -3322,7 +4044,7 @@ export class LifeWorld {
   }
   private seasonsDirty = false;
   /** Retired tiles retain their carts and reconcile the season when they return. */
-  private readonly appliedSeasons = new WeakMap<TileLife, string | null>();
+  private readonly appliedSeasons = new WeakMap<TileLife, SimulationSeason | null>();
   private readonly stallAnchors = new WeakMap<TileLife, readonly SeasonAnchor[]>();
   private readonly stallBounds = new WeakMap<TileLife, readonly number[]>();
   private readonly stallInputs = new WeakMap<
@@ -3355,7 +4077,7 @@ export class LifeWorld {
       for (const ring of area.rings) for (const p of ring) add(p.x, p.y);
     let margin = 100;
     for (const width of life.geo.widths) margin = Math.max(margin, width);
-    for (const r of [...(life.geo.seasonalTrees ?? []), ...(life.geo.seasonalRides ?? [])]) {
+    for (const r of physicalSeasonalRecords(life.geo)) {
       const points = r.kind === 'carnival' ? carnivalRing(r) : [r.at];
       for (const p of points) {
         const q = lngLatToTile(life.tile, ...p);
@@ -3384,33 +4106,41 @@ export class LifeWorld {
       this.seasonalConfig = config;
       return;
     }
-    const installGround =
-      changed &&
-      config?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
-    if (changed && (config?.installations?.length || this.seasonalConfig?.installations?.length))
-      this.groundTerrain = undefined;
+    const physical = (s: SimulationSeason | undefined) =>
+      s?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
+    const hadPhysical = physical(this.seasonalConfig);
+    const seasonalKey = this.physicalSeasonKey(this.tiles.values(), config);
+    if (seasonalKey !== this.seasonalTerrainKey) this.groundTerrain = undefined;
+    this.seasonalTerrainKey = seasonalKey;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
     for (const life of this.tiles.values()) {
-      const id = config?.id ?? null;
-      if (this.appliedSeasons.get(life) !== id) {
-        life.clearSeasonalStalls();
+      const previous = this.appliedSeasons.get(life) ?? null;
+      if (previous !== (config ?? null)) {
+        const before = previous?.stalls,
+          after = config?.stalls;
+        if (
+          !before ||
+          !after ||
+          before.radius_m !== after.radius_m ||
+          before.per_tile !== after.per_tile ||
+          before.near.length !== after.near.length ||
+          !before.near.every((kind) => after.near.includes(kind))
+        )
+          life.clearSeasonalStalls();
+        // Equivalent carts keep their scenes, but still recheck terrain and ownership.
         this.stallInputs.delete(life);
       }
-      this.appliedSeasons.set(life, id);
+      this.appliedSeasons.set(life, config ?? null);
     }
-    if (installGround) {
-      const guard = this.groundGuard(0, undefined, undefined, true);
-      for (const life of this.tiles.values())
-        if (
-          [...(life.geo.seasonalTrees ?? []), ...(life.geo.seasonalRides ?? [])].some((r) =>
-            admitsInstallation(r, config!),
-          )
-        ) {
-          life.settleGround((owner, before) => guard(life, owner, before));
-          life.settleAnimals((owner, before) => guard(life, owner, before));
-        }
-    }
+    if (
+      !this.groundTerrain &&
+      this.tiles.size &&
+      (hadPhysical ||
+        physical(config) ||
+        [...this.tiles.values()].some((life) => life.hasSuppressedActors))
+    )
+      this.groundGuard();
     if (!config?.stalls) return;
     const lives = [...this.tiles.values()];
     const anchors = lives.flatMap((life) => {
@@ -3436,7 +4166,7 @@ export class LifeWorld {
         );
       });
       const previous = this.stallInputs.get(life);
-      const quota = Math.max(0, MAX_TILE_AGENTS - life.movers.length);
+      const quota = Math.max(0, MAX_TILE_AGENTS - life.population);
       this.stallInputs.set(life, { config, anchors: nearby, neighbors, quota });
       if (
         previous?.config === config &&
@@ -3474,7 +4204,7 @@ export class LifeWorld {
         life.seasonalStalls.splice(i, 1);
       }
       life.clearSeasonalStalls(
-        Math.min(config.stalls.per_tile, Math.max(0, MAX_TILE_AGENTS - life.movers.length)),
+        Math.min(config.stalls.per_tile, Math.max(0, MAX_TILE_AGENTS - life.population)),
       );
       life.admitSeasonalStalls(
         config.stalls,
@@ -3483,15 +4213,39 @@ export class LifeWorld {
       );
     }
   }
-  private terrainKey(keys: readonly string[]) {
-    return (
-      keys.join('|') +
-      (this.seasonalConfig?.installations?.some(
-        (i) => i.kind === 'christmas-tree' || i.kind === 'carnival',
-      )
-        ? `|installations:${this.seasonalConfig.id}`
-        : '')
-    );
+  /** Called on season/tile changes or preparation, never by ordinary terrain-key reads. */
+  private physicalSeasonKey(lives: Iterable<TileLife>, config: SimulationSeason | undefined) {
+    if (!config?.installations?.length) return '';
+    const records: string[] = [];
+    const found = new Set<string>();
+    for (const life of lives)
+      for (const record of physicalSeasonalRecords(life.geo)) {
+        if (
+          found.has(record.id) ||
+          (record.kind !== 'christmas-tree' &&
+            (record.kind !== 'carnival' || record.style === 'midway')) ||
+          !admitsInstallation(record, config)
+        )
+          continue;
+        found.add(record.id);
+        records.push(
+          JSON.stringify([
+            record.id,
+            record.season,
+            record.installation,
+            record.anchor,
+            record.kind,
+            record.at,
+            record.kind === 'carnival'
+              ? [record.style, record.size_m, record.angle_deg]
+              : record.radius_m,
+          ]),
+        );
+      }
+    return records.length ? JSON.stringify(records.sort()) : '';
+  }
+  private terrainKey(keys: readonly string[], seasonalKey = this.seasonalTerrainKey) {
+    return keys.join('|') + (seasonalKey ? `|installations:${seasonalKey}` : '');
   }
   readonly inspection?: LifeInspection;
   preparationEpoch = 0;
@@ -3509,6 +4263,7 @@ export class LifeWorld {
       this.traffic,
       true,
       this.momentOptions,
+      'world',
     ).prepare();
     if (this.profiler) {
       this.profiler.registerPopulation(entry.key, life.movers);
@@ -3615,7 +4370,12 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.puffPacket = EMPTY_PUFFS;
+    this.puffSources.clear();
+    this.actorSources.clear();
+    this.puffSelector.clear();
     this.seasonalConfig = undefined;
+    this.seasonalTerrainKey = '';
     this.seasonsDirty = false;
     this.inspection?.clear();
     this.momentOptions?.memory?.clear();
@@ -3711,7 +4471,15 @@ export class LifeWorld {
           const fresh =
             saved?.life ??
             prepared?.get(key) ??
-            new TileLife(tile, life, hashString(key), this.traffic, false, this.momentOptions);
+            new TileLife(
+              tile,
+              life,
+              hashString(key),
+              this.traffic,
+              false,
+              this.momentOptions,
+              'world',
+            );
           this.retired.delete(key);
           this.tiles.set(key, fresh);
           if (!saved) {
@@ -3729,12 +4497,14 @@ export class LifeWorld {
         if (!keep.has(key)) {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
+          life.effects.pause(this.clock);
           this.retired.set(key, { life, at: this.clock });
           this.tiles.delete(key);
           changed = true;
         }
       if (changed) {
         this.seasonsDirty = true;
+        this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
         this.groundTerrain = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
@@ -3780,7 +4550,8 @@ export class LifeWorld {
           this.profiler!.add('settle', this.profiler!.time() - settleStart);
         for (const life of added) {
           const quotas = this.history.get(life)!.quotas;
-          for (const m of life.movers) if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
+          for (const m of life.residentMovers())
+            if (inTile(m)) quotas[m.kind] = (quotas[m.kind] ?? 0) + 1;
           if (!gradual) this.profiler?.countContinuity('births', life.movers.length);
           if (gradual)
             for (const m of [...life.movers]) {
@@ -3992,8 +4763,14 @@ export class LifeWorld {
   ): Generator<void, GroundTerrain, void> {
     const lives = entries.map(([, life]) => life);
     const ref = lives[0];
+    const config = this.seasonalConfig;
+    const seasonalKey = this.physicalSeasonKey(lives, config);
     const terrain: GroundTerrain = {
-      key: this.terrainKey(entries.map(([key]) => key)),
+      key: this.terrainKey(
+        entries.map(([key]) => key),
+        seasonalKey,
+      ),
+      seasonalKey,
       ref,
       blocked: new PolygonIndex(),
       seasonal: new PolygonIndex(),
@@ -4039,18 +4816,15 @@ export class LifeWorld {
       contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
       for (const polygon of cached.trees) yield* terrain.trees.addSteps(polygon);
     }
-    if (ref && this.seasonalConfig?.installations?.length) {
+    if (ref && config?.installations?.length) {
       const found = new Set<string>();
       for (const life of lives)
-        for (const record of [
-          ...(life.geo.seasonalTrees ?? []),
-          ...(life.geo.seasonalRides ?? []),
-        ]) {
+        for (const record of physicalSeasonalRecords(life.geo)) {
           if (
             found.has(record.id) ||
             (record.kind !== 'christmas-tree' &&
               (record.kind !== 'carnival' || record.style === 'midway')) ||
-            !admitsInstallation(record, this.seasonalConfig)
+            !admitsInstallation(record, config)
           )
             continue;
           found.add(record.id);
@@ -4120,6 +4894,7 @@ export class LifeWorld {
       for (const [key, life] of next) sandbox.tiles.set(key, life);
       sandbox.groundTerrain = terrain;
       sandbox.seasonalConfig = this.seasonalConfig;
+      sandbox.seasonalTerrainKey = terrain.seasonalKey;
       sandbox.lastLevels = this.lastLevels;
       sandbox.mixedZoom = [...next.values()].some(
         (life) => life.tile.z !== next.values().next().value!.tile.z,
@@ -4135,6 +4910,7 @@ export class LifeWorld {
           );
       }
       for (const life of fresh) life.setIdleGuard((owner) => sandbox.canIdle(life, owner));
+      for (const life of fresh) sandbox.reconcileSeasonalTerrain(life);
       const guard = yield* sandbox.groundGuardSteps(0, fresh);
       for (const life of fresh)
         yield* life.settleGroundSteps((owner, before) => guard(life, owner, before));
@@ -4166,6 +4942,7 @@ export class LifeWorld {
     const revalidateStart = this.profiler?.time();
     for (const life of this.tiles.values()) {
       const o = origin(life);
+      this.reconcileSeasonalTerrain(life);
       for (let i = life.gatherers.length - 1; i >= 0; i--)
         if (life.gatherers[i]!.behavior === 'sit' && !life.canIdle(life.gatherers[i]!))
           life.gatherers.splice(i, 1);
@@ -4197,6 +4974,55 @@ export class LifeWorld {
     }
     if (revalidateStart !== undefined)
       this.profiler!.add('terrainRevalidate', this.profiler!.time() - revalidateStart);
+  }
+
+  private reconcileSeasonalTerrain(life: TileLife) {
+    const terrain = this.groundTerrain!;
+    const o = terrain.origins.get(life);
+    if (!o) return;
+    const transform = (body: Body) => {
+      body.x = o.x + body.x * o.scale;
+      body.y = o.y + body.y * o.scale;
+      body.length *= o.scale;
+      body.width *= o.scale;
+      return body;
+    };
+    life.setForageGuard((from, to) => {
+      // Read the current shared index so retired tiles do not retain old terrain copies.
+      const current = this.groundTerrain;
+      const at = current?.origins.get(life);
+      if (!current || !at) return false;
+      const body = segmentBody(
+        { x: from.x / life.perMeter, y: from.y / life.perMeter },
+        { x: to.x / life.perMeter, y: to.y / life.perMeter },
+        0.01,
+      );
+      body.x = at.x + body.x * at.scale;
+      body.y = at.y + body.y * at.scale;
+      body.length *= at.scale;
+      body.width *= at.scale;
+      return !current.blocked.hits([body]);
+    });
+    life.reconcileSeasonalActors(
+      (owner) => {
+        const bodies = life.groundBodies(owner, 0, this.groundSample);
+        for (const body of bodies) transform(body);
+        return terrain.seasonal.hits(bodies);
+      },
+      (p) => {
+        const spec = VEHICLES[p.vehicle];
+        return terrain.seasonal.hits([
+          transform({
+            ...p,
+            x: p.x / life.perMeter,
+            y: p.y / life.perMeter,
+            length: spec.length,
+            width: spec.width,
+          }),
+        ]);
+      },
+      terrain.seasonal.polygons.length > 0,
+    );
   }
 
   private groundGuard(
@@ -4478,12 +5304,14 @@ export class LifeWorld {
     weather?: { rain: number; minutes?: number; season?: string | null },
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
+    effectCellMeters = cellMeters,
   ) {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig)
       for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.movers.length));
+        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
+    this.effectCellMeters = effectCellMeters;
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
@@ -4502,6 +5330,8 @@ export class LifeWorld {
       levels: this.lastLevels,
       rain: this.lastRain,
       wind,
+      effectCellMeters,
+      nextSourceId: this.nextSourceId,
       ...weather,
       cityLife: this.cityLife,
     };
@@ -4528,7 +5358,7 @@ export class LifeWorld {
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
       env.inspecting,
     );
-    const seamLimits = new Map<Mover, { room: number; crossing: boolean }>();
+    const seamLimits = new Map<Mover, SeamLimit>();
     const intents: {
       source: TileLife;
       target: TileLife;
@@ -4571,7 +5401,7 @@ export class LifeWorld {
         this.profiler?.countContinuity('attempts');
         const target = ownerAt(source, seam.preview);
         if (!target || target === source) {
-          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${m.line}/${m.dir}`;
+          const key = `${source.tile.z}/${source.tile.x}/${source.tile.y}/${seam.preview.line}/${seam.preview.dir}`;
           let wait = this.seamWait.get(m);
           if (wait?.key !== key) {
             wait = { key, at: source.elapsed };
@@ -4584,7 +5414,7 @@ export class LifeWorld {
           ((reason: ContinuityRejection) => this.profiler!.countContinuity(reason));
         let preview: Mover | undefined;
         if (!target || target === source) reject?.('ownership');
-        else if (target.movers.length + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
+        else if (target.population + (inbound.get(target) ?? 0) >= MAX_TILE_AGENTS)
           reject?.('capQuota');
         else preview = target.projectFrom(seam.preview, source, { reject });
         const safe =
@@ -4597,7 +5427,7 @@ export class LifeWorld {
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
-          seamLimits.set(m, { room: Infinity, crossing: true });
+          seamLimits.set(m, { room: Infinity, crossing: true, boundary: seam.preview });
         } else
           seamLimits.set(m, {
             room: Math.max(0, seam.distance - (length / 2 + FOLLOW.minGap) * pm),
@@ -4618,6 +5448,7 @@ export class LifeWorld {
       });
     }
     // All original owners have stepped once. New owners start stepping on the next frame.
+    const effectOwners = intents.length ? new Map<Mover, TileLife>() : undefined;
     for (const { source, target, m, before, boundary } of intents) {
       const clipped = Math.hypot(m.x - boundary.x, m.y - boundary.y) < 0.005 * source.perMeter;
       if (ownerAt(source, m) !== target && !clipped) continue;
@@ -4636,6 +5467,7 @@ export class LifeWorld {
         )
       ) {
         this.profiler?.countContinuity('transfers');
+        effectOwners!.set(m, target);
         if (held)
           this.junctions.rebind(
             m,
@@ -4653,6 +5485,8 @@ export class LifeWorld {
         if (m.kind === 'vehicle') guard(source, m);
       }
     }
+    for (const tile of this.tiles.values())
+      tile.finishEffects(this.clock, clamped, wind, effectOwners);
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileLife; m: Mover }[] | undefined;
     for (const tile of this.tiles.values()) {
@@ -4692,7 +5526,7 @@ export class LifeWorld {
     this.admitBirths(clamped);
     if (this.seasonalConfig)
       for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.movers.length));
+        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -4907,6 +5741,26 @@ export class LifeWorld {
     return this.clock;
   }
 
+  /** Fill a walker's ordinary look with its realised canopy, preserving seated figures. */
+  private umbrellaLook(
+    look: PersonLook,
+    walker: Walker,
+    share: number,
+    zoom: number,
+    clock: number,
+  ): PersonLook {
+    if (walker.figure !== 'adult') return look;
+    const want = underUmbrella(walker, share);
+    const open =
+      zoom >= UMBRELLA_MOTION.zoom ? this.umbrellas.look(walker, want, clock) : Number(want);
+    if (open > 0) {
+      if (open < 1) look.canopy = { open, figure: look.figure, paint: look.paint };
+      look.figure = 'umbrella';
+      look.paint = walker.canopy;
+    }
+    return look;
+  }
+
   /**
    * The agents to draw at `zoom` and time of day: those whose kind shows at the zoom and who
    * are out (config.ts `activityLevels`), movers only inside their own tile (tiles overlap in their
@@ -4923,6 +5777,9 @@ export class LifeWorld {
     crowd = 1,
     maxAgents = MAX_VISIBLE_AGENTS,
   ): VisibleAgent[] {
+    const umbrellaMotionVisible = zoom >= UMBRELLA_MOTION.zoom;
+    if (umbrellaMotionVisible && !this.umbrellaMotionVisible) this.umbrellas.reset();
+    this.umbrellaMotionVisible = umbrellaMotionVisible;
     // A bare number is the daylight, with no clock (config.ts `activityLevels`).
     const levels =
       typeof levelsOrDaylight === 'number' ? activityLevels(levelsOrDaylight) : levelsOrDaylight;
@@ -4930,6 +5787,14 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    this.actorSources.clear();
+    let collectPuffs = false;
+    if (shows('vehicle') && levels.vehicle > 0)
+      for (const life of this.tiles.values())
+        if (life.puffs.size) {
+          collectPuffs = true;
+          break;
+        }
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
@@ -4980,7 +5845,21 @@ export class LifeWorld {
         const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
-          push(m, {
+          const motor =
+            m.kind === 'vehicle' &&
+            hasTurnSignals(m.vehicle) &&
+            VEHICLES[m.vehicle].length >= STAMP_MIN_CELLS * this.effectCellMeters;
+          const effects = motor ? vehicleEffects(m) : undefined;
+          const lamps = motor
+            ? visibleLamps(
+                m.vehicle,
+                effects?.brake,
+                life.scenes.held(m),
+                m.routing,
+                inspection?.clock(m, this.clock) ?? this.clock,
+              )
+            : undefined;
+          const agent: VisibleAgent = {
             kind: m.kind,
             lng,
             lat,
@@ -4989,22 +5868,35 @@ export class LifeWorld {
             vehicle: m.vehicle,
             paint: m.paint,
             turnSignal:
-              m.kind === 'vehicle'
+              m.kind === 'vehicle' && lamps?.kind !== 'hazard'
                 ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
                 : undefined,
             flap: 0,
-          });
+          };
+          if (lamps) agent.lamps = lamps;
+          if (collectPuffs && effects?.sourceId !== undefined)
+            this.actorSources.set(agent, effects.sourceId);
+          push(m, agent);
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
-          const people = m.group.map((w, member): PersonLook => ({
-            figure: w.figure === 'adult' && w.umbrella < umbrellas ? 'umbrella' : w.figure,
-            paint: w.figure === 'adult' && w.umbrella < umbrellas ? w.canopy : w.shirt,
-            lateral: w.lateral,
-            back: w.back,
-            // Standing still, feet together.
-            flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
-            pose: life.momentHost.pose(m, member),
-          }));
+          const clock = inspection?.clock(m, this.clock) ?? this.clock;
+          const people = m.group.map((w, member) =>
+            this.umbrellaLook(
+              {
+                figure: w.figure,
+                paint: w.shirt,
+                lateral: w.lateral,
+                back: w.back,
+                // Standing still, feet together.
+                flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+                pose: life.momentHost.pose(m, member),
+              },
+              w,
+              umbrellas,
+              zoom,
+              clock,
+            ),
+          );
           const speech = life.momentHost.moments.speech(m) ?? life.momentHost.scenes.speech(m);
           const agent: VisibleAgent = {
             kind: m.kind,
@@ -5087,17 +5979,23 @@ export class LifeWorld {
           if (!this.owns(life, g)) continue;
           if (g.rank >= levels.places[g.place] * crowd || !inView(g.x, g.y)) continue;
           const w = g.walker;
-          const shaded = w.figure === 'adult' && w.umbrella < umbrellas;
+          const figure = g.behavior === 'sit' ? 'seated' : w.figure;
           const still = g.pause > 0 || g.behavior === 'sit';
-          const look: PersonLook = {
-            figure: shaded ? 'umbrella' : g.behavior === 'sit' ? 'seated' : w.figure,
-            paint: shaded ? w.canopy : w.shirt,
-            lateral: 0,
-            back: 0,
-            // Standing still (or sitting), feet together.
-            flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
-            pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
-          };
+          const look = this.umbrellaLook(
+            {
+              figure,
+              paint: w.shirt,
+              lateral: 0,
+              back: 0,
+              // Standing still (or sitting), feet together.
+              flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+              pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
+            },
+            w,
+            umbrellas,
+            zoom,
+            inspection?.clock(g, this.clock) ?? this.clock,
+          );
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
             // The carabao a pace ahead, its farmer walking beside it.
@@ -5194,8 +6092,7 @@ export class LifeWorld {
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
-        // Perched, the birds sit still and close in the crown; on the ground, still and spread
-        // out; flushed, they scatter outward.
+        // Tree perching and scattered flight keep their original spread; ground has its own layout.
         const perchSpread = PERCH.spread / spec.spread[1];
         const spread = flock.perched
           ? perchSpread
@@ -5206,14 +6103,34 @@ export class LifeWorld {
           const turn = sitting ? bird.phase * 6 : wobble + bird.phase * 6;
           const cos = Math.cos(turn) * spread;
           const sin = Math.sin(turn) * spread;
-          const x = flock.x + bird.ox * cos - bird.oy * sin;
-          const y = flock.y + bird.ox * sin + bird.oy * cos;
+          const ground = isForager(bird) && flock.landed;
+          const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
+          const ox = bird.ox * cos - bird.oy * sin;
+          const oy = bird.ox * sin + bird.oy * cos;
+          let x = ox + ((bird.gx ?? ox) - ox) * blend;
+          let y = oy + ((bird.gy ?? oy) - oy) * blend;
+          if (bird.departure && flock.departureBlend) {
+            x += (bird.departure.x - x) * flock.departureBlend;
+            y += (bird.departure.y - y) * flock.departureBlend;
+          }
+          x += flock.x;
+          y += flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
           const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
           const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
-          const face = sitting ? bird.phase * 2 * Math.PI : heading + (bird.phase - 0.5) * 0.6;
+          const peck =
+            ground && flock.feeding && bird.wait > 0 && weather.rain < BIRD_WEATHER.shelter
+              ? Math.floor(birdTime * 3 + bird.phase * 7) & 1
+                ? 0.25
+                : -0.25
+              : 0;
+          const face = ground
+            ? bird.face + peck
+            : sitting
+              ? bird.phase * 2 * Math.PI
+              : heading + (bird.phase - 0.5) * 0.6;
           const ahead = tileToLngLat(tile, {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
@@ -5246,7 +6163,7 @@ export class LifeWorld {
       return admitted;
     };
     if (out.length <= maxAgents) {
-      const result = withBalls([...staged, ...out]);
+      const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
       return inspection?.finish(result) ?? result;
     }
     const [cx, cy] = center;
@@ -5273,7 +6190,33 @@ export class LifeWorld {
       kept.push(...group.agents);
       count += group.agents.length;
     }
-    const result = withBalls(kept);
+    const result = this.withPuffs(withBalls(kept), center, bounds);
     return inspection?.finish(result, true) ?? result;
+  }
+
+  private withPuffs(
+    agents: VisibleAgent[],
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+  ) {
+    const sources = this.puffSources;
+    sources.clear();
+    if (!this.actorSources.size) {
+      this.puffPacket = EMPTY_PUFFS;
+      return agents;
+    }
+    for (let i = 0; i < agents.length; i++) {
+      const source = this.actorSources.get(agents[i]!);
+      if (source !== undefined) sources.set(source, i);
+    }
+    this.actorSources.clear();
+    this.puffPacket = this.puffSelector.select(
+      this.tiles.values(),
+      sources,
+      center,
+      this.clock,
+      (tile) => viewIn(tile, bounds, 0),
+    );
+    return agents;
   }
 }

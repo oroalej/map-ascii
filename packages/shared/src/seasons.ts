@@ -1,5 +1,5 @@
 /** Sourced annual decoration calendars. Runtime matching deliberately has no Zod dependency. */
-import { PLACE_KINDS, type RhythmCurve } from './rhythm';
+import type { RhythmCurve, SeasonAnchorKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
 import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
 export * from './seasonal-record';
@@ -30,9 +30,6 @@ export type SeasonGrounds = {
 export const FIREWORK_VARIANTS = ['peony', 'chrysanthemum', 'ring', 'willow'] as const;
 export type FireworkVariant = (typeof FIREWORK_VARIANTS)[number];
 export type FireworksConfig = { label: string; variants: FireworkVariant[] };
-/** Places a season's `near` may name: gathering places, plus mapped cemeteries. */
-export const SEASON_ANCHOR_KINDS = [...PLACE_KINDS, 'cemetery'] as const;
-export type SeasonAnchorKind = (typeof SEASON_ANCHOR_KINDS)[number];
 /** Illustrative candles on a seeded `share` of the city's mapped burial markers. */
 export type SeasonCandles = { label: string; share: number };
 /** Simulated families standing at a seeded `share` of graves, shown by `hours`. */
@@ -53,9 +50,8 @@ export type SeasonCongregations = {
 export type SeasonConfig = {
   id: string;
   title: LocalizedText;
-  status: 'draft' | 'verified';
   window: SeasonWindow;
-  note?: string;
+  includes?: string[];
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
@@ -90,8 +86,9 @@ export type SeasonInstallation = {
       mount?: 'canopy';
       bulb_spacing_m?: number;
       palette?: 'warm' | 'christmas';
+      exclude_tree_crowns?: boolean;
     }
-  | { kind: 'decorated-canopy' }
+  | { kind: 'decorated-canopy'; trees?: 'inside' | 'overlapping' }
   | {
       kind: 'access-path';
       grounds: string;
@@ -101,6 +98,107 @@ export type SeasonInstallation = {
     }
   | { kind: 'carnival'; grounds: string; components: CarnivalComponent[] }
 );
+
+/** The browser needs calendar and admission fields; the pipeline owns source geometry. */
+export type RuntimeSeasonInstallation = Pick<
+  SeasonInstallation,
+  'id' | 'anchor' | 'kind' | 'label'
+> & {
+  layout?: Extract<SeasonInstallation, { kind: 'light-string' }>['layout'];
+  mount?: 'canopy';
+  style?: Extract<SeasonInstallation, { kind: 'access-path' }>['style'];
+};
+export type RuntimeSeasonConfig = Omit<
+  SeasonConfig,
+  'sources' | 'grounds' | 'installations' | 'bunting'
+> & {
+  installations?: RuntimeSeasonInstallation[];
+  /** Author of the selected dense bunting records after season composition. */
+  buntingSeasonId?: string;
+  bunting?: Omit<NonNullable<SeasonConfig['bunting']>, 'corridors'> & {
+    corridors?: Pick<BuntingCorridor, 'id' | 'ways'>[];
+  };
+};
+export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
+  const { id, title, window, includes, fireworks, lanterns, bunting, stalls, installations } =
+    season;
+  return {
+    id,
+    title,
+    window,
+    ...(includes && { includes }),
+    ...(fireworks && { fireworks }),
+    ...(lanterns && { lanterns }),
+    ...(stalls && { stalls }),
+    ...(bunting && {
+      bunting: {
+        label: bunting.label,
+        near: bunting.near,
+        radius_m: bunting.radius_m,
+        spacing_m: bunting.spacing_m,
+        ...(bunting.corridors && {
+          corridors: bunting.corridors.map(({ id, ways }) => ({ id, ways })),
+        }),
+      },
+    }),
+    ...(installations && {
+      installations: installations.map((i) => ({
+        id: i.id,
+        anchor: i.anchor,
+        kind: i.kind,
+        label: i.label,
+        ...(i.kind === 'light-string' && { layout: i.layout, ...(i.mount && { mount: i.mount }) }),
+        ...(i.kind === 'access-path' && { style: i.style }),
+      })),
+    }),
+  };
+}
+
+/** Keep authored installations first, followed by each included list in reference order. */
+export function composeSeasonInstallations<T>(
+  own: readonly T[] | undefined,
+  included: readonly (readonly T[] | undefined)[],
+): T[] {
+  return [...(own ?? []), ...included.flatMap((list) => list ?? [])];
+}
+
+/** Expand the validated, one-level decoration references once, before identity-based caches. */
+export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeSeasonConfig[] {
+  const byId = new Map(seasons.map((season) => [season.id, season]));
+  return seasons.map((season) => {
+    const included = (season.includes ?? []).flatMap((id) => {
+      const config = byId.get(id);
+      return config ? [config] : [];
+    });
+    const lanterns = season.lanterns ?? included.find((s) => s.lanterns)?.lanterns;
+    const buntingSeason = season.bunting ? season : included.find((s) => s.bunting);
+    const stalls = season.stalls ?? included.find((s) => s.stalls)?.stalls;
+    const fireworks = season.fireworks ?? included.find((s) => s.fireworks)?.fireworks;
+    const installations = composeSeasonInstallations(
+      season.installations,
+      included.map((s) => s.installations),
+    );
+    return {
+      ...season,
+      ...(lanterns && { lanterns }),
+      ...(buntingSeason?.bunting && {
+        bunting: buntingSeason.bunting,
+        ...(season.includes && { buntingSeasonId: buntingSeason.id }),
+      }),
+      ...(stalls && { stalls }),
+      ...(fireworks && { fireworks }),
+      ...(installations.length && { installations }),
+    };
+  });
+}
+
+/** Tile records retain the authoring season id when a preview includes its decorations. */
+export function admitsSeasonRecord(
+  season: { id: string; includes?: readonly string[] },
+  recordSeason: string,
+): boolean {
+  return recordSeason === season.id || season.includes?.includes(recordSeason) === true;
+}
 
 /** A calendar day, as days since 1970-01-01 (the existing Life clock's arithmetic). */
 export const epochDay = (year: number, month: number, day: number): number =>

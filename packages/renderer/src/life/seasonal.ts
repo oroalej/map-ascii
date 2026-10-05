@@ -2,11 +2,11 @@
 import {
   DEFAULT_ROAD_WIDTH_M,
   bandVisibility,
+  SEASON_ZOOM,
   type PlaceKind,
-  type SeasonConfig,
+  type RuntimeSeasonConfig,
   type UtilityRecord,
   type UtilitySpan,
-  type SeasonalRecord,
   type SeasonalBuntingRecord,
 } from '@atlas/shared';
 import {
@@ -17,7 +17,14 @@ import {
   tileToLngLat,
 } from '../raster/geometry';
 import type { TileId } from '../tiles';
-import { LifeLine, PLACE_CODES, PLACE_STRIDE, type LifeGeometry } from './geometry';
+import {
+  LifeLine,
+  PLACE_CODES,
+  PLACE_STRIDE,
+  seasonalRecords,
+  type SeasonalPayload,
+  type LifeGeometry,
+} from './geometry';
 import type { FixtureGrid, LegacyStreetFixture, StreetFixture } from './fixtures';
 import { lightByte, LampState, placeSeed } from './lights';
 import { clipUtilityLine } from './utilities';
@@ -58,7 +65,7 @@ export type SeasonalTile = {
   life: LifeGeometry;
   fixtures: readonly LegacyStreetFixture[];
   utilities?: readonly UtilityRecord[];
-  seasonal?: readonly SeasonalRecord[];
+  seasonal?: SeasonalPayload;
 };
 export type SeasonAnchor = { at: Point; kind: PlaceKind | 'market' };
 type Geography = Pick<SeasonalTile, 'tile' | 'life'>;
@@ -100,7 +107,7 @@ export function seasonProximity(
 /** A fixed reference latitude keeps the world lattice identical across adjacent tile rows. */
 function fallbackBunting(
   group: SeasonalTile,
-  config: NonNullable<SeasonConfig['bunting']>,
+  config: NonNullable<RuntimeSeasonConfig['bunting']>,
   near: (x: number, y: number) => boolean,
   latitude: number,
   covered: ReadonlySet<number>,
@@ -111,7 +118,8 @@ function fallbackBunting(
   const step = config.spacing_m / groundScale;
   const result: SeasonalFixture[] = [];
   for (let line = 0; line < life.kinds.length; line++) {
-    if (life.kinds[line]! > LifeLine.roadMinor || covered.has(line)) continue;
+    if (life.kinds[line]! > LifeLine.roadMinor || covered.has(life.spawnGroups?.[line] ?? line))
+      continue;
     const reach = ((life.widths[line] || DEFAULT_ROAD_WIDTH_M) / 2 + 0.5) / metersPerUnit(tile);
     for (let v = life.starts[line]! + 1; v < life.starts[line + 1]!; v++) {
       const ax = life.coords[(v - 1) * 2]!,
@@ -224,7 +232,7 @@ function buntingCoverage(
 
 export function seasonalFixtures(
   groups: readonly SeasonalTile[],
-  season: SeasonConfig | undefined,
+  season: RuntimeSeasonConfig | undefined,
   latitude: number,
   buntingVisible = true,
 ): SeasonalFixture[] {
@@ -235,13 +243,13 @@ export function seasonalFixtures(
   const displays = new Map<string, InstallationFixture>();
   const dense = new Map<string, SeasonalBuntingRecord>();
   for (const group of groups)
-    for (const r of group.seasonal ?? []) {
+    for (const r of seasonalRecords(group.seasonal)) {
       if (r.kind !== 'bunting' && admitsInstallation(r, season))
         displays.set(r.id, { kind: 'season-installation', record: r });
       else if (
         r.kind === 'bunting' &&
         buntingVisible &&
-        r.season === season.id &&
+        r.season === (season.buntingSeasonId ?? season.id) &&
         corridors.get(r.corridor)?.ways.includes(r.road)
       )
         dense.set(r.id, r);
@@ -319,7 +327,7 @@ export function seasonalFixtures(
             metersPerUnit(group.tile)) **
             2
       )
-        covered.add(closest);
+        covered.add(group.life.spawnGroups?.[closest] ?? closest);
       bunting.set(span.id, {
         kind: 'season-bunting',
         id: span.id,
@@ -369,13 +377,13 @@ export function seasonalFixtures(
 /** Only the current contributing set is retained; payload/config changes invalidate the cache. */
 export function createSeasonalFixtureCache() {
   let previous: readonly SeasonalTile[] = [],
-    previousSeason: SeasonConfig | undefined,
+    previousSeason: RuntimeSeasonConfig | undefined,
     previousBunting = true,
     previousLatitude = NaN;
   let result: SeasonalFixture[] = [];
   return (
     groups: readonly SeasonalTile[],
-    season: SeasonConfig | undefined,
+    season: RuntimeSeasonConfig | undefined,
     latitude: number,
     buntingVisible = true,
   ) => {
@@ -417,9 +425,12 @@ export function packSeasonalFixtures(
   zoom: number,
   glyphIndex: (glyph: string) => number,
   owners: Int32Array,
+  written?: () => void,
 ): SeasonalVisibility {
   const visibility: SeasonalVisibility = { lanterns: false, bunting: false };
-  const rows = bandVisibility({ min: 18 }, zoom) ? selectBuntingRows(fixtures, grid) : undefined;
+  const rows = bandVisibility(SEASON_ZOOM.bunting, zoom)
+    ? selectBuntingRows(fixtures, grid)
+    : undefined;
   const write = (
     x: number,
     y: number,
@@ -447,6 +458,7 @@ export function packSeasonalFixtures(
     out[at + 2] = info;
     out[at + 3] = alpha;
     owners[cell] = -3;
+    written?.();
     return !grid.visible || grid.visible(c, r);
   };
   // Lay paving below decorations, independently of buffered tile/record ordering.
@@ -461,8 +473,13 @@ export function packSeasonalFixtures(
     surfaceOrderCache.set(fixtures, ordered);
   }
   for (const fixture of ordered) {
-    const min = fixture.kind === 'season-lantern' ? 17 : 18;
-    const alpha = Math.round(bandVisibility({ min }, zoom) * 255);
+    const band =
+      fixture.kind === 'season-lantern'
+        ? SEASON_ZOOM.lanterns
+        : fixture.kind === 'season-bunting'
+          ? SEASON_ZOOM.bunting
+          : SEASON_ZOOM.installations;
+    const alpha = Math.round(bandVisibility(band, zoom) * 255);
     if (!alpha) continue;
     if (fixture.kind === 'season-installation') {
       visibility.installations =

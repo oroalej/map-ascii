@@ -57,7 +57,7 @@ export type BirdSpec = {
   flap: number;
   /** The chance a flock picking where to go next lands in a tree (config.ts `PERCH`). */
   perch: number;
-  /** The chance it lands on the ground at its roost instead of circling it (not in trees). */
+  /** The chance it approaches suitable ground near its roost instead of circling it. */
   ground: number;
   /** A sitting flock takes off when someone comes within this many meters (a dog, twice). */
   wary: number;
@@ -73,8 +73,8 @@ export type BirdSpec = {
 /**
  * The species: maya (tree sparrows) in small quick flocks around trees and parks, swallows
  * sweeping wide over water and fields, pigeons over parks and plazas, and egrets, large and
- * slow, over water and rice fields (they never land in the trees here). Pigeons and egrets
- * also settle on the ground, and take off when someone comes near. By night, bats: small fruit
+ * slow, over water and rice fields (they never land in the trees here). Pigeons, egrets and maya
+ * also come down to feed on suitable ground, and take off when someone comes near. By night, bats: small fruit
  * bats flitting over trees and water.
  */
 export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
@@ -86,7 +86,7 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     spread: [1, 4],
     flap: 5,
     perch: 0.7,
-    ground: 0,
+    ground: 0.25,
     wary: 4,
     habitats: { water: 0.3, field: 2, park: 3, trees: 3 },
   },

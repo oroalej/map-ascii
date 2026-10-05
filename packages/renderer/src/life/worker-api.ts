@@ -3,7 +3,7 @@ import * as Comlink from 'comlink';
 import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
-import { placeGrid } from '../grid';
+import { placeGrid, metersPerCssPx } from '../grid';
 import { treeGust } from '../glyphs/select';
 import { LifeWorld, type LifeTile, type VisibleAgent, type ProcessionRun } from './simulate';
 import type { LifeGeometry } from './geometry';
@@ -30,11 +30,14 @@ export type FrameInput = {
     wind: Step[4];
     weather: Step[5];
     cellMeters: Step[6];
+    /** Actual rounded render grid scale; movement still uses CSS clearance. */
+    effectCellMeters?: number;
   };
   visible: Parameters<LifeWorld['visible']>;
 };
 export type FrameResult = {
   agents: VisibleAgent[];
+  puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
   terrain?: TerrainSnapshot | null;
@@ -86,6 +89,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.weather,
     step.cellMeters,
     gust.cssCell.h / gust.cssCell.w,
+    step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
@@ -93,13 +97,26 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
   if (visibleStart !== undefined) profiler!.add('visible', profiler!.time() - visibleStart);
   return {
     agents,
+    puffs: world.visiblePuffs,
     procession: world.procession(),
     signalClock: world.signalClock,
   };
 }
 
 /** Plain API for both Comlink and deterministic tests; no DOM or GL dependencies. */
-export function createLifeWorkerApi(preparationClock?: () => number) {
+export function createLifeWorkerApi(
+  preparationClock?: () => number,
+  worldFactory = (options: LifeInit, profiler?: FrameProfiler) =>
+    new LifeWorld(
+      options.traffic,
+      profiler,
+      {
+        dialogue: options.dialogue,
+        periods: options.periods,
+      },
+      options.itemInspection,
+    ),
+) {
   let world: LifeWorld;
   let profiler: FrameProfiler | undefined;
   let preparation: LifePreparation;
@@ -110,15 +127,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
     init(options: LifeInit) {
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
-      world = new LifeWorld(
-        options.traffic,
-        profiler,
-        {
-          dialogue: options.dialogue,
-          periods: options.periods,
-        },
-        options.itemInspection,
-      );
+      world = worldFactory(options, profiler);
       preparation = new LifePreparation(world, profiler, preparationClock);
       configureLifeWorld(world, options);
       geometries.clear();
@@ -158,7 +167,9 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
       const result: FrameResult = runLifeFrame(world, input, profiler);
       for (const agent of result.agents) delete agent.consist;
       const terrain = world.cellTerrain();
-      let buffers: ArrayBuffer[] = [];
+      const buffers: ArrayBuffer[] = result.puffs.length
+        ? [result.puffs.buffer as ArrayBuffer]
+        : [];
       if (!terrainSent || terrain?.version !== lastTerrain) {
         terrainSent = true;
         lastTerrain = terrain?.version;
@@ -167,7 +178,7 @@ export function createLifeWorkerApi(preparationClock?: () => number) {
           const encoded = snapshotOf(terrain);
           if (start !== undefined) profiler!.add('terrainEncode', profiler!.time() - start);
           result.terrain = encoded.snapshot;
-          buffers = encoded.transferables;
+          buffers.push(...encoded.transferables);
         } else result.terrain = null;
       }
       if (profiler) {

@@ -1,7 +1,7 @@
 'use client';
 
 import type {
-  CityLifeConfig,
+  RuntimeCityLife,
   RuntimeDialogueCatalog,
   ClimateConfig,
   Landmark,
@@ -46,7 +46,7 @@ export type CityAtlasProps = {
   /** The city's IANA time zone (the city pack's `timezone`). */
   timezone?: string | undefined;
   /** The daily rhythm of simulated traffic (the city pack's `life`). */
-  cityLife?: CityLifeConfig | undefined;
+  cityLife?: RuntimeCityLife | undefined;
   dialogue?: RuntimeDialogueCatalog | undefined;
   /** Whether the city's street layer supplements mapped sidewalks. */
   sidewalksDerived?: boolean;

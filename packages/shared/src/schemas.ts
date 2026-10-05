@@ -4,14 +4,22 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { OsmId, OsmAreaId, MercatorPosition } from './schema-primitives';
+export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
-import { RHYTHM_KINDS, type CityLifeConfig } from './rhythm';
+import {
+  RHYTHM_KINDS,
+  SEASON_ANCHOR_KINDS,
+  runtimeCityLife,
+  type CityLifeConfig,
+  type RuntimeCityLife,
+} from './rhythm';
 import {
   FIREWORK_VARIANTS,
-  SEASON_ANCHOR_KINDS,
   validMonthDay,
+  composeSeasonInstallations,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
@@ -94,8 +102,6 @@ export const DateCertainty = z.enum(['exact', 'circa']);
 export type DateCertainty = z.infer<typeof DateCertainty>;
 
 export const Year = z.int().min(YEAR_RANGE[0]).max(YEAR_RANGE[1]);
-
-export const OsmId = z.string().regex(/^osm:(node|way|relation)\/\d+$/, 'expected osm:<type>/<id>');
 
 export const Photo = z.object({
   src: z.string().min(1),
@@ -1053,9 +1059,17 @@ const SeasonPlaces = z
   .array(z.enum(SEASON_ANCHOR_KINDS))
   .min(1)
   .refine((places) => new Set(places).size === places.length, 'duplicate place kind');
+const SeasonGeometryId = z.string().regex(/^[a-z][a-z0-9-]*$/);
+const SeasonInstallationBase = {
+  id: SeasonGeometryId,
+  anchor: OsmId,
+  label: z.string().trim().min(1),
+  sources: Sources,
+  grounds: SeasonGeometryId.optional(),
+};
 export const SeasonGroundsSchema = z.strictObject({
   id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-  anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
+  anchor: OsmAreaId,
   // Reuse the simple, closed, nonzero-area ring contract from plan-view structures.
   ring: SiteStructure.shape.ring.max(64),
   sources: Sources,
@@ -1068,16 +1082,17 @@ export const FireworksSchema = z.strictObject({
     .max(FIREWORK_VARIANTS.length)
     .refine((v) => new Set(v).size === v.length, 'duplicate firework variants'),
 }) satisfies z.ZodType<FireworksConfig>;
+const SeasonId = z
+  .string()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
+  .refine((id) => id !== 'auto', 'auto is reserved');
+const MAX_SEASON_INSTALLATIONS = 32;
 export const Season = z
   .strictObject({
-    id: z
-      .string()
-      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'expected a lowercase slug')
-      .refine((id) => id !== 'auto', 'auto is reserved'),
+    id: SeasonId,
     title: LocalizedText,
-    status: z.enum(['draft', 'verified']),
     window: SeasonWindowSchema,
-    note: z.string().trim().min(1).optional(),
+    includes: z.array(SeasonId).min(1).optional(),
     fireworks: FireworksSchema.optional(),
     grounds: z
       .array(SeasonGroundsSchema)
@@ -1093,21 +1108,14 @@ export const Season = z
         z.discriminatedUnion('kind', [
           z
             .strictObject({
-              id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-              anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
-              label: z.string().trim().min(1),
-              sources: Sources,
-              grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+              ...SeasonInstallationBase,
+              anchor: OsmAreaId,
+              grounds: SeasonGeometryId,
               kind: z.literal('access-path'),
               style: z.enum(['walkway', 'driveway', 'parking']),
               width_m: z.number().min(1).max(12),
               points: z
-                .array(
-                  z.tuple([
-                    z.number().min(-180).max(180),
-                    z.number().min(-85.051129).max(85.051129),
-                  ]),
-                )
+                .array(MercatorPosition)
                 .min(2)
                 .max(32)
                 .refine(
@@ -1123,11 +1131,9 @@ export const Season = z
               'parking requires bays and access',
             ),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z.string().regex(/^[a-z][a-z0-9-]*$/),
+            ...SeasonInstallationBase,
+            anchor: OsmAreaId,
+            grounds: SeasonGeometryId,
             kind: z.literal('carnival'),
             components: z
               .array(CarnivalComponentSchema)
@@ -1140,48 +1146,29 @@ export const Season = z
               .refine((v) => v.filter((c) => c.style === 'midway').length <= 1, 'only one midway'),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('christmas-tree'),
             radius_m: z.number().min(1).max(12),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('light-string'),
             layout: z.enum(['paths', 'perimeter', 'building-perimeter', 'canopy']),
             spacing_m: z.number().min(0.75).max(12),
             mount: z.literal('canopy').optional(),
             bulb_spacing_m: z.number().min(0.3).max(3).optional(),
             palette: z.enum(['warm', 'christmas']).optional(),
+            exclude_tree_crowns: z.boolean().optional(),
           }),
           z.strictObject({
-            id: z.string().regex(/^[a-z][a-z0-9-]*$/),
-            anchor: z.string().regex(/^osm:(node|way|relation)\/\d+$/),
-            label: z.string().trim().min(1),
-            sources: Sources,
-            grounds: z
-              .string()
-              .regex(/^[a-z][a-z0-9-]*$/)
-              .optional(),
+            ...SeasonInstallationBase,
             kind: z.literal('decorated-canopy'),
+            trees: z.enum(['inside', 'overlapping']).optional(),
           }),
         ]),
       )
       .min(1)
-      .max(32)
+      .max(MAX_SEASON_INSTALLATIONS)
       .refine((v) => new Set(v.map((i) => i.id)).size === v.length, 'duplicate installation ids')
       .optional(),
     lanterns: z
@@ -1292,21 +1279,6 @@ export const Season = z
       !season.congregations
     )
       ctx.addIssue({ code: 'custom', message: 'a season needs at least one decoration' });
-    const todo = [...Object.values(season.title), season.note ?? ''].some((v) =>
-      v.includes(TODO_VERIFY),
-    );
-    if (season.status === 'verified' && todo)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a verified season cannot contain ${TODO_VERIFY}`,
-      });
-    if (season.status === 'draft' && !season.note?.includes(TODO_VERIFY))
-      ctx.addIssue({
-        code: 'custom',
-        path: ['note'],
-        message: `a draft season needs a ${TODO_VERIFY} note`,
-      });
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
@@ -1317,6 +1289,50 @@ export const CityLife = z.strictObject({
       (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
       'duplicate season id',
     )
+    .superRefine((seasons, ctx) => {
+      const byId = new Map(seasons.map((season) => [season.id, season]));
+      for (const [index, season] of seasons.entries()) {
+        if (!season.includes) continue;
+        const seen = new Set<string>();
+        const includedInstallations: (typeof season.installations)[] = [];
+        for (const [includeIndex, id] of season.includes.entries()) {
+          const included = byId.get(id);
+          const message = !included
+            ? 'included season must exist'
+            : id === season.id
+              ? 'a season cannot include itself'
+              : seen.has(id)
+                ? 'duplicate included season'
+                : included.includes
+                  ? 'included seasons cannot include another season'
+                  : undefined;
+          if (message)
+            ctx.addIssue({
+              code: 'custom',
+              path: [index, 'includes', includeIndex],
+              message,
+            });
+          else if (included) includedInstallations.push(included.installations);
+          seen.add(id);
+        }
+        const installations = composeSeasonInstallations(
+          season.installations,
+          includedInstallations,
+        );
+        if (new Set(installations.map((i) => i.id)).size !== installations.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: 'composed installations must have unique ids',
+          });
+        if (installations.length > MAX_SEASON_INSTALLATIONS)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: `a composed season accepts at most ${MAX_SEASON_INSTALLATIONS} installations`,
+          });
+      }
+    })
     .optional(),
   signals: z
     .strictObject({
@@ -1393,6 +1409,9 @@ export const CityLife = z.strictObject({
   source: z.string().min(1),
 }) satisfies z.ZodType<CityLifeConfig>;
 export type CityLife = z.infer<typeof CityLife>;
+export const RuntimeCityLifeSchema = CityLife.transform(
+  runtimeCityLife,
+) satisfies z.ZodType<RuntimeCityLife>;
 
 export const Traffic = z.strictObject({
   road_major: VehicleWeights,
@@ -1609,10 +1628,7 @@ export const TileLayer = z.enum([
 export type TileLayer = z.infer<typeof TileLayer>;
 
 /** Utility identities and coordinates survive MVT clipping as a validated JSON property. */
-const UtilityPosition = z.tuple([
-  z.number().min(-180).max(180),
-  z.number().min(-85.051129).max(85.051129),
-]);
+const UtilityPosition = MercatorPosition;
 const UtilityDirection = z
   .tuple([z.number(), z.number()])
   .refine((v) => Math.abs(Math.hypot(...v) - 1) < 0.001, 'expected unit direction');
