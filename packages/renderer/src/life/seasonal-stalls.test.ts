@@ -1,6 +1,11 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { describe, expect, it, vi } from 'vitest';
-import type { SeasonConfig, SeasonalDisplayRecord } from '@atlas/shared';
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type SeasonalDisplayRecord,
+} from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
 import { MAX_TILE_AGENTS, activityLevels } from './config';
@@ -197,6 +202,52 @@ describe('seasonal stall lifecycle', () => {
       expect(visit.state).toBe('return');
     },
   );
+
+  it('keeps terrain, carts and purchasing customers across equivalent physical previews', () => {
+    const { world, life, display } = physicalPreview();
+    const physical: SeasonConfig = {
+      ...season,
+      installations: [
+        {
+          id: display.installation,
+          kind: 'christmas-tree',
+          anchor: display.anchor,
+          label: 'Tree',
+          radius_m: display.radius_m,
+          sources: season.sources,
+        },
+      ],
+    };
+    world.setSeasons(
+      simulationSeasons(
+        expandSeasons([
+          runtimeSeason(physical),
+          runtimeSeason({
+            ...physical,
+            id: 'new-year',
+            includes: [season.id],
+            installations: undefined,
+            stalls: undefined,
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          }),
+        ]),
+      ),
+    );
+    select(world);
+    const terrain = world.cellTerrain()!.version;
+    const stall = life.seasonalStalls[0]!;
+    const site = life.scenes.sites.findIndex((s) => s.kind === 'vendor' && s.stall === stall);
+    const customer = life.movers.find((m) => m.kind === 'person' && life.scenes.reserve(m, site))!;
+    const visit = life.scenes.visits.get(customer)!;
+    visit.state = 'purchase';
+    for (const id of ['new-year', season.id]) {
+      select(world, id);
+      expect(world.cellTerrain()!.version).toBe(terrain);
+      expect(life.seasonalStalls).toContain(stall);
+      expect(life.scenes.visits.get(customer)).toBe(visit);
+      expect(visit.state).toBe('purchase');
+    }
+  });
 
   it('rechecks physical admission when an equivalent stall season adds an obstacle', () => {
     const { world, life, tiles } = setup();

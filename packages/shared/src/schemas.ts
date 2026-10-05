@@ -19,13 +19,11 @@ import {
 import {
   FIREWORK_VARIANTS,
   validMonthDay,
-  runtimeSeason,
   composeSeasonInstallations,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
   type SeasonWindow,
-  type RuntimeSeasonConfig,
 } from './seasons';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
@@ -1255,9 +1253,6 @@ export const Season = z
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
-export const RuntimeSeasonSchema = Season.transform(
-  runtimeSeason,
-) satisfies z.ZodType<RuntimeSeasonConfig>;
 export const CityLife = z.strictObject({
   seasons: z
     .array(Season)

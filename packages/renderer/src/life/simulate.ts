@@ -3394,6 +3394,7 @@ export type ProcessionRun = { id: string; progress: number; live: boolean };
 
 type GroundTerrain = {
   key: string;
+  seasonalKey: string;
   blocked: PolygonIndex;
   seasonal: PolygonIndex;
   water: PolygonIndex;
@@ -3410,6 +3411,7 @@ export class LifeWorld {
   }
   private seasons: readonly SimulationSeason[] = [];
   private seasonalConfig: SimulationSeason | undefined;
+  private seasonalTerrainKey = '';
   setSeasons(seasons: readonly SimulationSeason[]) {
     if (seasons === this.seasons) return;
     this.seasons = seasons;
@@ -3482,8 +3484,9 @@ export class LifeWorld {
     const physical = (s: SimulationSeason | undefined) =>
       s?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
     const hadPhysical = physical(this.seasonalConfig);
-    if (changed && (config?.installations?.length || this.seasonalConfig?.installations?.length))
-      this.groundTerrain = undefined;
+    const seasonalKey = this.physicalSeasonKey(this.tiles.values(), config);
+    if (seasonalKey !== this.seasonalTerrainKey) this.groundTerrain = undefined;
+    this.seasonalTerrainKey = seasonalKey;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
     for (const life of this.tiles.values()) {
@@ -3585,15 +3588,39 @@ export class LifeWorld {
       );
     }
   }
-  private terrainKey(keys: readonly string[]) {
-    return (
-      keys.join('|') +
-      (this.seasonalConfig?.installations?.some(
-        (i) => i.kind === 'christmas-tree' || i.kind === 'carnival',
-      )
-        ? `|installations:${this.seasonalConfig.id}`
-        : '')
-    );
+  /** Called on season/tile changes or preparation, never by ordinary terrain-key reads. */
+  private physicalSeasonKey(lives: Iterable<TileLife>, config: SimulationSeason | undefined) {
+    if (!config?.installations?.length) return '';
+    const records: string[] = [];
+    const found = new Set<string>();
+    for (const life of lives)
+      for (const record of physicalSeasonalRecords(life.geo)) {
+        if (
+          found.has(record.id) ||
+          (record.kind !== 'christmas-tree' &&
+            (record.kind !== 'carnival' || record.style === 'midway')) ||
+          !admitsInstallation(record, config)
+        )
+          continue;
+        found.add(record.id);
+        records.push(
+          JSON.stringify([
+            record.id,
+            record.season,
+            record.installation,
+            record.anchor,
+            record.kind,
+            record.at,
+            record.kind === 'carnival'
+              ? [record.style, record.size_m, record.angle_deg]
+              : record.radius_m,
+          ]),
+        );
+      }
+    return records.length ? JSON.stringify(records.sort()) : '';
+  }
+  private terrainKey(keys: readonly string[], seasonalKey = this.seasonalTerrainKey) {
+    return keys.join('|') + (seasonalKey ? `|installations:${seasonalKey}` : '');
   }
   readonly inspection?: LifeInspection;
   preparationEpoch = 0;
@@ -3718,6 +3745,7 @@ export class LifeWorld {
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
     this.seasonalConfig = undefined;
+    this.seasonalTerrainKey = '';
     this.seasonsDirty = false;
     this.inspection?.clear();
     this.momentOptions?.memory?.clear();
@@ -3837,6 +3865,7 @@ export class LifeWorld {
         }
       if (changed) {
         this.seasonsDirty = true;
+        this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
         this.groundTerrain = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
@@ -4095,8 +4124,14 @@ export class LifeWorld {
   ): Generator<void, GroundTerrain, void> {
     const lives = entries.map(([, life]) => life);
     const ref = lives[0];
+    const config = this.seasonalConfig;
+    const seasonalKey = this.physicalSeasonKey(lives, config);
     const terrain: GroundTerrain = {
-      key: this.terrainKey(entries.map(([key]) => key)),
+      key: this.terrainKey(
+        entries.map(([key]) => key),
+        seasonalKey,
+      ),
+      seasonalKey,
       ref,
       blocked: new PolygonIndex(),
       seasonal: new PolygonIndex(),
@@ -4142,7 +4177,7 @@ export class LifeWorld {
       contributions.push({ owner: life, terrain: life.roadTerrain, ...o });
       for (const polygon of cached.trees) yield* terrain.trees.addSteps(polygon);
     }
-    if (ref && this.seasonalConfig?.installations?.length) {
+    if (ref && config?.installations?.length) {
       const found = new Set<string>();
       for (const life of lives)
         for (const record of physicalSeasonalRecords(life.geo)) {
@@ -4150,7 +4185,7 @@ export class LifeWorld {
             found.has(record.id) ||
             (record.kind !== 'christmas-tree' &&
               (record.kind !== 'carnival' || record.style === 'midway')) ||
-            !admitsInstallation(record, this.seasonalConfig)
+            !admitsInstallation(record, config)
           )
             continue;
           found.add(record.id);
@@ -4220,6 +4255,7 @@ export class LifeWorld {
       for (const [key, life] of next) sandbox.tiles.set(key, life);
       sandbox.groundTerrain = terrain;
       sandbox.seasonalConfig = this.seasonalConfig;
+      sandbox.seasonalTerrainKey = terrain.seasonalKey;
       sandbox.lastLevels = this.lastLevels;
       sandbox.mixedZoom = [...next.values()].some(
         (life) => life.tile.z !== next.values().next().value!.tile.z,

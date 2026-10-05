@@ -1,11 +1,13 @@
 import { simulationSeasons } from './seasonal-simulation';
 import { expect, it } from 'vitest';
-import type {
-  SeasonConfig,
-  SeasonalDisplayRecord,
-  SeasonalLightStringRecord,
-  SeasonalCarnivalRecord,
-  SeasonalAccessRecord,
+import {
+  expandSeasons,
+  runtimeSeason,
+  type SeasonConfig,
+  type SeasonalDisplayRecord,
+  type SeasonalLightStringRecord,
+  type SeasonalCarnivalRecord,
+  type SeasonalAccessRecord,
 } from '@atlas/shared';
 import {
   admitsInstallation,
@@ -472,6 +474,93 @@ it('activates/deactivates deduplicated physical footprints independently of stal
   expect(world.cellTerrain()!.version).toBe(version);
   choose(null);
   expect(world.cellTerrain()!.trees.hits([body])).toBe(false);
+});
+it('reuses terrain across equivalent inclusion previews with the same admitted trees and carnival', () => {
+  const preview: SeasonConfig = {
+    ...season,
+    id: 'new-year',
+    includes: [season.id],
+    installations: undefined,
+    fireworks: { label: 'Fireworks', variants: ['peony'] },
+  };
+  const world = new LifeWorld();
+  world.setSeasons(
+    simulationSeasons(expandSeasons([runtimeSeason(season), runtimeSeason(preview)])),
+  );
+  world.sync([
+    {
+      key: 'test',
+      tile,
+      life: { ...new LifeBuilder().finish(), seasonalTrees: [tree], seasonalRides: [carnival] },
+    },
+  ]);
+  const choose = (id: string) =>
+    world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: id });
+  choose(season.id);
+  const terrain = world.cellTerrain()!.version;
+  const at = lngLatToTile(tile, ...carnival.at);
+  expect(
+    world.cellTerrain()!.trees.hits([
+      {
+        x: at.x * metersPerUnit(tile),
+        y: at.y * metersPerUnit(tile),
+        hx: 1,
+        hy: 0,
+        length: 1,
+        width: 1,
+      },
+    ]),
+  ).toBe(true);
+  for (const id of ['new-year', season.id, 'new-year', season.id]) {
+    choose(id);
+    expect(world.cellTerrain()!.version).toBe(terrain);
+  }
+});
+it('rebuilds terrain for unrelated seasons with reused IDs and keeps anchor admission guards', () => {
+  const other = { ...season, id: 'other' };
+  const otherTree = { ...tree, season: other.id, at: tileToLngLat(tile, { x: 3000, y: 2000 }) };
+  const world = new LifeWorld();
+  world.setSeasons(simulationSeasons([season, other]));
+  world.sync([
+    {
+      key: 'test',
+      tile,
+      life: { ...new LifeBuilder().finish(), seasonalTrees: [tree, otherTree] },
+    },
+  ]);
+  const choose = (id: string) =>
+    world.step(0, undefined, 20, undefined, undefined, { rain: 0, season: id });
+  const body = (record: typeof tree) => {
+    const at = lngLatToTile(tile, ...record.at);
+    return {
+      x: at.x * metersPerUnit(tile),
+      y: at.y * metersPerUnit(tile),
+      hx: 1,
+      hy: 0,
+      length: 1,
+      width: 1,
+    };
+  };
+  choose(season.id);
+  const before = world.cellTerrain()!;
+  expect(before.trees.hits([body(tree)])).toBe(true);
+  expect(before.trees.hits([body(otherTree)])).toBe(false);
+  choose(other.id);
+  const after = world.cellTerrain()!;
+  expect(after.version).not.toBe(before.version);
+  expect(after.trees.hits([body(tree)])).toBe(false);
+  expect(after.trees.hits([body(otherTree)])).toBe(true);
+  world.setSeasons(
+    simulationSeasons([
+      {
+        ...other,
+        installations: other.installations!.map((i) => ({ ...i, anchor: 'osm:way/999' })),
+      },
+    ]),
+  );
+  choose(other.id);
+  expect(world.cellTerrain()!.version).not.toBe(after.version);
+  expect(world.cellTerrain()!.trees.hits([body(otherTree)])).toBe(false);
 });
 it('settles existing actors away from a newly activated physical display', () => {
   const b = new LifeBuilder();
