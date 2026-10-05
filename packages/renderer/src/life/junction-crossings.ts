@@ -90,4 +90,22 @@ export class JunctionCrossings {
     const turning = p.inHx * p.outHx + p.inHy * p.outHy < COS30;
     return !(!controlled || turning) || !blocked(this.forArm(p.junction, p.exit));
   }
+  /** A denied car must leave the entrance stripes usable by the people it is yielding to. */
+  holdAhead(p: Movement, controlled: boolean): void {
+    p.boxAhead ??= p.ahead;
+    if (controlled || !p.entry) return;
+    const pm = this.life.perMeter,
+      x = (p.entry.x ?? p.junction.x) / pm,
+      y = (p.entry.y ?? p.junction.y) / pm;
+    let extra = 0;
+    for (const c of this.forArm(p.junction, p.entry)) {
+      const outward = -(c.body.x - x) * p.inHx - (c.body.y - y) * p.inHy;
+      const half =
+        (Math.abs(c.body.hx * p.inHx + c.body.hy * p.inHy) * c.body.length +
+          Math.abs(c.body.hy * p.inHx - c.body.hx * p.inHy) * c.body.width) /
+        2;
+      extra = Math.max(extra, outward + half - p.junction.radius / pm);
+    }
+    p.ahead = p.boxAhead - extra * pm;
+  }
 }

@@ -19,6 +19,52 @@ const movement = (vertical = false): Movement => ({
 });
 const life = new TileLife({ z: 16, x: 1, y: 1 }, new LifeBuilder().finish(), 1);
 
+it('grants the first at-line arrival ahead of a car registered earlier in the distance', () => {
+  const table = new JunctionTable(),
+    a = { kind: 'vehicle', vehicle: 'car' } as Mover,
+    b = { kind: 'vehicle', vehicle: 'car' } as Mover;
+  const request = (m: Mover, atLine: boolean, ready: boolean) =>
+    table.request({
+      m,
+      life,
+      tileKey: m === a ? 'a' : 'b',
+      index: 0,
+      movement: movement(m === a),
+      ready,
+      inside: false,
+      atLine,
+    });
+  request(a, false, false);
+  table.resolve(0);
+  table.begin(new Set([life]));
+  request(a, false, false);
+  request(b, true, false);
+  table.resolve(5);
+  table.begin(new Set([life]));
+  request(a, true, true);
+  request(b, true, true);
+  table.resolve(7);
+  expect(table.granted(b)).toBe(true);
+  expect(table.granted(a)).toBe(false);
+});
+
+it('a distant denied request does not block a later compatible free-flow approach', () => {
+  const table = new JunctionTable(),
+    cars = [0, 1, 2].map(() => ({ kind: 'vehicle', vehicle: 'car' }) as Mover);
+  for (const [index, m] of cars.entries())
+    table.request({
+      m,
+      life,
+      tileKey: 'a',
+      index,
+      movement: movement(index !== 1),
+      ready: true,
+      inside: index === 0,
+    });
+  table.resolve(0);
+  expect(cars.map((m) => table.granted(m))).toEqual([true, false, true]);
+});
+
 it('counts only arrival at the stop line, preserving an absent arrival for distant requests', () => {
   const table = new JunctionTable(),
     a = { kind: 'vehicle', vehicle: 'car' } as Mover,

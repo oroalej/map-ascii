@@ -3455,6 +3455,7 @@ export class TileLife {
         (line, dir) => this.seamExit(m, line, dir),
       );
       const submit = (movement: Movement, inside: boolean) => {
+        this.junctionCrossings.holdAhead(movement, this.junctionControlled(movement));
         const room = traffic.room(m, movement, this);
         const ready =
           room >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
@@ -3498,15 +3499,19 @@ export class TileLife {
         if (r.carried) {
           table.refreshCarried(
             m,
-            (p) =>
-              this.signals.allows(
-                m,
-                p.entry?.x ?? p.junction.x,
-                p.entry?.y ?? p.junction.y,
-                clock,
-                Math.max(0, p.ahead),
-                p,
-              ) && this.junctionClear(p, pedestrians),
+            (p) => {
+              this.junctionCrossings.holdAhead(p, this.junctionControlled(p));
+              return (
+                this.signals.allows(
+                  m,
+                  p.entry?.x ?? p.junction.x,
+                  p.entry?.y ?? p.junction.y,
+                  clock,
+                  Math.max(0, p.ahead),
+                  p,
+                ) && this.junctionClear(p, pedestrians)
+              );
+            },
             traffic.room(m, previous, this),
             previous.key,
             traffic.atLine(m, previous, this, table),
@@ -3519,6 +3524,7 @@ export class TileLife {
             j.radius -
             JUNCTION.gap * pm -
             length / 2;
+          previous.boxAhead = previous.ahead;
           submit(previous, true);
         } else if (candidate)
           submit(candidate, candidate.ahead < -0.05 * pm && candidate.line === m.line);
@@ -3530,15 +3536,18 @@ export class TileLife {
     }
   }
 
-  junctionClear(movement: Movement, pedestrians: PedestrianView): boolean {
+  private junctionControlled(movement: Movement): boolean {
     const j = movement.junction;
-    const controlled =
+    return (
       j.controlled === true ||
       this.signals.controlsCrossing(movement.entry?.line ?? movement.line, {
         x: movement.entry?.x ?? j.x,
         y: movement.entry?.y ?? j.y,
-      });
-    return this.junctionCrossings.clear(movement, pedestrians, controlled);
+      })
+    );
+  }
+  junctionClear(movement: Movement, pedestrians: PedestrianView): boolean {
+    return this.junctionCrossings.clear(movement, pedestrians, this.junctionControlled(movement));
   }
 
   private terminalTarget(m: Mover, target: number, remaining: number): number {
@@ -3671,12 +3680,11 @@ export class TileLife {
           }
         }
         for (const { movement } of table.holds(m)) {
-          if (!table.granted(m, movement.key) && movement.ahead >= -0.05 * pm) {
-            speeds[i] = Math.min(
-              speeds[i],
-              approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
-            );
-            caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
+          const ahead =
+            movement.ahead >= -0.05 * pm ? movement.ahead : (movement.boxAhead ?? movement.ahead);
+          if (!table.granted(m, movement.key) && ahead >= -0.05 * pm) {
+            speeds[i] = Math.min(speeds[i], approach(ahead, 0, kinematicsOf(m.vehicle).brake * pm));
+            caps[i] = Math.min(caps[i]!, Math.max(0, ahead) / dt);
           }
         }
       }
@@ -3974,12 +3982,13 @@ export class TileLife {
             const p = r.movement;
             if (r.inside || this.junctionClear(p, livePedestrians)) continue;
             table.revokeGrant(m, p.key);
-            if (p.ahead >= -0.05 * this.perMeter) {
+            const ahead = p.ahead >= -0.05 * this.perMeter ? p.ahead : (p.boxAhead ?? p.ahead);
+            if (ahead >= -0.05 * this.perMeter) {
               speeds[i] = Math.min(
                 speeds[i]!,
-                approach(p.ahead, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
+                approach(ahead, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
               );
-              this.caps[i] = Math.min(this.caps[i]!, Math.max(0, p.ahead) / dt);
+              this.caps[i] = Math.min(this.caps[i]!, Math.max(0, ahead) / dt);
             }
           }
         }

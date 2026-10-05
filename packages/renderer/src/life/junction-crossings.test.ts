@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { LifeBuilder } from './geometry';
 import { LifeWorld, TileLife, type Mover } from './simulate';
-import { JunctionTable, type Junction, type Movement } from './junctions';
+import type { JunctionTable} from './junctions';
+import { type Junction, type Movement } from './junctions';
 import { worldTiles } from './testing/scenarios';
 import { metersPerUnit } from '../raster/geometry';
 import { EMPTY_PEDESTRIANS, type PedestrianView } from './pedestrians';
@@ -108,6 +109,21 @@ for (const arm of ['entry', 'exit'] as const)
     expect(car.x).toBeLessThanOrEqual(2000 - 10.7 * pm + 1e-6);
     expect(table.waited(car)).toBeGreaterThanOrEqual(0);
   });
+it('holds a newly denied approach upstream of its entrance stripe without moving physical box admission', () => {
+  const f = fixture(),
+    { life, car, human, table } = f;
+  Object.assign(car, { d: (200 - 20) * pm, x: 2000 - 20 * pm, v: 0 });
+  life.movers.push(human);
+  life.prepareTraffic(() => true);
+  life.requestJunctions(table, () => true, 0, '', undefined, humanView(life));
+  table.resolve(0);
+  const p = table.movement(car)!;
+  expect(table.granted(car)).toBe(false);
+  expect(p.ahead / pm).toBeCloseTo(2.8);
+  expect(p.boxAhead! / pm).toBeCloseTo(9.3);
+  f.world.step(0.1, undefined, 18, undefined, undefined, undefined, 0.9);
+  expect(car.x).toBeLessThanOrEqual(2000 - 17.2 * pm);
+});
 it('checks accepted pedestrian positions after a walker enters the inward-curb area in the same step', () => {
   const f = fixture(),
     { life, car, human, table } = f;

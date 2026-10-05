@@ -48,6 +48,8 @@ export type Movement = {
   dir: 1 | -1;
   exit: Arm;
   ahead: number;
+  /** Physical box admission is distinct from a hold upstream of an entrance stripe. */
+  boxAhead?: number;
   entry?: Arm;
 };
 
@@ -320,8 +322,8 @@ class Precedence {
         if (this.edges[i * n + j]) {
           if (this.visits[j] === -1) {
             dfs(j);
-            this.lows[i] = Math.min(this.lows[i]!, this.lows[j]!);
-          } else if (this.active[j]) this.lows[i] = Math.min(this.lows[i]!, this.visits[j]!);
+            this.lows[i] = Math.min(this.lows[i], this.lows[j]!);
+          } else if (this.active[j]) this.lows[i] = Math.min(this.lows[i], this.visits[j]!);
         }
       if (this.lows[i] !== this.visits[i]) return;
       let j: number;
@@ -489,6 +491,7 @@ export class JunctionTable {
               line: -1,
               stop: old.stop * f.scale,
               ahead: old.ahead * f.scale,
+              boxAhead: old.boxAhead === undefined ? undefined : old.boxAhead * f.scale,
               junction: {
                 ...old.junction,
                 x: f.x + old.junction.x * f.scale,
@@ -530,10 +533,11 @@ export class JunctionTable {
       j.radius -
       length / 2 -
       JUNCTION.gap * pm;
-    r.inside = p.ahead < -0.05 * pm;
+    p.boxAhead = p.ahead;
+    r.inside = p.boxAhead < -0.05 * pm;
     r.room = room;
     r.ready = ready(p);
-    r.atLine = atLine ?? false;
+    r.atLine = traffic ? traffic.atLine(m, p, r.life, this) : (atLine ?? false);
     r.traffic = traffic;
     this.request(r);
   }
@@ -561,7 +565,7 @@ export class JunctionTable {
     const groups = new Map<string, Hold[]>();
     for (const request of this.requests) {
       let records = this.records.get(request.m);
-      if (!records) this.records.set(request.m, (records = new Map()));
+      if (!records) this.records.set(request.m, (records = new Map<string, Hold>()));
       const previous = records.get(request.movement.key);
       const r: Hold = previous ? Object.assign(previous, request) : { ...request };
       if (r.arrival === undefined && (r.atLine === true || r.inside)) r.arrival = clock;
