@@ -5,6 +5,7 @@ import {
   bodyCorners,
   bodyHitsPolygon,
   corridorDistance,
+  pointInside,
   type Body,
   type Occupancy,
   type Point,
@@ -303,6 +304,23 @@ export class PedestrianCrossings {
   hasLine(line: number): boolean {
     return this.lines.has(line);
   }
+  /**
+   * The uncontrolled crossings a step from `from` to `to` (tile metres) walks onto from outside,
+   * one record per road line they cross.
+   */
+  entered(from: Point, to: Point): PedestrianCrossing[] {
+    const out: PedestrianCrossing[] = [];
+    for (const key of binKeys([to]))
+      for (const c of this.index.get(key) ?? [])
+        if (
+          !c.controlled &&
+          !out.includes(c) &&
+          pointInside(to, c.polygon) &&
+          !pointInside(from, c.polygon)
+        )
+          out.push(c);
+    return out;
+  }
   constructor(
     private readonly tile: TileId,
     private readonly pm: number,
@@ -322,7 +340,7 @@ export class PedestrianCrossings {
     for (const area of geo.areas ?? []) {
       yield;
       if (area.kind !== 'crossing') continue;
-      const ring = area.rings[0];
+      const ring = (area.crossingStripes ?? area.rings)[0];
       if (!ring || ring.length < 4) continue;
       const polygon = preparedArea([
         ring.slice(0, 4).map((p) => ({ x: p.x / this.pm, y: p.y / this.pm })),

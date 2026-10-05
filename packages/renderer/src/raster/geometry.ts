@@ -74,6 +74,7 @@ import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { stripRing } from '../life/terrain';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import {
+  CROSSING_WALK_PAST_M,
   DEFAULT_ROAD_WIDTH_M,
   FLOOD,
   SHOP,
@@ -138,6 +139,9 @@ const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
   road_minor: { min: 18 },
   path: { min: 18.5 },
 };
+
+/** A crossing's walkable cut reaches this far past each side of its mapped width, m. */
+const CROSSING_CUT_M = 1.5;
 
 /**
  * How a street's name ranks and when it shows, from its class and OSM kind (`highway=…`): only
@@ -1053,15 +1057,18 @@ export function buildTileGeometry(
                 const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
                 const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
                 const along = 1.5 / unitMeters;
-                life.area('crossing', [
-                  stripRing(
-                    { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along },
-                    { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along },
-                    halfWidth,
-                  ),
-                ]);
+                const a = { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along };
+                const b = { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along };
+                // The walkable cut runs past the mapped width: the carriageway's corners and
+                // inferred widths can reach further, which would strand walkers mid-crossing.
+                life.area(
+                  'crossing',
+                  [stripRing(a, b, halfWidth + CROSSING_CUT_M / unitMeters)],
+                  false,
+                  [stripRing(a, b, halfWidth)],
+                );
                 // Give a whole group room to clear the road before turning at an unattached end.
-                const reach = halfWidth + 3 / unitMeters;
+                const reach = halfWidth + (CROSSING_CUT_M + CROSSING_WALK_PAST_M) / unitMeters;
                 walkingLines.push({
                   points: [
                     { x: p.x - Math.cos(theta) * reach, y: p.y - Math.sin(theta) * reach },
@@ -1347,7 +1354,8 @@ export function buildTileGeometry(
           }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
-            else if (walkableStep) life.area('vehicle-blocked', polygon);
+            // A curb ring encloses its island: vehicles keep off all of it, not just the curb.
+            else if (walkableStep) life.area('vehicle-blocked', [polygon[0]!]);
             else if (solid || standingWater || feature.properties.detail_blocked)
               life.area('blocked', polygon, standingWater);
             else if (className === 'trees') life.area('parking-exclusion', polygon);
