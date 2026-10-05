@@ -91,13 +91,44 @@ export const FOLLOW = {
   squeeze: 0.3,
   roadGap: 0.15,
   lateralPad: 0.3,
+  /** Where a lane moves sideways, following compares lanes this far ahead too, m. */
+  laneAheadM: 10,
 } as const;
 /** Required distance from a vehicle centre to a stop edge, m. */
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
-/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
-export const ROAD_AVOID = { steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
+/**
+ * Terrain recovery for vehicles: sideways metres per metre travelled while shifting or returning
+ * (no sideways move while stopped); clear road edge allowance for inferred widths, m.
+ */
+export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
+/**
+ * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
+ * or the movement guard has refused it for any reason this long.
+ */
+export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
+/**
+ * Turn back after this many active seconds attempting a blocked walking route; from fixed
+ * obstacles at once, once at least `terrainMinWalkM` has been walked since the last turn back.
+ */
+export const WALK_RECOVERY = { seconds: 3, terrainMinWalkM: 1 } as const;
+/**
+ * People wait at the curb while a vehicle moving faster than `movingMs` (m/s) couldn't stop
+ * `marginM` short of the crossing.
+ */
+export const WALK_GAP = { movingMs: 0.5, marginM: 2 } as const;
+/** People turn round on the spot over this many seconds. */
+export const TURN_AROUND = { seconds: 0.4 } as const;
+/** Having stepped aside on a path, the share of the offset given back per metre walked on. */
+export const WALK_ASIDE = { restore: 0.3 } as const;
+/** Walking lines shorter than this, m, joined to no other at either end, get no residents. */
+export const STRANDED_WALK_M = 20;
+/**
+ * A crossing's walking line runs this far past its walkable cut at each end (raster/geometry.ts),
+ * giving a group room to clear the road before turning at an unattached end.
+ */
+export const CROSSING_WALK_PAST_M = 1.5;
 /** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,
@@ -134,6 +165,8 @@ export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
+/** A terrain-cleared corner may run this far past its vertex, m. */
+export const FILLET_RUN_ON_M = 2 * FILLET.maxM;
 export const JUNCTION = {
   linkedLookaheadM: 60,
   gap: 1.5,

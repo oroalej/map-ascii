@@ -176,6 +176,7 @@ it('keeps authored low curbs out of walking obstacles while retaining their vehi
       buildings: layer([
         feature(3, { id: 'curb', class: 'building_part', height: 0.18, detail_blocked: true }, [
           square(100, 100, 30),
+          reversed(square(110, 110, 10)),
         ]),
         feature(3, { id: 'wall', class: 'building_part', height: 0.3, detail_blocked: true }, [
           square(200, 100, 30),
@@ -189,6 +190,9 @@ it('keeps authored low curbs out of walking obstacles while retaining their vehi
   expect(g.life.areas?.filter((a) => a.kind === 'vehicle-blocked')).toHaveLength(1);
   expect(g.life.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(2);
   expect(g.life.obstacleClosed).toHaveLength(2);
+  const island = g.life.areas!.find((a) => a.kind === 'vehicle-blocked')!;
+  expect(island.rings).toHaveLength(1);
+  expect(pointInside({ x: 115, y: 115 }, island.rings)).toBe(true);
 });
 
 /** Vertices of a geometry as { cls, x, y } for easy assertions. */
@@ -404,6 +408,10 @@ describe('classifyRings', () => {
       const unit = metersPerUnit(tile);
       expect(pointInside({ x: 2000, y: 2000 + 4 / unit }, crossing.rings)).toBe(true);
       expect(pointInside({ x: 2000 + 2 / unit, y: 2000 }, crossing.rings)).toBe(false);
+      expect(pointInside({ x: 2000, y: 2000 + 6.4 / unit }, crossing.rings)).toBe(true);
+      expect(pointInside({ x: 2000, y: 2000 + 6.6 / unit }, crossing.rings)).toBe(false);
+      expect(pointInside({ x: 2000, y: 2000 + 4.9 / unit }, crossing.crossingStripes!)).toBe(true);
+      expect(pointInside({ x: 2000, y: 2000 + 5.1 / unit }, crossing.crossingStripes!)).toBe(false);
     }
   });
 

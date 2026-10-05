@@ -13,6 +13,14 @@ import { bodiesOverlap, PolygonIndex } from './occupancy';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
+/** Exercise checked reactive recovery with the world guard, before proactive lane planning. */
+function reactiveRoadRecovery(world: LifeWorld) {
+  vi.spyOn(
+    world as unknown as { laneTerrain(life: TileLife): undefined },
+    'laneTerrain',
+  ).mockReturnValue(undefined);
+  for (const life of worldTiles(world).values()) life.setLaneTerrain(undefined);
+}
 function fixture(
   kind: LifeLine,
   width: number,
@@ -785,6 +793,7 @@ it.each([-8, -6])(
     );
     const m = mover('vehicle', 70, 1);
     // -8 m can be retained after a wide one-way road enters this narrow piece.
+    reactiveRoadRecovery(world);
     // Both stored values have exactly the same valid physical starting lane.
     m.lane = 1;
     m.roadShift = shift;
@@ -874,6 +883,7 @@ it('retains a safe steering direction after crossing the original offset sign', 
     b.area('blocked', rectangle(1000 + 75 * pm, 2048 - 5 * pm, 1000 + 80 * pm, 2048 + 1.5 * pm)),
   );
   const m = mover('vehicle', 70, 1);
+  reactiveRoadRecovery(world);
   m.roadShift = -0.4;
   const blocked = new PolygonIndex();
   blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm + 1.5));
@@ -1108,10 +1118,12 @@ it('backs away from an oblique curb obstruction before steering, keeping its rou
     1,
   );
   const m = mover('vehicle', 70, 1);
+  reactiveRoadRecovery(world);
   life.movers.push(m);
   let backward = false;
   let closestShift = Infinity;
-  for (let frame = 0; frame < 15 * 30; frame++) {
+  // Checked nose alignment adds a short approach while keeping the same physical pace.
+  for (let frame = 0; frame < 18 * 30; frame++) {
     const before = life.pose(m),
       x = m.x;
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
@@ -1458,6 +1470,7 @@ it('retreats far enough to clear the complete rotation beside a narrowing buildi
   ]);
   const world = new LifeWorld(undefined, undefined, { enabled: false });
   world.sync([{ key: 'narrow', tile, life: b.finish() }]);
+  reactiveRoadRecovery(world);
   const life = worldTiles(world).get('narrow')!;
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
   life.scenes.sites.length = 0;
