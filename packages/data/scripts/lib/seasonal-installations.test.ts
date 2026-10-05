@@ -218,6 +218,84 @@ it('clips dense canopy rows around holes and concave access gaps, and validates 
       ).toBe(true);
   }
 });
+it('trims only crown intersections and keeps both outside ends, with stable defaults and ordering', () => {
+  const meters = (x: number, y: number): SeasonalPoint => [x / 111320, y / 111320];
+  const ground: AtlasFeature = {
+    ...area,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[meters(0, 0), meters(100, 0), meters(100, 10), meters(0, 10), meters(0, 0)]],
+    },
+  };
+  const config: SeasonConfig = {
+    ...season,
+    installations: [
+      {
+        ...shared,
+        id: 'canopy',
+        kind: 'light-string',
+        layout: 'canopy',
+        spacing_m: 10,
+        mount: 'canopy',
+        exclude_tree_crowns: true,
+      },
+    ],
+  };
+  const tree = (id: string, x: number, y = 5, crown = 8): AtlasFeature => ({
+    ...features[3]!,
+    properties: { id, class: 'tree', crown },
+    geometry: { type: 'Point', coordinates: meters(x, y) },
+  });
+  const uncut = generateSeasonalInstallations([ground], [config]);
+  expect(uncut.records).toHaveLength(1);
+  for (const [trees, count] of [
+    [[tree('tree/a', 50)], 2],
+    [[tree('tree/a', 40), tree('tree/b', 45)], 2],
+    [[tree('tree/a', 40), tree('tree/b', 60)], 3],
+    [[tree('tree/a', -1)], 1],
+    [[tree('tree/a', 50, 30)], 1],
+    [[tree('tree/a', 1)], 1],
+    [[tree('tree/a', 5)], 2],
+  ] as const) {
+    const inputs = [ground, ...trees];
+    const clipped = generateSeasonalInstallations(inputs, [config]);
+    expect(clipped.records).toHaveLength(count);
+    expect(generateSeasonalInstallations([...inputs].reverse(), [config])).toEqual(clipped);
+    expect(generateSeasonalInstallations([...inputs, ...trees], [config])).toEqual(clipped);
+    const defaultConfig: SeasonConfig = {
+      ...config,
+      installations: config.installations!.map((i) => ({ ...i, exclude_tree_crowns: false })),
+    };
+    expect(generateSeasonalInstallations(inputs, [defaultConfig])).toEqual(uncut);
+    for (const record of clipped.records) {
+      if (record.kind !== 'light-string') throw new Error('expected string');
+      for (const feature of trees) {
+        if (feature.geometry.type !== 'Point') throw new Error('expected tree');
+        const [x, y] = feature.geometry.coordinates;
+        for (let i = 0; i <= 20; i++) {
+          const at = [
+            record.from[0] + ((record.to[0] - record.from[0]) * i) / 20,
+            record.from[1] + ((record.to[1] - record.from[1]) * i) / 20,
+          ];
+          expect(Math.hypot(at[0]! - x!, at[1]! - y!) * 111320).toBeGreaterThanOrEqual(4 - 1e-6);
+        }
+      }
+    }
+    if (trees[0].geometry.type === 'Point' && trees[0].geometry.coordinates[1]! > 0.0002)
+      expect(clipped).toEqual(uncut);
+  }
+  const covered = tree('tree/a', 50, 5, 100);
+  const shortGround: AtlasFeature = {
+    ...ground,
+    geometry: {
+      type: 'Polygon',
+      coordinates: [[meters(40, 0), meters(60, 0), meters(60, 10), meters(40, 10), meters(40, 0)]],
+    },
+  };
+  expect(() => generateSeasonalInstallations([shortGround, covered], [config])).toThrow(
+    'no light-string geometry',
+  );
+});
 it('keeps deterministic tree footprints away from paths, monuments and each other; retains mapped crowns', () => {
   const a = generateSeasonalInstallations(features, [season]);
   expect(generateSeasonalInstallations([...features].reverse(), [season])).toEqual(a);

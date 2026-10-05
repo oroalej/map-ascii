@@ -10,6 +10,34 @@ const season = {
   sources: [{ title: 'Calendar', url: 'https://example.org/' }],
 };
 describe('season content validation', () => {
+  it('validates optional pipeline-only tree crown clipping on light strings', () => {
+    const installation = {
+      id: 'yard',
+      anchor: 'osm:way/1',
+      kind: 'light-string' as const,
+      layout: 'perimeter' as const,
+      label: 'Lights',
+      sources: season.sources,
+      spacing_m: 3,
+    };
+    for (const exclude_tree_crowns of [undefined, false, true])
+      expect(
+        Season.safeParse({ ...season, installations: [{ ...installation, exclude_tree_crowns }] })
+          .success,
+      ).toBe(true);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...installation, exclude_tree_crowns: 'yes' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      Season.safeParse({
+        ...season,
+        installations: [{ ...installation, kind: 'decorated-canopy', exclude_tree_crowns: true }],
+      }).success,
+    ).toBe(false);
+  });
   it('accepts center-inside and overlapping crown selection only for decorated canopies', () => {
     const canopy = {
       id: 'lights',

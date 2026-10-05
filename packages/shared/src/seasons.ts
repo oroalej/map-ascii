@@ -66,6 +66,7 @@ export type SeasonInstallation = {
       mount?: 'canopy';
       bulb_spacing_m?: number;
       palette?: 'warm' | 'christmas';
+      exclude_tree_crowns?: boolean;
     }
   | { kind: 'decorated-canopy'; trees?: 'inside' | 'overlapping' }
   | {

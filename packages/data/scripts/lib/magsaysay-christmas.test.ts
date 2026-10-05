@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
-import { Season, localMetricProjection, type SeasonalPoint } from '@atlas/shared';
+import {
+  Season,
+  localMetricProjection,
+  type SeasonalPoint,
+  type SeasonalLightStringRecord,
+} from '@atlas/shared';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';
@@ -16,12 +21,14 @@ const config = {
 };
 const features = [...reference.features, ...reference.integrationTrees] as AtlasFeature[];
 
-it('wraps the existing roadside crown and retains house lights without yard strings, paths or parking', () => {
-  expect(config.installations).toHaveLength(4);
-  expect(config.grounds).toHaveLength(3);
-  expect(config.installations.filter((i) => i.kind === 'light-string')).toMatchObject([
-    { id: 'magsaysay-house-lights', layout: 'building-perimeter' },
-  ]);
+it('retains yard strings outside the roadside crown, with crown wraps and unchanged house lights', () => {
+  expect(config.installations).toHaveLength(13);
+  expect(config.grounds).toHaveLength(9);
+  const yard = config.installations.filter(
+    (i) => i.kind === 'light-string' && i.layout !== 'building-perimeter',
+  );
+  expect(yard).toHaveLength(9);
+  expect(yard.every((i) => i.kind === 'light-string' && i.exclude_tree_crowns)).toBe(true);
   expect(config.installations.find((i) => i.id === 'magsaysay-tree-lights')).toMatchObject({
     kind: 'decorated-canopy',
     grounds: 'magsaysay-tree-display',
@@ -40,7 +47,52 @@ it('wraps the existing roadside crown and retains house lights without yard stri
     radius_m: 8.5,
   });
   expect(new Set(result.records.map((r) => r.id)).size).toBe(result.records.length);
-  const strings = result.records.filter((r) => r.kind === 'light-string');
+  const yardStrings = result.records.filter(
+    (r): r is SeasonalLightStringRecord =>
+      r.kind === 'light-string' && r.installation !== 'magsaysay-house-lights',
+  );
+  expect(new Set(yardStrings.map((r) => r.installation))).toEqual(new Set(yard.map((i) => i.id)));
+  const beforeClipping = generateSeasonalInstallations(features, [
+    {
+      ...config,
+      installations: config.installations.map((i) =>
+        i.kind === 'light-string' ? { ...i, exclude_tree_crowns: false } : i,
+      ),
+    },
+  ]).records.filter(
+    (r): r is SeasonalLightStringRecord =>
+      r.kind === 'light-string' && r.installation !== 'magsaysay-house-lights',
+  );
+  const center = reference.integrationTrees[0]!.geometry.coordinates as SeasonalPoint;
+  const frame = localMetricProjection(center);
+  const nearest = (from: SeasonalPoint, to: SeasonalPoint) => {
+    const a = frame.to(from),
+      b = frame.to(to);
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1];
+    const t = Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(a[0] + dx * t, a[1] + dy * t);
+  };
+  expect(beforeClipping.some((r) => r.kind === 'light-string' && nearest(r.from, r.to) < 8.5)).toBe(
+    true,
+  );
+  let unaffected = 0;
+  for (const record of beforeClipping) {
+    if (record.kind !== 'light-string') throw new Error('expected yard string');
+    if (nearest(record.from, record.to) >= 8.5 + 1e-4) {
+      expect(yardStrings.find((r) => r.id === record.id)).toEqual(record);
+      unaffected++;
+    }
+  }
+  expect(unaffected).toBeGreaterThan(10);
+  for (const record of yardStrings) {
+    if (record.kind !== 'light-string') throw new Error('expected yard string');
+    expect(nearest(record.from, record.to)).toBeGreaterThanOrEqual(8.5 - 1e-4);
+  }
+  const strings = result.records.filter(
+    (r): r is SeasonalLightStringRecord =>
+      r.kind === 'light-string' && r.installation === 'magsaysay-house-lights',
+  );
   expect(strings).toHaveLength(21);
   expect(
     strings.every((r) => r.installation === 'magsaysay-house-lights' && r.mount === 'building'),
@@ -49,6 +101,7 @@ it('wraps the existing roadside crown and retains house lights without yard stri
   if (house.geometry.type !== 'Polygon') throw new Error('expected complete house');
   const roof = polygon(house.geometry.coordinates);
   for (const string of strings) {
+    if (string.kind !== 'light-string') throw new Error('expected house string');
     expect(string.palette).toBe('christmas');
     expect(string.bulb_spacing_m).toBe(0.4);
     for (let n = 0; n <= 20; n++) {

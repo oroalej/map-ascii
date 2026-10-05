@@ -55,6 +55,7 @@ describe('season client payload', () => {
           'radius_m',
           'spacing_m',
           'trees',
+          'exclude_tree_crowns',
         ])
           expect(admitted).not.toHaveProperty(field);
       }
@@ -83,6 +84,7 @@ describe('season client payload', () => {
         'radius_m',
         'spacing_m',
         'trees',
+        'exclude_tree_crowns',
       ])
         expect(installation).not.toHaveProperty(field);
   });

@@ -1158,6 +1158,7 @@ export const Season = z
             mount: z.literal('canopy').optional(),
             bulb_spacing_m: z.number().min(0.3).max(3).optional(),
             palette: z.enum(['warm', 'christmas']).optional(),
+            exclude_tree_crowns: z.boolean().optional(),
           }),
           z.strictObject({
             ...SeasonInstallationBase,
