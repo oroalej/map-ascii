@@ -3397,6 +3397,7 @@ export class TileLife {
             [0, 0.25],
           ];
           let limit = 0;
+          let steeringOrigin = before.roadShift ?? 0;
           const steeringSpeed = Math.min(0.6, m.speed / this.perMeter / Math.SQRT2);
           if (
             m.kind === 'vehicle' &&
@@ -3477,11 +3478,28 @@ export class TileLife {
             ];
           } else if (
             m.kind === 'vehicle' &&
+            m.vehicle &&
             distance > 1e-8 * this.perMeter &&
             !intentionalHold &&
             this.scenes.transferable(m)
           ) {
             const side = before.roadSteering ?? (Math.sign(before.roadShift ?? 0) || -1);
+            const spec = VEHICLES[m.vehicle!];
+            const effectiveShift =
+              this.vehicleLane(before, before.line) -
+              laneOffset(this.roadWidth(before.line), spec.width, before.lane, spec.curb);
+            if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
+              const reach = FILLET.maxM * this.perMeter;
+              const behind = before.d <= reach ? this.corner(before, before.from, m) : undefined;
+              const remaining = this.segment(before.from, before.from + before.dir) - before.d;
+              const ahead =
+                remaining <= reach ? this.corner(before, before.from + before.dir, m) : undefined;
+              // A narrower road can clamp a retained shift well before its stored
+              // value. Start retries at the same effective lane, so their first
+              // increment moves. Active arcs keep both existing tangent offsets.
+              if (!(behind && before.d <= behind.length) && !(ahead && remaining <= ahead.length))
+                steeringOrigin = effectiveShift;
+            }
             tries = [
               [side, 0.5],
               [side, 0],
@@ -3503,9 +3521,10 @@ export class TileLife {
               const shiftLimit = this.geo.oneway?.[m.line] ? this.roadWidth(m.line) : 1;
               m.roadShift = Math.max(
                 -shiftLimit,
-                Math.min(shiftLimit, (before.roadShift ?? 0) + side * dt * steeringSpeed),
+                Math.min(shiftLimit, steeringOrigin + side * dt * steeringSpeed),
               );
-              if (Math.abs(this.offsetOf(m) - this.offsetOf(before, m)) < 1e-8) continue;
+              const lateral = Math.abs(this.offsetOf(m) - this.offsetOf(before, m));
+              if (lateral < 1e-8 || lateral > dt * steeringSpeed + 1e-8) continue;
             }
             if (!walking && share! < 0) {
               const retreat = Math.min(m.d, dt * this.perMeter * steeringSpeed);

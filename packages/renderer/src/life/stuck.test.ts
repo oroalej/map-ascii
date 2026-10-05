@@ -732,6 +732,102 @@ it('clears a committed turning jeepney past a curbside group with retained physi
   expect(person.walked).toBeGreaterThan(0.5);
 });
 
+it.each([-8, -3.4])(
+  'steers away from a curb obstruction with an inherited saturated lane shift (%s m)',
+  (shift) => {
+    const { world, life } = fixture(
+      LifeLine.roadMajor,
+      6,
+      false,
+      (b) =>
+        b.area(
+          'blocked',
+          rectangle(1000 + 75 * pm, 2048 - 5 * pm, 1000 + 80 * pm, 2048 - 1.5 * pm),
+        ),
+      1,
+    );
+    const m = mover('vehicle', 70, 1);
+    // -8 m can be retained after a wide one-way road enters this narrow piece.
+    // Both stored values have exactly the same valid physical starting lane.
+    m.lane = 1;
+    m.roadShift = shift;
+    const blocked = new PolygonIndex();
+    blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm - 1.5));
+    life.movers.push(m);
+    expect(blocked.hits(life.groundBodies(m))).toBe(false);
+    expect(life.offsetOf(m)).toBeCloseTo(-1.9);
+    for (let frame = 0; frame < 240; frame++) {
+      const before = life.pose(m);
+      world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+      const after = life.pose(m);
+      expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
+        5 / 30 + 1e-8,
+      );
+      expect(Math.abs(after.y - before.y) / pm).toBeLessThanOrEqual(0.6 / 30 + 1e-8);
+      expect(blocked.hits(life.groundBodies(m))).toBe(false);
+      expect(m.dir).toBe(1);
+      expect(m.v).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(life.offsetOf(m))).toBeLessThanOrEqual(1.9 + 1e-8);
+    }
+    expect((m.x - 1000) / pm).toBeGreaterThan(85);
+  },
+);
+
+it('retains both tangent offsets while a saturated shift is still on an active curve', () => {
+  const b = new LifeBuilder(),
+    corner = 1000 + 100 * pm;
+  b.line(
+    [
+      { x: 1000, y: 2048 },
+      { x: corner, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    14,
+    1,
+    1,
+  );
+  b.line(
+    [
+      { x: corner, y: 2048 },
+      { x: corner, y: 2048 + 100 * pm },
+    ],
+    LifeLine.roadMajor,
+    6,
+    2,
+    1,
+  );
+  const life = new TileLife(tile, b.finish(), 1);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  const m = mover('vehicle', 0, 1);
+  Object.assign(m, {
+    line: 1,
+    from: 2,
+    d: 3 * pm,
+    x: corner,
+    y: 2048 + 3 * pm,
+    hx: 0,
+    hy: 1,
+    lane: 1,
+    came: 1,
+    roadShift: -8,
+  });
+  life.movers.push(m);
+  const before = life.pose(m);
+  let trials = 0;
+  life.step(0.05, undefined, undefined, undefined, undefined, () => {
+    trials++;
+    const after = life.pose(m);
+    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
+      5 * 0.05 + 1e-8,
+    );
+    return false;
+  });
+  expect(trials).toBeGreaterThan(0);
+  expect(m.roadShift).toBe(-8);
+  expect(life.pose(m)).toEqual(before);
+});
+
 it('retains a safe steering direction after crossing the original offset sign', () => {
   const { world, life } = fixture(LifeLine.roadMajor, 8, false, (b) =>
     b.area('blocked', rectangle(1000 + 75 * pm, 2048 - 5 * pm, 1000 + 80 * pm, 2048 + 1.5 * pm)),
