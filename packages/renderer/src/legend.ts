@@ -36,7 +36,7 @@ import {
 } from './theme';
 
 export type LegendEntryId =
-  | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks'}`
+  | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
   | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'utilities'}`;
@@ -384,6 +384,31 @@ export function legendEntries(
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
       color: css(theme.fixturePaints[7]!),
     });
+  if (season?.labels.candles && fixtures?.seasonal?.candles)
+    entries.push({
+      id: 'info:season-candles',
+      classes: [],
+      label: season.labels.candles,
+      glyphs: '',
+      color: '#ffb347',
+      icons: [
+        {
+          pixels: ['..#..', '.###.', '..#..', '.ooo.', '.ooo.', '.ooo.'],
+          paint: '#ffb347',
+          tone: '#f2dfb0',
+        },
+      ],
+    });
+  for (const kind of ['visitors', 'congregations'] as const)
+    if (season?.labels[kind] && life && bandVisibility(LIFE_ZOOM.person, zoom) > 0)
+      entries.push({
+        id: `info:season-${kind}`,
+        classes: [],
+        label: `${season.labels[kind]} (simulated)`,
+        glyphs: '',
+        color: css(theme.styles.life_person!.color),
+        icons: peopleIcons(theme),
+      });
   if (season?.labels.lanterns && fixtures?.seasonal?.lanterns)
     entries.push({
       id: 'info:season-lanterns',

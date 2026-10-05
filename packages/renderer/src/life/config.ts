@@ -13,6 +13,7 @@ import {
   rhythmFor,
   type CityLifeConfig,
   type PlaceKind,
+  type RuntimeSeasonConfig,
   type ZoomBand,
 } from '@atlas/shared';
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
@@ -79,15 +80,49 @@ export function laneOffset(
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
  * side may overlap this much (m) and still pass.
  */
-export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3 } as const;
+export const FOLLOW = {
+  minGap: 1.5,
+  headway: 1.2,
+  squeeze: 0.3,
+  lateralPad: 0.3,
+  /** Where a lane moves sideways, following compares lanes this far ahead too, m. */
+  laneAheadM: 10,
+} as const;
 /** Required distance from a vehicle centre to a stop edge, m. */
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
-/** Lateral recovery/return speeds, m/s; clear road edge allowance for inferred widths, m. */
-export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
-/** Turn back after this many active seconds attempting a blocked walking route. */
-export const WALK_RECOVERY = { seconds: 3 } as const;
+/**
+ * Terrain recovery for vehicles: sideways metres per metre travelled while shifting or returning
+ * (no sideways move while stopped); clear road edge allowance for inferred widths, m.
+ */
+export const ROAD_AVOID = { slope: 0.25, shoulder: 0.5 } as const;
+/**
+ * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
+ * or the movement guard has refused it for any reason this long.
+ */
+export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
+/**
+ * Turn back after this many active seconds attempting a blocked walking route; from fixed
+ * obstacles at once, once at least `terrainMinWalkM` has been walked since the last turn back.
+ */
+export const WALK_RECOVERY = { seconds: 3, terrainMinWalkM: 1 } as const;
+/**
+ * People wait at the curb while a vehicle moving faster than `movingMs` (m/s) couldn't stop
+ * `marginM` short of the crossing.
+ */
+export const WALK_GAP = { movingMs: 0.5, marginM: 2 } as const;
+/** People turn round on the spot over this many seconds. */
+export const TURN_AROUND = { seconds: 0.4 } as const;
+/** Having stepped aside on a path, the share of the offset given back per metre walked on. */
+export const WALK_ASIDE = { restore: 0.3 } as const;
+/** Walking lines shorter than this, m, joined to no other at either end, get no residents. */
+export const STRANDED_WALK_M = 20;
+/**
+ * A crossing's walking line runs this far past its walkable cut at each end (raster/geometry.ts),
+ * giving a group room to clear the road before turning at an unattached end.
+ */
+export const CROSSING_WALK_PAST_M = 1.5;
 /** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,
@@ -121,6 +156,8 @@ export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
 export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookaheadM: 60 } as const;
+/** A terrain-cleared corner may run this far past its vertex, m. */
+export const FILLET_RUN_ON_M = 2 * FILLET.maxM;
 export const JUNCTION = {
   atLine: 3,
   linkedLookaheadM: 60,
@@ -500,6 +537,7 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
   /** Night creatures (bats, life/birds.ts `nocturnal`): `nightActivity`. */
   night: number;
   places: Readonly<Record<PlaceKind, number>>;
+  season?: { visitors: number; congregations: number };
 };
 
 /**
@@ -515,6 +553,7 @@ export function activityLevels(
     weekday: number;
     life?: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined;
   },
+  season?: Pick<RuntimeSeasonConfig, 'visitors' | 'congregations'>,
 ): Activity {
   const byRhythm = (kind: 'vehicle' | 'person' | 'boat' | 'train') =>
     clock ? curveAt(rhythmFor(clock.life, kind), clock.minutes) : activity(kind, daylight);
@@ -532,6 +571,13 @@ export function activityLevels(
     cat: activity('cat', daylight),
     night: nightActivity(daylight),
     places,
+    ...((season?.visitors || season?.congregations) && {
+      season: {
+        visitors: season.visitors && clock ? curveAt(season.visitors.hours, clock.minutes) : 0,
+        congregations:
+          season.congregations && clock ? curveAt(season.congregations.hours, clock.minutes) : 0,
+      },
+    }),
   };
 }
 
@@ -541,9 +587,18 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
     Math.abs(a.night - b.night) > epsilon ||
-    PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon)
+    PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon) ||
+    Math.abs((a.season?.visitors ?? 0) - (b.season?.visitors ?? 0)) > epsilon ||
+    Math.abs((a.season?.congregations ?? 0) - (b.season?.congregations ?? 0)) > epsilon
   );
 }
+
+/** Illustrative long pauses beside memorials and outside churches, in seconds. */
+export const SEASON_CROWD = {
+  pause: [40, 180] as const,
+  speed: [0.3, 0.7] as const,
+  congregationWanderScale: 1.5,
+};
 
 /** The render class each kind is drawn with (its glyphs and color, theme.ts). */
 export const lifeClassFor: Readonly<Record<AgentKind, LifeClass>> = {

@@ -12,6 +12,7 @@ import {
   transferables,
 } from './raster/geometry';
 import type { WorkerRequest, WorkerResponse, ResidentialResponse } from './tiles';
+import { prepareMemorialSites } from './life/seasonal-candles';
 
 // The package compiles with the DOM lib, where `self` is a Window; this file runs in a worker.
 const scope = self as unknown as {
@@ -23,11 +24,13 @@ let archive: PMTiles | undefined;
 let maxZoom: number | undefined;
 let fireworks = false;
 let fireworksActive = false;
+let memorials = false;
 const registry = createIdRegistry();
 
 async function handle(request: WorkerRequest) {
   if (request.type === 'init') {
     fireworks = request.fireworks === true;
+    memorials = request.memorials === true;
     fireworksActive = fireworks && request.fireworksActive === true;
     archive = new PMTiles(request.url);
     const h = await archive.getHeader();
@@ -69,6 +72,7 @@ async function handle(request: WorkerRequest) {
     return;
   }
   const geometry = buildTileGeometry(tile.layers, registry, { z, x, y }, maxZoom, fireworksActive);
+  if (memorials && z === maxZoom) prepareMemorialSites({ z, x, y }, geometry.life);
   const decodeMs = performance.now() - start;
   scope.postMessage(
     { type: 'tile', key, geometry, newFeatures: registry.takeNew(), decodeMs },

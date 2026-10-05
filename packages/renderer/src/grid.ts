@@ -48,6 +48,8 @@ export function screenArea(
 /** The grid for a view, and how tiles and points map onto it. */
 export type GridPlacement = {
   grid: Grid;
+  /** Zoom-zero world pixels to cells, without repeating geographic projection. */
+  world?: readonly [number, number, number, number];
   /** Tile units → cell-grid clip space. */
   tileMatrix: (tile: TileId) => number[];
   /** A point's position on the grid, in (fractional) cells. */
@@ -69,6 +71,12 @@ export function placeGrid(
   const originCol = Math.floor(left / cellDev.w) - 1;
   const originRow = Math.floor(top / cellDev.h) - 1;
   return {
+    world: [
+      (2 ** camera.zoom * dpr) / cellDev.w,
+      (2 ** camera.zoom * dpr) / cellDev.h,
+      originCol,
+      originRow,
+    ],
     grid: {
       originCol,
       originRow,

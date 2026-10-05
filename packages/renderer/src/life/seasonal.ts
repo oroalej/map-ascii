@@ -3,7 +3,7 @@ import {
   DEFAULT_ROAD_WIDTH_M,
   bandVisibility,
   SEASON_ZOOM,
-  type PlaceKind,
+  type SeasonAnchorKind,
   type RuntimeSeasonConfig,
   type UtilityRecord,
   type UtilitySpan,
@@ -36,11 +36,13 @@ import {
   packInstallation,
   type InstallationFixture,
 } from './seasonal-installations';
+import { candleFixtures, type CandleFixture } from './seasonal-candles';
 
 type Point = [number, number];
 import { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 export { SeasonalPart, SeasonalGlyph } from './seasonal-glyphs';
 export type SeasonalFixture =
+  | CandleFixture
   | InstallationFixture
   | { kind: 'season-lantern'; lamp: Extract<LegacyStreetFixture, { kind: 'streetlight' }> }
   | {
@@ -52,11 +54,17 @@ export type SeasonalFixture =
       style?: 'red-yellow-rectangles';
       priority?: BuntingPriority;
     };
-export type SeasonalVisibility = { lanterns: boolean; bunting: boolean; installations?: boolean };
+export type SeasonalVisibility = {
+  lanterns: boolean;
+  bunting: boolean;
+  installations?: boolean;
+  candles?: boolean;
+};
 export function isSeasonalFixture(fixture: StreetFixture): fixture is SeasonalFixture {
   return (
     fixture.kind === 'season-lantern' ||
     fixture.kind === 'season-bunting' ||
+    fixture.kind === 'season-candle' ||
     fixture.kind === 'season-installation'
   );
 }
@@ -67,15 +75,19 @@ export type SeasonalTile = {
   utilities?: readonly UtilityRecord[];
   seasonal?: SeasonalPayload;
 };
-export type SeasonAnchor = { at: Point; kind: PlaceKind | 'market' };
+export type SeasonAnchor = { at: Point; kind: SeasonAnchorKind | 'market'; radius_m?: number };
 type Geography = Pick<SeasonalTile, 'tile' | 'life'>;
 
 /** Place centers are tile-owned, so neighboring tiles must contribute their anchors too. */
 export function collectSeasonAnchors(tiles: readonly Geography[]): SeasonAnchor[] {
   const found = new Map<string, SeasonAnchor>();
-  const add = (tile: TileId, x: number, y: number, kind: SeasonAnchor['kind']) => {
+  const add = (tile: TileId, x: number, y: number, kind: SeasonAnchor['kind'], radius_m = 0) => {
     const at = tileToLngLat(tile, { x, y });
-    found.set(`${kind}/${at[0].toFixed(7)}/${at[1].toFixed(7)}`, { at, kind });
+    found.set(`${kind}/${at[0].toFixed(7)}/${at[1].toFixed(7)}`, {
+      at,
+      kind,
+      ...(radius_m && { radius_m }),
+    });
   };
   for (const { tile, life } of tiles) {
     for (let i = 0; i < life.places.length; i += PLACE_STRIDE) {
@@ -84,6 +96,14 @@ export function collectSeasonAnchors(tiles: readonly Geography[]): SeasonAnchor[
     }
     for (let i = 0; i < life.markets.length; i += 2)
       add(tile, life.markets[i]!, life.markets[i + 1]!, 'market');
+    for (let i = 0; i < (life.cemeteries?.length ?? 0); i += 3)
+      add(
+        tile,
+        life.cemeteries![i]!,
+        life.cemeteries![i + 1]!,
+        'cemetery',
+        life.cemeteries![i + 2]! * metersPerUnit(tile),
+      );
   }
   return [...found.values()];
 }
@@ -92,17 +112,23 @@ export function collectSeasonAnchors(tiles: readonly Geography[]): SeasonAnchor[
 export function seasonProximity(
   tile: TileId,
   anchors: readonly SeasonAnchor[],
-  near: readonly PlaceKind[] | undefined,
+  near: readonly SeasonAnchorKind[] | undefined,
   radius: number | undefined,
   markets = false,
 ) {
   if (!near) return () => true;
   const points = anchors
     .filter((a) => (a.kind === 'market' ? markets : near.includes(a.kind)))
-    .map((a) => lngLatToTile(tile, ...a.at));
-  const reach2 = ((radius ?? 0) / metersPerUnit(tile)) ** 2;
-  return (x: number, y: number) => points.some((p) => (p.x - x) ** 2 + (p.y - y) ** 2 <= reach2);
+    .map((a) => ({
+      ...lngLatToTile(tile, ...a.at),
+      reach2: (((radius ?? 0) + (a.radius_m ?? 0)) / metersPerUnit(tile)) ** 2,
+    }));
+  return (x: number, y: number) => points.some((p) => (p.x - x) ** 2 + (p.y - y) ** 2 <= p.reach2);
 }
+
+/** Older seasons retain their market fallback; cemetery-only calendars use cemetery edges. */
+export const seasonMarkets = (near: readonly SeasonAnchorKind[]) =>
+  near.some((kind) => kind !== 'cemetery');
 
 /** A fixed reference latitude keeps the world lattice identical across adjacent tile rows. */
 function fallbackBunting(
@@ -235,6 +261,7 @@ export function seasonalFixtures(
   season: RuntimeSeasonConfig | undefined,
   latitude: number,
   buntingVisible = true,
+  candlesVisible = true,
 ): SeasonalFixture[] {
   if (!season) return [];
   const anchors = collectSeasonAnchors(groups);
@@ -269,6 +296,8 @@ export function seasonalFixtures(
         spans.set(record.span.id, record.span);
   const bunting = new Map<string, Extract<SeasonalFixture, { kind: 'season-bunting' }>>();
   for (const group of groups) {
+    if (season.candles && candlesVisible)
+      result.push(...candleFixtures(group.tile, group.life, season.candles.share));
     if (season.lanterns) {
       const near = seasonProximity(
         group.tile,
@@ -379,6 +408,7 @@ export function createSeasonalFixtureCache() {
   let previous: readonly SeasonalTile[] = [],
     previousSeason: RuntimeSeasonConfig | undefined,
     previousBunting = true,
+    previousCandles = true,
     previousLatitude = NaN;
   let result: SeasonalFixture[] = [];
   return (
@@ -386,11 +416,13 @@ export function createSeasonalFixtureCache() {
     season: RuntimeSeasonConfig | undefined,
     latitude: number,
     buntingVisible = true,
+    candlesVisible = true,
   ) => {
     if (!season && !previousSeason) return result;
     if (
       season === previousSeason &&
       buntingVisible === previousBunting &&
+      candlesVisible === previousCandles &&
       latitude === previousLatitude &&
       groups.length === previous.length &&
       groups.every((g, i) => {
@@ -411,7 +443,8 @@ export function createSeasonalFixtureCache() {
     previousSeason = season;
     previousLatitude = latitude;
     previousBunting = buntingVisible;
-    result = seasonalFixtures(groups, season, latitude, buntingVisible);
+    previousCandles = candlesVisible;
+    result = seasonalFixtures(groups, season, latitude, buntingVisible, candlesVisible);
     return result;
   };
 }
@@ -472,14 +505,17 @@ export function packSeasonalFixtures(
       : fixtures;
     surfaceOrderCache.set(fixtures, ordered);
   }
+  const lanternAlpha = Math.round(bandVisibility(SEASON_ZOOM.lanterns, zoom) * 255);
+  const buntingAlpha = Math.round(bandVisibility(SEASON_ZOOM.bunting, zoom) * 255);
+  const installationAlpha = Math.round(bandVisibility(SEASON_ZOOM.installations, zoom) * 255);
+  if (!lanternAlpha && !buntingAlpha && !installationAlpha) return visibility;
   for (const fixture of ordered) {
-    const band =
+    const alpha =
       fixture.kind === 'season-lantern'
-        ? SEASON_ZOOM.lanterns
+        ? lanternAlpha
         : fixture.kind === 'season-bunting'
-          ? SEASON_ZOOM.bunting
-          : SEASON_ZOOM.installations;
-    const alpha = Math.round(bandVisibility(band, zoom) * 255);
+          ? buntingAlpha
+          : installationAlpha;
     if (!alpha) continue;
     if (fixture.kind === 'season-installation') {
       visibility.installations =
@@ -493,6 +529,19 @@ export function packSeasonalFixtures(
             owners[r * grid.cols + c] = -5;
           return ok;
         }) || visibility.installations === true;
+      continue;
+    }
+    if (fixture.kind === 'season-candle') {
+      const [x, y] = grid.toCell(...fixture.at);
+      visibility.candles =
+        write(
+          x,
+          y,
+          SeasonalGlyph.candle,
+          SeasonalPart.candle,
+          lightByte(LampState.candle, fixture.seed),
+          alpha,
+        ) || visibility.candles === true;
       continue;
     }
     if (fixture.kind === 'season-lantern') {

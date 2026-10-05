@@ -92,6 +92,10 @@ export function placeTileLamps(
  * the center of its pool and points its radius east and north of that, and how it is.
  */
 export type VisibleLamp = {
+  /** Immutable zoom-zero pool centre and axis offsets for compact seasonal pools. */
+  worldPool?: readonly [number, number, number, number];
+  /** Seasonal fixtures provide their own glyph and need only the compact pool. */
+  headless?: boolean;
   lng: number;
   lat: number;
   center: [number, number];
@@ -105,6 +109,7 @@ export type VisibleLamp = {
 export type LightGrid = {
   cols: number;
   rows: number;
+  world?: readonly [number, number, number, number];
   /** A point's position on the grid, in fractional cells (passes.ts `GridPlacement.toCell`). */
   toCell: (lng: number, lat: number) => [number, number];
 };
@@ -135,6 +140,7 @@ function pool(
   g: number,
   clocks?: (cell: number, token: number) => void,
   clock = ORDINARY_CLOCK,
+  touched?: (cell: number) => void,
 ) {
   const { cols, rows } = grid;
   const c0 = Math.max(0, Math.floor(cx - rx) - 1);
@@ -149,6 +155,7 @@ function pool(
       const head = out[at + 2] !== 0;
       if (d >= 1) {
         if (!head && out[at + 3] === 0) {
+          touched?.(at / 4);
           out[at + 1] = g;
           clocks?.(at / 4, clock);
           out[at + 3] = 255;
@@ -160,12 +167,22 @@ function pool(
       // Under a head the pool still shines, but the cell keeps the head's light.
       out[at] = value;
       if (head) continue;
+      if (out[at + 3] === 0) touched?.(at / 4);
       out[at + 1] = g;
       clocks?.(at / 4, clock);
       out[at + 3] = 255;
     }
   }
 }
+
+const candleBatches = new WeakMap<
+  Uint8Array,
+  {
+    texels: Uint8Array;
+    cells: number[];
+    touch: (cell: number) => void;
+  }
+>();
 
 /**
  * Pack `lamps` into `out` (cols × rows × 4 bytes, cleared first): per cell, the pool of light
@@ -185,7 +202,7 @@ export function packLights(
   // Heads first, so pools leave them be.
   let drawn = 0;
   for (const lamp of lamps) {
-    if (lamp.state === LampState.flood || lamp.state === LampState.shop) continue;
+    if (lamp.headless || lamp.state === LampState.flood || lamp.state === LampState.shop) continue;
     let [hx, hy] = toCell(lamp.lng, lamp.lat);
     const [mx, my] = toCell(...lamp.center);
     const side = Math.hypot(hx - mx, hy - my);
@@ -202,22 +219,76 @@ export function packLights(
     out[at + 3] = 255;
     drawn++;
   }
+  let batch: ReturnType<typeof candleBatches.get>;
+  const flush = () => {
+    if (!batch?.cells.length) return;
+    for (const cell of batch.cells) {
+      const at = cell * 4;
+      if (batch.texels[at]! > out[at]!) {
+        out[at] = batch.texels[at]!;
+        if (!out[at + 2]) {
+          out[at + 1] = batch.texels[at + 1]!;
+          out[at + 3] = 255;
+        }
+      } else if (!out[at + 2] && !out[at + 3]) {
+        out[at + 1] = batch.texels[at + 1]!;
+        out[at + 3] = 255;
+      }
+      batch.texels.fill(0, at, at + 4);
+    }
+    batch.cells.length = 0;
+  };
   for (const lamp of lamps) {
     if (lamp.state === LampState.dead) continue;
-    const [cx, cy] = toCell(...lamp.pool);
-    const [ex, ey] = toCell(...lamp.east);
-    const [nx, ny] = toCell(...lamp.north);
+    const candle = lamp.headless && lamp.state === LampState.candle;
+    if (!candle) flush();
+    let cx: number, cy: number, rx: number, ry: number;
+    if (candle && lamp.worldPool && grid.world) {
+      const [sx, sy, ox, oy] = grid.world;
+      cx = lamp.worldPool[0] * sx - ox;
+      cy = lamp.worldPool[1] * sy - oy;
+      rx = Math.max(1, lamp.worldPool[2] * sx);
+      ry = Math.max(1, lamp.worldPool[3] * sy);
+    } else {
+      [cx, cy] = toCell(...lamp.pool);
+      const [ex, ey] = toCell(...lamp.east);
+      const [nx, ny] = toCell(...lamp.north);
+      rx = Math.max(1, Math.hypot(ex - cx, ey - cy));
+      ry = Math.max(1, Math.hypot(nx - cx, ny - cy));
+    }
     // At least a cell, so the pool still shows when zoomed out.
-    const rx = Math.max(1, Math.hypot(ex - cx, ey - cy));
-    const ry = Math.max(1, Math.hypot(nx - cx, ny - cy));
+    if (cx + rx + 2 < 0 || cy + ry + 2 < 0 || cx - rx - 2 >= cols || cy - ry - 2 >= rows) continue;
     const strength =
       lamp.state === LampState.flood
         ? FLOOD.strength
         : lamp.state === LampState.shop
           ? SHOP.strength
           : 1;
-    pool(out, grid, cx, cy, rx, ry, strength, lightByte(lamp.state, lamp.seed));
+    if (candle) {
+      if (!batch) {
+        batch = candleBatches.get(out);
+        if (!batch) {
+          const cells: number[] = [];
+          batch = { texels: new Uint8Array(out.length), cells, touch: (cell) => cells.push(cell) };
+          candleBatches.set(out, batch);
+        }
+      }
+      pool(
+        batch.texels,
+        grid,
+        cx,
+        cy,
+        rx,
+        ry,
+        strength,
+        lightByte(lamp.state, lamp.seed),
+        undefined,
+        ORDINARY_CLOCK,
+        batch.touch,
+      );
+    } else pool(out, grid, cx, cy, rx, ry, strength, lightByte(lamp.state, lamp.seed));
   }
+  flush();
   return drawn;
 }
 

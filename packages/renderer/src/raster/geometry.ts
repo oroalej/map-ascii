@@ -59,6 +59,7 @@ import { LabelRank, LANDMARK_LABEL_BAND, labelText, MONUMENT_LABEL_BAND } from '
 import {
   CANAL_KIND,
   LifeBuilder,
+  graveSeed,
   LifeLine,
   lifeLineFor,
   lifeTransferables,
@@ -73,6 +74,7 @@ import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { stripRing } from '../life/terrain';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import {
+  CROSSING_WALK_PAST_M,
   DEFAULT_ROAD_WIDTH_M,
   FLOOD,
   SHOP,
@@ -137,6 +139,9 @@ const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
   road_minor: { min: 18 },
   path: { min: 18.5 },
 };
+
+/** A crossing's walkable cut reaches this far past each side of its mapped width, m. */
+const CROSSING_CUT_M = 1.5;
 
 /**
  * How a street's name ranks and when it shows, from its class and OSM kind (`highway=…`): only
@@ -770,6 +775,7 @@ export function buildTileGeometry(
   fireworks = true,
 ): TileGeometry {
   const unitMeters = tile ? metersPerUnit(tile) : undefined;
+  const memorials = !!tile && tile.z === maxZoom;
   const drawnAt = (zoom: number) =>
     !tile || maxZoom === undefined || tile.z >= Math.min(zoom, maxZoom) - 1;
   const strips = drawnAt(ROAD_AREA_ZOOM);
@@ -821,6 +827,7 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      let burialHash: number | undefined;
       // A site's building or monument may be in another tile on a cold direct-URL load.
       // Register its real metadata without assigning its id to the surface's outline.
       const descriptor = feature.properties.detail_selection;
@@ -1050,15 +1057,18 @@ export function buildTileGeometry(
                 const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
                 const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
                 const along = 1.5 / unitMeters;
-                life.area('crossing', [
-                  stripRing(
-                    { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along },
-                    { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along },
-                    halfWidth,
-                  ),
-                ]);
+                const a = { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along };
+                const b = { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along };
+                // The walkable cut runs past the mapped width: the carriageway's corners and
+                // inferred widths can reach further, which would strand walkers mid-crossing.
+                life.area(
+                  'crossing',
+                  [stripRing(a, b, halfWidth + CROSSING_CUT_M / unitMeters)],
+                  false,
+                  [stripRing(a, b, halfWidth)],
+                );
                 // Give a whole group room to clear the road before turning at an unattached end.
-                const reach = halfWidth + 3 / unitMeters;
+                const reach = halfWidth + (CROSSING_CUT_M + CROSSING_WALK_PAST_M) / unitMeters;
                 walkingLines.push({
                   points: [
                     { x: p.x - Math.cos(theta) * reach, y: p.y - Math.sin(theta) * reach },
@@ -1132,7 +1142,16 @@ export function buildTileGeometry(
               addShop(p, SHOP.pointRadius / 2 / unitMeters, !!shopPosition);
             }
             if (place && inTile)
-              life.place(p, place, 0, false, Number(feature.properties.seat_bearing ?? NaN));
+              life.place(
+                p,
+                place,
+                0,
+                false,
+                Number(feature.properties.seat_bearing ?? NaN),
+                typeof feature.properties.landmark_id === 'string'
+                  ? feature.properties.landmark_id
+                  : undefined,
+              );
           }
         }
       } else if (feature.type === 2) {
@@ -1280,6 +1299,7 @@ export function buildTileGeometry(
           !overhead &&
           feature.properties.detail_blocked === true &&
           className === 'building_part' &&
+          !String(feature.properties.kind).startsWith('burial=') &&
           rawHeight > 0 &&
           rawHeight <= 0.2;
         const solid = !overhead && !walkableStep && isBuilding(className) && height > 0;
@@ -1334,7 +1354,8 @@ export function buildTileGeometry(
           }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
-            else if (walkableStep) life.area('vehicle-blocked', polygon);
+            // A curb ring encloses its island: vehicles keep off all of it, not just the curb.
+            else if (walkableStep) life.area('vehicle-blocked', [polygon[0]!]);
             else if (solid || standingWater || feature.properties.detail_blocked)
               life.area('blocked', polygon, standingWater);
             else if (className === 'trees') life.area('parking-exclusion', polygon);
@@ -1394,6 +1415,26 @@ export function buildTileGeometry(
             for (const i of triangles) fills.indices.push(base + i);
           }
           const outer = polygon[0]!;
+          if (!isRegion && memorials) {
+            if (
+              className === 'grass' &&
+              ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+            ) {
+              life.cemeteryArea(featureId, polygon);
+            }
+            if (
+              className === 'building_part' &&
+              String(feature.properties.kind).startsWith('burial=')
+            ) {
+              if (typeof feature.properties.detail_parent === 'string')
+                life.burialParent(feature.properties.detail_parent);
+              const center = ringCentroid(outer);
+              const wx = Math.round(tile.x * EXTENT + center.x),
+                wy = Math.round(tile.y * EXTENT + center.y);
+              burialHash ??= hashString(featureId);
+              life.grave(center, featureId, graveSeed(burialHash, wx, wy), [wx, wy]);
+            }
+          }
           if (!isRegion && obstacle) life.obstacle(outer, true);
           if (!isRegion && plazaClasses.has(className)) life.line(outer, LifeLine.plaza);
           if (!isRegion && className === 'parking' && unitMeters) {
@@ -1404,6 +1445,13 @@ export function buildTileGeometry(
         }
         if (largest) {
           const center = ringCentroid(largest.ring);
+          if (
+            !isRegion &&
+            className === 'grass' &&
+            ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+          ) {
+            life.cemetery(center, Math.sqrt(largest.area / 2 / Math.PI));
+          }
           if (isBuilding(className)) addPoint(center, cls);
           addMarkers(center);
           // A landmark is floodlit at night, over its whole footprint (life/lights.ts).
@@ -1431,7 +1479,16 @@ export function buildTileGeometry(
           if (!isRegion && place && inside) {
             // `signedArea` is twice the area; the radius of a circle as big.
             const radius = Math.sqrt(largest.area / 2 / Math.PI);
-            life.place(center, place, radius, isBuilding(className) && height > 0);
+            life.place(
+              center,
+              place,
+              radius,
+              isBuilding(className) && height > 0,
+              NaN,
+              typeof feature.properties.landmark_id === 'string'
+                ? feature.properties.landmark_id
+                : undefined,
+            );
           }
         }
       }

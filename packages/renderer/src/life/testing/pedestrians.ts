@@ -23,6 +23,17 @@ export function pedestrianEntry() {
     LifeLine.path,
     3,
   );
+  // Sidewalks along both curbs, so the crossing joins the walking network (an unjoined
+  // crossing has no residents).
+  for (const y of [-40, 40])
+    b.line(
+      [
+        { x: 2000, y: 2000 + y * pm },
+        { x: 2000 + 30 * pm, y: 2000 + y * pm },
+      ],
+      LifeLine.path,
+      3,
+    );
   b.area('crossing', [
     [
       { x: 2000 - 1.5 * pm, y: 2000 - 7 * pm },
