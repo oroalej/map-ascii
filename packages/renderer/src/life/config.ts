@@ -84,6 +84,10 @@ export const FOLLOW = { minGap: 1.5, headway: 1.2, squeeze: 0.3, lateralPad: 0.3
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
+/** Lateral recovery/return speeds, m/s; clear one-way road edge allowance, m. */
+export const ROAD_AVOID = { shift: 0.8, restore: 0.4, shoulder: 0.5 } as const;
+/** Turn back after this many active seconds attempting a blocked walking route. */
+export const WALK_RECOVERY = { seconds: 3 } as const;
 /** Distances are metres; holdMax counts active simulation seconds. */
 export const PEDESTRIAN = {
   corridorPad: 0.3,

@@ -116,7 +116,11 @@ describe('cross-zoom continuity', () => {
         elapsed: 7,
         expired: false,
       };
-      if (kind === LifeLine.roadMajor) for (const m of movers) m.pedestrianHolds = [crossingHold];
+      if (kind === LifeLine.roadMajor)
+        for (const m of movers) {
+          m.pedestrianHolds = [crossingHold];
+          m.roadShift = 0.4;
+        }
       if (movers[0]!.train) {
         movers[0]!.pause = 9;
         movers[0]!.train.reverse = true;
@@ -149,6 +153,7 @@ describe('cross-zoom continuity', () => {
         expect(m.routing?.seed).toBe(state.routing?.seed);
         expect(m.routing?.turns).toBe(state.routing?.turns);
         expect(m.pedestrianHolds).toEqual(state.pedestrianHolds);
+        expect(m.roadShift).toBe(state.roadShift);
         if (m.train) {
           expect(m.pause).toBe(9);
           expect(m.train.reverse).toBe(true);

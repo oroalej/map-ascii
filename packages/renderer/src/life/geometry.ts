@@ -228,7 +228,8 @@ export type LifeGeometry = {
 };
 
 export type LifeArea = {
-  kind: 'parking' | 'blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
+  kind:
+    'parking' | 'blocked' | 'vehicle-blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
   rings: TilePoint[][];
   water?: boolean;
 };

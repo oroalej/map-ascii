@@ -1057,8 +1057,8 @@ export function buildTileGeometry(
                     halfWidth,
                   ),
                 ]);
-                // Extend to the curb so mapped sidewalks and walking ways can attach safely.
-                const reach = halfWidth + 1 / unitMeters;
+                // Give a whole group room to clear the road before turning at an unattached end.
+                const reach = halfWidth + 3 / unitMeters;
                 walkingLines.push({
                   points: [
                     { x: p.x - Math.cos(theta) * reach, y: p.y - Math.sin(theta) * reach },
@@ -1276,15 +1276,22 @@ export function buildTileGeometry(
           plan && tile ? roofFrame(plan.origin).metersPerTileUnit(tile.z) : undefined;
         // What walkers and parked cars keep out of: solid buildings (not grounds) and water.
         const overhead = feature.properties.detail_overhead === true;
-        const solid = !overhead && isBuilding(className) && height > 0;
+        const walkableStep =
+          !overhead &&
+          feature.properties.detail_blocked === true &&
+          className === 'building_part' &&
+          rawHeight > 0 &&
+          rawHeight <= 0.2;
+        const solid = !overhead && !walkableStep && isBuilding(className) && height > 0;
         const standingWater = className === 'water_area' || className === 'water_sea';
         const obstacle =
-          !!feature.properties.detail_blocked ||
-          solid ||
-          standingWater ||
-          (!overhead && className === 'building_part') ||
-          className === 'water_river' ||
-          className === 'water_stream';
+          !walkableStep &&
+          (!!feature.properties.detail_blocked ||
+            solid ||
+            standingWater ||
+            (!overhead && className === 'building_part') ||
+            className === 'water_river' ||
+            className === 'water_stream');
         const polygons = classifyRings(rings).map((polygon) => {
           const points: TilePoint[] = [];
           const coords: number[] = [];
@@ -1327,6 +1334,7 @@ export function buildTileGeometry(
           }
           if (!isRegion) {
             if (className === 'parking') life.area('parking', polygon);
+            else if (walkableStep) life.area('vehicle-blocked', polygon);
             else if (solid || standingWater || feature.properties.detail_blocked)
               life.area('blocked', polygon, standingWater);
             else if (className === 'trees') life.area('parking-exclusion', polygon);
