@@ -1,9 +1,9 @@
 import { expect, it, vi } from 'vitest';
-import { LifeWorld, TileLife } from './simulate';
+import { LifeWorld, TileLife, type Mover } from './simulate';
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import { pedestrianState } from './signals';
-import { bodyCorners, bodyInside, bodiesOverlap, type Point } from './occupancy';
+import { bodyCorners, bodyInside, bodiesOverlap, type Body, type Point } from './occupancy';
 import { frameBetween } from './frames';
 import { walkingBefore } from './continuity';
 import type { TileId } from '../tiles';
@@ -180,12 +180,35 @@ it('runs dense signalized crossroads with exact stops and only off-road waiting 
   expect(life.signals.signals[0]!.approaches!.every((a) => a.stopAlong !== undefined)).toBe(true);
   let waiting = 0,
     offRoad = true;
+  const checked = new WeakMap<Mover, readonly Body[]>();
   for (let frame = 0; frame < 300; frame++) {
     world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
     for (const m of life.movers)
       if (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing) {
         waiting++;
-        offRoad &&= life.roadTerrain.access.allows(life.groundBodies(m, 0.9), false);
+        const bodies = life.groundBodies(m, 0.9),
+          previous = checked.get(m);
+        // Terrain is immutable here. Recheck every changed physical member pose;
+        // an identical waiting footprint retains its already-proved clearance.
+        if (
+          !previous ||
+          bodies.length !== previous.length ||
+          bodies.some((b, i) => {
+            const old = previous[i]!;
+            return (
+              b.x !== old.x ||
+              b.y !== old.y ||
+              b.hx !== old.hx ||
+              b.hy !== old.hy ||
+              b.length !== old.length ||
+              b.width !== old.width ||
+              b.kind !== old.kind
+            );
+          })
+        ) {
+          offRoad &&= life.roadTerrain.access.allows(bodies, false);
+          checked.set(m, bodies);
+        }
       }
   }
   expect(waiting).toBeGreaterThan(0);

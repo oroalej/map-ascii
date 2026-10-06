@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { activityLevels, RUN, RECOVERY } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LocalScenes } from './interactions';
+import { LocalScenes, type Visit } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 import type { WalkingGraph } from './navigation';
-import { Occupancy, memberSize } from './occupancy';
+import { Occupancy, memberSize, sweptBodyOverlap, type Body } from './occupancy';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -56,6 +56,127 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('restores every live member and retained visit when a return clearance query throws', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }, { ...walker, figure: 'child' as const, back: 1 }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      path = visit.path,
+      trail = visit.trail,
+      group = p.group,
+      members = [...group];
+    visit.state = 'return';
+    visit.blocked = RECOVERY.returnReplanSeconds;
+    p.x = 48;
+    const before = structuredClone(p),
+      query = () => {
+        throw new Error('clearance query failed');
+      };
+    const retry = scene as unknown as {
+      blockedTimeout(m: Mover, visit: Visit, guard: typeof query): void;
+      rng(): number;
+    };
+    const rng = vi.spyOn(retry, 'rng');
+    expect(() => retry.blockedTimeout(p, visit, query)).toThrow('clearance query failed');
+    expect(p).toEqual(before);
+    expect(p.group).toBe(group);
+    group.forEach((w, i) => expect(w).toBe(members[i]));
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.path).toBe(path);
+    expect(visit.trail).toBe(trail);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(rng).not.toHaveBeenCalled();
+  });
+
+  it('replans an entire returning formation around a centroid-clear blocked member corridor', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+      ],
+      LifeLine.path,
+      2,
+    );
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 10, y: 40 },
+        { x: 40, y: 40 },
+        { x: 40, y: 30 },
+      ],
+      LifeLine.path,
+      2,
+    );
+    b.site({ x: 10, y: 30 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = {
+        ...person(10),
+        d: 0,
+        group: [
+          { ...walker },
+          { ...walker, lateral: -1 },
+          { ...walker, figure: 'child' as const, back: 1 },
+        ],
+      };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      trail = structuredClone(visit.trail),
+      group = p.group,
+      members = [...group],
+      appearances = group.map(({ figure, shirt, umbrella, canopy }) => ({
+        figure,
+        shirt,
+        umbrella,
+        canopy,
+      })),
+      obstacle: Body = { x: 27.5, y: 29, hx: 1, hy: 0, length: 15, width: 0.5 };
+    p.x = 35.8;
+    visit.state = 'return';
+    visit.path = [{ x: p.x, y: p.y }, trail[0]!];
+    visit.next = 1;
+    visit.blocked = RECOVERY.returnReplanSeconds;
+    const physical = (m: Mover): Body[] => {
+      const h = m.momentFacing ?? m;
+      return m.group!.map((w) => ({
+        x: m.x - h.hy * w.lateral - h.hx * w.back,
+        y: m.y + h.hx * w.lateral - h.hy * w.back,
+        hx: h.hx,
+        hy: h.hy,
+        ...memberSize(w.figure),
+      }));
+    };
+    let planned = false;
+    const guard = (next: Mover, before: Mover, reserve = true) => {
+      if (!reserve) planned = true;
+      const a = physical(before),
+        c = physical(next);
+      return c.every((body, i) => !sweptBodyOverlap(a[i]!, body, obstacle));
+    };
+    const original = structuredClone(p);
+    const retry = scene as unknown as {
+      blockedTimeout(m: Mover, visit: Visit, clearance: typeof guard): void;
+    };
+    retry.blockedTimeout(p, visit, guard);
+    expect(p).toEqual(original);
+    expect(visit.path.some((point) => point.y === 40)).toBe(true);
+    for (let frame = 0; frame < 500 && scene.visits.has(p); frame++) {
+      const before = structuredClone(p);
+      scene.step(0.1, [p], {}, undefined, undefined, guard);
+      expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+      expect(guard(p, before)).toBe(true);
+      expect(p.group).toBe(group);
+      group.forEach((w, i) => expect(w).toBe(members[i]));
+      expect(visit.trail[0]).toEqual(trail[0]);
+    }
+    expect(planned).toBe(true);
+    expect(scene.visits.has(p)).toBe(false);
+    expect([p.x, p.y, p.d]).toEqual([10, 30, 0]);
+    expect(
+      group.map(({ figure, shirt, umbrella, canopy }) => ({ figure, shirt, umbrella, canopy })),
+    ).toEqual(appearances);
+  });
+
   it.each([1, -1] as const)('finishes an oblique endpoint return in direction %s', (dir) => {
     const b = new LifeBuilder(),
       a = { x: 100, y: 100 },
@@ -570,7 +691,7 @@ describe('local interaction scenes', () => {
     ];
     visit.next = 1;
     visit.blocked = 15.95;
-    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    scene.step(0.1, [p], {}, undefined, undefined, (_next, _before, reserve = true) => !reserve);
     expect(scene.visits.get(p)).toBe(visit);
     expect([p.x, p.y]).toEqual([48, 30]);
     expect(visit.blocked).toBeCloseTo(16.05);
@@ -671,7 +792,7 @@ describe('local interaction scenes', () => {
     ];
     visit.next = 1;
     visit.blocked = 15.95;
-    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    scene.step(0.1, [p], {}, undefined, undefined, (_next, _before, reserve = true) => !reserve);
     expect(visit.path[1]).toEqual({ x: 40, y: 30 });
     expect(visit.path[0]).toEqual({ x: 48, y: 30.2 });
     p.x = 47;

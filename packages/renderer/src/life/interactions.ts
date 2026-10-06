@@ -388,9 +388,13 @@ export class LocalScenes {
     m.lying = false;
   }
 
-  private route(from: WalkPoint, to: WalkPoint) {
+  private route(
+    from: WalkPoint,
+    to: WalkPoint,
+    permits?: (from: WalkPoint, to: WalkPoint) => boolean,
+  ) {
     const start = { x: from.x, y: from.y };
-    const path = this.graph.route(start, { x: to.x, y: to.y });
+    const path = this.graph.route(start, { x: to.x, y: to.y }, permits);
     // A tiny perpendicular attachment after a sidestep can force another in-place
     // turn into the same blocker. Skip it only through an equally clear graph edge;
     // the actual movement still passes the full swept footprint guard.
@@ -398,10 +402,46 @@ export class LocalScenes {
       path &&
       path.length > 2 &&
       dist(start, path[1]!) <= 1.5 * this.perMeter &&
-      this.graph.clear(start, path[2]!)
+      this.graph.clear(start, path[2]!) &&
+      (!permits || permits(start, path[2]!))
     )
       path.splice(1, 1);
     return path;
+  }
+
+  /** A retry must fit the same complete formation that actual scene movement guards. */
+  private returnRoute(
+    m: Mover,
+    to: WalkPoint,
+    guard?: MoveGuard,
+    owns?: (p: WalkPoint) => boolean,
+  ) {
+    if (!guard || !isWalker(m.kind)) return this.route(m, to);
+    const original = snapshotMover(m);
+    const permits = (from: WalkPoint, target: WalkPoint) => {
+      const before = snapshotMover(original);
+      before.x = from.x;
+      before.y = from.y;
+      before.avoid = 0;
+      restoreMover(m, before);
+      const d = dist(from, target);
+      if (d > 1e-8 * this.perMeter) faceGroup(m, (target.x - from.x) / d, (target.y - from.y) / d);
+      m.x = target.x;
+      m.y = target.y;
+      const bodies = this.walkingBodies(m, m);
+      return (
+        inTile(m) &&
+        (!owns || owns(m)) &&
+        bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
+        this.graph.allowsBodies(bodies, true) &&
+        guard(m, before, false)
+      );
+    };
+    try {
+      return this.route(original, to, permits);
+    } finally {
+      restoreMover(m, original);
+    }
   }
 
   private canIdle(m: Mover): boolean {
@@ -545,7 +585,7 @@ export class LocalScenes {
           visit.trail.push(...addedTrail);
           visit.bypass = trialBypass;
           this.acceptedProgress(m, visit, before, progressCorner);
-          this.blockedProgress(m, visit, dt);
+          this.blockedProgress(m, visit, dt, guard, owns);
           return visit.next >= visit.path.length;
         }
         restoreMover(m, before);
@@ -661,7 +701,7 @@ export class LocalScenes {
               };
               break;
             }
-            this.blockedProgress(m, visit, dt);
+            this.blockedProgress(m, visit, dt, guard, owns);
             if (visit.state !== 'return') visit.trail.push({ x: m.x, y: m.y });
             return false;
           }
@@ -669,7 +709,7 @@ export class LocalScenes {
         restoreMover(m, before);
       }
       visit.blocked += dt;
-      this.blockedTimeout(m, visit);
+      this.blockedTimeout(m, visit, guard, owns);
       return false;
     }
     if (held && !changed) return false;
@@ -679,12 +719,12 @@ export class LocalScenes {
       const progress = (m.x - bypass.start.x) * bypass.hx + (m.y - bypass.start.y) * bypass.hy;
       if (progress > bypass.progress + 1e-8 * this.perMeter) {
         bypass.progress = progress;
-        this.blockedProgress(m, visit, dt);
+        this.blockedProgress(m, visit, dt, guard, owns);
       } else {
         visit.blocked += dt;
-        this.blockedTimeout(m, visit);
+        this.blockedTimeout(m, visit, guard, owns);
       }
-    } else if (visit.progress) this.blockedProgress(m, visit, dt);
+    } else if (visit.progress) this.blockedProgress(m, visit, dt, guard, owns);
     else if (!visit.handoffBlocked) visit.blocked = 0;
     if (visit.returnPending && this.canIdle(m)) {
       this.returning(m, visit);
@@ -693,7 +733,13 @@ export class LocalScenes {
     return visit.next >= visit.path.length;
   }
 
-  private blockedProgress(m: Mover, visit: Visit, dt: number) {
+  private blockedProgress(
+    m: Mover,
+    visit: Visit,
+    dt: number,
+    guard?: MoveGuard,
+    owns?: (p: WalkPoint) => boolean,
+  ) {
     const p = visit.progress;
     if (!p) {
       visit.blocked = 0;
@@ -705,7 +751,7 @@ export class LocalScenes {
       delete visit.retryAt;
     } else {
       visit.blocked += dt;
-      this.blockedTimeout(m, visit);
+      this.blockedTimeout(m, visit, guard, owns);
     }
   }
 
@@ -733,14 +779,19 @@ export class LocalScenes {
     }
   }
 
-  private blockedTimeout(m: Mover, visit: Visit) {
+  private blockedTimeout(
+    m: Mover,
+    visit: Visit,
+    guard?: MoveGuard,
+    owns?: (p: WalkPoint) => boolean,
+  ) {
     if (visit.blocked >= RECOVERY.visitReturnSeconds && visit.state !== 'return') {
       if (!visit.returnPending) this.requestReturn(m, visit);
     } else if (
       visit.blocked >= (visit.retryAt ?? RECOVERY.returnReplanSeconds) &&
       visit.state === 'return'
     ) {
-      const path = this.route(m, visit.trail[0]!);
+      const path = this.returnRoute(m, visit.trail[0]!, guard, owns);
       if (path?.every(inTile)) {
         const target = path[1],
           oldTarget = visit.path[visit.next],
@@ -1234,7 +1285,7 @@ export class LocalScenes {
             visit.handoffBlocked = true;
             visit.blocked += dt;
             diagnostics?.tag(m, 'blockedReturn');
-            this.blockedTimeout(m, visit);
+            this.blockedTimeout(m, visit, guard, owns);
             continue;
           }
           if ((m.walked ?? 0) > walked) this.returnSteps.add(m);
