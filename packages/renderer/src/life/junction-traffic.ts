@@ -1,6 +1,6 @@
 import { metricFrame } from './frames';
 import { VEHICLES } from './vehicles';
-import { COS20, JUNCTION } from './config';
+import { COS20, JUNCTION, kinematicsOf } from './config';
 import type { JunctionTable, Movement } from './junctions';
 import type { Mover, TileLife } from './simulate';
 
@@ -12,6 +12,7 @@ type TrafficBody = {
   hx: number;
   hy: number;
   length: number;
+  velocity: number;
   qx: number;
   qy: number;
   qhx: number;
@@ -74,7 +75,7 @@ export class JunctionTraffic {
     if (!body)
       this.cache.set(
         m,
-        (body = { m, life, x, y, hx: m.hx, hy: m.hy, length: 0, qx, qy, qhx, qhy }),
+        (body = { m, life, x, y, hx: m.hx, hy: m.hy, length: 0, velocity: 0, qx, qy, qhx, qhy }),
       );
     body.life = life;
     body.x = x;
@@ -82,6 +83,7 @@ export class JunctionTraffic {
     body.hx = m.hx;
     body.hy = m.hy;
     body.length = VEHICLES[m.vehicle].length * f.scale;
+    body.velocity = Math.max(0, m.v ?? 0) * f.units;
     body.qx = qx;
     body.qy = qy;
     body.qhx = qhx;
@@ -133,11 +135,39 @@ export class JunctionTraffic {
   }
   room(m: Mover, p: Movement, life: TileLife): number {
     const f = this.frame(life, p, true);
+    // A moving leader is not a standing exit queue. Compare its rear with the
+    // space needed at its estimated unobstructed box clearance, rather than
+    // revoking a following grant as soon as the leader crosses the centre.
+    // Only a straight, single-member route has this analytic clearance time.
+    let time = 0;
+    if (!p.junction.linked && p.inHx * p.outHx + p.inHy * p.outHy > 1 - 1e-6) {
+      const transform = this.tileFrame(life),
+        mx = transform.x + m.x * transform.units,
+        my = transform.y + m.y * transform.units,
+        distance = Math.max(
+          0,
+          ((f.x - mx) * p.outHx + (f.y - my) * p.outHy + f.radius) / f.scale +
+            VEHICLES[m.vehicle!].length / 2,
+        ),
+        v = Math.max(0, (m.v ?? m.speed) / life.perMeter),
+        speed = Math.max(v, m.speed / life.perMeter),
+        accel = kinematicsOf(m.vehicle).accel,
+        accelerating = (speed - v) / accel,
+        acceleratingDistance = ((v + speed) * accelerating) / 2;
+      if (speed > 0 && distance > 0)
+        time =
+          distance <= acceleratingDistance
+            ? (2 * distance) / (Math.sqrt(v * v + 2 * accel * distance) + v)
+            : accelerating + (distance - acceleratingDistance) / speed;
+    }
     let room = Infinity;
     for (const b of this.nearby(f.x, f.y, p.outHx, p.outHy, f.radius + 60 * f.scale)) {
       if (b.m === m || !this.inExit(b, p, f)) continue;
       const past = (b.x - f.x) * p.outHx + (b.y - f.y) * p.outHy;
-      room = Math.min(room, (past - b.length / 2 - f.radius) / f.scale);
+      // Every downstream body still constrains capacity. A stopped queue has
+      // zero forecast displacement, even with a moving leader ahead of it.
+      const advance = b.velocity * (b.hx * p.outHx + b.hy * p.outHy) * time;
+      room = Math.min(room, (past + advance - b.length / 2 - f.radius) / f.scale);
     }
     return room;
   }

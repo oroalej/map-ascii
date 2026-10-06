@@ -316,6 +316,44 @@ for (const inside of [false, true])
     expect(table.snapshot()[0]!.inside).toBe(inside);
   });
 
+it('retains courtesy at an unrelated downstream crossing while an occupant clears its junction', () => {
+  const { life, car, table } = fixture(false, -22);
+  Object.assign(car, { x: 2000 - 5 * pm, d: 195 * pm });
+  life.prepareTraffic(() => true);
+  life.requestJunctions(table, () => true, 0);
+  table.resolve(0);
+  const key = table.movement(car)!.key;
+  Object.assign(car, {
+    line: 0,
+    from: 0,
+    dir: 1,
+    x: 2000 + 7.5 * pm,
+    d: 7.5 * pm,
+    routing: undefined,
+    next: undefined,
+  });
+  life.prepareTraffic(() => true);
+  table.begin(new Set([life]));
+  life.requestJunctions(table, () => true, 0.1);
+  table.resolve(0.1);
+  expect(table.snapshot().find((r) => r.key === key)!.inside).toBe(true);
+  const movement = table.movement(car, key)!;
+  expect(life.junctionCrossings.forArm(movement.junction, movement.exit)).toHaveLength(1);
+  const target = (
+    life as unknown as {
+      pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
+    }
+  ).pedestrianTarget(
+    car,
+    8 * pm,
+    { ...EMPTY_PEDESTRIANS, empty: false, walkersInArea: () => true },
+    0.1,
+  );
+  expect(target).toBeLessThan(8 * pm);
+  expect(car.pedestrianHolds?.some((h) => !h.committed)).toBe(true);
+  expect(table.granted(car, key)).toBe(true);
+});
+
 it('reuses one curb predicate across repeated entry and exit clearance queries', () => {
   const { life, car } = fixture(),
     movement = life.junctionIndex.movement(car, 60 * pm)!,
