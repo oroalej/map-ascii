@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { LifeWorld, TileLife, type Mover } from './simulate';
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
@@ -170,50 +170,66 @@ it('adopts a releasing two-person cohort across zoom after it leaves the pad', (
   expect(released).toBe(true);
 });
 
-it('runs dense signalized crossroads with exact stops and only off-road waiting bodies', () => {
-  const geo = signalizedCrossroads(controlledTile),
-    world = new LifeWorld();
-  world.sync([{ key: 'dense-signals', tile: controlledTile, life: geo }]);
-  const life = worldTiles(world).get('dense-signals')!;
-  expect(life.crossingWaits.records).toHaveLength(4);
-  expect(life.signals.signals[0]!.approaches).toHaveLength(4);
-  expect(life.signals.signals[0]!.approaches!.every((a) => a.stopAlong !== undefined)).toBe(true);
-  let waiting = 0,
-    offRoad = true;
-  const checked = new WeakMap<Mover, readonly Body[]>();
-  for (let frame = 0; frame < 300; frame++) {
-    world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
-    for (const m of life.movers)
-      if (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing) {
-        waiting++;
-        const bodies = life.groundBodies(m, 0.9),
-          previous = checked.get(m);
-        // Terrain is immutable here. Recheck every changed physical member pose;
-        // an identical waiting footprint retains its already-proved clearance.
-        if (
-          !previous ||
-          bodies.length !== previous.length ||
-          bodies.some((b, i) => {
-            const old = previous[i]!;
-            return (
-              b.x !== old.x ||
-              b.y !== old.y ||
-              b.hx !== old.hx ||
-              b.hy !== old.hy ||
-              b.length !== old.length ||
-              b.width !== old.width ||
-              b.kind !== old.kind
-            );
-          })
-        ) {
-          offRoad &&= life.roadTerrain.access.allows(bodies, false);
-          checked.set(m, bodies);
+describe(
+  'dense signalized crossroads with exact stops and off-road waiting bodies',
+  { concurrent: false },
+  () => {
+    let world: LifeWorld, life: TileLife;
+    let frame = 0,
+      waiting = 0,
+      offRoad = true;
+    const checked = new WeakMap<Mover, readonly Body[]>();
+    beforeAll(() => {
+      const geo = signalizedCrossroads(controlledTile);
+      world = new LifeWorld();
+      world.sync([{ key: 'dense-signals', tile: controlledTile, life: geo }]);
+      life = worldTiles(world).get('dense-signals')!;
+      expect(life.crossingWaits.records).toHaveLength(4);
+      expect(life.signals.signals[0]!.approaches).toHaveLength(4);
+      expect(life.signals.signals[0]!.approaches!.every((a) => a.stopAlong !== undefined)).toBe(
+        true,
+      );
+    });
+    // One continuous 30-second world, checked at every frame. Serial checkpoints keep
+    // each test within its existing limit without resetting the simulation or its RNG.
+    for (const end of [100, 200, 300])
+      it(`checks every waiting footprint through ${end / 10} seconds`, () => {
+        for (; frame < end; frame++) {
+          world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+          for (const m of life.movers)
+            if (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing) {
+              waiting++;
+              const bodies = life.groundBodies(m, 0.9),
+                previous = checked.get(m);
+              // Terrain is immutable here. Recheck every changed physical member pose;
+              // an identical waiting footprint retains its already-proved clearance.
+              if (
+                !previous ||
+                bodies.length !== previous.length ||
+                bodies.some((b, i) => {
+                  const old = previous[i]!;
+                  return (
+                    b.x !== old.x ||
+                    b.y !== old.y ||
+                    b.hx !== old.hx ||
+                    b.hy !== old.hy ||
+                    b.length !== old.length ||
+                    b.width !== old.width ||
+                    b.kind !== old.kind
+                  );
+                })
+              ) {
+                offRoad &&= life.roadTerrain.access.allows(bodies, false);
+                checked.set(m, bodies);
+              }
+            }
         }
-      }
-  }
-  expect(waiting).toBeGreaterThan(0);
-  expect(offRoad).toBe(true);
-});
+        expect(offRoad).toBe(true);
+        expect(frame).toBe(end);
+        if (end === 300) expect(waiting).toBeGreaterThan(0);
+      });
+  },
+);
 
 it('clamps an oversized ordinary step after its bend and restores a rejected full trial', () => {
   const entry = signalizedCrossingEntry(),
