@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, synchronizing main and fixing CI first. An interrupted delegated review retains progress before any merge. After merging, clean task scratch with pnpm plans:clean, update the task row, and remove its local branch and worktree with pnpm worktree:remove; the remote branch stays. Use for $merge-pr with an optional branch, Head SHA and --claude-effort, or when $sync-review reaches its merge step.
+description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, synchronizing main and fixing CI first. An interrupted delegated review retains progress before any merge. After merging, clean task scratch with pnpm plans:clean, update the task row, stop processes left running in its worktree with pnpm worktree:stop, and remove its local branch and worktree with pnpm worktree:remove; the remote branch stays. Use for $merge-pr with an optional branch, Head SHA and --claude-effort, or when $sync-review reaches its merge step.
 ---
 
 # Merge a PR, then clean up its scratch, branch and worktree
@@ -19,6 +19,7 @@ Invoking `$merge-pr` authorizes these actions, for that branch only:
 - commenting on its PR with the conflict decisions that merge made
 - merging its PR into `main`, which deploys to production through Vercel
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
+- stopping processes started from its worktree (a leftover `serve` or `dev` server, a watcher) before removing it
 - deleting its local branch and its worktree folder
 
 Don't ask for confirmation between steps. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns and Rules.
@@ -122,12 +123,15 @@ On Windows, if the session process's directory is inside `<wt>` (or unknown), ru
 Otherwise, from `<main-checkout>`:
 
 ```
+pnpm worktree:stop <branch>
 pnpm worktree:remove <branch> --head <cleanup-head>
 ```
 
-It repeats step 4's checks, records recovery information, and renames the worktree to a unique sibling folder before deleting its contents. It then removes only its Git registration and deletes the local branch. The remote branch stays.
+`worktree:stop` ends processes started from `<wt>`, such as a `serve` or `dev` server left running, which keep Windows from renaming the folder. It never stops the calling session's own process chain or other Claude/Codex sessions. It prints `stopped <pid> <name> <command>` per process tree, or `no processes`. A `could not stop` line (exit 1) doesn't block `worktree:remove`; report it. Run it only here, after step 4's dry-run passed and removal isn't deferred.
 
-- If it reports `Could not relocate` (a process is holding the original directory; its contents and branch were kept), rerun the same command after 1, 2 and 4 minutes, since the holder often lets go. If it still fails, report the path as deferred so the user can close the process and run `$merge-pr <branch>` again. If it reports `Partially deleted`, rerun the same command the same way: it resumes from the recorded sibling folder and refuses a recreated original path. Never prune worktree metadata.
+`worktree:remove` repeats step 4's checks, records recovery information, and renames the worktree to a unique sibling folder before deleting its contents. It then removes only its Git registration and deletes the local branch. The remote branch stays.
+
+- If it reports `Could not relocate` (a process is holding the original directory; its contents and branch were kept), rerun `pnpm worktree:stop <branch>` and then the same command after 1, 2 and 4 minutes, since the holder often lets go. If it still fails, report the path as deferred so the user can close the process and run `$merge-pr <branch>` again. If it reports `Partially deleted`, rerun the same command the same way: it resumes from the recorded sibling folder and refuses a recreated original path. Never prune worktree metadata.
 - If an already-merged rerun has no worktree (step 1 found none), it deletes only the local branch. An open PR still requires a worktree at gate 2.1.
 
 ## 7. Report
@@ -136,7 +140,7 @@ Report:
 
 - The PR URL, the merge commit, or the stop reason
 - The `.plans` rows moved or noted, and each `plans:clean` result (deleted and kept)
-- The `worktree:remove` output, and that the remote branch `origin/<branch>` was kept
+- The `worktree:stop` and `worktree:remove` output, and that the remote branch `origin/<branch>` was kept
 
 End with a fenced block tagged `merge-pr-result`, holding one JSON object:
 
@@ -149,6 +153,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
   "mainSyncs": 0,
   "cleanup": {
     "plans": ["done/stable-labels: deleted 12, kept 3", "pr12-review-fixes: deleted 4, removed folder"],
+    "processes": "stopped 29052 node.exe tsx scripts/serve.ts",
     "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
     "branch": "deleted codex/stable-labels"
   },
