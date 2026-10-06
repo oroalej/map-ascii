@@ -76,6 +76,9 @@ for (const city of cities) {
       test.skip(!city.hasMeta, 'no generated tiles; run pnpm data:build');
       test('previews seasonal decorations and keeps the URL unchanged', async ({ page }) => {
         test.skip(!city.seasons.length, 'no festive calendar in this pack');
+        // Bound animated software-WebGL work, as in the Life smoke, while keeping desktop UI.
+        await page.setViewportSize({ width: 641, height: 480 });
+        expect(await page.evaluate(() => matchMedia('(max-width: 640px)').matches)).toBe(false);
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
@@ -126,7 +129,7 @@ for (const city of cities) {
             const control = page.getByRole('button', { name: /^Season:/ });
             if ((await control.getAttribute('aria-label')) === `Season: ${eventsSeason.title.en}`)
               break;
-            await control.click();
+            await control.press('Enter');
           }
           const street =
             city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'procession') ??
@@ -139,7 +142,8 @@ for (const city of cities) {
           for (const event of [street, mass]) {
             const button = page.getByRole('button', { name: `▶ ${event.label!.en}`, exact: true });
             await expect(button).toBeEnabled();
-            await button.click();
+            // Keyboard activation avoids waiting for pointer stability between expensive frames.
+            await button.press('Enter');
             await page.mouse.move(-10, -10);
             const generated = city.generatedProcessions.find((p) => p.id === event.id)!;
             const [lng, lat] =
@@ -155,7 +159,7 @@ for (const city of cities) {
               page.getByRole('status').filter({ hasText: `${event.title.en} (simulated)` }),
             ).toBeVisible();
             await expect.poll(() => clock.textContent()).not.toBe(initial);
-            await page.getByRole('button', { name: 'Stop', exact: true }).click();
+            await page.getByRole('button', { name: 'Stop', exact: true }).press('Enter');
             await expect(page.getByRole('button', { name: choice!, exact: true })).toBeEnabled();
           }
           const withoutCamera = (value: Record<string, string>) =>

@@ -1,7 +1,7 @@
 import type { TileId } from '../tiles';
 import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
-import { SIGNAL, kinematicsOf } from './config';
+import { COS20, SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
 import {
   LifeLine,
@@ -13,6 +13,7 @@ import { placeSeed } from './lights';
 import type { Mover } from './simulate';
 import { VEHICLES } from './vehicles';
 import { complete } from './cooperate';
+import type { Movement } from './junctions';
 
 export type SignalColor = 'green' | 'amber' | 'red';
 export type SignalPhase = {
@@ -169,11 +170,36 @@ export class SignalControl {
         TILE_QUANTIZATION_TOLERANCE,
     );
   }
-  vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit, clearing?: string): void {
+  /** Junction entry ownership is separate from exact, tagged pedestrian crossing anchors. */
+  controlsApproach(line: number, centre: Point): boolean {
+    for (const s of this.signals) {
+      const reach = (s.radius + 2) * this.perMeter;
+      if (s.approaches) {
+        if (
+          s.approaches.some(
+            (a) => a.line === line && Math.hypot(a.x - centre.x, a.y - centre.y) <= reach,
+          )
+        )
+          return true;
+      } else if (
+        this.stops.get(line)?.some((stop) => stop.signal === s) &&
+        Math.hypot(s.x - centre.x, s.y - centre.y) <= reach
+      )
+        return true;
+    }
+    return false;
+  }
+  vehicleLimit(
+    m: Mover,
+    dt: number,
+    clock: number,
+    out: MotionLimit,
+    clearing?: ReadonlySet<string>,
+  ): void {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
-      if (clearing && stop.signal.key === clearing) continue;
+      if (stop.signal.key && clearing?.has(stop.signal.key)) continue;
       const ahead =
         m.dir * (stop.along - progress) -
         ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
@@ -189,14 +215,25 @@ export class SignalControl {
       }
     }
   }
-  allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
+  allows(
+    m: Mover,
+    x: number,
+    y: number,
+    clock: number,
+    ahead: number,
+    movement?: Movement,
+  ): boolean {
     for (const s of this.signals) {
-      if (s.approaches) {
+      if (movement && s.key && s.approaches?.length && s.key !== movement.key) continue;
+      // An unmatched exact layout adds no stop. A real box still needs red admission safety.
+      if (s.approaches && (s.approaches.length || !movement)) {
         const entry = s.approaches.find(
           (a) =>
             a.arm.inbound &&
-            a.line === m.line &&
-            a.arm.direction === m.dir &&
+            (movement?.entry?.line === -1
+              ? -a.hx * movement.inHx - a.hy * movement.inHy > COS20
+              : a.line === (movement?.entry?.line ?? m.line) &&
+                a.arm.direction === (movement?.dir ?? m.dir)) &&
             Math.hypot(a.x - x, a.y - y) <= TILE_QUANTIZATION_TOLERANCE,
         );
         if (!entry) continue;
@@ -207,7 +244,9 @@ export class SignalControl {
         continue;
       }
       if (Math.hypot(s.x - x, s.y - y) > (s.radius + 2) * this.perMeter) continue;
-      const state = signalState(s.seed, clock, s.a < 0)[group(s, m.hx, m.hy)];
+      const state = signalState(s.seed, clock, s.a < 0)[
+        group(s, movement?.inHx ?? m.hx, movement?.inHy ?? m.hy)
+      ];
       const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
       if (state === 'red' || (state === 'amber' && (m.v ?? m.speed) ** 2 / (2 * brake) <= ahead))
         return false;
