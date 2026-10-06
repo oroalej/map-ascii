@@ -467,7 +467,7 @@ export function removeWorktree({
         renameSync(worktree!, tomb);
       } catch (error) {
         throw new Error(
-          `Could not relocate ${worktree}: nothing was removed. Close processes using it and rerun. The branch was kept. (${(error as NodeJS.ErrnoException).code ?? 'rename failed'})`,
+          `Could not relocate ${worktree}: nothing was removed. Run \`pnpm worktree:stop ${branch}\` to end processes started from it, close others using it, and rerun. The branch was kept. (${(error as NodeJS.ErrnoException).code ?? 'rename failed'})`,
         );
       }
       folder = tomb;

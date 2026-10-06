@@ -1,5 +1,6 @@
 export * from './climate';
 export * from './clock';
+export * from './emoji';
 export * from './attribution';
 export * from './dialogue';
 export * from './dialogue-options';

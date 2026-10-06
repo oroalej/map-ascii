@@ -198,6 +198,7 @@ export class LifeHoverController {
       (visible) => {
         if (this.pending?.serial !== serial) return;
         this.pending = undefined;
+        if (visible === undefined) return;
         this.confirmed = { key: c.key, revision, visible, at: now };
         // Publish from update, once per animation frame, after all current geometry is known.
       },

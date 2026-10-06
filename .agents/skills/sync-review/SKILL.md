@@ -1,11 +1,11 @@
 ---
 name: sync-review
-description: For each comma-separated branch, in order, commit and push its worktree, open a PR to main, delegate origin/main synchronization and review to $review-pr (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it with $merge-pr, which also deletes the task's scratch, local branch and worktree (the remote branch stays). Never pauses; a branch that ends with error only skips the branches stacked on it. Use when the user invokes $sync-review [--fast] <branches>.
+description: For each comma-separated branch, commit and push, open a PR, delegate synchronization and resumable review to $review-pr, get CI green, and merge with $merge-pr. Usage exhaustion retains progress and ends the loop. Other branch errors skip only branches stacked on them. Use for $sync-review with optional --fast, --claude-effort and comma-separated branches.
 ---
 
 # Sync, review and merge branches
 
-Usage: `$sync-review [--fast] codex/tree-canopy, codex/stable-labels, codex/vehicle-lamps-exhaust`
+Usage: `$sync-review [--fast] [--claude-effort <level>] codex/tree-canopy, codex/stable-labels, codex/vehicle-lamps-exhaust`
 
 The user lists only branches that are safe to process. Invoking `$sync-review` authorizes these actions, for the listed branches only:
 
@@ -18,59 +18,45 @@ The user lists only branches that are safe to process. Invoking `$sync-review` a
 - merging the PRs into `main`, which deploys to production through Vercel
 - after each merge, deleting the task's `.plans` scratch, its local branch and its worktree folder (`$merge-pr`). Remote branches stay.
 
-Don't ask for confirmation between steps or branches. Never pause. The only ends are the ones in `<review-pr-skill>` "Ends": nothing to do or a missing tool. Retry, Detached work tree, Decide, don't stall, Carry, don't stop and Relaunch on the wrong model apply here too.
+Don't ask for confirmation between steps or branches. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns, Rules, Binaries (`codex` only), Speed and Claude effort. Propagate an interrupted delegated review immediately, keeping all task scratch and worktrees.
 
 ## Models
-
-Always pass these explicitly. Never change them or fall back to another model.
 
 | Role | Model | Effort | Speed | How |
 | --- | --- | --- | --- | --- |
 | Loop session (this session): commits, conflicts, PRs, CI fixes, merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
-| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal | started by `$review-pr` |
+| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by `$review-pr` |
 | Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
 | Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
 
-**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.5. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-pr` resolves its own `codex` and `claude`.
-
-This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, relaunch (`<review-pr-skill>` Shared patterns, "Relaunch on the wrong model") with the same arguments, and relay that run's report.
-
-`<speed>` comes from the `--fast` option:
-
-- with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
-- without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
-
-`--fast` also gets forwarded to `$review-pr`, so Codex #1 uses the same speed in every round. It doesn't change Claude, or this session's own speed.
+`$review-pr` resolves its own `codex` and `claude`. `--fast` and `--claude-effort` apply to every listed branch's review.
 
 ## Rules for every branch
 
+shared.md's Rules apply, plus:
+
 - **Keep going:** a branch ends unmerged only with an "Ends" `error` (nothing to do, or a missing tool). Then continue with the next branch, skipping only later branches whose PR base, or whose merge-base with `main`, is that branch's head (they're stacked on it): report them as `not processed: stacked on <branch>`. A missing tool that every branch needs (`gh` auth, `codex`) ends the loop, since no later branch could run either.
-- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`. Run every command against the branch's worktree (`git -C <wt> …`, or with `<wt>` as the working directory).
-- **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
-- **Long commands:** the `$review-pr` run can take several hours, and `gh pr checks --watch` 10+ minutes. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<run>`, and poll until it exits.
+- **Interrupted review:** `interrupted` ends the loop immediately. Report remaining branches as `not processed: review interrupted`, retain the original branch order in the report, and print the checkpoint and resume command. Do not merge, clean up, or repeatedly relaunch the exhausted coordinator.
+- **Branch worktree:** run every command against the branch's worktree (`git -C <wt> …`, or with `<wt>` as the working directory). Background logs go in `<run>`.
 
 ## 0. Prepare (once)
 
 1. Parse the argument:
    - Take out `--fast` if present and set `<speed>`.
+   - Take out and validate `--claude-effort <level>` if present, retaining whether it was explicit.
    - Split the rest on commas. Trim, drop empty entries and duplicates, and strip a leading `origin/`.
    - Drop `main` and report it as skipped.
    - Print the branch order and the speed (fast or normal) as the first line of output.
 2. Run `gh auth status`. If it fails, end with a missing tool. Then run `git fetch origin` (with Retry).
 3. Map each branch to its worktree with `git worktree list --porcelain`.
    - No worktree: create one as `<review-pr-skill>` step 1.3 does, with `<main-checkout>/worktrees/<short>`. If the branch exists only locally and has no worktree, use `git worktree add <path> <branch>`.
-   - Checked out in the first entry (the main checkout): use a detached work tree at `origin/<branch>` (`<review-pr-skill>` Shared patterns). Uncommitted work in the main checkout stays untouched and is reported.
+   - Checked out in the first entry (the main checkout): use a detached work tree at `origin/<branch>` (shared.md). Uncommitted work in the main checkout stays untouched and is reported.
    - A branch that exists neither locally nor on `origin` → `skipped: no such branch` (nothing to do).
 4. Create `<run>` = `$env:TEMP/sync-review-<yyyyMMdd-HHmmss>/`. It lives outside `.plans/` on purpose. `<main-checkout>` is the first worktree entry.
-5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, end with a missing tool. Then resolve the newest installed Codex (PowerShell):
-
-   ```
-   pnpm.cmd -C <repo> --silent cli:latest codex
-   ```
-
-   `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`). Use `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`. Check `$LASTEXITCODE` immediately; if non-zero, end with a missing tool. Set `<codex>` to the absolute path printed on stdout and retain it in session context, like `<run>` and `<speed>`. It prints `codex <version> <path>` on stderr; note the version for the report. Shell variables do not survive separate tool calls: replace `<codex>` with the resolved path in every later command, keeping its single quotes for paths containing spaces.
+5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, end with a missing tool. Then resolve `<codex>` (shared.md, Binaries).
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
+For a branch whose existing PR has a saved incomplete review, inspect it with the review recovery reference before step 1. Skip steps 1 and 3 and continue at step 4: the review coordinator owns its unfinished fixes and verification. Do not commit that WIP through the generic commit step. A live saved coordinator is awaited.
 
 ## 1. Commit and push
 
@@ -78,12 +64,12 @@ Then process the branches one at a time, in the order given. `<slug>` is the bra
 2. Hold back any file that looks like a secret (`.env*`, keys, tokens, credentials) and any file over 10 MB. Leave held-back files uncommitted and untouched, report them, and continue.
 3. Stage the rest by explicit path.
 4. Commit with one gitmoji + conventional message written from the diff, matching `git log` (e.g. `✨ feat(life): …`): lowercase, imperative, header at most 72 characters. Hooks run. If a hook rejects the commit, fix what it reports (formatting, lint, a wrong branch for the main checkout: use the detached work tree) and commit again.
-5. If `origin/<branch>` has commits the local branch lacks, run `git merge origin/<branch>`. Resolve any conflicts with the rules in `<review-pr-skill>` step 1.7.
+5. If `origin/<branch>` has commits the local branch lacks, run `git merge origin/<branch>`. Resolve any conflicts with the rules in [merge-main.md](../review-pr/references/merge-main.md) item 4.
 6. `git push -u origin <branch>` (in a detached work tree, `git push origin HEAD:<branch>`). If it is rejected because the remote moved, repeat step 5 and push again; Retry a network failure.
 
 ## 2. Delegate main synchronization to review-pr
 
-Nothing to do here: `$review-pr` merges `origin/main` into the branch as its first step (step 1.7 of `<review-pr-skill>`), resolving conflicts, before Claude reviews. If `main` moves again before the merge, `$merge-pr` syncs it (its gate 3), so each branch also picks up the branches merged before it.
+No action: `$review-pr` merges `origin/main` first (its step 1.7), and `$merge-pr` syncs again if `main` moves before the merge (its gate 3). Each branch therefore picks up the branches merged before it.
 
 ## 3. Open a PR if none exists
 
@@ -92,19 +78,19 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
    - Title: a gitmoji + conventional header summarizing the branch's commits since `main`.
    - Body: what the branch does, taken from its commits and its handoff, plus a test plan listing the checks the handoff names. Don't invent claims about tests that weren't run.
 
-## 4. Review until clean, with the CI gate ($review-pr)
+## 4. Review (up to 3 rounds), with the CI gate ($review-pr)
 
-`$review-pr` runs the review loop (until a round is clean) and the CI gate (until green) itself. Start it once, in a fresh Codex #2:
+`$review-pr` runs the review loop and CI gate itself. Start Codex #2 with the delegated review call (shared.md), using `resultFile: "<run>/<slug>-review.json"`:
 
 ```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-review.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <run>/<slug>-review.json.'
+pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-input.json
 ```
 
-- Shell timeout: at least 4 hours (review rounds plus CI). Background-and-poll as needed.
-- Read `<run>/<slug>-review.json`. If it's missing, use the `review-pr-result` block at the end of the `-o` file.
-- `status` is `clean` → go to step 5. Entries `$review-pr` carried as `open` are in the PR body and the report; they don't stop the branch.
-- `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going".
-- No result (the process failed or wrote nothing): Retry the run.
+If the result file is missing, use the canonical checkpoint result, or else the `review-pr-result` block at the end of the `-o` file.
+
+- `clean` → step 5.
+- `error` → the branch ends with its `stopReason`; apply "Keep going".
+- `interrupted` → end the loop with saved progress, leaving later branches unprocessed ("Interrupted review").
 
 ## 5. Confirm CI
 
@@ -117,14 +103,15 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 1. Check that `$review-pr` ended `clean` and step 5 passed on the PR's current head SHA. Held-back files were never committed, so they don't block the merge.
 
    Don't check whether the PR is behind `main` or conflicting: if `main` moved, `$merge-pr` merges `origin/main` into it (its gate 3).
-2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>` and `--claude-effort <review-result.claudeEffort>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). If an older result lacks effort, read its checkpoint or use the original fixed `high`. It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, stops processes left running in the worktree with `pnpm worktree:stop`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
 3. Read its `merge-pr-result`.
    - `merged` → done. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
    - `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going". `$merge-pr` fixes CI and syncs `main` itself, so nothing else comes back.
+   - `interrupted` → propagate the saved review checkpoint and end the loop; do not run cleanup or later branches.
 
 ## 7. Note an unmerged branch in `.plans`
 
-Only when a branch ended with `error` before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. `$review-pr` has already set their PR review cell. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
+When a branch ended with `error` or `interrupted` before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and continuation command. `$review-pr` has already set their PR review cell when it could report. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
 
 ## 8. Report
 

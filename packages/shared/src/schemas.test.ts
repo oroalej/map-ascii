@@ -3,6 +3,9 @@ import {
   ART_CHARACTERS,
   CameraState,
   City,
+  CityLife,
+  Season,
+  SeasonEmojiEntrySchema,
   contentSchemas,
   Event,
   Landcover,
@@ -17,6 +20,104 @@ import {
 } from './schemas';
 
 const source = { title: 'Example source', url: 'https://example.org/' };
+
+describe('seasonal emoji', () => {
+  const entry = { mood: 'gift', subjects: ['person'] };
+  const season = {
+    id: 'winter',
+    title: { en: 'Winter' },
+    sources: [source],
+    emoji: [entry],
+    window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
+  };
+  it('accepts emoji-only seasons, supplies weights and preserves strict fields', () => {
+    expect(Season.parse(season).emoji![0]!.weight).toBe(1);
+    expect(SeasonEmojiEntrySchema.safeParse({ ...entry, extra: true }).success).toBe(false);
+    expect(Season.safeParse({ ...season, note: 'Unsupported' }).success).toBe(false);
+  });
+  it.each([
+    { subjects: [] },
+    { subjects: ['person', 'person'] },
+    { hours: [0, 0] },
+    { hours: [1440, 0] },
+    { hours: [0, 1441] },
+    { hours: [0.5, 60] },
+    { days: [{ month: 4, day: 31 }] },
+    {
+      days: [
+        { month: 12, day: 1 },
+        { month: 12, day: 1 },
+      ],
+    },
+    { days: [] },
+    { weight: 0 },
+    { weight: 6 },
+    { mood: 'invented' },
+    { subjects: ['driver'], figure: 'adult' },
+    { subjects: ['person', 'dog'], figure: 'child' },
+  ])('rejects malformed entries %j', (change) => {
+    expect(SeasonEmojiEntrySchema.safeParse({ ...entry, ...change }).success).toBe(false);
+  });
+  it.each(['cheers', 'beer'])('keeps %s entirely within adult evening hours', (mood) => {
+    const drinking = { mood, subjects: ['person'], figure: 'adult', hours: [960, 360] };
+    expect(SeasonEmojiEntrySchema.safeParse(drinking).success).toBe(true);
+    expect(SeasonEmojiEntrySchema.safeParse({ ...drinking, hours: [1080, 1440] }).success).toBe(
+      true,
+    );
+    for (const change of [
+      { figure: 'child' },
+      { figure: undefined },
+      { subjects: ['driver'] },
+      { hours: undefined },
+      { hours: [900, 1440] },
+      { hours: [1020, 1000] },
+    ])
+      expect(SeasonEmojiEntrySchema.safeParse({ ...drinking, ...change }).success).toBe(false);
+  });
+  it('validates real authored dates across wrapping, moving and leap calendars', () => {
+    const withDay = (month: number, day: number) => ({ ...entry, days: [{ month, day }] });
+    expect(Season.safeParse({ ...season, emoji: [withDay(12, 24)] }).success).toBe(true);
+    expect(Season.safeParse({ ...season, emoji: [withDay(7, 1)] }).success).toBe(false);
+    expect(
+      Season.safeParse({
+        ...season,
+        emoji: [withDay(2, 29)],
+        window: { from: { month: 2, day: 1 }, to: { month: 3, day: 1 } },
+      }).success,
+    ).toBe(true);
+    expect(
+      Season.safeParse({
+        ...season,
+        emoji: [withDay(9, 20)],
+        window: {
+          anchor: { month: 9, weekday: 6, nth: 3, offset_days: 1 },
+          days_before: 0,
+          days_after: 0,
+        },
+      }).success,
+    ).toBe(false);
+  });
+  it('bounds composed pools without revalidating inherited days in the includer window', () => {
+    const base = { ...season, emoji: [{ ...entry, days: [{ month: 12, day: 24 }] }] };
+    const included = {
+      ...season,
+      id: 'new-year',
+      includes: ['winter'],
+      window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+    };
+    expect(CityLife.safeParse({ source: 'Fixture', seasons: [included, base] }).success).toBe(true);
+    expect(
+      CityLife.safeParse({
+        source: 'Fixture',
+        seasons: [
+          { ...included, emoji: Array.from({ length: 11 }, () => entry) },
+          { ...base, emoji: Array.from({ length: 10 }, () => entry) },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(Season.safeParse({ ...season, emoji: [] }).success).toBe(false);
+  });
+});
 
 const landmark = {
   id: 'landmark/example-church',

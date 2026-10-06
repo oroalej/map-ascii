@@ -1,4 +1,5 @@
 'use client';
+import { useEmojiStore, loadEmojiPrefs, saveEmojiPrefs } from '@/state/emoji';
 
 import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
@@ -169,6 +170,8 @@ export function AtlasCanvas({
       ? loadSpeechPrefs(slug, dialogue)
       : { enabled: false, translation: null };
     useSpeechStore.setState(speechPrefs);
+    const emojiPrefs = loadEmojiPrefs(slug);
+    useEmojiStore.setState(emojiPrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
@@ -192,6 +195,7 @@ export function AtlasCanvas({
       cityLife,
       dialogue,
       speech: speechPrefs.enabled,
+      emoji: emojiPrefs.enabled,
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
@@ -204,6 +208,10 @@ export function AtlasCanvas({
       useSpeechStore.subscribe((prefs, previous) => {
         if (prefs.enabled !== previous.enabled) atlas.setSpeech(prefs.enabled);
         saveSpeechPrefs(slug, prefs);
+      }),
+      useEmojiStore.subscribe((prefs, previous) => {
+        if (prefs.enabled !== previous.enabled) atlas.setEmoji(prefs.enabled);
+        saveEmojiPrefs(slug, prefs);
       }),
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),

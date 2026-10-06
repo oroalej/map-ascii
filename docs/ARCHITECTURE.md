@@ -78,6 +78,7 @@ const atlas = createAtlas(canvas, {
   utilities: { derive: cityConfig.streets?.utilities?.derive === true }, // optional; omitted disables
   dialogue: cityPack.dialogue,          // optional validated native/translation catalog
   speech: true,                        // display preference, independent of simulation
+  emoji: true,                         // display preference; independent of the observer
 });
 
 atlas.setCamera(partial, { animate?: boolean, duration?: number });
@@ -86,6 +87,8 @@ atlas.getCamera(): CameraState;
 atlas.setYear(year: number, { animate?: boolean });
 atlas.setTheme('dark' | 'light');
 atlas.setSpeech(enabled: boolean);
+atlas.setEmoji(enabled: boolean);
+atlas.getLabelObstacles(): readonly { left: number; top: number; width: number; height: number }[];
 atlas.setSelected(featureId | null);
 atlas.setFocus(focus: LegendFocus | null);            // transient map-class/Life-group focus
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
@@ -98,7 +101,7 @@ atlas.getSeason(): SeasonState | null;               // immutable resolved calen
 atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms
 atlas.setUnderlay(null | { kind: 'imagery' | 'historic-map', id: string });
 atlas.on('camerachange' | 'hover' | 'lifehover' | 'click' | 'flyend' | 'input'
-  | 'procession' | 'classeschange' | 'labelschange' | 'fixtureschange' | 'seasonchange' | 'speechchange' | 'contextlost' | 'contextrestored', handler);
+  | 'procession' | 'classeschange' | 'labelschange' | 'fixtureschange' | 'seasonchange' | 'speechchange' | 'emojichange' | 'contextlost' | 'contextrestored', handler);
 atlas.destroy();
 ```
 
@@ -271,6 +274,13 @@ Building-mounted Christmas strings carry an optional `mount: "building"` on the 
 The renderer deduplicates buffered copies and builds static fixtures from those explicit endpoints. It memoizes by unordered contributing payload references; no neighboring-tile search or runtime topology reconstruction is needed. Signals, lamps and flags retain priority, then utility poles claim free cells; a shared cap may replace only its exact lamp owner's base. Shared-base lookup runs only for drawable utility fixtures. Cables combine directional masks commutatively and clip to the cell grid before rasterization, reusing per-target owner/cable scratch arrays. Packing reuses exact projected support centers and local metre-scale ornament directions, with conservative padding for offscreen hardware entering the viewport. Named detail hashes append to a cached identifier hash without changing seeded choices. Shared zoom bands govern hardware opacity and seeded detail. Fixture paints append concrete and cable to the existing six colors. Cable ink leaves the background and traffic visible around its strokes. `fixtureschange.utilities` describes viewport-packed marks, independently of Life and illumination; viewport visibility is cached until placement or viewport cell bounds change, and the existing shader surface mask can hide those marks under cover.
 
 ### Human speech
+
+Emoji uses a Zod-free shared vocabulary and plain seasonal projection. `emojichange` carries `{id,subject,mood,pair?,point}` in canvas-relative CSS pixels, independently of a dialogue catalog. The worker's read-only observer owns weak tracks, an independent salted RNG and stable reset-generation episode/group IDs. Each accepted step samples transitions and elapsed rest, wait, stop and cruise; fixed half-second evaluation admits at most four leaders per tile, with a pair counting once. Transfers keep tracks and IDs; retirement freezes observation, disposal removes active indexing and hard reset clears weak memory. Normal actually voiced completion records are separate from physical moment snapshots. Seasonal ambient pools are cached by immutable table identity and selected ID. Observer-only `env.date` contains the real city epoch day, weekday and valid explicit preview flag; `sunAltitude` and `windPreset` arrive with the same frame's time/weather choice. They do not alter physical streams.
+
+Speech and emoji share generic cue confirmation and one physical three-read lease over the existing eight-read queue, reserving two slots for other consumers. Individual retirement notifications cover completion, drop, reset and rejection; a logical clear cannot free queued siblings. Due speech takes priority. Emoji grants budget their batch plus the next speech batch before a valid speech confirmation expires. Pairs are grouped before caps, independently confirmed and published atomically; other groups stay 80 CSS pixels apart and clear of displayed speech. Human cues require the painted member-0 cell; vehicles and pets require their own painted owner. No new GPU passes, targets or glyphs are added. Each emoji glyph is one allowed code point with optional VS16.
+
+The shared aria-hidden DOM overlay places speech first, then transactional emoji groups including thought-dot footprints. `getLabelObstacles()` returns detached current CPU collision bounds, including halos and rotated labels, converted from label-grid cells using current shifts, cell size and DPR; invalid targets return an empty list. The overlay adds the canvas origin and rereads these bounds each placement. Preferences affect display only and remain outside worker initialization and URL state.
+
 
 Encounter reach is the larger of its original limit and the pair's combined rendering clearance plus two metres; third conversation members use the same rule. Minimum separation and guarded facing still apply. A failed facing admission rolls back and retains its accepted chance for a retry at most once per simulated second, charged against the existing eight-check scan budget. Lost eligibility, separation, idle state or suitable weather discards pending admission. Rejected chances remain remembered for their approach or idle episode; retries never reroll them.
 

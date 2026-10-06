@@ -163,6 +163,19 @@ export class Moments<Owner extends object = object> {
   busy(owner: object) {
     return this.membership.has(owner);
   }
+  /** Observer-only occurrence records; cancellation never creates a completion. */
+  private readonly occurrences = new WeakMap<
+    object,
+    { start: number; token: object; completed: boolean }
+  >();
+  private readonly completions: { token: object; owners: readonly object[] }[] = [];
+  get voiceCompletions() {
+    return this.completions as readonly { token: object; owners: readonly object[] }[];
+  }
+  voiceActive(owner: object) {
+    const m = this.membership.get(owner);
+    return !!m?.voiced && m.speechStart !== undefined && this.time >= m.speechStart;
+  }
   get size() {
     return this.active.length;
   }
@@ -194,6 +207,7 @@ export class Moments<Owner extends object = object> {
   }
   /** Explicit tile disposal releases even externally inspected test instances. */
   clear(release: (actor: MomentActor<Owner>) => void) {
+    this.completions.length = 0;
     for (const m of this.active) for (const actor of m.members) release(actor);
     this.active.length = 0;
     this.membership.clear();
@@ -296,8 +310,30 @@ export class Moments<Owner extends object = object> {
     this.active.splice(this.active.indexOf(m), 1);
     this.stats[canceled ? 'canceled' : 'completed']++;
   }
+  private completeSpeech(m: Moment<Owner>) {
+    const occurrence = this.occurrences.get(m);
+    if (!occurrence || occurrence.completed || occurrence.start !== m.speechStart || !m.dialogue)
+      return;
+    const seconds = MOMENTS[m.kind].speechTurn;
+    const end =
+      m.dialogue.conditions?.event === 'catch'
+        ? m.caught === undefined
+          ? Infinity
+          : m.caught + seconds
+        : occurrence.start + m.dialogue.turns * seconds;
+    // A physical game may contain several exchanges or end halfway through one.
+    if (this.time + 1e-9 < end || end > m.end + 1e-9) return;
+    occurrence.completed = true;
+    this.completions.push({ token: occurrence.token, owners: m.members.map((a) => a.owner) });
+  }
   step(dt: number, context: MomentContext<Owner>) {
+    this.completions.length = 0;
     if (!this.enabled) return;
+    for (const m of this.active)
+      if (m.speechStart !== undefined && m.members.some((a) => this.speech(a.owner))) {
+        if (this.occurrences.get(m)?.start !== m.speechStart)
+          this.occurrences.set(m, { start: m.speechStart, token: {}, completed: false });
+      }
     this.time += dt;
     const weather = context.zoom >= MOMENTS.zoom && context.rain < MOMENTS.rain;
     for (const m of [...this.active]) {
@@ -316,6 +352,7 @@ export class Moments<Owner extends object = object> {
         this.finish(m, context, true);
         continue;
       }
+      this.completeSpeech(m);
       if (this.time + 1e-9 >= m.end) {
         this.finish(m, context, false);
         continue;

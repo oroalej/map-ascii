@@ -16,8 +16,16 @@ Other sessions may have uncommitted edits in this checkout. Read the PR's code f
 
 1. Claude's review (the file path in the prompt).
 2. `AGENTS.md`: conventions, the "Verifying changes" table, and the Don'ts.
-3. The PR: `gh pr view <N> --json title,body,files,commits`, `gh pr diff <N>`, and `gh pr checks <N>`.
+3. The PR: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. In a full round, also `gh pr diff <N>`. In a delta round, read `git diff <since> <headRefOid>` instead, and the ledger named in the prompt.
 4. If `.plans/README.md` in the main checkout lists the PR's branch, read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
+
+## Delta rounds
+
+When the prompt says `Scope: delta since <sha>`, Claude reviewed only the fix commits since that reviewed commit, plus their callers and tests. Earlier rounds already validated the rest of the PR.
+
+- Validate every entry exactly as below.
+- For each ledger entry these commits claim to fix, check that the fix really resolves it. An entry that still holds goes under "Noticed" with its ledger ID, unless the ledger marks it `open`: it's already carried in the PR body.
+- For "Noticed", inspect the delta, the callers and tests of changed code, and the ledger's open entries. Don't re-audit untouched files, but read anything outside the delta that the evidence needs.
 
 ## Validate every entry
 
@@ -35,7 +43,10 @@ Go through every Blocker, Should-fix, and Nit in Claude's review. For each one:
    - **valid**: the problem and the fix both hold
    - **partly valid**: the problem holds but the fix or scope needs changing (say how)
    - **invalid**: the claim doesn't hold (say why)
-4. Correct the severity if it's wrong, with a one-line reason.
+4. Correct the severity if it's wrong, with a one-line reason. Use these definitions:
+   - **blocker:** wrong behavior a user or CI would hit, with a concrete failing scenario. That covers a crash, wrong output, a failing or broken test, data loss, a broken `AGENTS.md` rule, or a budget breach.
+   - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
+   - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness. If it's unclear whether something is a should-fix or a nit, it's a nit. Only blockers and should-fix items start another round.
 
 Don't add findings of your own. If you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with an id `N<n>`, its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. Prove it the same way. The fixer fixes a noticed blocker or should-fix in this round like any valid entry, so give each one a fix step (`**N<n> <severity>**`). Noticed nits get no fix step.
 

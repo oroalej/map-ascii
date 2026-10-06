@@ -19,12 +19,21 @@ import {
 import {
   FIREWORK_VARIANTS,
   validMonthDay,
+  occurrence,
+  seasonContains,
   composeSeasonInstallations,
   type FireworksConfig,
   type SeasonConfig,
   type SeasonGrounds,
   type SeasonWindow,
 } from './seasons';
+import {
+  EMOJI_SUBJECTS,
+  EMOJI_MOODS,
+  DRINKING_MOODS,
+  EMOJI_EVENING,
+  type SeasonEmojiEntry,
+} from './emoji';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
 export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
@@ -1212,6 +1221,50 @@ export const LifeSite = z
 const MonthDaySchema = z
   .strictObject({ month: z.int().min(1).max(12), day: z.int().min(1).max(31) })
   .refine(validMonthDay, 'expected a real month/day');
+export const EmojiSubjectSchema = z.enum(EMOJI_SUBJECTS);
+export const EmojiMoodSchema = z.enum(EMOJI_MOODS);
+export const SeasonEmojiEntrySchema = z
+  .strictObject({
+    mood: EmojiMoodSchema,
+    subjects: z
+      .array(EmojiSubjectSchema)
+      .min(1)
+      .refine((subjects) => new Set(subjects).size === subjects.length, 'duplicate emoji subject'),
+    hours: z
+      .tuple([z.int().min(0).max(1439), z.int().min(0).max(1440)])
+      .refine(([from, to]) => from !== to, 'empty emoji hour window')
+      .optional(),
+    days: z
+      .array(MonthDaySchema)
+      .min(1)
+      .max(4)
+      .refine(
+        (days) => new Set(days.map((d) => `${d.month}/${d.day}`)).size === days.length,
+        'duplicate emoji date',
+      )
+      .optional(),
+    figure: z.enum(['adult', 'child']).optional(),
+    weight: z.number().positive().max(5).default(1),
+  })
+  .superRefine((entry, ctx) => {
+    const person = entry.subjects.length === 1 && entry.subjects[0] === 'person';
+    if (entry.figure && !person)
+      ctx.addIssue({ code: 'custom', path: ['figure'], message: 'figure requires only person' });
+    if (DRINKING_MOODS.some((mood) => mood === entry.mood)) {
+      const hours = entry.hours;
+      if (
+        !person ||
+        entry.figure !== 'adult' ||
+        !hours ||
+        hours[0] < EMOJI_EVENING.start ||
+        (hours[1] < hours[0] && hours[1] > EMOJI_EVENING.end)
+      )
+        ctx.addIssue({
+          code: 'custom',
+          message: 'drinking requires adult people and evening hours',
+        });
+    }
+  }) satisfies z.ZodType<SeasonEmojiEntry>;
 export const SeasonWindowSchema = z.union([
   z.strictObject({ from: MonthDaySchema, to: MonthDaySchema }),
   z.strictObject({
@@ -1263,6 +1316,7 @@ export const Season = z
     title: LocalizedText,
     window: SeasonWindowSchema,
     includes: z.array(SeasonId).min(1).optional(),
+    emoji: z.array(SeasonEmojiEntrySchema).min(1).max(20).optional(),
     fireworks: FireworksSchema.optional(),
     grounds: z
       .array(SeasonGroundsSchema)
@@ -1404,6 +1458,20 @@ export const Season = z
     sources: Sources,
   })
   .superRefine((season, ctx) => {
+    for (const [index, entry] of (season.emoji ?? []).entries())
+      for (const date of entry.days ?? [])
+        for (let year = 2000; year < 2400; year++) {
+          const day = occurrence(year, date);
+          if (day === undefined) continue;
+          if (!seasonContains(season.window, year, day)) {
+            ctx.addIssue({
+              code: 'custom',
+              path: ['emoji', index, 'days'],
+              message: 'emoji dates must fit every occurrence of their authored season window',
+            });
+            break;
+          }
+        }
     for (const [index, installation] of (season.installations ?? []).entries()) {
       if (installation.kind === 'light-string') {
         if (installation.layout !== 'canopy' && installation.spacing_m < 3)
@@ -1444,6 +1512,7 @@ export const Season = z
       !season.stalls &&
       !season.installations?.length &&
       !season.fireworks &&
+      !season.emoji?.length &&
       !season.candles &&
       !season.visitors &&
       !season.congregations
@@ -1489,6 +1558,15 @@ export const CityLife = z.strictObject({
           season.installations,
           includedInstallations,
         );
+        const emojiCount =
+          (season.emoji?.length ?? 0) +
+          [...seen].reduce((count, id) => count + (byId.get(id)?.emoji?.length ?? 0), 0);
+        if (emojiCount > 20)
+          ctx.addIssue({
+            code: 'custom',
+            path: [index, 'includes'],
+            message: 'a composed season accepts at most 20 emoji entries',
+          });
         if (new Set(installations.map((i) => i.id)).size !== installations.length)
           ctx.addIssue({
             code: 'custom',

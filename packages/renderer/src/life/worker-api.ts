@@ -53,6 +53,8 @@ export type LifeInit = {
   seasons?: readonly SimulationSeason[];
   shopSchedule?: ShopSchedule;
   itemInspection?: boolean;
+  /** Internal isolation switch; public emoji display preferences never reach it. */
+  emojiObserver?: boolean;
   dialogue?: readonly DialogueChoice[];
   periods?: Readonly<GreetingPeriods>;
   traffic?: TrafficMix;
@@ -81,6 +83,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     1,
   );
   const start = profiler?.time();
+  world.setEmojiView(input.visible);
   world.step(
     step.dt,
     (lng, lat) => {
@@ -121,6 +124,7 @@ export function createLifeWorkerApi(
         periods: options.periods,
       },
       options.itemInspection,
+      options.emojiObserver,
     ),
 ) {
   let world: LifeWorld;

@@ -38,6 +38,8 @@ import { SeasonControl, SeasonEvents, useSeasonState } from './SeasonControl';
 import { useLifeShown, useProcessionPlayback } from './useProcessionPlayback';
 import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { SpeechControls } from './SpeechControls';
+import { EmojiControls } from './EmojiControls';
+import { useEmojiStore } from '@/state/emoji';
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -172,10 +174,18 @@ function LegendControls({
   );
   const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
   const season = useSeasonState();
+  const emoji = useEmojiStore((s) => s.enabled);
   const entries = useMemo(
     () =>
-      legendEntries(theme, rounded, onScreen, { life, lights, sidewalksDerived, fixtures, season }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season],
+      legendEntries(theme, rounded, onScreen, {
+        life,
+        lights,
+        sidewalksDerived,
+        fixtures,
+        season,
+        emoji,
+      }),
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season, emoji],
   );
   // Replacements start clean; cleanup touches only the instance it belongs to.
   useEffect(() => {
@@ -256,7 +266,11 @@ function LegendControls({
           {entries.map((entry) => {
             const content = (
               <>
-                <span className={styles.glyphs} style={{ color: entry.color }} aria-hidden="true">
+                <span
+                  className={`${styles.glyphs} ${entry.id === 'info:emoji' ? styles.emojiGlyphs : ''}`}
+                  style={{ color: entry.color }}
+                  aria-hidden="true"
+                >
                   {entry.icons
                     ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
                     : entry.glyphs}
@@ -569,6 +583,7 @@ export function Hud({
         <SeasonEvents seasons={seasons} />
         <ProcessionControls />
         {dialogue && <SpeechControls catalog={dialogue} />}
+        <EmojiControls />
       </div>
     </>
   );
