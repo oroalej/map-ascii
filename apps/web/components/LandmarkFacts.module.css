@@ -1,0 +1,81 @@
+.popover,
+.sheet {
+  position: fixed;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--fg-dim);
+  font-size: 14px;
+  line-height: 1.5;
+  z-index: 14;
+  overflow-wrap: anywhere;
+}
+.popover {
+  top: 0;
+  left: 0;
+}
+.popover[hidden] {
+  display: none;
+}
+/* An inset arrow stays inside the constrained border box. */
+.popover::before {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--fg-dim);
+  transform: rotate(45deg);
+}
+.popover[data-side='right']::before {
+  left: 2px;
+  top: calc(50% - 3px);
+}
+.popover[data-side='left']::before {
+  right: 2px;
+  top: calc(50% - 3px);
+}
+.popover[data-side='bottom']::before {
+  top: 2px;
+  left: calc(50% - 3px);
+}
+.popover[data-side='top']::before {
+  bottom: 2px;
+  left: calc(50% - 3px);
+}
+.sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 42dvh;
+  padding: 4px 18px calc(var(--attribution-height, 40px) + 12px);
+  border-width: 1px 0 0;
+}
+.sheet[data-expanded='true'] {
+  max-height: min(88dvh, calc(100dvh - var(--focus-header-bottom, 0px) - 8px));
+}
+.handle {
+  display: block;
+  width: 100%;
+  height: 22px;
+  margin-bottom: 4px;
+  border: none;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+.handle::before {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 4px;
+  margin: 0 auto;
+  background: var(--fg-dim);
+  border-radius: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover,
+  .sheet {
+    transition: none;
+  }
+}

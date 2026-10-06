@@ -61,7 +61,13 @@ beforeEach(() => {
   useAtlasStore.setState({ ...initialAtlasState(), camera: { lng: 0, lat: 0, zoom: 19 } });
   useLifeStore.setState({ enabled: false });
   useEmojiStore.setState({ enabled: true });
-  useUiStore.setState({ legendFocus: null, lifeHover: null, processions: [], procession: null });
+  useUiStore.setState({
+    legendFocus: null,
+    lifeHover: null,
+    processions: [],
+    procession: null,
+    factsVisible: false,
+  });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -178,6 +184,7 @@ it('keeps a clear control outside the collapsed/hidden legend and preserves sele
   expect(instance.focus).toHaveBeenLastCalledWith(null);
   act(() => road.click());
   select('place');
+  act(() => useUiStore.setState({ factsVisible: true }));
   expect(legend().hidden).toBe(true);
   expect(clear()).not.toBeNull();
   const map = document.createElement('canvas');
@@ -304,8 +311,16 @@ it('retains fixture entries and the collapsed preference after a panel closes wi
   });
   expect(legend().open).toBe(false);
   select('place');
+  expect(legend().hidden).toBe(false);
+  act(() => useUiStore.setState({ factsVisible: true }));
+  expect(legend().hidden).toBe(true);
+  act(() => useUiStore.setState({ factsVisible: false }));
+  expect(useAtlasStore.getState().selectedId).toBe('place');
+  expect(legend().hidden).toBe(false);
+  act(() => useUiStore.setState({ factsVisible: true }));
   expect(legend().hidden).toBe(true);
   select(null);
+  act(() => useUiStore.setState({ factsVisible: false }));
   expect(legend().hidden).toBe(false);
   expect(legend().open).toBe(false);
   expect(labels()).toEqual(before);

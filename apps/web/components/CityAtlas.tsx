@@ -20,7 +20,7 @@ import { Attribution } from './Attribution';
 import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
 import { Hud } from './Hud';
-import { InfoPanel } from './InfoPanel';
+import { LandmarkFacts } from './LandmarkFacts';
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { CueBubbles } from './CueBubbles';
@@ -118,7 +118,12 @@ export function CityAtlas({
       <TourMenu />
       <HoverTooltip />
       <CueBubbles catalog={dialogue} />
-      <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
+      <LandmarkFacts
+        city={slug}
+        subdivisionLabel={subdivisionLabel}
+        landmarks={landmarks}
+        art={art}
+      />
       <TourPlayer />
       <Attribution />
       <DebugStats />

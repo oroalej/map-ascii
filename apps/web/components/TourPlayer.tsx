@@ -2,7 +2,8 @@
 
 import type { CSSProperties } from 'react';
 import type { TourRun } from '@/lib/tour';
-import { useAtlasStore } from '@/state/store';
+import { useUiStore } from '@/state/ui';
+import { useSmallScreen } from '@/lib/screen';
 import { tourControls, useTourStore } from '@/state/tour';
 import styles from './TourPlayer.module.css';
 
@@ -50,8 +51,9 @@ function Progress({ run }: { run: TourRun }) {
  */
 export function TourPlayer() {
   const active = useTourStore((s) => s.active);
-  const panelOpen = useAtlasStore((s) => s.selectedId !== null);
-  if (!active) return null;
+  const factsVisible = useUiStore((s) => s.factsVisible);
+  const small = useSmallScreen();
+  if (!active || (small && factsVisible)) return null;
 
   const { tour, run } = active;
   const step = tour.steps[run.step];
@@ -59,7 +61,7 @@ export function TourPlayer() {
   const ended = run.phase === 'ended';
 
   return (
-    <section className={styles.card} aria-label="Tour" data-panel={panelOpen} data-speech-obstacle>
+    <section className={styles.card} aria-label="Tour" data-speech-obstacle>
       {run.grabbed && !ended && (
         <button type="button" className={styles.chip} onClick={tourControls.resume}>
           ▶ Resume tour

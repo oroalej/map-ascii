@@ -537,7 +537,7 @@ export function Hud({
   seasons?: readonly RuntimeSeasonConfig[] | undefined;
 }) {
   const hasCamera = useAtlasStore((s) => s.camera !== null);
-  const panelOpen = useAtlasStore((s) => s.selectedId !== null);
+  const factsVisible = useUiStore((s) => s.factsVisible);
   const touring = useAtlasStore((s) => s.tour !== null);
   const subdivision = useUiStore((s) => s.subdivision);
   if (!hasCamera) return <SubdivisionTracker city={city} />;
@@ -549,7 +549,7 @@ export function Hud({
         <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
-          hidden={panelOpen}
+          hidden={factsVisible}
         />
       </div>
       <div className={styles.bottomLeft} data-touring={touring} data-speech-obstacle>
