@@ -16,8 +16,16 @@ Other sessions may have uncommitted edits in this checkout. Read the PR's code f
 
 1. Claude's review (the file path in the prompt).
 2. `AGENTS.md`: conventions, the "Verifying changes" table, and the Don'ts.
-3. The PR: `gh pr view <N> --json title,body,files,commits`, `gh pr diff <N>`, and `gh pr checks <N>`.
+3. The PR: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. In a full round, also `gh pr diff <N>`. In a delta round, read `git diff <since> <headRefOid>` instead, and the ledger named in the prompt.
 4. If `.plans/README.md` in the main checkout lists the PR's branch, read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
+
+## Delta rounds
+
+When the prompt says `Scope: delta since <sha>`, Claude reviewed only the fix commits since that reviewed commit, plus their callers and tests. Earlier rounds already validated the rest of the PR.
+
+- Validate every entry exactly as below.
+- For each ledger entry these commits claim to fix, check that the fix really resolves it. An entry that still holds goes under "Noticed" with its ledger ID.
+- For "Noticed", inspect the delta, the callers and tests of changed code, and the ledger's open entries. Don't re-audit untouched files, but read anything outside the delta that the evidence needs.
 
 ## Validate every entry
 

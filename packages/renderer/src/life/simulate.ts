@@ -3,6 +3,13 @@ import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
+import {
+  EmojiObserver,
+  EmojiMemory,
+  type EmojiCue,
+  type EmojiObservation,
+  type EmojiObserverOptions,
+} from './emoji';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
  * along the lines of the tiles on screen, and flocks of birds circling over parks, trees, and
@@ -225,6 +232,11 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
+const moverAttendance = (m: Mover, levels: Activity | undefined, crowd: number) =>
+  !!m.train || !levels || m.rank < levels[m.kind] * crowd;
+const vendorAttendance = (s: Stall, levels: Activity | undefined, crowd: number) =>
+  s.open !== false && (!levels || s.rank < levels.person * crowd);
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
   return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
@@ -456,9 +468,18 @@ export type LifeEnv = {
   nextSourceId?: () => number;
   inspecting?: object;
   clock?: number;
+  /** Viewer elapsed time for read-only moods; movement keeps its capped step clock. */
+  emojiTime?: { clock: number; dt: number };
   minutes?: number;
   cityLife?: Pick<CityLifeConfig, 'schedules'>;
   season?: string | null;
+  /** Installed, composed observer metadata; schedules remain in cityLife. */
+  emojiSeasons?: readonly SimulationSeason[];
+  /** Observer-only city calendar and same-frame lighting/weather choice. */
+  date?: { epochDay: number; weekday: number; preview: boolean };
+  sunAltitude?: number;
+  windPreset?: 'calm' | 'breeze' | 'gusty' | 'storm';
+  emojiView?: { levels: Activity; crowd: number; bounds?: LngLatBounds };
   levels?: Activity;
   rain: number;
   wind?: { dir: readonly [number, number]; strength: number };
@@ -746,6 +767,9 @@ export class TileLife {
   private readonly sharedRoadVertices = new Set<number>();
   private inspected?: object;
   readonly momentHost: MomentHost;
+  readonly emoji: EmojiObserver;
+  private readonly emojiInputs: EmojiObservation[] = [];
+  private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
@@ -944,6 +968,7 @@ export class TileLife {
     const preview = this.projectFrom(m, source, options);
     if (!preview || (admit && !admit(preview))) return false;
     if (replace) this.release(replace);
+    this.emoji.adopt(m, source.emoji);
     source.release(m);
     m.line = preview.line;
     m.from = preview.from;
@@ -967,6 +992,7 @@ export class TileLife {
   }
 
   release(m: Mover): void {
+    this.emoji.release(m);
     const index = this.movers.indexOf(m);
     if (index >= 0) this.movers.splice(index, 1);
     this.scenes.release(m);
@@ -1142,6 +1168,7 @@ export class TileLife {
     deferred = false,
     momentOptions?: MomentOptions,
     private readonly forageMode: ForageMode = 'standalone',
+    emojiOptions?: EmojiObserverOptions,
   ) {
     this.perMeter = 1 / metersPerUnit(tile);
     this.rng = random(seed);
@@ -1163,6 +1190,7 @@ export class TileLife {
     this.along = new Float64Array(geo.coords.length / 2);
     this.curvable = new Uint8Array(lines);
     this.momentHost = new MomentHost(this, seed, momentOptions);
+    this.emoji = new EmojiObserver(seed, this.perMeter, emojiOptions);
     if (!deferred) complete(this.prepare());
   }
 
@@ -4538,6 +4566,87 @@ export class TileLife {
     this.stepFrame(dt, gustAt, shows, near, env, guard, pass, pedestrians);
   }
 
+  private clearEmojiInput(input: Partial<EmojiObservation>) {
+    input.owner = undefined;
+    input.mover = undefined;
+    input.gatherer = undefined;
+    input.visit = undefined;
+    input.passenger = undefined;
+    input.figure = undefined;
+    input.held = undefined;
+    input.arrival = undefined;
+    input.still = undefined;
+    input.vendor = undefined;
+  }
+  private emojiInput(
+    owner: EmojiObservation['owner'],
+    subject: EmojiObservation['subject'],
+    eligible: boolean,
+  ): EmojiObservation {
+    const index = this.emojiInputs.length;
+    const input = this.emojiInputPool[index] ?? (this.emojiInputPool[index] = {});
+    this.clearEmojiInput(input);
+    input.owner = owner;
+    input.subject = subject;
+    input.eligible = eligible;
+    input.speaking = this.momentHost.speaking(owner);
+    // Required fields are populated before lending this pooled record to the observer.
+    const observation = input as EmojiObservation;
+    this.emojiInputs.push(observation);
+    return observation;
+  }
+  private emojiArrival(mover: Mover): boolean {
+    for (const event of this.scenes.speechEvents)
+      if (event.kind === 'arrival' && event.mover === mover) return true;
+    return false;
+  }
+  private emojiObservations(
+    env: LifeEnv,
+    near?: (x: number, y: number) => boolean,
+    owns?: (p: { x: number; y: number }) => boolean,
+  ): EmojiObservation[] {
+    const levels = env.emojiView?.levels ?? env.levels;
+    const crowd = env.emojiView?.crowd ?? 1;
+    const visible = viewIn(this.tile, env.emojiView?.bounds, 0);
+    const eligible = (p: { x: number; y: number }) =>
+      inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
+    const observations = this.emojiInputs;
+    observations.length = 0;
+    for (const m of this.movers) {
+      if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
+      const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
+      if (subject === 'person' && !m.group) continue;
+      const admitted = eligible(m) && this.visibleMover(m, levels, crowd);
+      if (!admitted && this.emoji.memory.get(m)?.clock === undefined) continue;
+      const input = this.emojiInput(m, subject, admitted);
+      input.mover = m;
+      input.figure = m.group?.[0]?.figure;
+      input.visit = this.scenes.visits.get(m);
+      input.held = this.scenes.held(m);
+      input.passenger = this.scenes.services.get(m)?.passenger;
+      input.arrival = this.emojiArrival(m);
+      input.still = m.pause > 0 || this.scenes.still(m);
+    }
+    for (const g of this.gatherers) {
+      if (g.carabao !== undefined) continue;
+      const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
+      if (!admitted && this.emoji.memory.get(g)?.clock === undefined) continue;
+      const input = this.emojiInput(g, 'person', admitted);
+      input.gatherer = g;
+      input.figure = g.walker.figure;
+    }
+    for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls) {
+      const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
+      if (!admitted && this.emoji.memory.get(s)?.clock === undefined) continue;
+      const input = this.emojiInput(s, 'person', admitted);
+      input.figure = 'adult';
+      input.vendor = true;
+    }
+    return observations;
+  }
+  visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
+    return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
+  }
   private stepFrame(
     dt: number,
     gustAt?: (x: number, y: number) => number,
@@ -4578,6 +4687,21 @@ export class TileLife {
       momentView?.cellAspect ?? DEFAULT_CELLS.aspect,
       this.inspected,
     );
+    const emojiEnv = env ?? { rain: 0, clock };
+    const emojiZoom = momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0);
+    if (this.emoji.observes(emojiZoom))
+      this.emoji.step(
+        dt,
+        emojiZoom,
+        emojiEnv,
+        this.emojiObservations(emojiEnv, near, pass?.owns),
+        this.scenes.purchaseCompletions,
+        this.momentHost.voiceCompletions,
+      );
+    else this.emoji.step(dt, emojiZoom, emojiEnv, []);
+    // Inputs are borrowed only for this observer call; do not retain actor references.
+    for (let i = 0; i < this.emojiInputs.length; i++) this.clearEmojiInput(this.emojiInputPool[i]!);
+    this.emojiInputs.length = 0;
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
     const speeds = this.followLimits(dt, table);
@@ -5529,6 +5653,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  emoji?: EmojiCue;
   /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
   /** Candle clock token: running offset >= 0, held time encoded as -time - 2. */
@@ -5909,6 +6034,7 @@ export class LifeWorld {
       true,
       this.momentOptions,
       'world',
+      { memory: this.emojiMemory, enabled: this.emojiObserver },
     ).prepare();
     if (this.profiler) {
       this.profiler.registerPopulation(entry.key, life.movers);
@@ -6005,11 +6131,21 @@ export class LifeWorld {
   private readonly scenes = new Map<string, ProcessionScene>();
   /** Seconds simulated, for played processions. */
   private clock = 0;
+  private emojiClock = 0;
   private played: { id: string; start: number } | undefined;
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
   private lastRain = 0;
+  readonly emojiMemory = new EmojiMemory();
+  private emojiView?: LifeEnv['emojiView'];
+  setEmojiView(view: Parameters<LifeWorld['visible']>) {
+    this.emojiView = {
+      levels: typeof view[1] === 'number' ? activityLevels(view[1]) : view[1],
+      crowd: view[5] ?? 1,
+      bounds: view[4],
+    };
+  }
 
   /** `traffic`: the city's vehicle mix (its pack's `traffic`), over the default. */
   constructor(
@@ -6017,6 +6153,7 @@ export class LifeWorld {
     private readonly profiler?: FrameProfiler,
     private readonly momentOptions?: MomentOptions,
     itemInspection = false,
+    private readonly emojiObserver = true,
   ) {
     this.traffic = resolveTraffic(traffic);
     if (itemInspection) this.inspection = new LifeInspection();
@@ -6031,6 +6168,10 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    for (const tile of this.tiles.values()) tile.emoji.dispose();
+    for (const { life } of this.retired.values()) life.emoji.dispose();
+    this.emojiMemory.reset();
+    this.emojiView = undefined;
     this.puffPacket = EMPTY_PUFFS;
     this.puffSources.clear();
     this.actorSources.clear();
@@ -6072,6 +6213,7 @@ export class LifeWorld {
       if (this.clock - entry.at >= RETIRE.seconds) {
         this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
+        entry.life.emoji.dispose();
         this.retired.delete(key);
       }
     if (cap)
@@ -6080,6 +6222,7 @@ export class LifeWorld {
         const life = this.retired.get(key)!.life;
         this.forgetBirds(life);
         life.momentHost.clear();
+        life.emoji.dispose();
         this.retired.delete(key);
       }
   }
@@ -6142,6 +6285,7 @@ export class LifeWorld {
               false,
               this.momentOptions,
               'world',
+              { memory: this.emojiMemory, enabled: this.emojiObserver },
             );
           this.retired.delete(key);
           this.tiles.set(key, fresh);
@@ -6161,6 +6305,7 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
+          life.emoji.freeze();
           life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
           this.appliedCrowds.delete(life);
           this.retired.set(key, { life, at: this.clock });
@@ -7077,7 +7222,7 @@ export class LifeWorld {
     zoom?: number,
     bounds?: LngLatBounds,
     wind?: LifeEnv['wind'],
-    weather?: { rain: number; minutes?: number; season?: string | null },
+    weather?: Pick<LifeEnv, 'rain' | 'minutes' | 'season' | 'date' | 'sunAltitude' | 'windPreset'>,
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
@@ -7091,6 +7236,7 @@ export class LifeWorld {
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
+    this.emojiClock += Math.max(0, dt);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.arrivals.clear();
@@ -7103,6 +7249,7 @@ export class LifeWorld {
     const env: LifeEnv = {
       inspecting: this.inspection?.owner,
       clock: this.clock,
+      emojiTime: { clock: this.emojiClock, dt: Math.max(0, dt) },
       levels: this.lastLevels,
       rain: this.lastRain,
       wind,
@@ -7110,6 +7257,8 @@ export class LifeWorld {
       nextSourceId: this.nextSourceId,
       ...weather,
       cityLife: this.cityLife,
+      emojiSeasons: this.seasons,
+      emojiView: this.emojiView,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds);
     this.junctions.begin(new Set(this.tiles.values()));
@@ -7632,9 +7781,23 @@ export class LifeWorld {
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const push: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
+    const present: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number = inspection
       ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
       : (_owner, agent) => out.push(agent);
+    const push = (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+      const cue = this.emojiMemory.cue(owner);
+      if (
+        cue &&
+        !agent.speech &&
+        !agent.aboard &&
+        !agent.parked &&
+        !agent.prop &&
+        !agent.consist &&
+        agent.vehicle !== 'carabao'
+      )
+        agent.emoji = cue;
+      return present(owner, agent, birdSpeed);
+    };
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -7658,8 +7821,7 @@ export class LifeWorld {
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!this.owns(life, m)) continue;
-        if (life.scenes.hidden(m)) continue;
-        if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
+        if (!shows(m.kind) || !life.visibleMover(m, levels, crowd)) continue;
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
@@ -7779,12 +7941,9 @@ export class LifeWorld {
         }
       }
       if (shows('person')) {
-        const vendorsOut = levels.person * crowd;
         for (const s of life.seasonalStalls.length ? life.allStalls() : life.stalls) {
           if (!this.owns(life, s)) continue;
-          if (s.open === false) continue;
-          if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
-            continue;
+          if (!vendorAttendance(s, levels, crowd) || !inTile(s)) continue;
           if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
           const speech = life.momentHost.scenes.speech(s);

@@ -36,6 +36,15 @@ export class SceneSpeech {
   private readonly active: Active[] = [];
   private readonly owners = new Map<object, Active>();
   private seen = new WeakSet<object>();
+  private readonly heard = new WeakSet<object>();
+  private readonly completions: { token: object; owners: readonly object[] }[] = [];
+  get voiceCompletions() {
+    return this.completions as readonly { token: object; owners: readonly object[] }[];
+  }
+  voiceActive(owner: object) {
+    const a = this.owners.get(owner);
+    return !!a?.voiced && this.time >= a.start;
+  }
   constructor(
     seed: number,
     choices: readonly DialogueChoice[],
@@ -54,8 +63,10 @@ export class SceneSpeech {
   get foregroundSize() {
     return this.active.reduce((count, a) => count + Number(!a.scene.ambient), 0);
   }
-  private remove(index: number) {
+  private remove(index: number, completed = false) {
     const [a] = this.active.splice(index, 1);
+    if (completed && this.heard.has(a!))
+      this.completions.push({ token: a!, owners: a!.scene.speakers.map((s) => s.owner) });
     for (const { owner } of a!.scene.speakers)
       if (this.owners.get(owner) === a) this.owners.delete(owner);
   }
@@ -74,12 +85,15 @@ export class SceneSpeech {
     }
   }
   step(dt: number, allowed: boolean, clock?: number) {
+    this.completions.length = 0;
+    for (const a of this.active) if (a.voiced && this.time >= a.start) this.heard.add(a);
     this.time += dt;
     this.now = clock ?? this.time;
     for (let i = this.active.length - 1; i >= 0; i--) {
       const a = this.active[i]!;
-      if (!allowed || !a.scene.valid() || this.time >= a.start + a.dialogue.turns * a.turn)
-        this.remove(i);
+      const valid = allowed && a.scene.valid();
+      const ended = this.time >= a.start + a.dialogue.turns * a.turn;
+      if (!valid || ended) this.remove(i, valid && ended);
     }
   }
   admit(scene: SceneExchange, freeCapacity: number) {
@@ -179,6 +193,7 @@ export class SceneSpeech {
       : 'gesture';
   }
   clear() {
+    this.completions.length = 0;
     this.active.length = 0;
     this.owners.clear();
     this.seen = new WeakSet();

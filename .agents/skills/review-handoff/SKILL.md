@@ -11,7 +11,7 @@ This skill authorizes reviewer CLI runs, review artifacts inside the task's main
 
 The sequence is fixed: **round 1: Codex; round 2: Claude → Codex validation**. Run round 2 even if round 1 has no findings. Never add a third round or substitute a review by the coordinating session for a required process. Reruns of a process (Retry, or a restart after the handoff itself changed) are not rounds.
 
-**Never pause.** The only ends are the ones in [review-pr's "Ends"](../review-pr/SKILL.md): nothing to do (no such handoff, or the work already landed on `main`: `blocked`) and a missing tool (`error`). Everything else is solved with review-pr's Shared patterns (Retry; Decide, don't stall) and the rules below.
+**Never pause.** Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns, Rules, Binaries (`codex` and `claude`) and Speed. The only ends are nothing to do (no such handoff: `error`; the work already landed on `main`: `blocked`) and a missing tool (`error`). Everything else is solved with Retry, Decide don't stall, and the rules below.
 
 Use the shared [review prompt](references/handoff-review-prompt.md) for both reviewers and the [validation prompt](references/handoff-validation-prompt.md) for round 2's Codex run.
 
@@ -23,15 +23,14 @@ Use the shared [review prompt](references/handoff-review-prompt.md) for both rev
 | Round 2 reviewer | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
 | Round 2 validator | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 
-The current session coordinates, checks evidence and edits only scratch candidates (and the original when authorized). There is no extra coordinator CLI run. Each listed reviewer/validator starts in a fresh process. Never change models or efforts or fall back to another model.
+The current session coordinates, checks evidence and edits only scratch candidates (and the original when authorized). There is no extra coordinator CLI run. Each listed reviewer/validator starts in a fresh process. Resolve `<codex>` and `<claude>` once. `<speed>` goes to both Codex runs; Claude runs at normal speed and fixed `high` effort, never `--claude-effort`. Every launch, background ones included, uses `<checkout>` as its working directory and quotes paths. Prompts go in a scratch file passed as `(Get-Content -Raw '<prompt-path>')`.
 
-Resolve the newest installed binaries once with `pnpm.cmd -C <repo> --silent cli:latest codex` and the same command with `claude`. `<repo>` is the checkout containing this skill, `<skill-dir>/../../..`. Check `$LASTEXITCODE` immediately after each command; a failure is a missing tool (`error`). Retain the printed absolute paths and versions. Never use bare `codex` or `claude`.
+**Process failures are retried.** A reviewer or validator gets Retry, writing to `<round>/attempt-<n>/`, when it:
+- exits nonzero (including "Selected model is at capacity", rate limits and network errors)
+- writes no report
+- writes a report missing its verdict or required sections
 
-`<speed>` is `-c 'service_tier="fast"' --enable fast_mode` with `--fast`, otherwise `--disable fast_mode`. Pass it explicitly to both Codex runs. Claude remains at normal speed.
-
-All reviewer and validator launches, including background launches, use `<checkout>` as their working directory. On Windows, quote paths and use single-quoted prompt strings, or put the exact prompt in a scratch file and pass `(Get-Content -Raw '<prompt-path>')`. Capture stdout with `Out-File -Encoding utf8`, never plain `>`. Capture native exit codes immediately. If a run needs a background process, use `Start-Process -WindowStyle Hidden`, capture its exit code, and poll with short waits while providing progress updates.
-
-**Process failures are retried.** A reviewer or validator that exits nonzero (including "Selected model is at capacity", rate limits and network errors), writes no report, or writes a report missing its verdict or required sections is rerun with the same model, effort and input under review-pr's Retry (1, 2, 4, 8, 15, 15… minutes, up to 60 minutes), writing to `<round>/attempt-<n>/`. Only an exhausted window ends the run (`error`, `model unavailable: <model>`).
+Only an exhausted window ends the run (`error`, `model unavailable: <model>`).
 
 ## 1. Resolve and snapshot
 

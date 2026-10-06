@@ -1,11 +1,11 @@
 ---
 name: implement-handoff
-description: Take an ASCII Atlas handoff from two-round review to PR. Run $review-handoff --apply (Codex first, then Claude with Codex validation), implement the reviewed handoff, commit and push, open a PR to main, then run $review-pr for synchronization, review and CI. Never pauses; never merges the PR. Use when invoked as $implement-handoff [--fast] with a task name or handoff path.
+description: Take an ASCII Atlas handoff from two-round review to PR, implementation, synchronization, resumable PR review and CI. Retains progress when delegated PR review exhausts usage; never merges. Use for $implement-handoff with optional --fast, --claude-effort and a task name or handoff path.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
 
-Usage: `$implement-handoff [--fast] [--candidate <prior candidate path>] <task | path to handoff.md>`
+Usage: `$implement-handoff [--fast] [--claude-effort <level>] [--candidate <prior candidate path>] <task | path to handoff.md>`
 
 Invoking `$implement-handoff` authorizes these actions for this one task:
 
@@ -17,11 +17,13 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - opening a PR to `main`
 - running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
-Don't ask for confirmation between steps. **Never pause.** The only ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no such handoff, or the work already landed on `main`) and a missing tool. Its Shared patterns (Retry, Detached work tree, Decide, don't stall, Carry, don't stop, Relaunch on the wrong model) apply here. The handoff's "Stop and report if" conditions are problems to solve, not stops. Never merge the PR.
+Don't ask for confirmation between steps, and never merge the PR. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns, Rules, Binaries (`codex` only), Speed and Claude effort.
+
+- **Interrupted review:** an interrupted delegated PR review ends this invocation with saved progress.
+- **Other ends:** nothing to do (no such handoff, or the work already landed on `main`) and a missing tool.
+- **Stop conditions:** the handoff's "Stop and report if" conditions are problems to solve, not stops.
 
 ## Models
-
-Always pass these explicitly. Never change them or fall back to another model.
 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
@@ -29,38 +31,26 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Inside `$review-handoff`: round 1 review / round 2 validation | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 | Inside `$review-handoff`: round 2 review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
 | PR review coordinator: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
-| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
+| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, max | | normal / `<speed>` |
 
-**Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.1. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-handoff` and `$review-pr` resolve their own newest `codex` and `claude`.
-
-This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a different model or effort, relaunch (review-pr Shared patterns) with the same arguments and relay that run's report.
-
-`<speed>` comes from the `--fast` option:
-
-- with `--fast`: `-c 'service_tier="fast"' --enable fast_mode`
-- without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
-
-`--fast` is also forwarded to `$review-handoff` and `$review-pr`. It doesn't change Claude, or this session's own speed.
+`$review-handoff` and `$review-pr` resolve their own binaries. `--fast` is forwarded to both; `--claude-effort` goes only to `$review-pr`.
 
 ## Rules
 
-- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`.
+shared.md's Rules apply, plus:
+
 - **Main moves on.** Pull `origin/main` before the handoff review (step 0.4) and once more before implementing (step 3.0). The review reads `main` once; it never re-checks it. Drift after the review is handled while implementing (step 3.2): find where the code went and continue. After implementation starts, `$review-pr` handles synchronization.
-- **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
-- **Long commands:** the `$review-pr` run can take several hours. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<scratch>`, and poll until it exits.
 - **Solve blockers; don't pause for them.** A failed gate, a premise that turns out false, an approach that doesn't work, or a finding a reviewer noticed is a problem to solve inside this task, not a decision for the owner. Diagnose it, change the approach within the handoff's goal, Invariants, Out of scope and `AGENTS.md`, and measure again. A gate that still fails after that doesn't stop the run: commit, open the PR, and list the gate as unmet in the PR body and the report. The same goes for a step whose only implementation would break an `AGENTS.md` rule: choose a compliant approach, and if the goal can't be reached that way, carry it as an unmet gate.
-- **Uncommitted files in this task's worktree** are this task's work in progress (from an earlier run of it). Commit them with this task's commits, holding back secrets (`.env*`, keys, tokens, credentials) and files over 10 MB, which stay uncommitted and are reported. If they would block a merge anyway, use a detached work tree (review-pr Shared patterns) for the merge.
+- **Uncommitted files in this task's worktree** are this task's work in progress (from an earlier run of it). Commit them with this task's commits, holding back secrets (`.env*`, keys, tokens, credentials) and files over 10 MB, which stay uncommitted and are reported. If they would block a merge anyway, use a detached work tree for the merge.
 - **Ending early** happens only for a missing tool: set the task row's Next step to the missing tool and what installs it, leave the folder in `active/`, and go to step 6. Commits already made stay; push them first when the push itself works.
 
 ## 0. Resolve the handoff
 
-1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Resolve an explicitly supplied `--candidate` path against the invocation directory and retain its absolute path for the handoff review; it is not the original handoff path. Resolve the newest installed Codex (PowerShell):
-
-   ```
-   pnpm.cmd -C <repo> --silent cli:latest codex
-   ```
-
-   `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`). Use `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`. Check `$LASTEXITCODE` immediately; if non-zero, end with a missing tool. Set `<codex>` to the absolute path printed on stdout and retain it in session context, like `<scratch>` and `<speed>`. It prints `codex <version> <path>` on stderr; note the version for the report. Shell variables do not survive separate tool calls: replace `<codex>` with the resolved path in every later command, keeping its single quotes for paths containing spaces.
+1. **Parse options and resolve Codex.**
+   - Take out `--fast` and set `<speed>`.
+   - Take out and validate `--claude-effort`, remembering whether it was explicit.
+   - Resolve an explicit `--candidate` path against the invocation directory and keep its absolute path for the handoff review. It is not the original handoff path.
+   - Resolve `<codex>` (shared.md, Binaries).
 2. Find the handoff:
    - **A path:** use it.
    - **A task name:** look for `<main-checkout>/.plans/{todo,paused,active}/<task>/handoff.md`.
@@ -86,12 +76,10 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 Bring the branch up to date with `main` before the review and again before the first code edit, so both work against current code:
 
-1. `git -C <wt> fetch origin main` (with Retry). If `git -C <wt> merge-base --is-ancestor origin/main HEAD` succeeds, it's already current.
-2. Otherwise `git -C <wt> merge origin/main -m "🔀 merge(<scope>): sync <topic> with main"` (same `<scope>`/`<topic>` rule as `<skill-dir>/../review-pr/SKILL.md` step 1.7.3). A branch with no commits of its own just fast-forwards.
-3. Resolve every conflict as `review-pr` step 1.7.4–1.7.6 says: regenerate tiles (tippecanoe through Docker when it isn't installed), decide incompatible behaviors with `main` as the baseline, record `Conflict decisions:` in the merge commit, and fix what the tests catch. Never stop for a conflict. Only a tool that is still missing after its fallbacks ends the run (`merge tool unavailable: <tool> — <files>`). List any conflict decisions in the step 6 report.
-4. If git refuses because the merge would overwrite uncommitted files, commit those files first as this task's work in progress (Rules), then merge again.
-
-The merge commit is pushed with the rest of the branch in step 4.
+Follow [merge-main.md](../review-pr/references/merge-main.md) in `<wt>` with an empty baseline. It fetches, merges (a branch with no commits of its own fast-forwards), and resolves every conflict: regenerating tiles, deciding with `main` as the baseline, recording `Conflict decisions:`, and fixing what the tests catch. Only a tool still missing after its fallbacks ends the run (`merge tool unavailable: <tool> — <files>`).
+- **Uncommitted files:** if git refuses because the merge would overwrite them, commit them first as this task's work in progress (Rules), then merge again.
+- **Push later:** don't push yet. The merge commit goes out with the rest of the branch in step 4.
+- **Report:** list any conflict decisions in the step 6 report.
 
 ## 1. Run $review-handoff
 
@@ -138,16 +126,17 @@ For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SK
 
 ## 5. Run $review-pr
 
-Start it once, in a fresh Codex PR-review coordinator, with a shell timeout of at least 4 hours:
+Make the delegated review call (shared.md) with `resultFile: "<scratch>/review.json"`:
 
 ```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <scratch>/review.md 'Use the review-pr skill at <skill-dir>/../review-pr/SKILL.md, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <scratch>/review.json.'
+pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input.json
 ```
 
-Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`. If neither exists (the process failed), Retry the run. `$review-pr` has already written the PR review cell of the task's row.
+`$review-pr` writes the task's PR review cell when it can report. Then:
 
 - `clean` (review clean and CI green): go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
 - `error` (a missing tool): the PR stays open. Set the row's Next step to its `stopReason`. The folder stays in `active/`.
+- `interrupted`: report the checkpoint, reset information and resume command; set the row's Next step accordingly. Leave the task active, preserve WIP and scratch, and end without marking implementation complete or retrying the exhausted process.
 
 ## 6. Report and clean up
 
@@ -166,4 +155,5 @@ Then, per `AGENTS.md`:
   - `clean` with every gate met and no open review entries: move `<task-dir>` to `.plans/done/`, and set its row to Complete, with the PR # and the final commit.
   - `clean` with an unmet gate or open review entries: leave the folder in `active/`. Set Status to `PR open; gate unmet` (or `PR open; <n> open review entries`) and Next step to the gate and its latest numbers, or the entries.
   - Ended early for a missing tool: leave the folder in `active/`, with the row's Next step naming the tool.
-- **Scratch:** leave it in `<task-dir>`. `$merge-pr` deletes it with `pnpm plans:clean` when the PR merges, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands: Codex rejects recursive deletes as "blocked by policy".
+  - Interrupted review: leave the folder in `active/`, with the row's Next step naming the checkpoint and continuation command. Existing unmet gates and open entries remain in effect on the next invocation.
+- **Scratch:** leave it in `<task-dir>`. `$merge-pr` deletes it with `pnpm plans:clean` when the PR merges, keeping `handoff.md` and the files the handoff marks **keep** (shared.md, Deleting).

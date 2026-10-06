@@ -576,6 +576,22 @@ const texels = (targets: CellTargets): Texels => {
 
 /** The CPU raster belonging to these targets, without allocating or resetting it. */
 export const lifeRaster = (targets: CellTargets) => texelsOf.get(targets) ?? null;
+export type LabelObstacle = { left: number; top: number; width: number; height: number };
+/** Detached current collision footprints, including halos and rotated bounds. */
+export function labelObstacles(
+  targets: CellTargets | null | undefined,
+  grid: Pick<Grid, 'shiftX' | 'shiftY'>,
+  cell: { w: number; h: number },
+  dpr: number,
+): LabelObstacle[] {
+  if (!targets || dpr <= 0) return [];
+  return (overlays.get(targets)?.overlay.taken ?? []).map((b) => ({
+    left: (b.left * cell.w - grid.shiftX) / dpr,
+    top: (b.top * cell.h - grid.shiftY) / dpr,
+    width: (b.width * cell.w) / dpr,
+    height: (b.height * cell.h) / dpr,
+  }));
+}
 /** A conservative label/halo guard, including rotated labels' collision bounds. */
 export function labelCovers(targets: CellTargets, col: number, row: number): boolean {
   const overlay = overlays.get(targets)?.overlay;

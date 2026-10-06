@@ -55,6 +55,32 @@ const fbo = {} as WebGLFramebuffer;
 const rect = { x: 3, y: 4, width: 1, height: 1 };
 
 describe('Readback', () => {
+  it.each([false, true])(
+    'notifies retirement on reset(lost=%s), rejection and success exactly once',
+    (lost) => {
+      const f = fakeGl(),
+        readback = new Readback(f.gl),
+        done = vi.fn(),
+        retired = vi.fn();
+      readback.request(fbo, 10, { ...rect, width: 0 }, done, retired);
+      expect(retired).toHaveBeenCalledTimes(1);
+      expect(done).not.toHaveBeenCalled();
+      f.raw.fenceSync.mockReturnValueOnce(null as unknown as object);
+      readback.request(fbo, 10, rect, done, retired);
+      expect(retired).toHaveBeenCalledTimes(2);
+      readback.request(fbo, 10, rect, done, retired);
+      readback.reset(lost);
+      expect(retired).toHaveBeenCalledTimes(3);
+      expect(readback.size).toBe(0);
+      readback.request(fbo, 10, rect, done, retired);
+      f.signal();
+      readback.poll();
+      expect(done).toHaveBeenCalledTimes(1);
+      expect(retired).toHaveBeenCalledTimes(4);
+      readback.reset();
+      expect(retired).toHaveBeenCalledTimes(4);
+    },
+  );
   it('hands the data over only once the fence has signaled', () => {
     const f = fakeGl();
     const readback = new Readback(f.gl);
