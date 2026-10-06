@@ -1,6 +1,7 @@
 /**
  * Delete a handoff task's scratch (AGENTS.md "Handoff plans"): everything in
- * `.plans/<status>/<task>/` except `handoff.md` and the named keep paths.
+ * `.plans/<status>/<task>/` (or `.plans/done/<group>/<task>/`) except `handoff.md`
+ * and the named keep paths.
  *
  * Deletion runs in Node because Codex rejects recursive shell deletes
  * (`Remove-Item -Recurse`, `rm -rf`) as "blocked by policy" when it can't ask for approval.
@@ -35,14 +36,28 @@ const isDescendant = (path: string, folder: string) => {
 };
 
 /**
- * Finds the one `<plansRoot>/<status>/<task>/` folder, failing on a bad slug, no or several
- * matches, or a folder that is a link (junction or symlink) or resolves outside `plansRoot`.
+ * Finds the one task folder, allowing grouped completed tasks while retaining legacy direct
+ * done paths. Fails on a bad slug, no or several matches, or linked/out-of-root paths.
  */
 export function findTaskFolder(plansRoot: string, task: string): string {
   if (!SLUG.test(task)) {
     throw new Error(`Invalid task "${task}" (lowercase letters, digits and dashes)`);
   }
-  const matches = PLAN_STATUSES.map((status) => join(plansRoot, status, task)).filter((path) => {
+  const matches = PLAN_STATUSES.flatMap((status) => {
+    const direct = join(plansRoot, status, task);
+    const paths = [direct];
+    if (status === 'done') {
+      const doneFolder = join(plansRoot, status);
+      const doneStats = lstatOrNull(doneFolder);
+      if (doneStats?.isDirectory() && !doneStats.isSymbolicLink()) {
+        for (const group of readdirSync(doneFolder, { withFileTypes: true })) {
+          if (group.isDirectory() && !group.isSymbolicLink())
+            paths.push(join(doneFolder, group.name, task));
+        }
+      }
+    }
+    return paths;
+  }).filter((path) => {
     const stats = lstatOrNull(path);
     return stats !== null && (stats.isDirectory() || stats.isSymbolicLink());
   });
@@ -50,7 +65,7 @@ export function findTaskFolder(plansRoot: string, task: string): string {
     throw new Error(`No task folder ${task} under ${plansRoot}/{${PLAN_STATUSES.join(',')}}`);
   }
   if (matches.length > 1) {
-    throw new Error(`Task ${task} exists in several statuses: ${matches.join(', ')}`);
+    throw new Error(`Task ${task} exists in several locations: ${matches.join(', ')}`);
   }
   const folder = matches[0]!;
   if (lstatSync(folder).isSymbolicLink())

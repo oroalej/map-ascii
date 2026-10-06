@@ -101,12 +101,12 @@ If one fails, fix it and rerun only that check.
 
 Implementation plans live in the gitignored `.plans/` folder of the main checkout. `.plans/README.md` indexes them.
 
-- Each task has one folder, `.plans/<status>/<task>/`, where `<status>` is `todo`, `active`, `paused` or `done`. `handoff.md` is the plan.
+- Each task has one folder: `.plans/<status>/<task>/` for `todo`, `active` and `paused`, and `.plans/done/<group>/<task>/` for grouped completed tasks. `handoff.md` is the plan. Legacy direct `.plans/done/<task>/` folders remain supported.
 - In new handoffs, list **keep** entries as exact paths relative to that task folder (files or directories, including nested paths). Counts and prose alone do not identify protected files. Cleanup reconciles legacy keep prose with the README and inventory, verifies a dry-run by file identity and directory coverage, and preserves the whole task when the protected set is ambiguous.
 - Put every scratch file for the task in its folder: logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
 - A handoff for a follow-up names the task's existing worktree and branch (from its `.plans/README.md` row), not a new one.
 - Confirm each step with targeted tests only; the end-of-task checks run once (see "Verifying changes"). No screenshots or evidence sets.
-- When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
+- When you start, move the folder from `todo/` to `active/`. When you finish, move it under the relevant topic group in `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
 - Don't delete scratch yourself. When the PR merges, `$merge-pr` runs `pnpm plans:clean`, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands (`Remove-Item -Recurse`, `rm -rf`): Codex rejects them as "blocked by policy".
 
 ## Don'ts
