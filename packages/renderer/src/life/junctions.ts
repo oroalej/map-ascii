@@ -164,12 +164,12 @@ export class JunctionIndex {
       }
   }
 
-  /** Initial traffic must enter a linked zone through its gates and acquire a reservation. */
-  canSpawnVehicle(m: Mover): boolean {
-    if (!this.hasLinked) return true;
+  /** Settled traffic needs reservations; population sampling retains its linked-zone rule. */
+  canSpawnVehicle(m: Mover, allJunctions = false): boolean {
+    if (!this.junctions.length || (!allJunctions && !this.hasLinked)) return true;
     if (this.internalLines.has(m.line)) return false;
     const movement = this.movement(m, 60 * this.pm);
-    return !movement?.junction.linked || movement.ahead >= 0;
+    return !movement || (!allJunctions && !movement.junction.linked) || movement.ahead >= 0;
   }
 
   movement(m: Mover, reach: number): Movement | undefined {

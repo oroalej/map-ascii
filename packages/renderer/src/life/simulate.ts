@@ -2637,11 +2637,14 @@ export class TileLife {
       yield;
       const m = this.movers[i]!;
       if (m.kind !== 'vehicle' && m.kind !== 'person') continue;
-      let fits = guard(m);
+      let fits = (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m, true)) && guard(m);
       for (let attempt = 0; !fits && attempt < 24; attempt++) {
         yield;
         this.advance(m, (3 + attempt) * this.perMeter, false);
-        fits = inTile(m) && guard(m);
+        fits =
+          inTile(m) &&
+          (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m, true)) &&
+          guard(m);
       }
       if (!fits) this.movers.splice(i, 1);
     }
