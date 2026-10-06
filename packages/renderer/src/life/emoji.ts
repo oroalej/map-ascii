@@ -432,7 +432,9 @@ export class EmojiObserver {
       t.eligible = o.eligible;
       t.speaking = o.speaking;
       const gap =
-        t.epoch !== this.epoch || (t.clock !== undefined && this.clock - t.clock > dt + 0.00001);
+        !existing ||
+        t.epoch !== this.epoch ||
+        (t.clock !== undefined && this.clock - t.clock > dt + 0.00001);
       if (!o.eligible) {
         this.release(o.owner);
         t.clock = undefined;
@@ -610,6 +612,15 @@ export class EmojiObserver {
       if (!t) continue;
       for (const mood of priorities) {
         if (!t.edges.has(mood)) continue;
+        if (
+          !o.eligible ||
+          o.speaking ||
+          t.group ||
+          this.clock < t.cooldownUntil ||
+          this.size >= EMOJI.capacity ||
+          t.rng() >= this.chance(o, mood)
+        )
+          continue;
         let reply = t.replies.get(mood),
           replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
         if (
@@ -618,21 +629,22 @@ export class EmojiObserver {
           (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
         ) {
           const m = o.mover!;
-          reply = observations
-            .filter(
-              (p) =>
-                p.mover?.group &&
-                p.eligible &&
-                (p.owner.x - m.x) * m.hx + (p.owner.y - m.y) * m.hy > 0,
-            )
-            .sort(
-              (a, b) =>
-                Math.hypot(a.owner.x - m.x, a.owner.y - m.y) -
-                Math.hypot(b.owner.x - m.x, b.owner.y - m.y),
-            )[0]?.owner;
+          let nearest = Infinity;
+          reply = undefined;
+          for (const p of observations) {
+            if (!p.mover?.group || !p.eligible) continue;
+            const dx = p.owner.x - m.x,
+              dy = p.owner.y - m.y;
+            if (dx * m.hx + dy * m.hy <= 0) continue;
+            const distance = dx * dx + dy * dy;
+            if (distance < nearest) {
+              nearest = distance;
+              reply = p.owner;
+            }
+          }
           replyMood = 'sorry';
         }
-        if (t.rng() < this.chance(o, mood)) this.admit(o, mood, observations, reply, replyMood);
+        this.admit(o, mood, observations, reply, replyMood);
       }
       t.edges.clear();
       t.replies.clear();

@@ -4,7 +4,13 @@
  * always matches the map; nothing in it is written by hand except the class names
  * (`CLASS_LABELS`).
  */
-import { bandVisibility, CLASS_ZOOM, EMOJI_ZOOM, type AtlasClass } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  EMOJI_ZOOM,
+  MOOD_GLYPHS,
+  type AtlasClass,
+} from '@atlas/shared';
 import { ROAD_AREA_ZOOM } from './glyphs/select';
 import type { LegendFocus, LifeFocus } from './focus';
 import {
@@ -329,8 +335,8 @@ export function legendEntries(
     entries.splice(pets + 1, 0, {
       id: 'info:emoji',
       classes: [],
-      label: 'Emoji (simulated moods)',
-      glyphs: '😊 💤',
+      label: 'Moods (simulated)',
+      glyphs: `${MOOD_GLYPHS.happy} ${MOOD_GLYPHS.sleeping}`,
       color: css(theme.label),
     });
   }

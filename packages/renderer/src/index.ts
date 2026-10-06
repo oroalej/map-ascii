@@ -6,6 +6,7 @@ import {
   CLASS_ZOOM,
   UTILITY_ZOOM,
   SEASON_ZOOM,
+  EMOJI_ZOOM,
   shopHours,
   shopOpen,
   resolveSeason,
@@ -1045,7 +1046,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
     const trackSpeech =
-      ((options.dialogue && speechEnabled) || emojiEnabled) && camera.zoom >= MOMENTS.zoom;
+      (options.dialogue && speechEnabled && camera.zoom >= MOMENTS.zoom) ||
+      (emojiEnabled && camera.zoom >= EMOJI_ZOOM);
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     agentsDrawn = lifePass(
@@ -1076,7 +1078,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       now - lastInput < 150 ||
       !lifeActive() ||
       !watch.watched() ||
-      camera.zoom < MOMENTS.zoom ||
+      camera.zoom < (kind === 'speech' ? MOMENTS.zoom : EMOJI_ZOOM) ||
       !targets ||
       !placement ||
       !lifeAgents.length ||

@@ -1,4 +1,4 @@
-import { placeSpeech, type SpeechRect } from './speech-layout';
+import { placeSpeech, speechPlacementEnvelope, type SpeechRect } from './speech-layout';
 // Matches the 14px extension of .emoji::after and its below variant in SpeechBubbles.module.css.
 const THOUGHT_DOT_EXTENT = 14;
 export type BubbleLayout = {
@@ -25,24 +25,34 @@ export function layoutBubbles(
     group.push(cue);
     groups.set(id, group);
   }
-  let labelsAdded = false;
+  const mapLabels =
+    origin.left === 0 && origin.top === 0
+      ? labels
+      : labels.map((b) => ({ ...b, left: b.left + origin.left, top: b.top + origin.top }));
   for (const group of groups.values()) {
     const emoji = group[0]!.kind === 'emoji';
-    if (emoji && !labelsAdded) {
-      occupied.push(
-        ...(origin.left === 0 && origin.top === 0
-          ? labels
-          : labels.map((b) => ({ ...b, left: b.left + origin.left, top: b.top + origin.top }))),
-      );
-      labelsAdded = true;
-    }
     if (emoji && group[0]!.pair && group.length !== 2) continue;
     const start = occupied.length;
     const placed: [string, NonNullable<ReturnType<typeof placeSpeech>>][] = [];
     for (const cue of group) {
       const point: [number, number] = [cue.point[0] + origin.left, cue.point[1] + origin.top];
       const size = { ...cue.size, height: cue.size.height + (emoji ? THOUGHT_DOT_EXTENT : 0) };
-      const footprint = placeSpeech(point, size, viewport, occupied);
+      const envelope = speechPlacementEnvelope(point, size, viewport);
+      const nearby = emoji
+        ? mapLabels.filter(
+            (label) =>
+              label.left < envelope.left + envelope.width &&
+              label.left + label.width > envelope.left &&
+              label.top < envelope.top + envelope.height &&
+              label.top + label.height > envelope.top,
+          )
+        : [];
+      const footprint = placeSpeech(
+        point,
+        size,
+        viewport,
+        nearby.length ? [...occupied, ...nearby] : occupied,
+      );
       if (!footprint) break;
       occupied.push(footprint);
       placed.push([

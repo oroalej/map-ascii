@@ -225,6 +225,10 @@ export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
 const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
+const moverAttendance = (m: Mover, levels: Activity | undefined, crowd: number) =>
+  !!m.train || !levels || m.rank < levels[m.kind] * crowd;
+const vendorAttendance = (s: Stall, levels: Activity | undefined, crowd: number) =>
+  s.open !== false && (!levels || s.rank < levels.person * crowd);
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
   return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
@@ -754,6 +758,7 @@ export class TileLife {
   private inspected?: object;
   readonly momentHost: MomentHost;
   readonly emoji: EmojiObserver;
+  private readonly emojiInputs: EmojiObservation[] = [];
   private readonly walkerRng: () => number;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
@@ -4438,7 +4443,8 @@ export class TileLife {
     const visible = viewIn(this.tile, env.emojiView?.bounds, 0);
     const eligible = (p: { x: number; y: number }) =>
       inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
-    const observations: EmojiObservation[] = [];
+    const observations = this.emojiInputs;
+    observations.length = 0;
     const arrivals = new Set<Mover>();
     for (const event of this.scenes.speechEvents)
       if (event.kind === 'arrival') arrivals.add(event.mover);
@@ -4446,9 +4452,8 @@ export class TileLife {
       if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
       const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
       if (subject === 'person' && !m.group) continue;
-      const admitted =
-        eligible(m) && (!levels || m.rank < levels[m.kind] * crowd) && !this.scenes.hidden(m);
-      if (!admitted && !this.emoji.memory.get(m)) continue;
+      const admitted = eligible(m) && this.visibleMover(m, levels, crowd);
+      if (!admitted && this.emoji.memory.get(m)?.clock === undefined) continue;
       observations.push({
         owner: m,
         mover: m,
@@ -4466,7 +4471,7 @@ export class TileLife {
     for (const g of this.gatherers) {
       if (g.carabao !== undefined) continue;
       const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
-      if (!admitted && !this.emoji.memory.get(g)) continue;
+      if (!admitted && this.emoji.memory.get(g)?.clock === undefined) continue;
       observations.push({
         owner: g,
         gatherer: g,
@@ -4477,9 +4482,8 @@ export class TileLife {
       });
     }
     for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls) {
-      const admitted =
-        eligible(s) && s.open !== false && (!levels || s.rank < levels.person * crowd);
-      if (!admitted && !this.emoji.memory.get(s)) continue;
+      const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
+      if (!admitted && this.emoji.memory.get(s)?.clock === undefined) continue;
       observations.push({
         owner: s,
         subject: 'person',
@@ -4490,6 +4494,9 @@ export class TileLife {
       });
     }
     return observations;
+  }
+  visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
+    return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
   }
   private stepFrame(
     dt: number,
@@ -4543,6 +4550,8 @@ export class TileLife {
         this.momentHost.voiceCompletions,
       );
     else this.emoji.step(dt, emojiZoom, emojiEnv, []);
+    // Inputs are borrowed only for this observer call; do not retain actor references.
+    this.emojiInputs.length = 0;
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
     const speeds = this.followLimits(dt, table);
@@ -7617,8 +7626,7 @@ export class LifeWorld {
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!this.owns(life, m)) continue;
-        if (life.scenes.hidden(m)) continue;
-        if (!shows(m.kind) || (!m.train && m.rank >= levels[m.kind] * crowd)) continue;
+        if (!shows(m.kind) || !life.visibleMover(m, levels, crowd)) continue;
         if (scene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
@@ -7738,12 +7746,9 @@ export class LifeWorld {
         }
       }
       if (shows('person')) {
-        const vendorsOut = levels.person * crowd;
         for (const s of life.seasonalStalls.length ? life.allStalls() : life.stalls) {
           if (!this.owns(life, s)) continue;
-          if (s.open === false) continue;
-          if (s.rank >= vendorsOut || s.x < 0 || s.x >= EXTENT || s.y < 0 || s.y >= EXTENT)
-            continue;
+          if (!vendorAttendance(s, levels, crowd) || !inTile(s)) continue;
           if (!inView(s.x, s.y)) continue;
           const [lng, lat] = tileToLngLat(tile, s);
           const speech = life.momentHost.scenes.speech(s);

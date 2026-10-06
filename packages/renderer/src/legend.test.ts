@@ -5,6 +5,7 @@ import { FIGURE_MASTERS } from './life/people';
 import { classId } from './classes';
 import { normalizeFocus } from './focus';
 import { themes } from './theme';
+import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
 it('shows an informational emoji line next to pets only while its display is eligible', () => {
@@ -12,7 +13,11 @@ it('shows an informational emoji line next to pets only while its display is eli
     const entries = legendEntries(theme, 19, [], { life: true, emoji: true });
     const at = entries.findIndex((e) => e.id === 'info:emoji');
     expect(entries[at - 1]!.id).toBe('life:pets');
-    expect(entries[at]).toMatchObject({ glyphs: '😊 💤', classes: [] });
+    expect(entries[at]).toMatchObject({
+      label: 'Moods (simulated)',
+      glyphs: `${MOOD_GLYPHS.happy} ${MOOD_GLYPHS.sleeping}`,
+      classes: [],
+    });
     expect(entries[at]!.focus).toBeUndefined();
     for (const options of [
       { life: false, emoji: true },

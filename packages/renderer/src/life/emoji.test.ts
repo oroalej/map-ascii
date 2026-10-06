@@ -134,6 +134,11 @@ describe('read-only emoji observer', () => {
     f.o.eligible = true;
     f.step();
     const track = f.observer.memory.get(f.m)!;
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.m.waiting = 0;
+    f.step();
+    f.m.waiting = 3;
+    f.step();
     expect(f.observer.cue(f.m)?.mood).toBe('impatient');
     const cooldown = track.cooldownUntil;
     f.o.eligible = false;
@@ -190,10 +195,52 @@ describe('read-only emoji observer', () => {
     tile.emoji.step(0.1, 19, hidden, cleanup);
     expect(tile.emoji.memory.get(unseen)).toBeUndefined();
     expect(tile.emoji.memory.get(visitors)?.eligible).toBe(false);
+    speaking.mockClear();
+    expect(read.emojiObservations(hidden)).toHaveLength(0);
+    expect(speaking).not.toHaveBeenCalled();
+    const resumed = read.emojiObservations(visible);
+    expect(resumed.map((o) => o.owner)).toEqual([visitors, congregations, unseen]);
+    tile.emoji.step(0.1, 19, visible, resumed);
+    expect(tile.emoji.memory.get(visitors)?.eligible).toBe(true);
     speaking.mockRestore();
+  });
+  it('shares mover and vendor attendance with drawing, including hidden and closed owners', () => {
+    const world = new LifeWorld();
+    const entry = continuityTile(left);
+    world.sync([entry]);
+    const tile = world.resident(entry.key)!;
+    const m = continuityMover(tile, 2000, 'vehicle');
+    m.rank = 0.5;
+    const stall: Stall = { x: 2000, y: 2000, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0.5 };
+    tile.movers.splice(0, tile.movers.length, m);
+    tile.stalls.splice(0, tile.stalls.length, stall);
+    tile.gatherers.length = 0;
+    const read = tile as unknown as { emojiObservations(env: LifeEnv): EmojiObservation[] };
+    const levels = { ...activityLevels(1), person: 1, vehicle: 1 };
+    const hidden = vi.spyOn(tile.scenes, 'hidden').mockReturnValue(false);
+    const compare = (owners: object[]) => {
+      expect(
+        read
+          .emojiObservations({ rain: 0, levels })
+          .filter((o) => o.eligible)
+          .map((o) => o.owner),
+      ).toEqual(owners);
+      expect(world.visible(19, levels, [0, 0])).toHaveLength(owners.length);
+    };
+    compare([m, stall]);
+    hidden.mockReturnValue(true);
+    compare([stall]);
+    stall.open = false;
+    compare([]);
+    hidden.mockReturnValue(false);
+    stall.open = true;
+    levels.person = levels.vehicle = 0.1;
+    compare([]);
+    hidden.mockRestore();
   });
   it('freezes retirement without new elapsed rest, disposes bounded references and never replays a gap', () => {
     const f = fixture('vehicle');
+    f.step(0);
     f.m.waiting = 3;
     f.step();
     const before = f.observer.cue(f.m)!.id;
@@ -292,15 +339,69 @@ describe('read-only emoji observer', () => {
       rolls++;
       return 0;
     });
+    f.step(0);
     f.m.waiting = waiting;
     f.step();
     expect(f.observer.cue(f.m)?.mood).toBe(mood);
+    f.observer.memory.get(f.m)!.attemptAt = 100;
     const after = rolls;
     for (let i = 0; i < 3; i++) f.step();
     expect(rolls).toBe(after);
   });
+  it.each(['boarding', 'shelter', 'grooming'] as const)(
+    'baselines an already-active %s state and reacts only to its later onset',
+    (event) => {
+      const f = fixture(event === 'boarding' ? 'vehicle' : event === 'grooming' ? 'cat' : 'person');
+      const passenger = fixture().m;
+      const visit = { state: 'shelter', time: 2, site: {} } as Visit;
+      const set = (active: boolean) => {
+        if (event === 'boarding') f.o.passenger = active ? passenger : undefined;
+        if (event === 'shelter') f.o.visit = active ? visit : undefined;
+        if (event === 'grooming') f.m.grooming = active;
+      };
+      set(true);
+      f.step(0, { rain: 1 });
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      expect(f.observer.memory.get(f.m)?.attemptAt).toBe(2);
+      set(false);
+      f.step(0.5, { rain: 1 });
+      set(true);
+      f.step(0.5, { rain: 1 });
+      expect(f.observer.cue(f.m)?.mood).toBe(event === 'shelter' ? 'rained' : 'happy');
+    },
+  );
+  it('pairs the nearest pedestrian ahead, preserving observation order for ties', () => {
+    const f = fixture('vehicle');
+    f.m.hx = 1;
+    f.m.hy = 0;
+    const people = [2, 1, 1, -0.5].map((distance) => {
+      const p = fixture().o;
+      p.owner.x = f.m.x + distance * f.tile.perMeter;
+      p.owner.y = f.m.y;
+      return p;
+    });
+    const observations = [f.o, ...people];
+    f.step(0, {}, observations);
+    f.m.waiting = 3;
+    f.step(0.5, {}, observations);
+    expect(f.observer.cue(people[1]!.owner)?.mood).toBe('sorry');
+    expect(f.observer.cue(people[2]!.owner)).toBeUndefined();
+    expect(f.observer.cue(people[1]!.owner)?.pair).toBe(f.observer.cue(f.m)?.pair);
+  });
+  it('does not search driver blockers when admission is unavailable', () => {
+    const f = fixture('vehicle');
+    const p = fixture().o;
+    const x = vi.spyOn(p.owner, 'x', 'get');
+    f.step(0, {}, [f.o, p]);
+    f.observer.memory.get(f.m)!.cooldownUntil = 100;
+    f.m.waiting = 3;
+    f.step(0.5, {}, [f.o, p]);
+    expect(x).not.toHaveBeenCalled();
+    x.mockRestore();
+  });
   it('counts elapsed rest rather than remaining pause, resets interruptions and excludes grooming', () => {
     const f = fixture('cat');
+    f.step(0);
     f.m.pause = 30;
     f.o.still = true;
     f.m.grooming = true;
@@ -381,6 +482,7 @@ describe('read-only emoji observer', () => {
   });
   it('preserves tracks and IDs across shared-memory adoption, disposal and reset', () => {
     const f = fixture('vehicle');
+    f.step(0);
     f.m.waiting = 3;
     f.step();
     const id = f.observer.cue(f.m)!.id,

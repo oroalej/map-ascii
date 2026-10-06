@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { layoutBubbles, type BubbleLayout } from './bubble-overlay';
+import { placeSpeech } from './speech-layout';
 const cue = (id: string, x = 400, pair?: string): BubbleLayout => ({
   id,
   kind: 'emoji',
@@ -79,4 +80,38 @@ it('uses canvas offsets and detached fractional label footprints on every placem
   const box = layoutBubbles([cue('a')], viewport, [], [label], origin).get('a')!;
   expect(box.below).toBe(true);
   expect(box.left).toBeGreaterThan(400);
+});
+it('matches unfiltered placement near viewport edges and label-clearance boundaries', () => {
+  const labels = [
+    { left: 0, top: 200, width: 19, height: 81 },
+    { left: 25, top: 242, width: 20, height: 40 },
+    { left: 380, top: 210, width: 80, height: 78 },
+    { left: 750, top: 270, width: 50, height: 45 },
+  ];
+  for (const x of [8, 20, 40, 400, 760, 792]) {
+    const record = cue('a', x);
+    const expected = placeSpeech(record.point, { width: 38, height: 48 }, viewport, labels);
+    const actual = layoutBubbles([record], viewport, [], labels).get('a');
+    expect(actual).toEqual(
+      expected
+        ? {
+            ...expected,
+            height: 34,
+            top: expected.top + (expected.below ? 14 : 0),
+          }
+        : undefined,
+    );
+  }
+});
+it('ignores distant labels while retaining local thought-dot collisions', () => {
+  const local = [{ left: 360, top: 210, width: 80, height: 78 }];
+  const distant = Array.from({ length: 100 }, (_, i) => ({
+    left: 600 + i,
+    top: 0,
+    width: 30,
+    height: 40,
+  }));
+  expect(layoutBubbles([cue('a')], viewport, [], [...local, ...distant])).toEqual(
+    layoutBubbles([cue('a')], viewport, [], local),
+  );
 });
