@@ -9,6 +9,7 @@ import {
 import { random } from './random';
 import type { Gatherer, LifeEnv, Mover, Stall } from './simulate';
 import type { Visit } from './interactions';
+import { exhaustKind, PUFF } from './exhaust';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const EMOJI = {
@@ -23,19 +24,38 @@ export const EMOJI = {
   seasonalChance: 0.2,
   followupChance: 0.25,
   playfulShare: 0.5,
+  honkShare: 0.4,
+  gossipShare: 1 / 3,
+  variantShare: 1 / 3,
+  churchWeight: 0.15,
   maxFollowups: 4,
   maxCats: 6,
   stoppedSpeed: 0.3,
   cruiseFraction: 0.85,
   hotAltitude: 45,
   rainThreshold: 0.5,
-  driver: { angryWait: 6, angryStop: 25, impatientWait: 2, boredStop: 8, coolCruise: 8 },
+  driver: {
+    angryWait: 6,
+    angryStop: 25,
+    impatientWait: 2,
+    boredStop: 8,
+    coolCruise: 8,
+    rushSpeed: 10,
+  },
   person: { impatientWait: 12, blockedWait: 3 },
   pet: { blockedWait: 1.5, rest: { day: 20, night: 10 } },
   standoff: 4,
   firstAttempt: [2, 12] as const,
   pairReach: 3,
-  hours: { night: [1320, 390], coffee: [330, 540], hot: [660, 870] },
+  begReach: 4,
+  hours: {
+    night: [1320, 390],
+    coffee: [330, 540],
+    hot: [660, 870],
+    mosquito: [1050, 1170],
+    karaoke: [1140, 1380],
+    churchMorning: [300, 540],
+  },
 } as const;
 export type EmojiCue = {
   id: string;
@@ -56,15 +76,26 @@ export const TEMPERAMENT: Record<
   neutral: { chances: {}, up: [], down: [] },
   cheerful: {
     chances: { impatient: 0.2, angry: 0.2, happy: 0.5, cool: 0.5, playful: 0.5 },
-    up: ['happy', 'cool', 'playful', 'love', 'party', 'festive', 'music', 'wave', 'thumbs'],
+    up: [
+      'happy',
+      'cool',
+      'playful',
+      'love',
+      'party',
+      'festive',
+      'music',
+      'wave',
+      'thumbs',
+      'karaoke',
+    ],
     down: ['bored', 'hot'],
   },
   grumpy: {
     chances: { impatient: 0.55, angry: 0.55, happy: 0.2 },
-    up: ['impatient', 'bored', 'hot', 'angry'],
+    up: ['impatient', 'bored', 'hot', 'angry', 'sneeze', 'mosquito'],
     down: ['happy', 'cool', 'playful', 'love'],
   },
-  sleepy: { chances: {}, up: ['sleepy', 'sleeping', 'coffee'], down: ['cool', 'party'] },
+  sleepy: { chances: {}, up: ['sleepy', 'sleeping', 'coffee'], down: ['cool', 'party', 'karaoke'] },
 };
 export function temperament(rank: number): Temperament {
   const v = Math.sin(rank * 12.9898) * 43758.5453;
@@ -126,6 +157,7 @@ export function ambientPool(
   const pool = seasonalPool(o, env, entries);
   const add = (mood: EmojiMood, weight = 1.5) => pool.push({ mood, weight });
   const { subject, mover: m, gatherer: g } = o;
+  const still = g ? g.pause > 0 || g.behavior === 'sit' : !!o.still;
   const human = subject === 'person' || subject === 'driver';
   if (human && inHours(env.minutes, EMOJI.hours.night)) add('sleepy');
   if (
@@ -142,8 +174,10 @@ export function ambientPool(
     (subject === 'person' ||
       (subject === 'driver' && open) ||
       ((subject === 'dog' || subject === 'cat') && o.still))
-  )
+  ) {
     add('hot');
+    if (human) add('melting', 0.5);
+  }
   if (
     env.rain >= EMOJI.rainThreshold &&
     ((subject === 'person' && o.visit?.state !== 'shelter') ||
@@ -152,6 +186,31 @@ export function ambientPool(
     add('rained');
   if (subject === 'person' && (env.windPreset === 'gusty' || env.windPreset === 'storm'))
     add('windy');
+  if (subject === 'person') {
+    if (still && inHours(env.minutes, EMOJI.hours.mosquito)) add('mosquito');
+    if (
+      (env.rain >= EMOJI.rainThreshold && o.visit?.state !== 'shelter') ||
+      env.windPreset === 'storm'
+    )
+      add('sneeze', 1);
+    if (
+      g?.behavior === 'gather' &&
+      g.place !== 'worship' &&
+      inHours(env.minutes, EMOJI.hours.karaoke)
+    )
+      add('karaoke');
+    if (g?.behavior === 'play' && o.figure === 'child') add('silly', 1);
+    if (g?.place === 'worship' && g.behavior === 'gather') {
+      if (still) {
+        for (const mood of ['moved', 'crying', 'angelic', 'hush'] as const)
+          add(mood, EMOJI.churchWeight);
+        if (inHours(env.minutes, EMOJI.hours.churchMorning)) add('yawn', EMOJI.churchWeight);
+      }
+      add('music', EMOJI.churchWeight);
+      if (env.emojiSeasons?.find((season) => season.id === env.season)?.visitors)
+        add('candle', EMOJI.churchWeight);
+    }
+  }
   if (subject === 'driver' && cruise >= EMOJI.driver.coolCruise) add('cool', 1);
   if (subject === 'person' && m?.group?.length === 1) add('bored', 1);
   if (g) {
@@ -187,6 +246,7 @@ const CONDITIONS = {
   sleepy: 1 << 3,
   happy: 1 << 4,
   bored: 1 << 5,
+  crying: 1 << 6,
 } as const;
 const CONDITION_MOODS = Object.keys(CONDITIONS) as (keyof typeof CONDITIONS)[];
 type Track = {
@@ -205,6 +265,10 @@ type Track = {
   passenger?: Mover;
   trot: boolean;
   grooming: boolean;
+  groomingHappy: boolean;
+  rushing: boolean;
+  running: boolean;
+  turnedAt?: number;
   lying: boolean;
   paused: boolean;
   triggers: number;
@@ -248,6 +312,9 @@ export class EmojiMemory {
         cruising: false,
         trot: false,
         grooming: false,
+        groomingHappy: false,
+        rushing: false,
+        running: false,
         lying: false,
         paused: false,
         triggers: 0,
@@ -370,6 +437,14 @@ export class EmojiObserver {
           Math.hypot(p.owner.x - o.owner.x, p.owner.y - o.owner.y) <=
             EMOJI.pairReach * this.perMeter,
       );
+    // Choose the cat's reply only after the leader and partner admission gates.
+    if (
+      partner?.subject === 'cat' &&
+      o.subject === 'dog' &&
+      mood === 'angry' &&
+      this.memory.get(partner.owner)!.rng() < EMOJI.variantShare
+    )
+      replyMood = 'sideeye';
     const pair = partner ? this.memory.id() : undefined;
     const members: Episode[] = [
       {
@@ -441,6 +516,7 @@ export class EmojiObserver {
         t.clock = undefined;
         t.epoch = -1;
         t.edges.clear();
+        t.groomingHappy = false;
         t.replies.clear();
         t.followups.length = 0;
         t.standoff = undefined;
@@ -451,6 +527,7 @@ export class EmojiObserver {
       if (gap) {
         t.rest = t.stop = t.cruise = t.wait = 0;
         t.edges.clear();
+        t.groomingHappy = false;
         t.replies.clear();
         t.followups.length = 0;
         t.visit = undefined;
@@ -474,6 +551,23 @@ export class EmojiObserver {
         (o.subject === 'cat' || (o.subject === 'dog' && (!!m?.lying || o.visit?.state === 'rest')));
       const stopped = m?.v !== undefined && m.v / this.perMeter < EMOJI.stoppedSpeed;
       const cruising = m?.v !== undefined && m.v >= EMOJI.cruiseFraction * m.speed;
+      const rushing = m?.v !== undefined && m.v / this.perMeter >= EMOJI.driver.rushSpeed;
+      const running = (m?.run ?? 0) > 0;
+      if (!gap) {
+        if (o.subject === 'driver') {
+          if (rushing && !t.rushing) t.edges.add('rushing');
+          if (
+            t.stopped &&
+            t.stop + 1e-8 >= PUFF.pullAway.minStop &&
+            !stopped &&
+            exhaustKind(m?.vehicle)
+          )
+            t.edges.add('smoke');
+        } else if (o.subject === 'person') {
+          if (running && !t.running) t.edges.add('rushing');
+          if (m?.turnedAt !== undefined && m.turnedAt !== t.turnedAt) t.edges.add('confused');
+        }
+      }
       t.rest = resting ? (!gap && t.resting ? t.rest + dt : 0) : 0;
       t.stop = stopped ? (!gap && t.stopped ? t.stop + dt : 0) : 0;
       t.cruise = cruising ? (!gap && t.cruising ? t.cruise + dt : 0) : 0;
@@ -486,6 +580,11 @@ export class EmojiObserver {
           : 0;
       let conditions = 0;
       if (o.subject === 'driver') {
+        if (
+          !o.held &&
+          ((m?.waiting ?? 0) >= EMOJI.driver.angryStop || t.stop + 1e-8 >= EMOJI.driver.angryStop)
+        )
+          conditions |= CONDITIONS.crying;
         if ((m?.waiting ?? 0) >= EMOJI.driver.angryWait || t.stop + 1e-8 >= EMOJI.driver.angryStop)
           conditions |= CONDITIONS.angry;
         if ((m?.waiting ?? 0) >= EMOJI.driver.impatientWait) conditions |= CONDITIONS.impatient;
@@ -512,6 +611,12 @@ export class EmojiObserver {
           conditions |= CONDITIONS.happy;
       } else if (!o.vendor) {
         if (
+          !o.held &&
+          (t.wait + 1e-8 >= EMOJI.person.impatientWait ||
+            (m?.waiting ?? 0) >= EMOJI.person.impatientWait)
+        )
+          conditions |= CONDITIONS.crying;
+        if (
           t.wait + 1e-8 >= EMOJI.person.impatientWait ||
           (m?.waiting ?? 0) >= EMOJI.person.blockedWait
         )
@@ -527,12 +632,17 @@ export class EmojiObserver {
       }
       const edges = conditions & ~t.triggers;
       if (!gap) for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
+      if (!gap && edges & CONDITIONS.happy && o.subject === 'cat' && m?.grooming && !t.grooming)
+        t.groomingHappy = true;
       t.triggers = conditions;
       t.resting = resting;
       t.stopped = stopped;
       t.cruising = cruising;
       t.trot = (m?.trot ?? 0) > 0;
       t.grooming = !!m?.grooming;
+      t.rushing = rushing;
+      t.running = running;
+      t.turnedAt = m?.turnedAt;
       t.lying = !!m?.lying;
       t.paused = (m?.pause ?? 0) > 0;
       t.passenger = o.passenger;
@@ -549,12 +659,22 @@ export class EmojiObserver {
         t.visit.stall = o.visit.site.stall;
       } else t.visit = undefined;
       if (!gap) {
-        for (const p of purchases)
-          if (p.mover === o.owner && !t.seen.has(p.key)) {
+        for (const p of purchases) {
+          if (t.seen.has(p.key)) continue;
+          if (p.mover === o.owner) {
             t.seen.add(p.key);
             t.edges.add('yummy');
             t.replies.set('yummy', p.stall);
+          } else if (
+            o.subject === 'dog' &&
+            Math.hypot(o.owner.x - p.mover.x, o.owner.y - p.mover.y) <=
+              EMOJI.begReach * this.perMeter + 1e-8
+          ) {
+            t.seen.add(p.key);
+            t.edges.add('beg');
+            t.replies.set('beg', p.mover);
           }
+        }
         for (const c of completions)
           if (c.owners.includes(o.owner) && !t.seen.has(c.token)) {
             t.seen.add(c.token);
@@ -602,16 +722,24 @@ export class EmojiObserver {
       t.standoff = dog?.owner;
     }
     const priorities: readonly EmojiMood[] = [
+      'crying',
       'angry',
       'impatient',
       'sleeping',
       'sleepy',
       'rained',
       'yummy',
+      'beg',
+      'rushing',
+      'smoke',
+      'confused',
       'happy',
       'bored',
     ];
-    for (const o of observations) {
+    // Give latched purchase owners their opportunity before any dog claims a buyer.
+    const buying = (o: EmojiObservation) => this.memory.get(o.owner)?.edges.has('yummy');
+    const evaluation = [...observations.filter(buying), ...observations.filter((o) => !buying(o))];
+    for (const o of evaluation) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
       for (const mood of priorities) {
@@ -625,7 +753,8 @@ export class EmojiObserver {
           t.rng() >= this.chance(o, mood)
         )
           continue;
-        let reply = t.replies.get(mood),
+        let selectedMood = mood,
+          reply = t.replies.get(mood),
           replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
         if (
           o.subject === 'driver' &&
@@ -647,16 +776,38 @@ export class EmojiObserver {
             }
           }
           replyMood = 'sorry';
+          if (reply && t.rng() < EMOJI.honkShare) selectedMood = 'honk';
         }
-        this.admit(o, mood, observations, reply, replyMood);
+        if (mood === 'yummy' && t.rng() < EMOJI.variantShare) {
+          selectedMood = 'drooling';
+          replyMood = 'profit';
+        } else if (mood === 'happy' && t.groomingHappy && t.rng() < EMOJI.variantShare)
+          selectedMood = 'beauty';
+        else if (
+          mood === 'angry' &&
+          o.subject === 'cat' &&
+          t.standoff &&
+          t.rng() < EMOJI.variantShare
+        )
+          selectedMood = 'sideeye';
+        this.admit(o, selectedMood, observations, reply, replyMood);
       }
       t.edges.clear();
+      t.groomingHappy = false;
       t.replies.clear();
       if (!o.vendor)
         for (let i = 0; i < t.followups.length; i++) {
           const adjustment = this.chance(o, 'playful') / EMOJI.chance;
           if (t.rng() < EMOJI.followupChance * adjustment)
-            this.admit(o, t.rng() < EMOJI.playfulShare ? 'playful' : 'thumbs', observations);
+            this.admit(
+              o,
+              o.figure === 'adult' && t.rng() < EMOJI.gossipShare
+                ? 'gossip'
+                : t.rng() < EMOJI.playfulShare
+                  ? 'playful'
+                  : 'thumbs',
+              observations,
+            );
         }
       t.followups.length = 0;
       if (!o.eligible || t.attemptAt === undefined || this.clock + 1e-8 < t.attemptAt) continue;
