@@ -3,6 +3,7 @@ import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { signalStop, type RoadArm, type RoadVertex } from './streets';
 import { key, lines, SIGNAL_STOP_GAP_M, width } from './road-geometry';
+import { armKey } from './signal-path';
 
 const position = (p: Position): [number, number] => [p[0]!, p[1]!];
 const angle = (a: number, b: number) => {
@@ -15,6 +16,7 @@ export function resolveSignalLayout(
   signal: AtlasFeature,
   vertices: ReadonlyMap<string, RoadVertex>,
   linked: readonly Position[] = [],
+  setbacks?: ReadonlyMap<string, number>,
 ): SignalLayout | undefined {
   if (signal.geometry.type !== 'Point') return;
   const center = signal.geometry.coordinates;
@@ -57,7 +59,12 @@ export function resolveSignalLayout(
       const dx = (p[0]! - arm.toward[0]!) * Math.cos((p[1]! * Math.PI) / 180);
       const dy = p[1]! - arm.toward[1]!;
       const bearing = ((Math.atan2(dx, dy) * 180) / Math.PI + 360) % 360;
-      const stop = signalStop(p, arm, signal.properties.signal_radius! + SIGNAL_STOP_GAP_M);
+      const stop = signalStop(
+        p,
+        arm,
+        setbacks?.get(armKey(p, arm)) ?? signal.properties.signal_radius! + SIGNAL_STOP_GAP_M,
+        vertices,
+      );
       arms.push({
         road_id: arm.road.properties.id,
         junction: position(p),
@@ -71,7 +78,9 @@ export function resolveSignalLayout(
           angle(bearing, signal.properties.signal_a!) <= angle(bearing, signal.properties.signal_b!)
             ? 'a'
             : 'b',
-        ...(stop ? { stop: stop.position, stop_width: stop.width } : {}),
+        ...(stop
+          ? { stop: stop.position, stop_width: stop.width, stop_bearing: stop.bearing }
+          : {}),
       });
     }
   const visited = new Set<string>();

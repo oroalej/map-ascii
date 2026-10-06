@@ -16,10 +16,17 @@ export const SignalArm = z
     width: z.number().positive(),
     stop: SignalPosition.optional(),
     stop_width: z.number().positive().optional(),
+    stop_bearing: z.number().min(0).lt(360).optional(),
   })
-  .refine((arm) => !!arm.stop === (arm.stop_width !== undefined) && (!arm.stop || arm.inbound), {
-    message: 'stop position and width must describe an inbound arm',
-  });
+  .refine(
+    (arm) =>
+      !!arm.stop === (arm.stop_width !== undefined) &&
+      (!arm.stop || arm.inbound) &&
+      (arm.stop_bearing === undefined || !!arm.stop),
+    {
+      message: 'stop position and width must describe an inbound arm',
+    },
+  );
 export type SignalArm = z.infer<typeof SignalArm>;
 
 export const SignalLayout = z.strictObject({
