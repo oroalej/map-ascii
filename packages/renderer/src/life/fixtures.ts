@@ -395,7 +395,7 @@ export function updateFixtureFlags(packed: PackedFixtures, motion: FixtureMotion
   return true;
 }
 
-/** Update only phase bytes, without reprojecting or stamping static hardware. */
+/** Bit flags returned by updateFixtureSignals. */
 export const FixtureSignalChange = { vehicle: 1, pedestrian: 2 } as const;
 
 function pedestrianTexelState(seed: number, clock: number, midBlock: boolean, group: 'a' | 'b') {
@@ -403,6 +403,7 @@ function pedestrianTexelState(seed: number, clock: number, midBlock: boolean, gr
   return phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
 }
 
+/** Update only phase bytes, without reprojecting or stamping static hardware. */
 export function updateFixtureSignals(packed: PackedFixtures, clock: number): number {
   let changed = 0;
   for (const ped of packed.pedestrians ?? []) {
