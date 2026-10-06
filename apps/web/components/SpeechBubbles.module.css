@@ -55,3 +55,42 @@
   top: -5px;
   transform: rotate(225deg);
 }
+.emoji {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font:
+    18px/1.2 'Apple Color Emoji',
+    'Segoe UI Emoji',
+    'Noto Color Emoji',
+    sans-serif;
+}
+.emoji::before,
+.emoji::after {
+  content: '';
+  position: absolute;
+  background: var(--speech-bg);
+  border: 1px solid var(--speech-border);
+  border-radius: 50%;
+  transform: none;
+}
+.emoji::before {
+  left: calc(var(--tail-x) - 3px);
+  bottom: -8px;
+  width: 5px;
+  height: 5px;
+}
+.emoji::after {
+  left: calc(var(--tail-x) - 1px);
+  bottom: -14px;
+  width: 3px;
+  height: 3px;
+}
+.emoji[data-below='true']::before {
+  bottom: auto;
+  top: -8px;
+}
+.emoji[data-below='true']::after {
+  bottom: auto;
+  top: -14px;
+  transform: none;
+}

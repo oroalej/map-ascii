@@ -4,7 +4,13 @@
  * always matches the map; nothing in it is written by hand except the class names
  * (`CLASS_LABELS`).
  */
-import { bandVisibility, CLASS_ZOOM, type AtlasClass } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  EMOJI_ZOOM,
+  MOOD_GLYPHS,
+  type AtlasClass,
+} from '@atlas/shared';
 import { ROAD_AREA_ZOOM } from './glyphs/select';
 import type { LegendFocus, LifeFocus } from './focus';
 import {
@@ -36,6 +42,7 @@ import {
 } from './theme';
 
 export type LegendEntryId =
+  | 'info:emoji'
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
@@ -243,12 +250,14 @@ export function legendEntries(
   present?: readonly RenderClass[],
   {
     life = false,
+    emoji = false,
     lights = false,
     sidewalksDerived = true,
     fixtures,
     season,
   }: {
     life?: boolean;
+    emoji?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
     fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
@@ -321,6 +330,16 @@ export function legendEntries(
       glyphs: '◊ ( )',
       color: css(theme.styles.water_river?.color ?? theme.label),
     });
+  if (life && emoji && zoom >= EMOJI_ZOOM) {
+    const pets = entries.findIndex((e) => e.id === 'life:pets');
+    entries.splice(pets + 1, 0, {
+      id: 'info:emoji',
+      classes: [],
+      label: 'Moods (simulated)',
+      glyphs: `${MOOD_GLYPHS.happy} ${MOOD_GLYPHS.sleeping}`,
+      color: css(theme.label),
+    });
+  }
   if (
     fixtures
       ? fixtures.streetlights

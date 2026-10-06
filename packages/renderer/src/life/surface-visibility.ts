@@ -30,13 +30,43 @@ export function readLifeSurface(
   attachment: number,
   targets: LifeSurfaceFrame['targets'],
   sample: { col: number; row: number; sx: number; sy: number; cls: number; flags: number },
-  done: (visible: boolean) => void,
+  done: (visible: boolean | undefined) => void,
+  retired?: () => void,
 ): boolean {
-  if (!canReadLifeSurface(reads)) return false;
+  if (!canReadLifeSurface(reads)) {
+    retired?.();
+    return false;
+  }
   const bytes: (Uint8Array | undefined)[] = [];
+  const settled = [false, false, false];
+  let remaining = 3,
+    issuing = true,
+    rejected = false,
+    published = false,
+    released = false;
+  const conclude = () => {
+    if (issuing) return;
+    if (rejected && !published) {
+      published = true;
+      done(undefined);
+    }
+    if (remaining === 0 && !released) {
+      released = true;
+      retired?.();
+    }
+  };
+  const settle = (index: number, data?: Uint8Array) => {
+    if (settled[index]) return;
+    settled[index] = true;
+    remaining--;
+    if (data?.length) bytes[index] = data;
+    else rejected = true;
+    conclude();
+  };
   const finish = (index: number) => (data: Uint8Array) => {
-    bytes[index] = data;
-    if (bytes[0] && bytes[1] && bytes[2])
+    settle(index, data);
+    if (!rejected && !published && bytes[0] && bytes[1] && bytes[2]) {
+      published = true;
       done(
         lifeVisibleOnSurface(
           sample.cls,
@@ -46,12 +76,14 @@ export function readLifeSurface(
           bytes[2][0]!,
         ),
       );
+    }
   };
   reads.request(
     targets.glyphFbo,
     attachment,
     { x: sample.col, y: sample.row, width: 1, height: 1 },
     finish(0),
+    () => settle(0),
   );
   const rect = {
     x: sample.col * SUB.cols + sample.sx,
@@ -59,8 +91,10 @@ export function readLifeSurface(
     width: 1,
     height: 1,
   };
-  reads.request(targets.sub.fbo, attachment, rect, finish(1));
-  reads.request(targets.sub.fbo, attachment + 1, rect, finish(2));
+  reads.request(targets.sub.fbo, attachment, rect, finish(1), () => settle(1));
+  reads.request(targets.sub.fbo, attachment + 1, rect, finish(2), () => settle(2));
+  issuing = false;
+  conclude();
   return true;
 }
 

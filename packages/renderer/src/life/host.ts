@@ -120,6 +120,7 @@ export function createWorkerHost(
     traffic?: TrafficMix;
     cityLife?: RuntimeCityLife;
     itemInspection?: boolean;
+    emojiObserver?: boolean;
     moments?: MomentOptions;
   },
   processions: readonly ProcessionRoute[],
@@ -128,7 +129,13 @@ export function createWorkerHost(
   const seasons = simulationSeasons(options.cityLife?.seasons);
   let worker: Worker;
   const inline = () => {
-    const world = new LifeWorld(options.traffic, profiler, options.moments, options.itemInspection);
+    const world = new LifeWorld(
+      options.traffic,
+      profiler,
+      options.moments,
+      options.itemInspection,
+      options.emojiObserver,
+    );
     configureLifeWorld(world, {
       processions,
       seasons,
@@ -184,6 +191,7 @@ export function createWorkerHost(
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
       itemInspection: options.itemInspection,
+      emojiObserver: options.emojiObserver,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
     })
