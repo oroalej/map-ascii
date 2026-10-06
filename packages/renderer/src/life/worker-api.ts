@@ -1,6 +1,12 @@
 import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
-import type { CameraState, ProcessionRoute, ShopSchedule, TrafficMix } from '@atlas/shared';
+import type {
+  CameraState,
+  EventTiming,
+  ProcessionRoute,
+  ShopSchedule,
+  TrafficMix,
+} from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
 import { placeGrid, metersPerCssPx } from '../grid';
@@ -195,11 +201,14 @@ export function createLifeWorkerApi(
       if (profiler) result.profile = profiler.drain();
       return Comlink.transfer(result, buffers);
     },
+    setProcessions(routes: readonly ProcessionRoute[]) {
+      world.setProcessions(routes);
+    },
     setLive(id: string | undefined, progress?: number, occurrence?: string) {
       world.setLive(id, progress, occurrence);
     },
-    play(id: string) {
-      return world.play(id);
+    play(id: string, timing?: EventTiming) {
+      return world.play(id, timing);
     },
     stop() {
       world.stop();

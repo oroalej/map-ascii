@@ -2,6 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
+import type { ProcessionRun } from './life/simulate';
+import type { FluvialRoute } from '@atlas/shared';
 import { LifeInspection } from './life/inspection';
 import {
   cellPass,
@@ -284,6 +286,75 @@ describe('live motion preference', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+  it('advances the event clock and lighting in renderer frames, restores preferences and cancels on Life off/reduced motion', () => {
+    atlas.destroy();
+    const original = Hosts.createInlineHost,
+      requests: FrameInput[] = [];
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((world, profiler, clock) => {
+      const host = original(world, profiler, clock),
+        request = host.request.bind(host);
+      host.request = (frame) => {
+        requests.push(frame);
+        return request(frame);
+      };
+      return host;
+    });
+    const event: FluvialRoute = {
+      id: 'event',
+      kind: 'fluvial',
+      title: { en: 'Event' },
+      status: 'draft',
+      route: [
+        [0, 0],
+        [0.001, 0],
+      ],
+      length_m: 100,
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: -8,
+        start: '12:00',
+        duration_min: 240,
+        timezone: 'Asia/Manila',
+      },
+    };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 1900,
+      timezone: 'Asia/Manila',
+      lifeWorker: false,
+      life: { time: 1320 },
+      now: () => new Date('2026-06-01T04:00:00Z'),
+      processions: [event],
+    });
+    const reports: (ProcessionRun | null)[] = [];
+    atlas.on('procession', (run) => reports.push(run));
+    draw(10);
+    expect(requests.at(-1)?.step.weather?.minutes).toBe(1320);
+    expect(atlas.playProcession(event.id)).toBe(true);
+    expect(reports.at(-1)?.time).toMatchObject({ date: '2026-09-11', time: '12:00' });
+    for (let at = 60; at <= 2200; at += 50) draw(at);
+    const minutes = reports.filter((r) => r?.time).map((r) => r!.time!.minute);
+    expect(new Set(minutes).size).toBeGreaterThan(1);
+    expect(requests.at(-1)?.step.weather?.minutes).toBeGreaterThanOrEqual(720);
+    expect(requests.at(-1)?.step.weather?.minutes).toBeLessThan(730);
+    expect(atlas.getLife().time).toBe(1320);
+    atlas.stopProcession();
+    draw(2250);
+    expect(reports.at(-1)).toBeNull();
+    expect(requests.at(-1)?.step.weather?.minutes).toBe(1320);
+    atlas.playProcession(event.id);
+    atlas.setLife({ enabled: false });
+    expect(reports.at(-1)).toBeNull();
+    atlas.setLife({ enabled: true });
+    atlas.playProcession(event.id);
+    atlas.setReducedMotion(true);
+    expect(reports.at(-1)).toBeNull();
+    expect(atlas.getLife().time).toBe(1320);
+  });
 
   it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
@@ -556,6 +627,7 @@ describe('live motion preference', () => {
       clearTiles() {},
       request,
       latest: () => latest,
+      setProcessions() {},
       setLive() {},
       play: () => false,
       stop() {},
@@ -712,6 +784,7 @@ describe('live motion preference', () => {
       clearTiles() {},
       request,
       latest: () => latest,
+      setProcessions() {},
       setLive() {},
       play: () => false,
       stop() {},
@@ -767,6 +840,7 @@ describe('live motion preference', () => {
       clearTiles() {},
       request: () => true,
       latest: () => visible,
+      setProcessions() {},
       setLive,
       play: () => true,
       stop() {},

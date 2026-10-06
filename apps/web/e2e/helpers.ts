@@ -1,6 +1,12 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { RuntimeCityLifeSchema, type SearchIndexFile, type CityLifeConfig } from '@atlas/shared';
+import {
+  RuntimeCityLifeSchema,
+  Procession as ProcessionSchema,
+  CityProcessions,
+  type SearchIndexFile,
+  type CityLifeConfig,
+} from '@atlas/shared';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */
@@ -33,6 +39,21 @@ export const cities = readdirSync(citiesDir)
       throw new Error(`${slug}: no landmark search entry for "${city.smoke_landmark}"`);
     }
     const toursDir = new URL(`${slug}/tours/`, citiesDir);
+    const eventDir = new URL(`${slug}/processions/`, citiesDir);
+    const processions = existsSync(eventDir)
+      ? readdirSync(eventDir)
+          .filter((file) => file.endsWith('.json'))
+          .map((file) =>
+            ProcessionSchema.parse(JSON.parse(readFileSync(new URL(file, eventDir), 'utf8'))),
+          )
+      : [];
+    const generatedEventsFile = new URL(
+      `../public/tiles/${slug}.processions.json`,
+      import.meta.url,
+    );
+    const generatedProcessions = existsSync(generatedEventsFile)
+      ? CityProcessions.parse(JSON.parse(readFileSync(generatedEventsFile, 'utf8'))).processions
+      : [];
     const tours = existsSync(toursDir)
       ? readdirSync(toursDir)
           .filter((file) => file.endsWith('.json'))
@@ -46,6 +67,8 @@ export const cities = readdirSync(citiesDir)
       smokePlace,
       hasMeta,
       tours,
+      processions,
+      generatedProcessions,
       seasons: city.life ? (RuntimeCityLifeSchema.parse(city.life).seasons ?? []) : [],
     };
   });

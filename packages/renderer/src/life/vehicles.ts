@@ -6,6 +6,7 @@
  */
 import {
   TRAFFIC_ROADS,
+  PROCESSION_GEOMETRY,
   type BoatType,
   type TrafficMix,
   type TrafficRoad,
@@ -134,8 +135,7 @@ export type ProcessionCraft = 'pagoda' | 'voyador' | 'baroto' | 'sailboat';
 
 export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   car: {
-    length: 4.4,
-    width: 1.8,
+    ...PROCESSION_GEOMETRY.vehicles.car,
     speed: 1,
     paints: [P.white, P.white, P.silver, P.graphite, P.red, P.blue, P.maroon, P.cream],
     mini: ['▬', '▮'],
@@ -143,8 +143,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBGRRRRGGBBH', 'BBGRRRRGGBBB', 'BBGRRRRGGBBB', 'TBGRRRRGGBBH'],
   },
   motorcycle: {
-    length: 2,
-    width: 0.8,
+    ...PROCESSION_GEOMETRY.vehicles.motorcycle,
     speed: 1.1,
     paints: [P.graphite, P.red, P.blue, P.silver, P.graphite],
     mini: ['•', '•'],
@@ -179,8 +178,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBBBBBBBBBBBBBBBGH', 'BRRDDRRRRRRDDRRRGB', 'TBBBBBBBBBBBBBBBGH'],
   },
   truck: {
-    length: 8,
-    width: 2.5,
+    ...PROCESSION_GEOMETRY.vehicles.truck,
     speed: 0.85,
     paints: [P.blue, P.red, P.white, P.green, P.yellow],
     mini: ['▬', '▮'],

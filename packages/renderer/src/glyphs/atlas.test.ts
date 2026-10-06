@@ -1,5 +1,6 @@
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
+import { PROCESSION_GLYPHS } from '../life/procession-glyphs';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
 import { createHash } from 'node:crypto';
 import {
@@ -316,7 +317,7 @@ describe('glyph set', () => {
     expect(draw(CANDLE_GLYPHS[0]).at(5, 12)).toBeGreaterThan(0);
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
-      expect(glyphs.slice(408)).toEqual([...CANDLE_GLYPHS]);
+      expect(glyphs.slice(408, 408 + CANDLE_GLYPHS.length)).toEqual([...CANDLE_GLYPHS]);
       expect(
         createHash('sha256')
           .update(JSON.stringify(glyphs.slice(0, 408)))
@@ -328,6 +329,7 @@ describe('glyph set', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
       const expected = new Set([
+        ...PROCESSION_GLYPHS,
         ...PUFF_GLYPHS,
         ...fixtureGlyphs,
         ...arrowGlyphs,
@@ -352,6 +354,16 @@ describe('glyph set', () => {
       expect(new Set(glyphs)).toEqual(expected);
       // Index 0 of the atlas is blank, so the glyphs take indices 1 on.
       expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS);
+      expect(glyphs.slice(-PROCESSION_GLYPHS.length)).toEqual(PROCESSION_GLYPHS);
+      for (const glyph of PROCESSION_GLYPHS) {
+        const rendered = draw(glyph);
+        expect(rendered.drawn).toBe(true);
+        expect(
+          Array.from({ length: W * H }, (_, i) => rendered.at(i % W, Math.floor(i / W))).some(
+            (pixel) => pixel > 0,
+          ),
+        ).toBe(true);
+      }
     }
   });
 
