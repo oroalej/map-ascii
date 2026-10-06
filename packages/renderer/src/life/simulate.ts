@@ -759,6 +759,7 @@ export class TileLife {
   readonly momentHost: MomentHost;
   readonly emoji: EmojiObserver;
   private readonly emojiInputs: EmojiObservation[] = [];
+  private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
   private seamLimits?: StepPass['seams'];
   private adoptionGrid?: SegmentGrid;
@@ -4433,6 +4434,40 @@ export class TileLife {
     this.stepFrame(dt, gustAt, shows, near, env, guard, pass, pedestrians);
   }
 
+  private clearEmojiInput(input: Partial<EmojiObservation>) {
+    input.owner = undefined;
+    input.mover = undefined;
+    input.gatherer = undefined;
+    input.visit = undefined;
+    input.passenger = undefined;
+    input.figure = undefined;
+    input.held = undefined;
+    input.arrival = undefined;
+    input.still = undefined;
+    input.vendor = undefined;
+  }
+  private emojiInput(
+    owner: EmojiObservation['owner'],
+    subject: EmojiObservation['subject'],
+    eligible: boolean,
+  ): EmojiObservation {
+    const index = this.emojiInputs.length;
+    const input = this.emojiInputPool[index] ?? (this.emojiInputPool[index] = {});
+    this.clearEmojiInput(input);
+    input.owner = owner;
+    input.subject = subject;
+    input.eligible = eligible;
+    input.speaking = this.momentHost.speaking(owner);
+    // Required fields are populated before lending this pooled record to the observer.
+    const observation = input as EmojiObservation;
+    this.emojiInputs.push(observation);
+    return observation;
+  }
+  private emojiArrival(mover: Mover): boolean {
+    for (const event of this.scenes.speechEvents)
+      if (event.kind === 'arrival' && event.mover === mover) return true;
+    return false;
+  }
   private emojiObservations(
     env: LifeEnv,
     near?: (x: number, y: number) => boolean,
@@ -4445,53 +4480,35 @@ export class TileLife {
       inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
     const observations = this.emojiInputs;
     observations.length = 0;
-    const arrivals = new Set<Mover>();
-    for (const event of this.scenes.speechEvents)
-      if (event.kind === 'arrival') arrivals.add(event.mover);
     for (const m of this.movers) {
       if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
       const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
       if (subject === 'person' && !m.group) continue;
       const admitted = eligible(m) && this.visibleMover(m, levels, crowd);
       if (!admitted && this.emoji.memory.get(m)?.clock === undefined) continue;
-      observations.push({
-        owner: m,
-        mover: m,
-        subject,
-        figure: m.group?.[0]?.figure,
-        eligible: admitted,
-        speaking: this.momentHost.speaking(m),
-        visit: this.scenes.visits.get(m),
-        held: this.scenes.held(m),
-        passenger: this.scenes.services.get(m)?.passenger,
-        arrival: arrivals.has(m),
-        still: m.pause > 0 || this.scenes.still(m),
-      });
+      const input = this.emojiInput(m, subject, admitted);
+      input.mover = m;
+      input.figure = m.group?.[0]?.figure;
+      input.visit = this.scenes.visits.get(m);
+      input.held = this.scenes.held(m);
+      input.passenger = this.scenes.services.get(m)?.passenger;
+      input.arrival = this.emojiArrival(m);
+      input.still = m.pause > 0 || this.scenes.still(m);
     }
     for (const g of this.gatherers) {
       if (g.carabao !== undefined) continue;
       const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
       if (!admitted && this.emoji.memory.get(g)?.clock === undefined) continue;
-      observations.push({
-        owner: g,
-        gatherer: g,
-        subject: 'person',
-        figure: g.walker.figure,
-        eligible: admitted,
-        speaking: this.momentHost.speaking(g),
-      });
+      const input = this.emojiInput(g, 'person', admitted);
+      input.gatherer = g;
+      input.figure = g.walker.figure;
     }
     for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls) {
       const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
       if (!admitted && this.emoji.memory.get(s)?.clock === undefined) continue;
-      observations.push({
-        owner: s,
-        subject: 'person',
-        figure: 'adult',
-        vendor: true,
-        eligible: admitted,
-        speaking: this.momentHost.speaking(s),
-      });
+      const input = this.emojiInput(s, 'person', admitted);
+      input.figure = 'adult';
+      input.vendor = true;
     }
     return observations;
   }
@@ -4551,6 +4568,7 @@ export class TileLife {
       );
     else this.emoji.step(dt, emojiZoom, emojiEnv, []);
     // Inputs are borrowed only for this observer call; do not retain actor references.
+    for (let i = 0; i < this.emojiInputs.length; i++) this.clearEmojiInput(this.emojiInputPool[i]!);
     this.emojiInputs.length = 0;
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);

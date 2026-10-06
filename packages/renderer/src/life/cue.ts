@@ -78,10 +78,13 @@ export class CueController<C extends { id: string }> {
   private candidates(frame: CueFrame): Candidate<C>[] {
     const out: Candidate<C>[] = [],
       { targets, grid, dpr } = frame;
+    const pairCounts = this.config.group ? new Map<string, number>() : undefined;
     for (let i = 0; i < frame.agents.length; i++) {
       const agent = frame.agents[i]!;
       const cue = this.config.pick(agent);
       if (!cue) continue;
+      const pair = this.config.group?.(cue);
+      if (pair) pairCounts!.set(pair, (pairCounts!.get(pair) ?? 0) + 1);
       if (this.config.requiresSpeakers(agent, cue) && !frame.speakers) continue;
       const member = this.config.member(agent, cue);
       const [x, y] = frame.speakers?.points.get(i + 1) ?? frame.toCell(agent.lng, agent.lat);
@@ -135,14 +138,7 @@ export class CueController<C extends { id: string }> {
       (entry.cue.point[1] - frame.size.height / 2) ** 2;
     const groups = this.groups(out).filter((group) => {
       const pair = this.config.group?.(group[0]!.cue);
-      return (
-        !pair ||
-        (group.length === 2 &&
-          frame.agents.filter((a) => {
-            const cue = this.config.pick(a);
-            return cue && this.config.group?.(cue) === pair;
-          }).length === 2)
-      );
+      return !pair || (group.length === 2 && pairCounts?.get(pair) === 2);
     });
     const order = this.config.order;
     if (order)
@@ -258,6 +254,12 @@ export class CueController<C extends { id: string }> {
       },
       (visible) => {
         if (this.pending?.serial !== serial) return;
+        this.pending = undefined;
+        this.ready.delete(candidate.key);
+        if (visible === undefined) {
+          this.continuation = undefined;
+          return;
+        }
         const completedAt = this.clock();
         this.latencies[this.latencyCursor++ % this.latencies.length] = Math.max(
           0,
@@ -266,7 +268,6 @@ export class CueController<C extends { id: string }> {
         this.maxLatency = 0;
         for (const latency of this.latencies) this.maxLatency = Math.max(this.maxLatency, latency);
         this.arbiter?.completed(Math.max(0, completedAt - issuedAt));
-        this.ready.delete(candidate.key);
         const pair = this.config.group?.(candidate.cue);
         this.continuation =
           pair && visible
@@ -277,7 +278,6 @@ export class CueController<C extends { id: string }> {
                   !this.confirmed.has(c.key),
               )?.key
             : undefined;
-        this.pending = undefined;
         // The shared grids may already contain the next draw. update() filters this
         // captured key against that frame before publishing its current position.
         this.confirmed.set(candidate.key, {

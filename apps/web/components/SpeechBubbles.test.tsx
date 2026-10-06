@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSpeechStore } from '@/state/speech';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useLifeStore } from '@/state/life';
-import { SpeechBubbles } from './SpeechBubbles';
+import { CueBubbles } from './CueBubbles';
 import { SpeechControls } from './SpeechControls';
 
 const catalog: DialogueCatalog = {
@@ -57,7 +57,7 @@ beforeEach(() => {
         'div',
         null,
         createElement(SpeechControls, { catalog }),
-        createElement(SpeechBubbles, { catalog }),
+        createElement(CueBubbles, { catalog }),
       ),
     ),
   );
@@ -92,10 +92,10 @@ const cue = (line = 0): SpeechInView => ({
   line,
   point: [400, 300],
 });
-it('keeps Bikol visible, switches translations immediately, follows replies and toggles speech', () => {
-  act(() => {
+it('keeps Bikol visible, switches translations immediately, follows replies and toggles speech', async () => {
+  await act(async () => {
     listener!([cue()]);
-    vi.advanceTimersToNextFrame();
+    await Promise.resolve();
   });
   expect(container.querySelector('[lang="bcl"]')?.textContent).toBe('Kumusta ka?');
   expect(container.querySelector('[lang="en"]')).toBeNull();
@@ -111,9 +111,9 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   translate('fil');
   expect(container.querySelector('[lang="en"]')).toBeNull();
   expect(container.querySelector('[lang="fil"]')?.textContent).toBe('Kumusta ka?');
-  act(() => {
+  await act(async () => {
     listener!([cue(1)]);
-    vi.advanceTimersToNextFrame();
+    await Promise.resolve();
   });
   expect(container.querySelector('[lang="bcl"]')?.textContent).toBe('Marhay man, salamat.');
   expect(container.querySelector('[lang="fil"]')?.textContent).toBe('Mabuti naman, salamat.');
@@ -125,10 +125,10 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   act(() => listener!([]));
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(0);
 });
-it('uses renderer-selected bubbles and removes old listeners/nodes when the renderer is replaced', () => {
-  act(() => {
+it('uses renderer-selected bubbles and removes old listeners/nodes when the renderer is replaced', async () => {
+  await act(async () => {
     listener!([1, 2, 3, 4].map((id) => ({ ...cue(), id: String(id), point: [id * 180, 300] })));
-    vi.advanceTimersToNextFrame();
+    await Promise.resolve();
   });
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(4);
   expect(container.textContent).toContain('Speech (simulated)');

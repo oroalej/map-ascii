@@ -152,6 +152,38 @@ describe('read-only emoji observer', () => {
     expect(f.observer.cue(f.m)).toBeUndefined();
     expect(track.attemptAt).toBeGreaterThan(160);
   });
+  it('clears sampled pet, visit and passenger references when owners become ineligible', () => {
+    const pet = fixture('dog');
+    const other = continuityMover(pet.tile, pet.m.x + 2 * pet.tile.perMeter, 'cat');
+    const cat: EmojiObservation = {
+      owner: other,
+      mover: other,
+      subject: 'cat',
+      eligible: true,
+      speaking: false,
+    };
+    const visit = { state: 'rest', time: 1, site: {} } as Visit;
+    pet.o.visit = visit;
+    pet.step(0.5, {}, [pet.o, cat]);
+    const petTrack = pet.observer.memory.get(pet.m)!;
+    expect(petTrack.standoff).toBe(other);
+    expect(petTrack.visit?.identity).toBe(visit);
+    const cooldown = petTrack.cooldownUntil;
+    pet.o.eligible = false;
+    pet.step(0.1, {}, [pet.o, cat]);
+    expect(petTrack.standoff).toBeUndefined();
+    expect(petTrack.visit).toBeUndefined();
+    expect(petTrack.cooldownUntil).toBe(cooldown);
+    const driver = fixture('vehicle');
+    const passenger = fixture().m;
+    driver.o.passenger = passenger;
+    driver.step();
+    const driverTrack = driver.observer.memory.get(driver.m)!;
+    expect(driverTrack.passenger).toBe(passenger);
+    driver.o.eligible = false;
+    driver.step(0.1);
+    expect(driverTrack.passenger).toBeUndefined();
+  });
   it('matches seasonal drawn attendance and skips never-visible owners before scene queries', () => {
     const builder = new LifeBuilder();
     builder.place({ x: 2000, y: 2000 }, 'worship', 80);

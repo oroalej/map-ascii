@@ -442,6 +442,9 @@ export class EmojiObserver {
         t.edges.clear();
         t.replies.clear();
         t.followups.length = 0;
+        t.standoff = undefined;
+        t.passenger = undefined;
+        t.visit = undefined;
         continue;
       }
       if (gap) {

@@ -30,7 +30,7 @@ export function readLifeSurface(
   attachment: number,
   targets: LifeSurfaceFrame['targets'],
   sample: { col: number; row: number; sx: number; sy: number; cls: number; flags: number },
-  done: (visible: boolean) => void,
+  done: (visible: boolean | undefined) => void,
   retired?: () => void,
 ): boolean {
   if (!canReadLifeSurface(reads)) {
@@ -48,7 +48,7 @@ export function readLifeSurface(
     if (issuing) return;
     if (rejected && !published) {
       published = true;
-      done(false);
+      done(undefined);
     }
     if (remaining === 0 && !released) {
       released = true;

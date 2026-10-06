@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { classId } from '../classes';
 import type { ReadRect } from '../readback';
 import { CellBit } from './config';
@@ -97,6 +97,51 @@ const dog = (id: string, x: number, y = 30, pair?: string): VisibleAgent => ({
   emoji: { id, subject: 'dog', mood: 'happy', pair },
 });
 describe('production cue wrappers', () => {
+  it.each(['speech', 'emoji'] as const)(
+    'keeps unexpired %s evidence after a dropped recheck without renewing expiry or sampling latency',
+    (kind) => {
+      const speaker: VisibleAgent = {
+        kind: 'person',
+        lng: 30,
+        lat: 30,
+        flap: 0,
+        speech: { id: 'speaker', exchangeId: 'hello', line: 0 },
+      };
+      const f = fixture([kind === 'speech' ? speaker : dog('mood', 30)]);
+      const sampled = vi.spyOn(f.arbiter, 'completed');
+      const scheduling = f[kind] as unknown as {
+        latencies: Float64Array;
+        latencyCursor: number;
+        maxLatency: number;
+      };
+      const events = kind === 'speech' ? f.speechEvents : f.emojiEvents;
+      f.tick(0);
+      f.tick(200);
+      expect(events.at(-1)).toHaveLength(1);
+      const latencies = scheduling.latencies.slice();
+      const cursor = scheduling.latencyCursor;
+      const maximum = scheduling.maxLatency;
+      f.tick(600);
+      f.tick(601, 1000);
+      const rejected = f.queue.splice(0);
+      expect(rejected).toHaveLength(3);
+      rejected[0]!.retire?.();
+      expect(f.arbiter.busy).toBe(true);
+      f.tick(602);
+      expect(events.at(-1)).toHaveLength(1);
+      expect(scheduling.latencies).toEqual(latencies);
+      expect(scheduling.latencyCursor).toBe(cursor);
+      expect(scheduling.maxLatency).toBe(maximum);
+      expect(sampled).toHaveBeenCalledTimes(1);
+      for (const request of rejected.slice(1)) request.retire?.();
+      expect(f.arbiter.busy).toBe(false);
+      f.tick(1199, 10_000);
+      expect(events.at(-1)).toHaveLength(1);
+      f.tick(1200, 10_000);
+      expect(events.at(-1)).toEqual([]);
+      sampled.mockRestore();
+    },
+  );
   it('uses explicit leader order with nonnumeric IDs even when the reply is closer to center', () => {
     const leader = dog('leader', 10, 30, 'pair');
     const reply = dog('reply', 40, 30, 'pair');
@@ -183,6 +228,18 @@ describe('production cue wrappers', () => {
     f.tick(220, 100);
     expect(f.emojiEvents.at(-1)).toEqual([]);
   });
+  it.each(['visible', 'offscreen', 'unpainted'])(
+    'rejects a malformed three-member pair even when its third member is %s',
+    (visibility) => {
+      const third = dog('third', visibility === 'offscreen' ? 0 : 40, 30, 'pair');
+      const f = fixture([dog('leader', 30, 30, 'pair'), dog('reply', 33, 30, 'pair'), third]);
+      if (visibility === 'unpainted') f.frame.owners[30 * 80 + 40] = 0;
+      f.tick(0);
+      f.tick(20);
+      expect(f.queue).toHaveLength(0);
+      expect(f.emojiEvents.flat()).toHaveLength(0);
+    },
+  );
   it('spreads other groups while exempting partners and requires a vendor human cell', () => {
     const f = fixture([dog('1', 35), dog('2', 39), dog('3', 55)]);
     for (let t = 0; t <= 300; t += 20) f.tick(t);

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { epochDay, expandSeasons, type RuntimeSeasonConfig } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type Mover, type TileLife } from './simulate';
@@ -6,6 +6,55 @@ import { simulationSeasons } from './seasonal-simulation';
 import { completeScenarioState, SCENARIO_DIALOGUE } from './testing/scenarios';
 import { left, right } from './testing/continuity';
 import type { DialogueMemory } from './dialogue';
+import type { EmojiObservation } from './emoji';
+import type { Visit } from './interactions';
+import { pedestrianWorld } from './testing/pedestrians';
+
+afterEach(() => vi.restoreAllMocks());
+
+it('reuses borrowed inputs without keeping actor references or stale passenger and visit fields', () => {
+  const { world, life, car, human } = pedestrianWorld();
+  world.setEmojiView([19, 1, [0, 0]]);
+  const visit = { state: 'wait', time: 1, site: {} } as Visit;
+  life.scenes.visits.set(car, visit);
+  life.scenes.services.set(car, {
+    site: visit.site,
+    time: 1,
+    boarded: 0,
+    arriving: false,
+    passenger: human,
+  });
+  vi.spyOn(life.scenes, 'step').mockImplementation(() => {});
+  vi.spyOn(life.momentHost, 'step').mockImplementation(() => {});
+  const step = life.emoji.step.bind(life.emoji);
+  const borrowed: EmojiObservation[][] = [],
+    samples: EmojiObservation[][] = [];
+  vi.spyOn(life.emoji, 'step').mockImplementation((...args) => {
+    borrowed.push([...args[3]]);
+    samples.push(args[3].map((input) => ({ ...input })));
+    step(...args);
+  });
+  world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 });
+  expect(samples[0]![0]).toMatchObject({ owner: car, passenger: human, visit });
+  for (const input of borrowed[0]!)
+    expect([input.owner, input.mover, input.gatherer, input.visit, input.passenger]).toEqual(
+      Array(5).fill(undefined),
+    );
+  life.scenes.visits.clear();
+  life.scenes.services.clear();
+  life.movers.splice(0, 1);
+  world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 });
+  expect(borrowed[1]![0]).toBe(borrowed[0]![0]);
+  expect(samples[1]![0]).toMatchObject({
+    owner: human,
+    subject: 'person',
+    passenger: undefined,
+    visit: undefined,
+    vendor: undefined,
+    gatherer: undefined,
+  });
+  for (const input of borrowed[0]!) expect(input.owner).toBeUndefined();
+});
 
 function speechState(tile: TileLife) {
   const owners = [...tile.movers, ...tile.gatherers, ...tile.stalls];

@@ -136,7 +136,8 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
         entry.node.dataset.below = String(box.below);
       }
     };
-    let drawFrame: number | undefined;
+    let drawFrame: number | undefined,
+      drawPending = false;
     const scheduleDraw = () => {
       if (drawFrame !== undefined) return;
       drawFrame = window.requestAnimationFrame(() => {
@@ -145,19 +146,27 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
       });
     };
     const drawNow = () => {
+      drawPending = false;
       if (drawFrame !== undefined) window.cancelAnimationFrame(drawFrame);
       drawFrame = undefined;
       draw();
     };
+    const scheduleCueDraw = () => {
+      if (drawPending) return;
+      drawPending = true;
+      queueMicrotask(() => {
+        if (drawPending) drawNow();
+      });
+    };
     const off = atlas.on('speechchange', (next) => {
       cues = next;
       // Empty channels clear immediately on camera/lifecycle invalidation.
-      if (next.length) scheduleDraw();
+      if (next.length) scheduleCueDraw();
       else drawNow();
     });
     const offEmoji = atlas.on('emojichange', (next) => {
       emojiCues = next;
-      if (next.length) scheduleDraw();
+      if (next.length) scheduleCueDraw();
       else drawNow();
     });
     const offEmojiPrefs = useEmojiStore.subscribe(drawNow);
@@ -170,6 +179,7 @@ export function CueBubbles({ catalog }: { catalog?: RuntimeDialogueCatalog }) {
     };
     window.addEventListener('resize', resize);
     return () => {
+      drawPending = false;
       if (drawFrame !== undefined) window.cancelAnimationFrame(drawFrame);
       off();
       offPrefs();

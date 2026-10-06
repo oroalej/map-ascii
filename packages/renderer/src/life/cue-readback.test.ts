@@ -37,7 +37,7 @@ describe('physical cue readback lease', () => {
         release,
       );
       expect(issued).toBe(3);
-      expect(done).toHaveBeenCalledExactlyOnceWith(false);
+      expect(done).toHaveBeenCalledExactlyOnceWith(undefined);
       expect(arbiter.acquire('emoji', 1)).toBeUndefined();
       queued[0]!.retire?.();
       expect(arbiter.busy).toBe(true);
