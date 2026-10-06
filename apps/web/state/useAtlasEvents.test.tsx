@@ -59,6 +59,7 @@ it('a listed click pauses a same-ID tour hold and cancels motion without flying;
   try {
     act(() =>
       click!({
+        featureId: 'place',
         feature: { id: 'place', class: 'monument', landmarkId: 'listed' },
         lngLat: [1, 2],
         point: [10, 20],
@@ -75,6 +76,7 @@ it('a listed click pauses a same-ID tour hold and cancels motion without flying;
     expect(useUiStore.getState().anchor).toMatchObject({ id: 'place', lngLat: [1, 2] });
     act(() =>
       click!({
+        featureId: 'other',
         feature: { id: 'other', class: 'monument', landmarkId: 'unlisted' },
         lngLat: [1, 2],
         point: [10, 20],

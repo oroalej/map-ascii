@@ -9,6 +9,7 @@ import { selectPlace } from '@/state/selection';
 import { useUiStore } from '@/state/ui';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
 import { loadSearch, type CitySearch } from '@/lib/search';
+import MiniSearch from 'minisearch';
 import { LandmarkFacts } from './LandmarkFacts';
 import { TourPlayer } from './TourPlayer';
 import { useTourStore } from '@/state/tour';
@@ -42,11 +43,14 @@ let viewport: EventTarget & {
   offsetLeft: number;
   offsetTop: number;
 };
-const searchData = (entries: SearchEntry[]) =>
-  ({ entries: new Map(entries.map((e) => [e.id, e])) }) as CitySearch;
+const searchData = (entries: SearchEntry[]): CitySearch => ({
+  index: new MiniSearch({ fields: ['name'] }),
+  entries: new Map(entries.map((e) => [e.id, e])),
+});
 const entry = (id: string, lng: number): SearchEntry => ({
   id,
   name: 'Place',
+  altNames: [],
   type: 'landmark',
   lat: 2,
   lng,
