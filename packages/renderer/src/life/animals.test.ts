@@ -4,7 +4,8 @@ import { themes } from '../theme';
 import { activityLevels, CAT, spawnRules, usableLines } from './config';
 import { packLife, type LifeGrid } from './draw';
 import { LifeBuilder, LifeLine, type LifeGeometry } from './geometry';
-import { animalSize, bodiesOverlap } from './occupancy';
+import { animalSize, bodiesOverlap, bodyCorners } from './occupancy';
+import { finalizeControlledCrossings } from './crossing-geometry';
 import { LifeWorld, TileLife, type Mover, type VisibleAgent } from './simulate';
 import { signalState } from './signals';
 import { stripRing } from './terrain';
@@ -162,7 +163,31 @@ describe('animal walking routes', () => {
     it(`${kind} waits at a pedestrian signal and clears a crossing once inside`, () => {
       const b = new LifeBuilder();
       line(b, LifeLine.path, 2000, 2);
-      const geo = { ...b.finish(), signals: Float32Array.from([2048, 2000, 8, 90, 0, 1]) };
+      const at = (x: number, y: number) => ({ x: 2048 + x * pm, y: 2000 + y * pm });
+      const road = [stripRing(at(0, -20), at(0, 20), 5 * pm)];
+      b.line([at(0, -20), at(0, 20)], LifeLine.roadMajor, 10);
+      b.area('carriageway', road);
+      b.area('crossing', [stripRing(at(0, -1.5), at(0, 1.5), 6.5 * pm)]);
+      b.controlledCrossing({
+        id: 'animal-crossing',
+        anchor: at(0, 0),
+        bearing: 0,
+        width: 10,
+        lineId: 0,
+        controller: {
+          id: 'animal-signal',
+          at: tileToLngLat(tile, at(0, 0)),
+          seed: 7,
+          midBlock: false,
+          walk: 'a',
+        },
+      });
+      const geo = {
+        ...b.finish(),
+        signals: Float32Array.from([2048, 2000, 8, 90, 0, 1]),
+        signalSeeds: [7],
+      };
+      finalizeControlledCrossings(geo.controlledCrossings!, [road], pm);
       const life = new TileLife(tile, geo, 1);
       life.movers.length = life.stalls.length = life.gatherers.length = 0;
       life.scenes.sites.length = 0;
@@ -175,12 +200,16 @@ describe('animal walking routes', () => {
       life.movers.push(m);
       for (let i = 0; i < 30; i++)
         life.step(0.1, undefined, undefined, undefined, { rain: 0, clock: red });
-      expect(m.x).toBeCloseTo(2048 - 8.5 * pm);
+      expect(m.crossingWait?.waiting).toBeDefined();
+      expect(bodyCorners(life.groundBodies(m)[0]!).every((point) => point.x < 2048 / pm - 5)).toBe(
+        true,
+      );
       let green = red;
       while (!signalState(signal.seed, green).walkA || signalState(signal.seed, green).left < 10)
         green++;
-      for (let i = 0; i < 10; i++)
+      for (let i = 0; i < 30 && !m.crossingWait?.commitments.length; i++)
         life.step(0.1, undefined, undefined, undefined, { rain: 0, clock: green });
+      expect(m.crossingWait?.commitments).toHaveLength(1);
       const inside = m.x;
       life.step(0.1, undefined, undefined, undefined, { rain: 0, clock: red });
       expect(m.x).toBeGreaterThan(inside);
