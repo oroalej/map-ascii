@@ -23,7 +23,7 @@ export class JunctionCrossings {
     const j = p.junction;
     if (j.controlled === true) return true;
     const entry = p.entry;
-    if (!entry) return this.life.signals.controlsCrossing(p.line, { x: j.x, y: j.y });
+    if (!entry) return this.life.signals.controlsApproach(p.line, { x: j.x, y: j.y });
     const arm = j.arms.includes(entry)
       ? entry
       : (j.arms.find(
@@ -39,7 +39,7 @@ export class JunctionCrossings {
     if (!entries) this.controllers.set(j, (entries = new Map<Arm, boolean>()));
     let controlled = entries.get(arm);
     if (controlled === undefined) {
-      controlled = this.life.signals.controlsCrossing(entry.line, {
+      controlled = this.life.signals.controlsApproach(entry.line, {
         x: entry.x ?? j.x,
         y: entry.y ?? j.y,
       });

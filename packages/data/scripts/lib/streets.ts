@@ -1,7 +1,8 @@
-import { SignalLayout, type City } from '@atlas/shared';
+import { SignalLayout, SignalStops, type City, type SignalArm } from '@atlas/shared';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { delta, key, lines, point, SIGNAL_STOP_GAP_M, width } from './road-geometry';
+import { armPath, pathPoint } from './signal-path';
 
 export type RoadArm = { road: AtlasFeature; bearing: number; toward: Position; forward: boolean };
 export type RoadVertex = { p: Position; arms: RoadArm[] };
@@ -17,6 +18,7 @@ export type StreetStats = {
   unresolvedStops: number;
   undirectedMidblockStops: number;
   shortApproaches: number;
+  shortCrossingArms: number;
 };
 
 const road = (f: AtlasFeature) => !f.properties.region && f.properties.class.startsWith('road_');
@@ -148,6 +150,7 @@ export function streetStats(features: readonly AtlasFeature[]): StreetStats {
     unresolvedStops: 0,
     undirectedMidblockStops: 0,
     shortApproaches: 0,
+    shortCrossingArms: 0,
   };
   for (const f of features) {
     const p = f.properties;
@@ -171,27 +174,39 @@ export function streetStats(features: readonly AtlasFeature[]): StreetStats {
 }
 
 /** The same inbound stop geometry is used by paint, hardware, and vehicle control. */
-export function signalStop(p: Position, arm: RoadArm, setback: number) {
+export function signalStop(
+  p: Position,
+  arm: RoadArm,
+  setback: number,
+  vertices: ReadonlyMap<string, RoadVertex>,
+) {
   const direction = arm.forward ? -1 : 1;
   if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
-  const [x, y] = delta(p, arm.toward),
-    length = Math.hypot(x, y);
-  if (!length || length < setback) {
-    return;
-  }
-  const tx = -x / length,
-    ty = -y / length; // toward the stop, east/north
-  const q = [
-    p[0]! + ((arm.toward[0]! - p[0]!) * setback) / length,
-    p[1]! + ((arm.toward[1]! - p[1]!) * setback) / length,
-  ];
-  const w = width(arm.road),
-    offset = arm.road.properties.oneway ? 0 : w / 4;
+  const path = armPath(p, arm, vertices),
+    at = path && pathPoint(path.points, setback);
+  if (!at) return;
+  const bearing = (at.bearing + 180) % 360;
+  const tx = Math.sin((bearing * Math.PI) / 180),
+    ty = Math.cos((bearing * Math.PI) / 180);
+  const q = [...at.position];
+  const segment = path.segments[at.segment]!;
+  const stopDirection: -1 | 1 = segment.forward ? -1 : 1;
+  const w = width(segment.road),
+    offset = segment.road.properties.oneway ? 0 : w / 4;
   q[0]! += (ty * offset) / (111320 * Math.cos((q[1]! * Math.PI) / 180));
   q[1]! -= (tx * offset) / 111320;
-  const bearing = ((Math.atan2(tx, ty) * 180) / Math.PI + 360) % 360;
-  const stopWidth = arm.road.properties.oneway ? w : w / 2;
-  return { position: q as [number, number], bearing, width: stopWidth };
+  const stopWidth = segment.road.properties.oneway ? w : w / 2;
+  const metadata =
+    segment.road.properties.id !== arm.road.properties.id ||
+    stopDirection !== direction ||
+    w !== width(arm.road)
+      ? {
+          stop_road_id: segment.road.properties.id,
+          stop_direction: stopDirection,
+          stop_road_width: w,
+        }
+      : {};
+  return { position: q as [number, number], bearing, width: stopWidth, metadata };
 }
 
 /** Resolve stop approaches before tiling; driving side currently defaults to right. */
@@ -202,6 +217,23 @@ export function mergeStreetDetails(
   policy?: City['streets'],
 ): { features: AtlasFeature[]; stats: StreetStats } {
   const stops = new Map<string, AtlasFeature>();
+  const signalArms = new Map<AtlasFeature, SignalArm[]>();
+  const controlledStops = new Map<string, SignalArm>();
+  const stopIdentity = (roadId: string, junction: Position, toward: Position) =>
+    JSON.stringify([roadId, key(junction), key(toward)]);
+  for (const signal of signals) {
+    const arms = signal.properties.signal_layout
+      ? SignalLayout.parse(JSON.parse(signal.properties.signal_layout)).arms
+      : signal.properties.signal_stops
+        ? SignalStops.parse(JSON.parse(signal.properties.signal_stops))
+        : [];
+    signalArms.set(signal, arms);
+    for (const arm of arms) {
+      if (!arm.stop) continue;
+      const identity = stopIdentity(arm.road_id, arm.junction, arm.toward);
+      if (!controlledStops.has(identity)) controlledStops.set(identity, arm);
+    }
+  }
   let unresolvedStops = 0,
     undirectedMidblockStops = 0,
     shortApproaches = 0;
@@ -209,7 +241,17 @@ export function mergeStreetDetails(
   function stop(p: Position, arm: RoadArm, setback: number, mapped: boolean, id: string) {
     const direction = arm.forward ? -1 : 1;
     if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
-    const resolved = signalStop(p, arm, setback);
+    const controlled = mapped
+      ? controlledStops.get(stopIdentity(arm.road.properties.id, p, arm.toward))
+      : undefined;
+    const resolved =
+      controlled?.stop && controlled.stop_width
+        ? {
+            position: controlled.stop,
+            width: controlled.stop_width,
+            bearing: controlled.stop_bearing ?? controlled.bearing,
+          }
+        : signalStop(p, arm, setback, vertices);
     if (!resolved) {
       shortApproaches++;
       return;
@@ -231,9 +273,9 @@ export function mergeStreetDetails(
   }
   for (const signal of signals) {
     if (signal.geometry.type !== 'Point') continue;
-    if (signal.properties.signal_layout) {
-      const layout = SignalLayout.parse(JSON.parse(signal.properties.signal_layout));
-      for (const arm of layout.arms) {
+    if (signal.properties.signal_layout || signal.properties.signal_stops) {
+      const arms = signalArms.get(signal)!;
+      for (const arm of arms) {
         if (!arm.inbound) continue;
         if (!arm.stop || !arm.stop_width) {
           shortApproaches++;
@@ -242,14 +284,15 @@ export function mergeStreetDetails(
         const feature = features.find(
           (f) => f.properties.id === arm.road_id && !f.properties.region,
         )!;
-        const k = `${arm.stop[0].toFixed(7)},${arm.stop[1].toFixed(7)}:${arm.bearing.toFixed(2)}:${arm.stop_width}`;
+        const localBearing = arm.stop_bearing ?? arm.bearing;
+        const k = `${arm.stop[0].toFixed(7)},${arm.stop[1].toFixed(7)}:${localBearing.toFixed(2)}:${arm.stop_width}`;
         stops.set(
           k,
           point(`${signal.properties.id}:stop:${arm.road_id}:${key(arm.toward)}`, arm.stop, {
             variant: 'stop_line',
             stop_road: feature.properties.class,
             stop_width: arm.stop_width,
-            stop_bearing: arm.bearing,
+            stop_bearing: localBearing,
             stop_src: 'signalized',
             source: 'Derived stop line at a resolved signal',
           }),

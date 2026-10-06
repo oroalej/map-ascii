@@ -4,7 +4,7 @@ import { LifeWorld, TileLife, type Mover } from './simulate';
 import type { JunctionTable } from './junctions';
 import { type Junction, type Movement } from './junctions';
 import { worldTiles } from './testing/scenarios';
-import { metersPerUnit } from '../raster/geometry';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { EMPTY_PEDESTRIANS, type PedestrianCrossing, type PedestrianView } from './pedestrians';
 import { signalState } from './signals';
 import { kinematicsOf } from './config';
@@ -111,7 +111,7 @@ it('keeps original and copied acute-fork arms tied to their own crossing', () =>
   life.junctionCrossings.holdAhead(inbound, false);
   expect(inbound.ahead).toBeLessThan(inbound.boxAhead);
 });
-function fixture(signal = false, remoteCrossing?: number) {
+function fixture(signal = false, remoteCrossing?: number, tagged = false) {
   const b = new LifeBuilder(),
     center = { x: 2000, y: 2000 },
     directions = [
@@ -135,6 +135,21 @@ function fixture(signal = false, remoteCrossing?: number) {
         y: y + (hy! * a! + hx! * s!) * pm,
       })),
     ]);
+    if (tagged)
+      b.controlledCrossing({
+        id: `crossing/${hx}/${hy}`,
+        anchor: { x, y },
+        bearing: hx ? 90 : 0,
+        width: 3,
+        lineId: 0,
+        controller: {
+          id: 'controller',
+          at: tileToLngLat(tile, center),
+          seed: 1,
+          midBlock: false,
+          walk: hx ? 'b' : 'a',
+        },
+      });
   }
   if (remoteCrossing !== undefined) {
     const x = center.x - remoteCrossing * pm;
@@ -206,7 +221,7 @@ function fixture(signal = false, remoteCrossing?: number) {
 for (const controlled of [false, true])
   it(`caches ${controlled ? 'controlled' : 'uncontrolled'} entry membership through requests and copied arms`, () => {
     const { life, car, table } = fixture(controlled),
-      membership = vi.spyOn(life.signals, 'controlsCrossing');
+      membership = vi.spyOn(life.signals, 'controlsApproach');
     life.prepareTraffic(() => true);
     life.requestJunctions(table, () => true, 0);
     table.resolve(0);
@@ -468,7 +483,7 @@ it('assigns a stripe inside the box to the east arm only, leaving southbound tra
   expect(f.life.junctionClear(path, view)).toBe(true);
 });
 it('retains controlled geometry separately without enabling entrance courtesy', () => {
-  const f = fixture(true),
+  const f = fixture(true, undefined, true),
     crossings = f.life.pedestrianCrossings;
   expect(crossings.empty).toBe(true);
   expect(crossings.hasLine(2)).toBe(false);
@@ -486,8 +501,15 @@ it('retains controlled geometry separately without enabling entrance courtesy', 
     ),
   ).toHaveLength(1);
 });
+it('keeps untagged stripes uncontrolled beside a signal-owned junction approach', () => {
+  const { life, car } = fixture(true);
+  const movement = life.junctionIndex.movement(car, 60 * pm)!;
+  expect(life.junctionCrossings.controlled(movement)).toBe(true);
+  expect(life.pedestrianCrossings.controlledAssociations.size).toBe(0);
+  expect(life.pedestrianCrossings.empty).toBe(false);
+});
 it('gates only the exit crossing for a signal-controlled turn and retains its green permission', () => {
-  const f = fixture(true),
+  const f = fixture(true, undefined, true),
     { life, car, human, table } = f;
   car.routing = {
     seed: 1,

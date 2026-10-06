@@ -5,8 +5,84 @@ import { worldTiles } from './testing/scenarios';
 import { LifeLine } from './geometry';
 import { frameBetween } from './frames';
 import { activityLevels } from './config';
-import { tileToLngLat } from '../raster/geometry';
+import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import type { PersonLook } from './people';
+import { signalizedCrossingEntry } from './testing/signalized-crossing';
+import type { JunctionTable } from './junctions';
+
+function clippedWalkingStep(controlled: boolean, atEnd = false) {
+  const entry = signalizedCrossingEntry(),
+    pm = 1 / metersPerUnit(entry.tile),
+    shift = 4096 - (2000 + 8 * pm);
+  if (!controlled) entry.life.controlledCrossings = [];
+  for (let i = 1; i < entry.life.coords.length; i += 2)
+    entry.life.coords[i] = entry.life.coords[i]! + shift;
+  // Move all buffered geometry before preparing the gate index.
+  for (const area of entry.life.areas ?? [])
+    for (const ring of area.rings) for (const p of ring) p.y += shift;
+  for (const crossing of entry.life.controlledCrossings ?? []) {
+    crossing.anchor.y += shift;
+    for (const p of crossing.quad ?? []) p.y += shift;
+    for (const side of crossing.sides ?? []) {
+      side.centre.y += shift;
+      for (const p of side.gate) p.y += shift;
+      for (const pad of side.pads) for (const p of pad) p.y += shift;
+      for (const p of side.slots) p.y += shift;
+    }
+  }
+  const prepared = new TileLife(entry.tile, entry.life, 1),
+    remaining = atEnd ? 0 : 0.05 * pm;
+  prepared.movers.length =
+    prepared.gatherers.length =
+    prepared.parked.length =
+    prepared.stalls.length =
+      0;
+  prepared.scenes.sites.length = 0;
+  (prepared as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+  const m: Mover = {
+    kind: 'person',
+    line: 1,
+    from: 3,
+    dir: 1,
+    d: entry.life.coords[9]! - entry.life.coords[7]! - remaining,
+    x: 2000,
+    y: 4096 - remaining,
+    hx: 0,
+    hy: 1,
+    speed: 2 * pm,
+    pause: 0,
+    paint: 0,
+    lane: 0,
+    rank: 0,
+    walked: 10,
+    waiting: atEnd ? 3 : 0,
+    group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
+  };
+  prepared.movers.push(m);
+  const before = m.y;
+  // Match world preparation before exercising a seam pass directly.
+  const stepping = prepared as unknown as {
+    localJunctions: JunctionTable;
+    prepareLocalTraffic: (table: JunctionTable, clock: number) => void;
+  };
+  stepping.prepareLocalTraffic(stepping.localJunctions, 0);
+  prepared.step(0.1, undefined, undefined, undefined, { clock: 0, rain: 0 }, () => true, {
+    junctions: stepping.localJunctions,
+    seams: new Map([[m, { room: Infinity, crossing: true, boundary: { line: 1, dir: 1 } }]]),
+  });
+  return { m, moved: (m.y - before) / pm };
+}
+
+it('counts only accepted seam distance with and without unrelated controlled crossings', () => {
+  for (const controlled of [false, true]) {
+    const { m, moved } = clippedWalkingStep(controlled);
+    expect(moved).toBeCloseTo(0.05);
+    expect(m.walked! - 10).toBeCloseTo(moved);
+    const stopped = clippedWalkingStep(controlled, true).m;
+    expect(stopped.walked).toBe(10);
+    expect(stopped.turnedAt).toBe(stopped.walked);
+  }
+});
 
 function group(size: number): Walker[] {
   return Array.from({ length: size }, (_, i) => ({
