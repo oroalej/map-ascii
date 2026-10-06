@@ -7,7 +7,11 @@ import { CellBit } from './config';
 import type { ReadRect } from '../readback';
 
 function fixture() {
-  const requests: { rect: ReadRect; done: (bytes: Uint8Array) => void }[] = [];
+  const requests: {
+    rect: ReadRect;
+    done: (bytes: Uint8Array) => void;
+    retire?: () => void;
+  }[] = [];
   const reads = {
     size: 0,
     request: (
@@ -15,8 +19,9 @@ function fixture() {
       _attachment: number,
       rect: ReadRect,
       done: (bytes: Uint8Array) => void,
+      retire?: () => void,
     ) => {
-      requests.push({ rect, done });
+      requests.push({ rect, done, retire });
     },
   };
   const emit = vi.fn();
@@ -55,6 +60,27 @@ function fixture() {
   };
   return { hover, frame, emit, inspect, inspectItem, requests, reads, finish };
 }
+
+it('keeps prior hover evidence after a dropped recheck without prolonging its lifetime', () => {
+  const { hover, frame, requests, finish, reads, emit, inspectItem } = fixture();
+  frame.agents = [{ ...frame.agents[0]!, inspectionId: 10 }];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  for (let now = 16; now <= 128; now += 16) hover.update(frame, now);
+  const dropped = requests.splice(0);
+  expect(dropped).toHaveLength(3);
+  dropped[0]!.retire?.();
+  reads.size = 6;
+  hover.update(frame, 129);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Car (simulated)', point: [2, 3] });
+  expect(inspectItem).toHaveBeenCalledTimes(1);
+  for (const request of dropped.slice(1)) request.retire?.();
+  for (let now = 144; now <= 240; now += 16) hover.update(frame, now);
+  hover.update(frame, 250);
+  expect(emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  expect(inspectItem).toHaveBeenLastCalledWith(null);
+});
 
 it('renews negative evidence at 125 ms for stable identities without holding the actor', () => {
   const { hover, frame, requests, finish, inspectItem } = fixture();

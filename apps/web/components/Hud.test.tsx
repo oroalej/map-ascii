@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useLifeStore } from '@/state/life';
+import { useEmojiStore } from '@/state/emoji';
 import { useUiStore } from '@/state/ui';
 import { Hud } from './Hud';
 
@@ -57,6 +58,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) }));
   useAtlasStore.setState({ ...initialAtlasState(), camera: { lng: 0, lat: 0, zoom: 19 } });
   useLifeStore.setState({ enabled: false });
+  useEmojiStore.setState({ enabled: true });
   useUiStore.setState({ legendFocus: null, lifeHover: null });
   container = document.createElement('div');
   document.body.append(container);
@@ -69,6 +71,7 @@ afterEach(() => {
   useAtlasInstance.setState({ atlas: null });
   useAtlasStore.setState(initialAtlasState());
   useLifeStore.setState({ enabled: true });
+  useEmojiStore.setState({ enabled: true });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -163,6 +166,20 @@ const mount = async (instance: ReturnType<typeof renderer>) => {
     await Promise.resolve();
   });
 };
+
+it('updates the mood legend when emoji is toggled without replacing the atlas', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  const moods = () =>
+    labels().some((label) => label?.includes('simulated') && /moods/i.test(label));
+  expect(moods()).toBe(true);
+  act(() => useEmojiStore.setState({ enabled: false }));
+  expect(moods()).toBe(false);
+  act(() => useEmojiStore.setState({ enabled: true }));
+  expect(moods()).toBe(true);
+  expect(useAtlasInstance.getState().atlas).toBe(instance.atlas);
+});
 
 it('toggles one focus, retains it through collapse and panels, and clears missing entries or atlas swaps', async () => {
   const instance = renderer();

@@ -33,7 +33,8 @@
     "worktree:new": "tsx scripts/worktree-new.ts",
     "plans:clean": "tsx scripts/plans-clean.ts",
     "worktree:remove": "tsx scripts/worktree-remove.ts",
-    "cli:latest": "tsx scripts/latest-cli.ts"
+    "cli:latest": "tsx scripts/latest-cli.ts",
+    "review:state": "tsx scripts/pr-review-state.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

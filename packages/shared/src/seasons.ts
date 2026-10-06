@@ -2,6 +2,7 @@
 import type { RhythmCurve, SeasonAnchorKind } from './rhythm';
 import type { LocalizedText, Source } from './schemas';
 import type { SeasonalPoint, CarnivalComponent } from './seasonal-record';
+import type { SeasonEmojiEntry } from './emoji';
 export * from './seasonal-record';
 
 /** Selected source ways, optionally trimmed to the frontage of an OSM feature. */
@@ -52,6 +53,7 @@ export type SeasonConfig = {
   title: LocalizedText;
   window: SeasonWindow;
   includes?: string[];
+  emoji?: SeasonEmojiEntry[];
   fireworks?: FireworksConfig;
   grounds?: SeasonGrounds[];
   installations?: SeasonInstallation[];
@@ -125,6 +127,7 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
     title,
     window,
     includes,
+    emoji,
     fireworks,
     lanterns,
     bunting,
@@ -139,6 +142,7 @@ export function runtimeSeason(season: SeasonConfig): RuntimeSeasonConfig {
     title,
     window,
     ...(includes && { includes }),
+    ...(emoji && { emoji }),
     ...(fireworks && { fireworks }),
     ...(lanterns && { lanterns }),
     ...(stalls && { stalls }),
@@ -197,6 +201,10 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       season.installations,
       included.map((s) => s.installations),
     );
+    const emoji = composeSeasonInstallations(
+      season.emoji,
+      included.map((s) => s.emoji),
+    );
     return {
       ...season,
       ...(lanterns && { lanterns }),
@@ -210,6 +218,7 @@ export function expandSeasons(seasons: readonly RuntimeSeasonConfig[]): RuntimeS
       ...(visitors && { visitors }),
       ...(congregations && { congregations }),
       ...(installations.length && { installations }),
+      ...(emoji.length && { emoji }),
     };
   });
 }
@@ -244,7 +253,7 @@ export function validMonthDay({ month, day }: MonthDay): boolean {
     day <= new Date(Date.UTC(2000, month, 0)).getUTCDate()
   );
 }
-function occurrence(year: number, date: MonthDay): number | undefined {
+export function occurrence(year: number, date: MonthDay): number | undefined {
   const day = epochDay(year, date.month, date.day);
   return new Date(day * 86_400_000).getUTCMonth() + 1 === date.month ? day : undefined;
 }

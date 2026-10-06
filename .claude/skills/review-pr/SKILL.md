@@ -1,13 +1,16 @@
 ---
 name: review-pr
 description: Review an ASCII Atlas pull request, branch, or diff for correctness, code quality, reuse, performance, test/CI cost, and AGENTS.md project rules. Reports verified, ranked findings with path:line and suggested fixes, then fixes the blockers and should-fix items (report only with --report-only). Use when asked to review a PR, a branch, or the current changes.
-argument-hint: '[PR number | branch] [--report-only]'
-allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr list:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(git merge-base:*), Bash(git rev-parse:*), Read, Grep, Glob, Agent
+argument-hint: '[PR number | branch] [--report-only] [--since <sha>] [--ledger <path>]'
+allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr list:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(git merge-base:*), Bash(git rev-parse:*), Bash(git grep:*), Read, Grep, Glob, Agent
 ---
 
 # Review a pull request
 
-Target: `$ARGUMENTS` (a PR number, a branch name, or empty for the current branch, optionally followed by `--report-only`).
+Target: `$ARGUMENTS` (a PR number, a branch name, or empty for the current branch, optionally followed by `--report-only`, `--since <sha>` and `--ledger <path>`).
+
+- `--since <sha>`: **delta mode**. An earlier round already reviewed the PR at `<sha>`; review only what changed since then (step 3).
+- `--ledger <path>`: earlier rounds' findings, with stable IDs such as `r1.2`, and rejected claims. Read it before reviewing. Don't re-report a rejected claim unless its code changed.
 
 Steps 1–5 are review only: no edits, comments, commits or pushes. Step 6 then fixes the findings, unless `--report-only` was given. `$review-pr` passes `--report-only`, because its validator and fixer run separately and its baseline check expects this process to leave the checkout unchanged.
 
@@ -35,7 +38,7 @@ Save the full diff to the session scratchpad directory (or the OS temp dir), nev
 
 - The PR title, body, and commit messages. Review against what the PR claims to do.
 - If `.plans/README.md` lists this branch, read that task's `handoff.md`. It holds the plan, its invariants, and what it ruled out of scope.
-- `AGENTS.md`, for conventions, the "Verifying changes" table, and the Don'ts.
+- `AGENTS.md` is already in your context through `CLAUDE.md`; don't read it again. Use it for conventions, the "Verifying changes" table, and the Don'ts.
 - The doc sections for the touched areas:
   - **Renderer or web:** `docs/ARCHITECTURE.md` §2 (public API), §3 (pipeline), §8 (performance budgets), §9 (testing)
   - **`packages/data` or `packages/content`:** `docs/DATA.md`
@@ -43,19 +46,24 @@ Save the full diff to the session scratchpad directory (or the OS temp dir), nev
 
 ## 3. Review
 
-Count the changed lines and files (`git diff --shortstat`).
+Work economically: every tool call re-reads the whole conversation so far. Batch independent reads into one message, and read line ranges around the changed hunks (`git diff -U20`, `sed -n`) rather than whole files. Some files run to thousands of lines.
+
+**Delta mode (`--since <sha>`):** review `git diff <sha> <head>` yourself, with no subagents. In step 2, read only what the delta needs: the PR title, the handoff's invariants and the touched docs.
+- Check every fix against the ledger entry it addresses. An entry that is still unresolved gets reported again under its ledger ID (`r1.2 — still …`).
+- Find the callers and tests of every changed function, type or constant (`git grep`), and report regressions beyond the changed lines.
+- Read beyond the delta whenever the evidence needs it, but don't re-audit untouched code. Earlier rounds reviewed it.
+- The report keeps the step 5 shape. "Checked, no issues" names what the delta covered.
+
+**Full review:** count the changed lines and files (`git diff --shortstat`).
 
 - **Small diff** (under ~300 changed lines and at most 8 files): review it yourself, going through all four checklist areas.
-- **Larger diff:** in one message, launch up to 4 `general-purpose` subagents in parallel, one per area:
-  - A. Correctness & robustness
-  - B. Performance & cost
-  - C. Quality & reuse
-  - D. Project rules, tests & docs
+- **Larger diff:** split the review by files, not by area. Use `n = min(4, max(2, ceil(changed lines / 1500)))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
 
   Give each one:
-  - the diff path and the head ref (so it can `git show <ref>:<path>`)
-  - a 3–5 line summary of the PR's intent and any handoff invariants
-  - the instruction to read `.claude/skills/review-pr/checklist.md`, its own section only
+  - its file list, and a diff of only those files saved to the scratchpad (`git diff <base>...<head> -- <files>`), plus the head ref (so it can `git show <ref>:<path>`)
+  - a 3–5 line summary of the PR's intent and any handoff invariants, and the ledger path if there is one
+  - the instruction to read `.claude/skills/review-pr/checklist.md` and apply all four areas (A correctness, B performance and cost, C quality and reuse, D project rules, tests and docs) to its files. It may read callers and code outside its group to judge them.
+  - the economy rules above: batch reads, read hunks with context instead of whole files, and aim to finish within about 25 tool calls
   - the rules: read-only, no checkout, and no findings CI already catches (ESLint, typecheck, `no-hardcoding.test.ts`, `check:budgets`)
   - the finding format below; it returns at most 8 findings
 
@@ -71,7 +79,7 @@ Count the changed lines and files (`git diff --shortstat`).
     evidence: for reuse claims, the existing helper's path:line; for perf claims, the hot path it sits on
   ```
 
-While subagents run, review the diff's overall shape yourself: is the approach right, and is anything missing? Missing pieces include a test, a doc update, a schema, or attribution.
+While subagents run, review the diff's overall shape and the interactions between file groups yourself: is the approach right, and is anything missing? Missing pieces include a test, a doc update, a schema, or attribution.
 
 ## 4. Verify every finding
 

@@ -29,6 +29,119 @@ const cells = (out: Uint8Array) =>
   Array.from({ length: out.length / 4 }, (_, i) =>
     Array.from(out.subarray(i * 4, i * 4 + 4)),
   ).filter((t) => t[2]);
+it('keeps the emoji anchor on a complete mapped person moved into the second ring', () => {
+  for (const scale of [0.2, 3]) {
+    const agent: VisibleAgent = {
+      kind: 'person',
+      mappedPersonMover: true,
+      lng: 40.35,
+      lat: 40.45,
+      ahead: [40.35 + scale, 40.45],
+      side: [40.35, 40.45 + scale],
+      flap: 0,
+      people: [{ figure: 'adult', paint: 2, lateral: 0, back: 0, flap: 0 }],
+      emoji: { id: 'walker', subject: 'person', mood: 'happy' },
+    };
+    const owners = new Uint32Array(grid.cols * grid.rows);
+    const speakers = {
+      members: new Uint8Array(owners.length),
+      points: new Map<number, [number, number]>(),
+    };
+    const original = new Uint8Array(owners.length * 4);
+    expect(packLife(original, { ...grid, owners, speakers }, [agent], themes.dark, index)).toBe(1);
+    const point = speakers.points.get(1)!;
+    const sourceCells = [...owners.entries()].filter(([, owner]) => owner === 1).map(([i]) => i);
+    expect(sourceCells).toHaveLength(scale === 3 ? 4 : 1);
+    const shift = 2 * grid.cols;
+    const allowed = new Set(sourceCells.map((i) => i + shift));
+    const out = new Uint8Array(original.length);
+    expect(
+      packLife(
+        out,
+        {
+          ...grid,
+          owners,
+          speakers,
+          allowsGroundCell: (_agent, col, row) => allowed.has(row * grid.cols + col),
+        },
+        [agent],
+        themes.dark,
+        index,
+      ),
+    ).toBe(1);
+    expect(speakers.points.get(1)).toEqual([point[0], point[1] + 2]);
+    for (const i of sourceCells) {
+      expect(out.subarray((i + shift) * 4, (i + shift + 1) * 4)).toEqual(
+        original.subarray(i * 4, (i + 1) * 4),
+      );
+      expect(owners[i + shift]).toBe(1);
+      expect(speakers.members[i + shift]).toBe(1);
+    }
+  }
+});
+it('records emoji driver, pet and human anchors without changing packed bytes', () => {
+  for (const scale of [1, 4]) {
+    const agents: VisibleAgent[] = [
+      {
+        kind: 'vehicle',
+        vehicle: 'car',
+        lng: 20,
+        lat: 20,
+        ahead: [20 + scale, 20],
+        side: [20, 20 + scale],
+        flap: 0,
+        emoji: { id: 'car', subject: 'driver', mood: 'cool' },
+      },
+      {
+        kind: 'dog',
+        lng: 50,
+        lat: 20,
+        ahead: [50 + scale, 20],
+        flap: 0,
+        emoji: { id: 'dog', subject: 'dog', mood: 'happy' },
+      },
+      {
+        kind: 'cat',
+        lng: 50,
+        lat: 50,
+        ahead: [50 + scale, 50],
+        flap: 0,
+        emoji: { id: 'cat', subject: 'cat', mood: 'sleeping' },
+      },
+      {
+        kind: 'person',
+        vehicle: 'cart',
+        lng: 20,
+        lat: 50,
+        ahead: [20 + scale, 50],
+        side: [20, 50 + scale],
+        flap: 0,
+        people: [{ figure: 'adult', paint: 2, lateral: 1, back: 0, flap: 0 }],
+        emoji: { id: 'vendor', subject: 'person', mood: 'happy' },
+      },
+    ];
+    const out = new Uint8Array(grid.cols * grid.rows * 4),
+      plain = new Uint8Array(out.length);
+    const owners = new Uint32Array(out.length / 4),
+      speakers = {
+        members: new Uint8Array(owners.length),
+        points: new Map<number, [number, number]>(),
+      };
+    packLife(out, { ...grid, owners, speakers }, agents, themes.dark, index);
+    packLife(
+      plain,
+      grid,
+      agents.map(({ emoji: _emoji, ...agent }) => agent),
+      themes.dark,
+      index,
+    );
+    expect(out).toEqual(plain);
+    expect(speakers.points.size).toBe(4);
+    if (scale === 4) expect(speakers.points.get(1)![0]).toBeGreaterThan(20);
+    expect(speakers.points.get(4)![1]).toBeGreaterThan(50);
+    expect([...owners].some((owner, i) => owner === 4 && speakers.members[i] === 1)).toBe(true);
+  }
+});
 it('tracks the actual speaking member and vendor separately from other people and cart cells', () => {
   const owners = new Uint32Array(grid.cols * grid.rows);
   const speakers = {

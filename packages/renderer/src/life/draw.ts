@@ -600,8 +600,11 @@ function drawAgent(
   const baseSpec = agent.vehicle ? VEHICLES[agent.vehicle] : undefined;
   const spec = agent.covered && agent.vehicle === 'cart' && baseSpec ? COVERED_CART : baseSpec;
   if (agent.kind === 'person' && !spec) return drawPeople(out, grid, agent, [col, row], glyphIndex);
-  if ((agent.kind === 'dog' || agent.kind === 'cat') && agent.ahead)
-    return drawPet(out, grid, agent, [col, row], glyphIndex) ? 1 : 0;
+  if ((agent.kind === 'dog' || agent.kind === 'cat') && agent.ahead) {
+    const drawn = drawPet(out, grid, agent, [col, row], glyphIndex);
+    if (drawn && agent.emoji) drawingSpeakers?.points.set(drawingOwner, [col, row]);
+    return drawn ? 1 : 0;
+  }
   // A vendor's cart is painted as a vehicle.
   const cls = spec && agent.kind === 'person' ? 'life_vehicle' : lifeClassFor[agent.kind];
   if (spec && agent.ahead && agent.side) {
@@ -644,6 +647,11 @@ function drawAgent(
         indicator,
       );
       detailedStamp = stamped;
+      if (stamped && agent.emoji && agent.kind === 'vehicle')
+        drawingSpeakers?.points.set(drawingOwner, [
+          col + 0.25 * spec.length * along[0],
+          row + 0.25 * spec.length * along[1],
+        ]);
       // The vendor stands clear of the cart's side.
       const vendor = agent.people
         ? drawPeople(out, grid, agent, [col, row], glyphIndex, spec.width / 2)
@@ -683,6 +691,8 @@ function drawAgent(
     agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind],
     spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
   );
+  if (agent.emoji && agent.kind !== 'person')
+    drawingSpeakers?.points.set(drawingOwner, [c + 0.5, r + 0.5]);
   return people + 1;
 }
 
@@ -851,7 +861,7 @@ function drawPeople(
       const back = look.back * spacing;
       const cx = col + right[0] * beside - along[0] * back;
       const cy = row + right[1] * beside - along[1] * back;
-      if (agent.speech && (agent.speech.member ?? 0) === i)
+      if ((agent.speech || agent.emoji) && (agent.speech?.member ?? 0) === i)
         drawingSpeakers?.points.set(drawingOwner, [cx, cy]);
       const fit = fits[i]!;
       let any: boolean;
@@ -928,7 +938,7 @@ function drawPeople(
     const r = r0 + Math.round(ry * lateral - fy * back);
     const fit = fits[i]!;
     const [dc, dr] = fit !== 'big' && size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
-    if (agent.speech && (agent.speech.member ?? 0) === i) {
+    if ((agent.speech || agent.emoji) && (agent.speech?.member ?? 0) === i) {
       const point: [number, number] = fit === 'big' ? [c + 1, r + 1] : [c + dc + 0.5, r + dr + 0.5];
       drawingSpeakers?.points.set(drawingOwner, point);
       if (captured >= 0) {

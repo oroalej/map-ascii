@@ -28,6 +28,26 @@ function fixture(choice = vendor) {
   return { a, b, state, scenes, scene };
 }
 describe('scene-owned dialogue', () => {
+  it('exposes one normal voiced occurrence including listeners, but no canceled completion', () => {
+    const f = fixture();
+    expect(f.scenes.admit(f.scene, 12)).toBe(true);
+    expect(f.scenes.voiceActive(f.b)).toBe(true);
+    f.scenes.step(1.5, true);
+    expect(f.scenes.voiceCompletions).toEqual([]);
+    f.scenes.step(1.5, true);
+    expect(f.scenes.voiceCompletions).toHaveLength(1);
+    expect(f.scenes.voiceCompletions[0]!.owners).toEqual([f.a, f.b]);
+    f.scenes.step(0.1, true);
+    expect(f.scenes.voiceCompletions).toEqual([]);
+    const canceled = fixture();
+    canceled.scenes.admit(canceled.scene, 12);
+    canceled.scenes.step(0.1, false);
+    expect(canceled.scenes.voiceCompletions).toEqual([]);
+    const cleared = fixture();
+    cleared.scenes.admit(cleared.scene, 12);
+    cleared.scenes.clear();
+    expect(cleared.scenes.voiceCompletions).toEqual([]);
+  });
   it.each([
     [true, 0.2],
     [false, 0.2],

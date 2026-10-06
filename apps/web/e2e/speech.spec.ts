@@ -2,6 +2,30 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { DialogueCatalog } from '@atlas/shared';
 import { cities, mapReady } from './helpers';
+test('naga: natural emoji appears at the central z19 view', async ({ page }) => {
+  test.skip(!cities.some((city) => city.slug === 'naga' && city.hasMeta));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'atlas.life',
+      JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
+    );
+    localStorage.setItem('atlas.quality', JSON.stringify('high'));
+    localStorage.setItem('atlas.emoji.naga', JSON.stringify({ enabled: true }));
+    localStorage.setItem(
+      'atlas.speech.naga',
+      JSON.stringify({ enabled: false, translation: null }),
+    );
+  });
+  await page.goto('/naga?lat=13.623407&lng=123.184867&z=19');
+  await mapReady(page);
+  // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
+  await page.getByText('Legend', { exact: true }).click();
+  await expect
+    .poll(() => page.locator('[data-emoji-bubble]:visible').count(), { timeout: 30_000 })
+    .toBeGreaterThan(0);
+});
 
 test('naga: natural moment speech appears at the reported monument view', async ({ page }) => {
   test.skip(!cities.some((city) => city.slug === 'naga' && city.hasMeta));

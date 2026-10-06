@@ -1,0 +1,102 @@
+/** Small system-font moods. Runtime imports deliberately have no validation dependency. */
+import { SPEECH_ZOOM } from './zoom';
+
+export const EMOJI_ZOOM = SPEECH_ZOOM;
+export const EMOJI_EVENING = { start: 16 * 60, end: 6 * 60 } as const;
+export const EMOJI_SUBJECTS = ['person', 'driver', 'dog', 'cat'] as const;
+export type EmojiSubject = (typeof EMOJI_SUBJECTS)[number];
+export const EMOJI_MOODS = [
+  'impatient',
+  'angry',
+  'bored',
+  'happy',
+  'cool',
+  'yummy',
+  'playful',
+  'relaxed',
+  'working',
+  'rained',
+  'sleepy',
+  'sleeping',
+  'sorry',
+  'wave',
+  'thumbs',
+  'coffee',
+  'hot',
+  'windy',
+  'pray',
+  'study',
+  'basketball',
+  'photo',
+  'harvest',
+  'gift',
+  'love',
+  'tree',
+  'star',
+  'party',
+  'festive',
+  'music',
+  'cheers',
+  'beer',
+  'balloon',
+  'feast',
+  'fireworks',
+  'scared',
+] as const;
+export type EmojiMood = (typeof EMOJI_MOODS)[number];
+export const DRINKING_MOODS = ['cheers', 'beer'] as const;
+export type SeasonEmojiEntry = {
+  mood: EmojiMood;
+  subjects: EmojiSubject[];
+  hours?: [number, number];
+  days?: { month: number; day: number }[];
+  figure?: 'adult' | 'child';
+  weight: number;
+};
+
+export const MOOD_GLYPHS: Readonly<Record<EmojiMood, string>> = {
+  impatient: '😤',
+  angry: '😠',
+  bored: '😑',
+  happy: '😊',
+  cool: '😎',
+  yummy: '😋',
+  playful: '😄',
+  relaxed: '😌',
+  working: '😓',
+  rained: '☔',
+  sleepy: '😪',
+  sleeping: '💤',
+  sorry: '😅',
+  wave: '👋',
+  thumbs: '👍',
+  coffee: '☕',
+  hot: '🥵',
+  windy: '💨',
+  pray: '🙏',
+  study: '📚',
+  basketball: '🏀',
+  photo: '📸',
+  harvest: '🌾',
+  gift: '🎁',
+  love: '❤️',
+  tree: '🎄',
+  star: '⭐',
+  party: '🎉',
+  festive: '🥳',
+  music: '🎶',
+  cheers: '🍻',
+  beer: '🍺',
+  balloon: '🎈',
+  feast: '🍖',
+  fireworks: '🎆',
+  scared: '😨',
+};
+export const SUBJECT_GLYPHS: Readonly<Record<EmojiSubject, Partial<Record<EmojiMood, string>>>> = {
+  person: {},
+  driver: { rained: '😣' },
+  dog: { angry: '💢', happy: '💕', hot: '💦', scared: '❗' },
+  cat: { angry: '😾', happy: '😺', hot: '💦', scared: '🙀' },
+};
+export const emojiGlyph = (subject: EmojiSubject, mood: EmojiMood): string =>
+  SUBJECT_GLYPHS[subject][mood] ?? MOOD_GLYPHS[mood];

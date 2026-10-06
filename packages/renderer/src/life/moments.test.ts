@@ -50,6 +50,42 @@ const start = (f: ReturnType<typeof fixture>, kind: MomentKind) => {
 };
 
 describe('small human moments', () => {
+  it('records normally finished voiced occurrences and excludes weather cancellation', () => {
+    const choice: DialogueChoice = { id: 'hello', kind: 'greet', period: 'afternoon', turns: 2 };
+    const f = fixture('greet', () => 0, [choice]);
+    start(f, 'greet');
+    expect(f.m.voiceActive(f.b.owner)).toBe(true);
+    f.m.step(0.1, f.c);
+    f.m.step(20, f.c);
+    expect(f.m.voiceCompletions).toHaveLength(1);
+    expect(f.m.voiceCompletions[0]!.owners).toEqual([f.a.owner, f.b.owner]);
+    const canceled = fixture('greet', () => 0, [choice]);
+    start(canceled, 'greet');
+    canceled.c.rain = 1;
+    canceled.m.step(0.1, canceled.c);
+    expect(canceled.m.voiceCompletions).toEqual([]);
+  });
+  it('completes repeated ball exchanges independently before the physical game ends', () => {
+    const f = fixture('ball', () => 0, [{ id: 'play', kind: 'ball', turns: 2 }]);
+    start(f, 'ball');
+    f.m.step(0.5, f.c);
+    f.m.step(2.5, f.c);
+    expect(f.m.voiceCompletions).toEqual([]);
+    f.m.step(2.5, f.c);
+    const first = f.m.voiceCompletions[0]!;
+    expect(first.owners).toEqual([f.a.owner, f.b.owner]);
+    expect(f.m.stats.completed).toBe(0);
+    f.m.step(6, f.c);
+    expect(f.m.voiceCompletions).toEqual([]);
+    f.m.step(2.5, f.c);
+    f.m.step(2.5, f.c);
+    expect(f.m.voiceCompletions).toHaveLength(1);
+    expect(f.m.voiceCompletions[0]!.token).not.toBe(first.token);
+    expect(f.m.stats.completed).toBe(0);
+    f.c.rain = 1;
+    f.m.step(0.1, f.c);
+    expect(f.m.voiceCompletions).toEqual([]);
+  });
   it.each(['look', 'greet'] as const)('lets a %s speak after a background remark', (kind) => {
     const reaction: DialogueChoice = {
       id: kind,
