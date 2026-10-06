@@ -4,7 +4,8 @@ import type { DialogueCatalog } from '@atlas/shared';
 import { cities, mapReady } from './helpers';
 test('naga: natural emoji appears at the central z19 view', async ({ page }) => {
   test.skip(!cities.some((city) => city.slug === 'naga' && city.hasMeta));
-  await page.setViewportSize({ width: 1280, height: 720 });
+  // Bound software-WebGL work while retaining the desktop controls and reported camera.
+  await page.setViewportSize({ width: 641, height: 480 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.addInitScript(() => {
     localStorage.setItem(
@@ -21,7 +22,8 @@ test('naga: natural emoji appears at the central z19 view', async ({ page }) => 
   await page.goto('/naga?lat=13.623407&lng=123.184867&z=19');
   await mapReady(page);
   // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
-  await page.getByText('Legend', { exact: true }).click();
+  await page.getByText('Legend', { exact: true }).press('Enter');
+  await expect(page.getByRole('list', { name: 'What the glyphs on screen mean' })).toBeHidden();
   await expect
     .poll(() => page.locator('[data-emoji-bubble]:visible').count(), { timeout: 30_000 })
     .toBeGreaterThan(0);
