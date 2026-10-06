@@ -75,12 +75,13 @@ function App() {
   );
 }
 const render = () => act(() => root.render(createElement(App)));
-const flush = () =>
+const flush = () => {
   act(() => {
     const callbacks = [...frames.values()];
     frames.clear();
     callbacks.forEach((cb) => cb(100));
   });
+};
 const dialog = () => container.querySelector<HTMLDivElement>('[role="dialog"]');
 const clickSelection = (id = landmark.osm_id!) =>
   act(() => selectPlace(id, { origin: 'pointer', anchor: [1, 2] }));
@@ -124,11 +125,10 @@ beforeEach(() => {
       }
     },
   );
-  const measure = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.getAttribute('role') !== 'dialog') return measure.call(this);
+    if (this.getAttribute('role') !== 'dialog') return new DOMRect();
     if (this.hidden) return new DOMRect(0, 0, 0, 0);
     shownMeasures++;
     return new DOMRect(
@@ -293,7 +293,7 @@ it('does not show unlisted selections and cancels stale search responses', async
     await Promise.resolve();
   });
   flush();
-  const project = vi.mocked(useAtlasInstance.getState().atlas!.project);
+  const project = vi.spyOn(useAtlasInstance.getState().atlas!, 'project');
   expect(project).toHaveBeenLastCalledWith([20, 2]);
   await act(async () => {
     stale(searchData([entry(landmark.osm_id!, 999)]));

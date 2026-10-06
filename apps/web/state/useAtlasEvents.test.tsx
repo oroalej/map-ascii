@@ -23,10 +23,12 @@ it('a listed click pauses a same-ID tour hold and cancels motion without flying;
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let click: ((event: AtlasEventMap['click']) => void) | undefined;
   const camera = { lng: 1, lat: 2, zoom: 18 };
+  const flyTo = vi.fn(),
+    setCamera = vi.fn();
   const atlas = {
     getCamera: () => camera,
-    setCamera: vi.fn(),
-    flyTo: vi.fn(),
+    setCamera,
+    flyTo,
     setSelected: vi.fn(),
     setHighlighted: vi.fn(),
     on: (event: string, handler: unknown) => {
@@ -65,8 +67,8 @@ it('a listed click pauses a same-ID tour hold and cancels motion without flying;
         point: [10, 20],
       }),
     );
-    expect(atlas.flyTo).not.toHaveBeenCalled();
-    expect(atlas.setCamera).toHaveBeenCalledWith(camera);
+    expect(flyTo).not.toHaveBeenCalled();
+    expect(setCamera).toHaveBeenCalledWith(camera);
     expect(useTourStore.getState().active?.run).toMatchObject({
       grabbed: true,
       paused: true,
