@@ -429,16 +429,23 @@ export class LocalScenes {
       restoreMover(m, before);
       const d = dist(from, target);
       if (d > 1e-8 * this.perMeter) faceGroup(m, (target.x - from.x) / d, (target.y - from.y) / d);
-      m.x = target.x;
-      m.y = target.y;
-      const bodies = this.walkingBodies(m, m);
-      return (
-        inTile(m) &&
-        (!owns || owns(m)) &&
-        bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
-        this.graph.allowsBodies(bodies, true) &&
-        guard(m, before, false)
-      );
+      const fits = () => {
+        m.x = target.x;
+        m.y = target.y;
+        const bodies = this.walkingBodies(m, m);
+        return (
+          inTile(m) &&
+          (!owns || owns(m)) &&
+          bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
+          this.graph.allowsBodies(bodies, true) &&
+          guard(m, before, false)
+        );
+      };
+      if (fits()) return true;
+      // Movement can keep the complete formation facing sideways or backwards
+      // when a corridor has no room for a turn. Prove that same full swept edge.
+      restoreMover(m, before);
+      return fits();
     };
     try {
       return this.route(original, to, permits);

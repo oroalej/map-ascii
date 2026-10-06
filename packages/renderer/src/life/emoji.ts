@@ -173,6 +173,7 @@ export function ambientPool(
     if (g.place === 'monument' && (env.sunAltitude ?? -90) > 0) add('photo');
     if (g.place === 'farm' && g.behavior === 'work' && (env.sunAltitude ?? -90) > 0) add('harvest');
   }
+  if (!pool.length) return pool;
   const t = TEMPERAMENT[temperament(o.owner.rank)];
   return pool.map((p) => ({
     ...p,
@@ -238,6 +239,8 @@ export class EmojiMemory {
     if (!t) {
       t = {
         cooldownUntil: 0,
+        attemptAt: undefined,
+        clock: undefined,
         epoch,
         rest: 0,
         stop: 0,
@@ -246,6 +249,8 @@ export class EmojiMemory {
         resting: false,
         stopped: false,
         cruising: false,
+        visit: undefined,
+        passenger: undefined,
         trot: false,
         grooming: false,
         lying: false,
@@ -256,6 +261,10 @@ export class EmojiMemory {
         seen: new WeakSet(),
         followups: [],
         rng: ownerRng ?? random(Math.floor(rng() * 4294967296)),
+        group: undefined,
+        eligible: undefined,
+        speaking: undefined,
+        standoff: undefined,
       };
       this.tracks.set(owner, t);
     }

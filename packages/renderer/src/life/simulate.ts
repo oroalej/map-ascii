@@ -4863,15 +4863,13 @@ export class TileLife {
       }
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
       if (room < 0.5 * pm) diagnostics?.following(m, leader);
-      speeds[i] = Math.min(
-        speeds[i]!,
-        room / FOLLOW.headway,
-        approach(
-          room,
-          this.inspected === leader ? 0 : (leader.v ?? leader.speed),
-          kinematicsOf(m.vehicle).brake * pm,
-        ),
-      );
+      const target = Math.min(speeds[i]!, room / FOLLOW.headway);
+      const lead = this.inspected === leader ? 0 : (leader.v ?? leader.speed);
+      // Comfortable braking cannot lower a target already below the lead speed.
+      speeds[i] =
+        target <= Math.abs(lead)
+          ? target
+          : Math.min(target, approach(room, lead, kinematicsOf(m.vehicle).brake * pm));
       caps[i] = Math.min(caps[i]!, room / dt);
     };
     const curbScenes =
@@ -10362,8 +10360,8 @@ export class LifeWorld {
         } else if (m.group) {
           const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
           const clock = inspection?.clock(m, this.clock) ?? this.clock;
-          // Turning round, the group keeps its footing while the drawn facing swings: each
-          // member's place, held in the walking heading's frame, is redrawn in the swinging one.
+          // Steering and turning change the drawn facing, while every member
+          // retains the centre accepted in the physical formation's frame.
           const place = (w: { lateral: number; back: number }, member: number) => {
             const wait = m.crossingWait?.waiting?.poses[member];
             if (wait) {
@@ -10374,9 +10372,11 @@ export class LifeWorld {
                 back: -(hx * dx + hy * dy),
               };
             }
-            if (!m.turning) return { lateral: w.lateral, back: w.back };
-            const wx = -m.hy * w.lateral - m.hx * w.back,
-              wy = m.hx * w.lateral - m.hy * w.back;
+            const formation = m.momentFacing ?? m;
+            if (formation.hx === hx && formation.hy === hy)
+              return { lateral: w.lateral, back: w.back };
+            const wx = -formation.hy * w.lateral - formation.hx * w.back,
+              wy = formation.hx * w.lateral - formation.hy * w.back;
             return { lateral: -hy * wx + hx * wy, back: -(hx * wx + hy * wy) };
           };
           const people = m.group.map((w, member) =>
