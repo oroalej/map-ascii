@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { CrossingReservations, CrossingWaits, type WaitingPose } from './crossing-wait';
 import { finalizeControlledCrossings } from './crossing-geometry';
 import { LifeBuilder, type ControlledCrossingAnchor } from './geometry';
@@ -163,4 +163,29 @@ it('retains a safe upstream footprint when coarse bodies cannot fit any slot', (
   expect(waits.registry.snapshot().claims).toHaveLength(0);
   expect(m.crossingWait?.waiting?.slots).toEqual([]);
   expect(bodies(m, 3).every((b) => bodyCorners(b).every((p) => p.y <= -5))).toBe(true);
+});
+
+it('shares whole swept trials and resolves queue order only when a waiter is created', () => {
+  const waits = fixture(),
+    m = mover(),
+    index = vi.fn(() => 17);
+  m.x = 200;
+  const trial = waits.prepare(m, { ...m, x: 199 });
+  expect(trial).toBeNull();
+  expect(waits.permits(m, undefined, phase('dont'), 0, trial)).toBe(true);
+  waits.accept(m, undefined, phase('dont'), 0, index, trial);
+  expect(index).not.toHaveBeenCalled();
+  m.x = 0;
+  const before = { ...m };
+  m.y += waits.limit(m, { x: 0, y: 20 }, 30, phase('dont'));
+  const stopped = waits.prepare(m, before);
+  expect(waits.permits(m, before, phase('dont'), 0, stopped)).toBe(true);
+  waits.accept(m, before, phase('dont'), 0, index, stopped);
+  expect(index).toHaveBeenCalledTimes(1);
+  expect(m.crossingWait?.waiting?.index).toBe(17);
+  waits.accept(m, before, phase('dont'), 0, index);
+  expect(index).toHaveBeenCalledTimes(1);
+  const crossing = { ...m, crossingWait: undefined, y: 40 };
+  const swept = waits.prepare(crossing, { ...crossing, y: -40 }, 3);
+  expect(waits.permits(crossing, { ...crossing, y: -40 }, phase('dont'), 3, swept)).toBe(false);
 });

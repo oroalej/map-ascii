@@ -3592,7 +3592,7 @@ export class TileLife {
       if (left <= 0) break;
       const to = m.from + m.dir;
       const length = this.segment(m.from, to);
-      if (junctions && isWalker(m.kind) && length > 0) {
+      if (junctions && this.crossingWaits.records.length && isWalker(m.kind) && length > 0) {
         const hx = (coords[to * 2]! - coords[m.from * 2]!) / length;
         const hy = (coords[to * 2 + 1]! - coords[m.from * 2 + 1]!) / length;
         const cursor = {
@@ -4666,14 +4666,16 @@ export class TileLife {
           (this.scenes.walkable(before ?? owner, owner) &&
             this.roadTerrain.access.allows(this.groundBodies(owner))));
       guard = (owner, before, reject) => {
-        if (!this.crossingWaits.permits(owner, before, clock, minimum)) return false;
+        const trial = this.crossingWaits.prepare(owner, before, minimum);
+        if (!this.crossingWaits.permits(owner, before, clock, minimum, trial)) return false;
         if (!physical(owner, before, reject)) return false;
         this.crossingWaits.accept(
           owner,
           before,
           clock,
           minimum,
-          this.movers.indexOf(owner as Mover),
+          () => this.movers.indexOf(owner as Mover),
+          trial,
         );
         return true;
       };
@@ -7091,7 +7093,9 @@ export class LifeWorld {
       reject?: (reason: ContinuityRejection) => void,
     ) => {
       if (!this.owns(life, owner)) return true;
-      if (!life.crossingWaits.permits(owner, before, this.clock, minimum)) return false;
+      const crossingTrial = life.crossingWaits.prepare(owner, before, minimum);
+      if (!life.crossingWaits.permits(owner, before, this.clock, minimum, crossingTrial))
+        return false;
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
@@ -7175,7 +7179,8 @@ export class LifeWorld {
           before,
           this.clock,
           minimum,
-          life.movers.indexOf(identity as Mover),
+          () => life.movers.indexOf(identity as Mover),
+          crossingTrial,
         );
         queryOnly?.delete(identity);
         const reserved = reservations.get(identity);

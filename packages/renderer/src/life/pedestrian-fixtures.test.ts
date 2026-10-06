@@ -108,6 +108,25 @@ it('reports only visible lenses and gives them their own legend entry', () => {
     'Pedestrian signals (synced with traffic signals)',
   );
 });
+
+it('retains reachable edge heads and rejects unreachable or nonfinite projected bases', () => {
+  for (const base of [
+    [-12, 20],
+    [92, 20],
+    [20, -8],
+    [20, 92],
+    [NaN, 20],
+    [Infinity, 20],
+  ])
+    expect(pack([{ ...ped, base: base as [number, number] }]).pedestrians).toHaveLength(0);
+  for (const base of [
+    [-11, 20],
+    [90, 20],
+    [20, -7],
+    [20, 91],
+  ])
+    expect(pack([{ ...ped, base: base as [number, number] }]).pedestrians).toHaveLength(1);
+});
 it('appends distinct procedural standing and walking symbols after candle slot 408 in both themes', () => {
   for (const theme of Object.values(themes)) {
     const chars = mapGlyphs(theme);

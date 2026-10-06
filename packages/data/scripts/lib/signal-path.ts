@@ -7,23 +7,54 @@ export const armKey = (p: Position, arm: RoadArm) =>
 
 /** The whole owned arm, stopping at the next shared junction, not the first bend. */
 export function armPath(p: Position, arm: RoadArm, vertices?: ReadonlyMap<string, RoadVertex>) {
-  const step = arm.forward ? 1 : -1;
-  for (const line of lines(arm.road)) {
-    const start = line.findIndex(
-      (q, i) => key(q) === key(p) && line[i + step] && key(line[i + step]!) === key(arm.toward),
+  const points: Position[] = [p],
+    segments: { road: RoadArm['road']; line: Position[]; forward: boolean }[] = [],
+    visited = new Set<string>();
+  let current = arm,
+    at = p,
+    firstLine: Position[] | undefined;
+  const flow = (a: RoadArm) => (a.road.properties.oneway ?? 0) * (a.forward ? 1 : -1);
+  while (!visited.has(armKey(at, current))) {
+    visited.add(armKey(at, current));
+    const step = current.forward ? 1 : -1;
+    const line = lines(current.road).find((line) =>
+      line.some(
+        (q, i) =>
+          key(q) === key(at) && line[i + step] && key(line[i + step]!) === key(current.toward),
+      ),
     );
-    if (start < 0) continue;
-    const points = [line[start]!];
+    if (!line) break;
+    firstLine ??= line;
+    const start = line.findIndex(
+      (q, i) =>
+        key(q) === key(at) && line[i + step] && key(line[i + step]!) === key(current.toward),
+    );
     for (let i = start + step; i >= 0 && i < line.length; i += step) {
       points.push(line[i]!);
+      segments.push({ road: current.road, line, forward: current.forward });
       if ((vertices?.get(key(line[i]!))?.arms.length ?? 0) >= 3) break;
     }
+    const end = points.at(-1)!,
+      previous = points.at(-2)!;
+    const joint = vertices?.get(key(end));
+    if (joint?.arms.length !== 2) break;
+    const next = joint.arms.find((a) => key(a.toward) !== key(previous));
+    if (
+      !next ||
+      next.road.properties.class !== arm.road.properties.class ||
+      flow(next) !== flow(arm)
+    )
+      break;
+    at = end;
+    current = next;
+  }
+  if (firstLine)
     return {
-      line,
+      line: firstLine,
       points,
+      segments,
       length: points.slice(1).reduce((d, q, i) => d + Math.hypot(...delta(points[i]!, q)), 0),
     };
-  }
 }
 
 export function pathPoint(points: readonly Position[], distance: number) {
@@ -37,6 +68,7 @@ export function pathPoint(points: readonly Position[], distance: number) {
     if (remaining <= length) {
       const t = remaining / length;
       return {
+        segment: i - 1,
         position: [a[0]! + (b[0]! - a[0]!) * t, a[1]! + (b[1]! - a[1]!) * t] as [number, number],
         bearing: ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360,
       };

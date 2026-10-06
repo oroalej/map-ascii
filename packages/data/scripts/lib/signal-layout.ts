@@ -79,7 +79,12 @@ export function resolveSignalLayout(
             ? 'a'
             : 'b',
         ...(stop
-          ? { stop: stop.position, stop_width: stop.width, stop_bearing: stop.bearing }
+          ? {
+              stop: stop.position,
+              stop_width: stop.width,
+              stop_bearing: stop.bearing,
+              ...stop.metadata,
+            }
           : {}),
       });
     }

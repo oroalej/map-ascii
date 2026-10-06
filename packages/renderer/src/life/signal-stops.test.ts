@@ -204,3 +204,65 @@ it('uses exact mid-block group a stops for east-west and north-south approaches'
       expect(life.signals.vehicleSpeed(m, 0.1, 0)).toBe(m.speed);
     }
 });
+
+it('controls the exact stop on a wider reversed continuation while retaining the original head arm', () => {
+  for (const reversed of [false, true]) {
+    const at = (x: number, y = 0) => ({ x: p.x + x * pm, y: p.y + y * pm });
+    const b = new LifeBuilder();
+    b.line([p, at(3)], LifeLine.roadMid, 10, hashString('original'));
+    b.line(
+      reversed ? [at(100), at(3)] : [at(3), at(100)],
+      LifeLine.roadMid,
+      14,
+      hashString('continuation'),
+    );
+    const arm: SignalArm = {
+      ...arms()[0]!,
+      road_id: 'original',
+      junction: tileToLngLat(tile, p),
+      toward: tileToLngLat(tile, at(3)),
+      direction: -1,
+      bearing: 270,
+      stop: tileToLngLat(tile, at(13, -3.5)),
+      stop_bearing: 270,
+      stop_width: 7,
+      stop_road_id: 'continuation',
+      stop_direction: reversed ? 1 : -1,
+      stop_road_width: 14,
+    };
+    // East-west inbound paint lies north in geographic coordinates, negative tile y.
+    b.signal(p, 6, 90, 0, true, { members: [arm.junction], arms: [arm] }, { seed: 0 });
+    const life = new TileLife(tile, b.finish(), 1);
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    const stops = life.signals.signals[0]!.approaches!.filter((a) => a.stopAlong !== undefined);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]!.line).toBe(1);
+    expect(stops[0]!.arm.road_id).toBe('original');
+    const m: Mover = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 1,
+      from: reversed ? 2 : 3,
+      dir: reversed ? 1 : -1,
+      d: (100 - 13 - VEHICLES.car.length / 2) * pm,
+      speed: 6 * pm,
+      v: 0,
+      pause: 0,
+      rank: 0,
+      paint: 0,
+      lane: 0.5,
+      x: at(13 + VEHICLES.car.length / 2).x,
+      y: p.y,
+      hx: -1,
+      hy: 0,
+    };
+    const red = Array.from({ length: 200 }, (_, i) => i).find(
+      (t) => signalState(0, t, false).a === 'red',
+    )!;
+    const green = Array.from({ length: 200 }, (_, i) => i).find(
+      (t) => signalState(0, t, false).a === 'green',
+    )!;
+    expect(life.signals.vehicleSpeed(m, 0.1, red) / pm).toBeLessThan(0.001);
+    expect(life.signals.vehicleSpeed(m, 0.1, green)).toBe(m.speed);
+  }
+});

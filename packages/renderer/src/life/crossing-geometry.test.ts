@@ -73,6 +73,30 @@ it('clips against other carriageways and retains active gates when a pad is unus
   expect(c.quad).toHaveLength(5);
 });
 
+it('preserves rotated curb and pad geometry among distant roads and carriageway holes', () => {
+  const distant = Array.from({ length: 100 }, (_, i) => [
+    stripRing({ x: 5000 + i * 20, y: 5000 }, { x: 5000 + i * 20, y: 5100 }, 5),
+  ]);
+  for (const bearing of [0, 31, 90, 143]) {
+    const theta = (bearing * Math.PI) / 180;
+    const p = (along: number) => ({
+      x: 1000 + Math.sin(theta) * along,
+      y: 1000 - Math.cos(theta) * along,
+    });
+    const local = [stripRing(p(-100), p(100), 5), stripRing(p(40), p(60), 1)];
+    const expected = anchor(bearing),
+      cluttered = anchor(bearing);
+    finalizeControlledCrossings([expected], [local], 1);
+    finalizeControlledCrossings([cluttered], [local, ...distant], 1);
+    expect(cluttered.sides).toEqual(expected.sides);
+    expect(cluttered.quad).toEqual(expected.quad);
+    for (const side of cluttered.sides!) {
+      expect(Math.hypot(side.centre.x - 1000, side.centre.y - 1000)).toBeCloseTo(5);
+      expect(side.slots).toHaveLength(4);
+    }
+  }
+});
+
 function routes(connect = true) {
   const tile = { z: 16, x: 55194, y: 30264 },
     pm = 1 / metersPerUnit(tile);

@@ -189,12 +189,24 @@ export function signalStop(
   const tx = Math.sin((bearing * Math.PI) / 180),
     ty = Math.cos((bearing * Math.PI) / 180);
   const q = [...at.position];
-  const w = width(arm.road),
-    offset = arm.road.properties.oneway ? 0 : w / 4;
+  const segment = path.segments[at.segment]!,
+    stopDirection = segment.forward ? -1 : 1;
+  const w = width(segment.road),
+    offset = segment.road.properties.oneway ? 0 : w / 4;
   q[0]! += (ty * offset) / (111320 * Math.cos((q[1]! * Math.PI) / 180));
   q[1]! -= (tx * offset) / 111320;
-  const stopWidth = arm.road.properties.oneway ? w : w / 2;
-  return { position: q as [number, number], bearing, width: stopWidth };
+  const stopWidth = segment.road.properties.oneway ? w : w / 2;
+  const metadata =
+    segment.road.properties.id !== arm.road.properties.id ||
+    stopDirection !== direction ||
+    w !== width(arm.road)
+      ? {
+          stop_road_id: segment.road.properties.id,
+          stop_direction: stopDirection,
+          stop_road_width: w,
+        }
+      : {};
+  return { position: q as [number, number], bearing, width: stopWidth, metadata };
 }
 
 /** Resolve stop approaches before tiling; driving side currently defaults to right. */

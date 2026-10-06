@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { LifeWorld, TileLife } from './simulate';
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
@@ -46,6 +46,20 @@ it('clamps an oversized ordinary step after its bend and restores a rejected ful
   expect(m.from).toBe(3);
   expect((m.y - 2000) / pm).toBeCloseTo(-5.46);
   expect(m.crossingWait?.waiting).toBeDefined();
+});
+
+it('avoids queue scans and crossing cursor trials in a world without controlled crossings', () => {
+  const entry = signalizedCrossingEntry();
+  entry.life.controlledCrossings = [];
+  const world = new LifeWorld();
+  world.sync([entry]);
+  const { life, m } = seedSignalizedCrossing(world);
+  const index = vi.spyOn(life.movers, 'indexOf'),
+    limit = vi.spyOn(life.crossingWaits, 'limit');
+  world.step(1 / 60, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+  expect(m.crossingWait).toBeUndefined();
+  expect(index).not.toHaveBeenCalled();
+  expect(limit.mock.calls.every((call) => call[5] === undefined)).toBe(true);
 });
 for (const hz of [30, 60, 120])
   it(`replays accepted waiting and release exactly in two complete worlds at ${hz} Hz`, () => {

@@ -158,6 +158,7 @@ export class CrossingReservations {
 }
 
 type Record = ControlledCrossingAnchor & { quad: Point[]; sides: [CrossingSide, CrossingSide] };
+type Trial = { before: readonly Body[]; after: readonly Body[]; records: readonly Record[] };
 const walker = (owner: GroundAgent): owner is Walker =>
   'walker' in owner ||
   ('kind' in owner && (owner.kind === 'person' || owner.kind === 'dog' || owner.kind === 'cat'));
@@ -173,6 +174,12 @@ export class CrossingWaits {
   private readonly bins = new Map<number, Record[]>();
   private readonly lines = new Map<number, Record[]>();
   private readonly blocked = new Map<GroundAgent, { record: Record; side: number }>();
+  private readonly queryKeys: number[] = [];
+  private readonly queryBounds = [
+    { x: 0, y: 0 },
+    { x: 0, y: 0 },
+  ];
+  private readonly candidates = new Set<Record>();
   registry = new CrossingReservations();
   shared = false;
   constructor(
@@ -214,9 +221,33 @@ export class CrossingWaits {
   beginStep() {
     this.blocked.clear();
   }
-  private near(before: readonly Body[], after = before): Set<Record> {
-    const points = [...before, ...after].flatMap((b) => bodyCorners(b));
-    return new Set(binKeys(points).flatMap((key) => this.bins.get(key) ?? []));
+  private near(before: readonly Body[], after = before): ReadonlySet<Record> {
+    const [lo, hi] = this.queryBounds as [Point, Point];
+    lo.x = lo.y = Infinity;
+    hi.x = hi.y = -Infinity;
+    let radius = 0;
+    for (const bodies of [before, after])
+      for (const body of bodies) {
+        lo.x = Math.min(lo.x, body.x);
+        lo.y = Math.min(lo.y, body.y);
+        hi.x = Math.max(hi.x, body.x);
+        hi.y = Math.max(hi.y, body.y);
+        radius = Math.max(radius, Math.hypot(body.length, body.width) / 2);
+      }
+    this.candidates.clear();
+    // The half-diagonal covers every intermediate heading and the entire swept cohort.
+    if (before.length || after.length)
+      for (const key of binKeys(this.queryBounds, radius, this.queryKeys))
+        for (const record of this.bins.get(key) ?? []) this.candidates.add(record);
+    return this.candidates;
+  }
+  prepare(owner: GroundAgent, previous: GroundAgent | undefined, minimum = 0): Trial | null {
+    if (!walker(owner) || !this.records.length) return null;
+    const after = this.bodies(owner, minimum),
+      before = previous ? this.bodies(previous, minimum) : after;
+    const records = this.near(before, after);
+    if (!records.size && !owner.crossingWait && !this.blocked.has(owner)) return null;
+    return { before, after, records: [...records] };
   }
   private committed(owner: Walker, record: Record) {
     return owner.crossingWait?.commitments.some(
@@ -245,10 +276,10 @@ export class CrossingWaits {
     previous: GroundAgent | undefined,
     clock: number,
     minimum = 0,
+    trial = this.prepare(owner, previous, minimum),
   ): boolean {
-    if (!walker(owner) || !this.records.length) return true;
-    const after = this.bodies(owner, minimum),
-      before = previous ? this.bodies(previous, minimum) : after;
+    if (!walker(owner) || !trial) return true;
+    const { before, after } = trial;
     const waiting = owner.crossingWait?.waiting;
     if (waiting) {
       const record = this.byId.get(waiting.id),
@@ -270,7 +301,7 @@ export class CrossingWaits {
       )
         return false;
     }
-    for (const record of this.near(before, after)) {
+    for (const record of trial.records) {
       if (this.committed(owner, record) || this.walk(record, clock)) continue;
       if (
         !previous &&
@@ -350,13 +381,13 @@ export class CrossingWaits {
     previous: GroundAgent | undefined,
     clock: number,
     minimum = 0,
-    index = 0,
+    index: number | (() => number) = 0,
+    trial = this.prepare(owner, previous, minimum),
   ) {
-    if (!walker(owner) || !this.records.length) return;
-    const after = this.bodies(owner, minimum),
-      before = previous ? this.bodies(previous, minimum) : after;
+    if (!walker(owner) || !trial) return;
+    const { before, after } = trial;
     let commitments = [...(owner.crossingWait?.commitments ?? [])];
-    for (const record of this.near(before, after)) {
+    for (const record of trial.records) {
       if (!commitments.some((c) => c.id === record.id) && this.walk(record, clock)) {
         const entered = record.sides.findIndex((side) =>
           after.some((body, i) =>
@@ -389,7 +420,7 @@ export class CrossingWaits {
         side: held.side,
         owner: this.registry.ownerKey(),
         arrival: clock,
-        index,
+        index: typeof index === 'function' ? index() : index,
         slots: [],
         activeSlots: [],
         age: 0,

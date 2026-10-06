@@ -282,7 +282,12 @@ export function mergeTraffic(
       if (!path) continue;
       for (const c of crossings.values()) {
         const match = crossingRoads.get(c)!;
-        if (match.road !== arm.arm.road || match.line !== path.line) continue;
+        if (
+          !path.segments.some(
+            (segment) => segment.road === match.road && segment.line === match.line,
+          )
+        )
+          continue;
         const d = pathDistance(path.points, (c.geometry as { coordinates: Position }).coordinates);
         const mid = entry.s.properties.signal_a! < 0;
         if (
@@ -294,7 +299,19 @@ export function mergeTraffic(
         const inbound =
           !arm.arm.road.properties.oneway ||
           arm.arm.road.properties.oneway === (arm.arm.forward ? -1 : 1);
-        if (path.length < d + 1.5 + (inbound ? SIGNAL_STOP_GAP_M : 0)) continue;
+        if (
+          path.length <
+          Math.max(
+            d + 1.5,
+            inbound
+              ? Math.max(
+                  entry.s.properties.signal_radius! + SIGNAL_STOP_GAP_M,
+                  d + 1.5 + SIGNAL_STOP_GAP_M,
+                )
+              : 0,
+          )
+        )
+          continue;
         claims.push({ entry, arm, crossing: c, d, armId: armKey(arm.p, arm.arm) });
       }
     }
@@ -347,13 +364,14 @@ export function mergeTraffic(
       let c = choice?.crossing;
       if (!c && !midBlock) {
         const at = pathPoint(path.points, d)!;
+        const segment = path.segments[at.segment]!;
         c = crossing(
           at.position,
-          arm.road,
+          segment.road,
           at.bearing % 180,
           false,
           `${s.properties.id}:crossing:${key(arm.toward)}`,
-          path.line,
+          segment.line,
         );
       }
       if (c)
@@ -385,6 +403,7 @@ export function mergeTraffic(
             stop: stop.position,
             stop_width: stop.width,
             stop_bearing: stop.bearing,
+            ...stop.metadata,
           });
       }
     }

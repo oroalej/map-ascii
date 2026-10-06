@@ -30,19 +30,22 @@ export function signalApproaches(
   const perMeter = 1 / metersPerUnit(tile);
   for (const arm of layout.arms) {
     const id = hashString(arm.road_id),
+      stopId = hashString(arm.stop_road_id ?? arm.road_id),
       p = lngLatToTile(tile, ...arm.junction);
     const out = -arm.direction as 1 | -1;
     const painted = arm.stop && lngLatToTile(tile, ...arm.stop);
     const theta = ((arm.stop_bearing ?? arm.bearing) * Math.PI) / 180;
-    const offset = ((arm.width - (arm.stop_width ?? arm.width)) / 2) * perMeter;
+    const stopRoadWidth = arm.stop_road_width ?? arm.width;
+    const offset = ((stopRoadWidth - (arm.stop_width ?? stopRoadWidth)) / 2) * perMeter;
     const stop = painted && {
       x: painted.x - Math.cos(theta) * offset,
       y: painted.y - Math.sin(theta) * offset,
     };
     for (let line = 0; line < geo.kinds.length; line++) {
-      if (geo.lineIds?.[line] !== id) continue;
+      const lineId = geo.lineIds?.[line];
+      if (lineId !== id && !(includeRemoteStops && lineId === stopId)) continue;
       let matched = false;
-      for (let v = geo.starts[line]!; v < geo.starts[line + 1]!; v++) {
+      for (let v = geo.starts[line]!; lineId === id && v < geo.starts[line + 1]!; v++) {
         const next = v + out;
         if (next < geo.starts[line]! || next >= geo.starts[line + 1]!) continue;
         const x = geo.coords[2 * v]!,
@@ -57,7 +60,10 @@ export function signalApproaches(
         let stopAlong: number | undefined;
         for (
           let index = v;
-          stop && index + out >= geo.starts[line]! && index + out < geo.starts[line + 1]!;
+          stop &&
+          lineId === stopId &&
+          index + out >= geo.starts[line]! &&
+          index + out < geo.starts[line + 1]!;
           index += out
         ) {
           const nextIndex = index + out;
@@ -94,14 +100,18 @@ export function signalApproaches(
       }
       // A crossing-carried controller can have its junction outside the buffered tile.
       // Match only its exact stop, never manufacture a radius stop or a local junction.
-      if (!matched && includeRemoteStops && stop)
+      if (!matched && includeRemoteStops && stop && lineId === stopId)
         for (let v = geo.starts[line]!; v + 1 < geo.starts[line + 1]!; v++) {
+          const stopOut = -(arm.stop_direction ?? arm.direction) as 1 | -1;
           const ax = geo.coords[v * 2]!,
             ay = geo.coords[v * 2 + 1]!;
           const dx = geo.coords[(v + 1) * 2]! - ax,
             dy = geo.coords[(v + 1) * 2 + 1]! - ay,
             length = Math.hypot(dx, dy);
-          if (!length || (dx * out * -Math.sin(theta) + dy * out * Math.cos(theta)) / length < 0.7)
+          if (
+            !length ||
+            (dx * stopOut * -Math.sin(theta) + dy * stopOut * Math.cos(theta)) / length < 0.7
+          )
             continue;
           const t = Math.max(
             0,
@@ -115,9 +125,9 @@ export function signalApproaches(
             vertex: v,
             x: p.x,
             y: p.y,
-            hx: (dx * out) / length,
-            hy: (dy * out) / length,
-            out,
+            hx: (dx * stopOut) / length,
+            hy: (dy * stopOut) / length,
+            out: stopOut,
             along: along[v]!,
             stopAlong: along[v]! + length * t,
           });

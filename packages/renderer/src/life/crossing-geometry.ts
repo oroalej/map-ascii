@@ -3,7 +3,7 @@ import {
   bodyInside,
   bodiesOverlap,
   memberSize,
-  pointInside,
+  boundsOf,
   PolygonIndex,
   type Body,
   type Point,
@@ -18,6 +18,14 @@ export function finalizeControlledCrossings(
   perMeter: number,
 ): void {
   const access = new RoadAccess(roads, []);
+  const roadBounds = roads.map((road) => ({ road, bounds: boundsOf(road[0]!) }));
+  const probe: Body = { x: 0, y: 0, hx: 1, hy: 0, length: 0, width: 0 },
+    probes = [probe];
+  const inRoad = (p: Point) => {
+    probe.x = p.x;
+    probe.y = p.y;
+    return access.roads.hits(probes);
+  };
   for (const crossing of anchors) {
     const theta = (crossing.bearing * Math.PI) / 180;
     const across = { x: Math.cos(theta), y: Math.sin(theta) };
@@ -28,19 +36,16 @@ export function finalizeControlledCrossings(
     });
     const sides = [-1, 1].map((side): CrossingSide => {
       let depth = crossing.width / 2;
-      if (roads.some((road) => pointInside(crossing.anchor, road))) {
+      if (inRoad(crossing.anchor)) {
         let inside = 0,
           outside = 0.1;
-        while (
-          outside < crossing.width + 64 &&
-          roads.some((road) => pointInside(at(side, outside, 0), road))
-        ) {
+        while (outside < crossing.width + 64 && inRoad(at(side, outside, 0))) {
           inside = outside;
           outside += 0.1;
         }
         for (let i = 0; i < 24; i++) {
           const mid = (inside + outside) / 2;
-          if (roads.some((road) => pointInside(at(side, mid, 0), road))) inside = mid;
+          if (inRoad(at(side, mid, 0))) inside = mid;
           else outside = mid;
         }
         depth = outside;
@@ -55,7 +60,13 @@ export function finalizeControlledCrossings(
           at(side, depth, -1.5),
         ],
       ];
-      for (const road of roads) pads = pads.flatMap((pad) => subtractCrossing(pad, road[0]!));
+      const [x0, y0, x1, y1] = boundsOf(pads[0]!);
+      for (const {
+        road,
+        bounds: [a0, b0, a1, b1],
+      } of roadBounds)
+        if (a0 <= x1 && x0 <= a1 && b0 <= y1 && y0 <= b1)
+          pads = pads.flatMap((pad) => subtractCrossing(pad, road[0]!));
       pads = pads.filter(
         (pad) =>
           Math.max(

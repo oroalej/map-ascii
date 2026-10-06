@@ -132,7 +132,7 @@ export class SignalControl {
                 along: a.stopAlong,
                 signal: s,
                 group: a.arm.group,
-                dir: a.arm.direction,
+                dir: a.arm.stop_direction ?? a.arm.direction,
                 exact: true,
               });
           }

@@ -217,6 +217,7 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
       }
     }
   }
+  if (!geo.controlledCrossings?.some((crossing) => crossing.sides)) return out;
   const access = new RoadAccess(
     (geo.areas ?? []).filter((a) => a.kind === 'carriageway').map((a) => a.rings),
     [],
@@ -712,6 +713,23 @@ export function packFixtures(
     const [bc, br] = grid.toCell(...fixture.base),
       baseC = Math.floor(bc),
       baseR = Math.floor(br);
+    if (
+      !Number.isFinite(baseC + baseR) ||
+      baseC + 12 < 1 ||
+      baseC - 12 >= grid.cols - 1 ||
+      baseR + 12 < 5 ||
+      baseR - 12 >= grid.rows
+    )
+      continue;
+    const fits = (dx: number, dy: number) => {
+      const c = baseC + dx,
+        r = baseR + dy;
+      if (c < 1 || c >= grid.cols - 1 || r < 5 || r >= grid.rows) return false;
+      for (let row = r - 5; row <= r - 2; row++)
+        for (let col = c - 1; col <= c + 1; col++)
+          if (owners[row * grid.cols + col] !== -1) return false;
+      return owners[(r - 1) * grid.cols + c] === -1 && owners[r * grid.cols + c] === -1;
+    };
     const plan = (dx: number, dy: number) => {
       const c = baseC + dx,
         r = baseR + dy,
@@ -741,18 +759,8 @@ export function packFixtures(
       for (let dy = -radius; dy <= radius && !chosen; dy++)
         for (let dx = -radius; dx <= radius; dx++) {
           if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-          const candidate = plan(dx, dy);
-          if (
-            candidate.every(
-              ({ c, r }) =>
-                c >= 0 &&
-                r >= 0 &&
-                c < grid.cols &&
-                r < grid.rows &&
-                owners[r * grid.cols + c] === -1,
-            )
-          ) {
-            chosen = candidate;
+          if (fits(dx, dy)) {
+            chosen = plan(dx, dy);
             break;
           }
         }

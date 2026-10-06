@@ -737,7 +737,6 @@ export const SIGNAL = {
   lookahead: 40,
   brake: 3,
   walkMin: 5,
-  /** Additional radius for associating crossing quads with signal controllers, m. */
 } as const;
 
 /** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */

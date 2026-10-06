@@ -170,3 +170,135 @@ it('encodes every mid-block inbound stop as a, for both road axes and one-way ru
       );
     }
 });
+
+it('retains crossing control and stop identity across reversed, wider degree-two continuations', () => {
+  for (const reversed of [false, true]) {
+    const continuation = road(
+      'east-b',
+      reversed
+        ? [
+            [100, 0],
+            [3, 0],
+          ]
+        : [
+            [3, 0],
+            [100, 0],
+          ],
+    );
+    continuation.properties.width = 14;
+    const out = mergeTraffic(
+      [
+        road('west', [
+          [-100, 0],
+          [0, 0],
+        ]),
+        road('north', [
+          [0, 0],
+          [0, 100],
+        ]),
+        road('south', [
+          [0, -100],
+          [0, 0],
+        ]),
+        road('east-a', [
+          [0, 0],
+          [3, 0],
+        ]),
+        continuation,
+        cross('continuation-cross', 10, 0),
+      ],
+      { derive: false, add: [{ id: 'origin', position: coord(0, 0), source: 'test' }] },
+    );
+    const signal = out.find((f) => f.properties.variant === 'signals')!;
+    const layout = SignalLayout.parse(JSON.parse(signal.properties.signal_layout!));
+    const arm = layout.arms.find((a) => a.road_id === 'east-a')!;
+    expect(
+      out.find((f) => f.properties.id === 'continuation-cross')!.properties.crossing_signal,
+    ).toBe('pack:signal:origin');
+    expect(arm).toMatchObject({
+      road_id: 'east-a',
+      direction: -1,
+      width: 10,
+      stop_road_id: 'east-b',
+      stop_direction: reversed ? 1 : -1,
+      stop_road_width: 14,
+      stop_width: 7,
+    });
+    expect(arm.stop![0] * 111320).toBeCloseTo(13);
+    expect(out.filter((f) => f.properties.variant === 'stop_line')).toHaveLength(4);
+    expect(
+      SignalLayout.safeParse({ ...layout, arms: [{ ...arm, stop_direction: undefined }] }).success,
+    ).toBe(false);
+  }
+});
+
+it('stops continuation ownership at the next shared junction and reports genuine short arms', () => {
+  const out = mergeTraffic(
+    [
+      road('ew-a', [
+        [-100, 0],
+        [0, 0],
+        [3, 0],
+      ]),
+      road('ew-b', [
+        [3, 0],
+        [7, 0],
+        [100, 0],
+      ]),
+      road('ns', [
+        [0, -100],
+        [0, 0],
+        [0, 100],
+      ]),
+      road('next', [
+        [7, 0],
+        [7, 100],
+      ]),
+      cross('beyond', 10, 0),
+    ],
+    { derive: false, add: [{ id: 'origin', position: coord(0, 0), source: 'test' }] },
+  );
+  const signal = out.find((f) => f.properties.variant === 'signals')!;
+  expect(out.find((f) => f.properties.id === 'beyond')!.properties.crossing_signal).toBeUndefined();
+  expect(
+    SignalLayout.parse(JSON.parse(signal.properties.signal_layout!)).arms.find(
+      (a) => a.road_id === 'ew-a' && a.direction === -1,
+    )!.stop,
+  ).toBeUndefined();
+});
+
+it('lets an eligible controller claim a crossing rejected by a nearer short arm', () => {
+  const wide = road('wide', [
+    [0, -100],
+    [0, 0],
+    [0, 100],
+  ]);
+  wide.properties.width = 30;
+  const out = mergeTraffic(
+    [
+      road('ew', [
+        [-100, 0],
+        [0, 0],
+        [10, 0],
+        [100, 0],
+      ]),
+      wide,
+      road('narrow', [
+        [10, -100],
+        [10, 0],
+        [10, 100],
+      ]),
+      cross('shared', 4, 0),
+    ],
+    {
+      derive: false,
+      add: [
+        { id: 'first', position: coord(0, 0), source: 'test' },
+        { id: 'second', position: coord(10, 0), source: 'test' },
+      ],
+    },
+  );
+  expect(out.find((f) => f.properties.id === 'shared')!.properties.crossing_signal).toBe(
+    'pack:signal:second',
+  );
+});
