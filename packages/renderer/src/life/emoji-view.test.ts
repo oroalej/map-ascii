@@ -97,6 +97,23 @@ const dog = (id: string, x: number, y = 30, pair?: string): VisibleAgent => ({
   emoji: { id, subject: 'dog', mood: 'happy', pair },
 });
 describe('production cue wrappers', () => {
+  it('includes lease wait in confirmation latency while GPU budgeting measures issued reads only', () => {
+    const f = fixture([dog('mood', 30)]);
+    const release = f.arbiter.acquire('speech', 0)!;
+    const sampled = vi.spyOn(f.arbiter, 'completed');
+    f.tick(0);
+    expect(f.queue).toHaveLength(0);
+    release();
+    f.tick(200);
+    expect(f.queue).toHaveLength(3);
+    f.tick(400);
+    expect(f.emojiEvents.at(-1)).toHaveLength(1);
+    const scheduling = f.emoji as unknown as { latencies: Float64Array; maxLatency: number };
+    expect(scheduling.latencies[0]).toBe(400);
+    expect(scheduling.maxLatency).toBe(400);
+    expect(sampled).toHaveBeenCalledExactlyOnceWith(200);
+    sampled.mockRestore();
+  });
   it.each(['speech', 'emoji'] as const)(
     'keeps unexpired %s evidence after a dropped recheck without renewing expiry or sampling latency',
     (kind) => {

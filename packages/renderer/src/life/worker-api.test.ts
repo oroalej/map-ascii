@@ -32,60 +32,63 @@ vi.mock('./moments', async (load) => {
 });
 
 describe('life worker protocol', () => {
-  it('emits stable naturally admitted emoji equally through worker and inline frames', () => {
-    const direct = new LifeWorld(),
-      entry = pedestrianEntry();
-    direct.sync([entry]);
-    const seeded = seedPedestrians(direct);
-    for (let i = 1; i < 20; i++)
-      seeded.life.movers.push({
-        ...structuredClone(seeded.human),
-        x: seeded.human.x + i * seeded.life.perMeter,
-        rank: i / 40,
+  it.each([0.1, 1])(
+    'emits natural emoji equally through worker and inline %s-second frames',
+    (dt) => {
+      const direct = new LifeWorld(),
+        entry = pedestrianEntry();
+      direct.sync([entry]);
+      const seeded = seedPedestrians(direct);
+      for (let i = 1; i < 20; i++)
+        seeded.life.movers.push({
+          ...structuredClone(seeded.human),
+          x: seeded.human.x + i * seeded.life.perMeter,
+          rank: i / 40,
+        });
+      const worlds: LifeWorld[] = [];
+      const api = createLifeWorkerApi(undefined, () => {
+        const world = new LifeWorld();
+        worlds.push(world);
+        return world;
       });
-    const worlds: LifeWorld[] = [];
-    const api = createLifeWorkerApi(undefined, () => {
-      const world = new LifeWorld();
-      worlds.push(world);
-      return world;
-    });
-    api.init({ processions: [] });
-    api.sync([structuredClone(entry)]);
-    const remote = seedPedestrians(worlds[0]!);
-    for (let i = 1; i < 20; i++)
-      remote.life.movers.push({
-        ...structuredClone(remote.human),
-        x: remote.human.x + i * remote.life.perMeter,
-        rank: i / 40,
-      });
-    const center = tileToLngLat(entry.tile, { x: 2000, y: 2000 });
-    const input: FrameInput = {
-      gust: {
-        camera: { lng: center[0], lat: center[1], zoom: 19 },
-        size: { width: 800, height: 600 },
-        cssCell: { w: 5, h: 7.5 },
-        time: 0,
-        wind: { dir: [1, 0], strength: 0 },
-      },
-      step: {
-        dt: 0.1,
-        zoom: 19,
-        bounds: undefined,
-        wind: undefined,
-        weather: { rain: 0, minutes: 720, sunAltitude: 70 },
-        cellMeters: 0.9,
-      },
-      visible: [19, 1, center],
-    };
-    let seen = false;
-    for (let i = 0; i < 150; i++) {
-      const a = runLifeFrame(direct, input),
-        b = api.frame(input);
-      expect(b.agents).toEqual(a.agents);
-      seen ||= a.agents.some((agent) => !!agent.emoji);
-    }
-    expect(seen).toBe(true);
-  });
+      api.init({ processions: [] });
+      api.sync([structuredClone(entry)]);
+      const remote = seedPedestrians(worlds[0]!);
+      for (let i = 1; i < 20; i++)
+        remote.life.movers.push({
+          ...structuredClone(remote.human),
+          x: remote.human.x + i * remote.life.perMeter,
+          rank: i / 40,
+        });
+      const center = tileToLngLat(entry.tile, { x: 2000, y: 2000 });
+      const input: FrameInput = {
+        gust: {
+          camera: { lng: center[0], lat: center[1], zoom: 19 },
+          size: { width: 800, height: 600 },
+          cssCell: { w: 5, h: 7.5 },
+          time: 0,
+          wind: { dir: [1, 0], strength: 0 },
+        },
+        step: {
+          dt,
+          zoom: 19,
+          bounds: undefined,
+          wind: undefined,
+          weather: { rain: 0, minutes: 720, sunAltitude: 70 },
+          cellMeters: 0.9,
+        },
+        visible: [19, 1, center],
+      };
+      let seen = false;
+      for (let i = 0; i < Math.ceil(15 / dt); i++) {
+        const a = runLifeFrame(direct, input),
+          b = api.frame(input);
+        expect(b.agents).toEqual(a.agents);
+        seen ||= a.agents.some((agent) => !!agent.emoji);
+      }
+      expect(seen).toBe(true);
+    },
+  );
   it('delivers composed emoji-only seasons equally to worker and inline step environments', () => {
     const seasons: SimulationSeason[] = [
       { id: 'moods', emoji: [{ mood: 'gift', subjects: ['person'], weight: 2 }] },

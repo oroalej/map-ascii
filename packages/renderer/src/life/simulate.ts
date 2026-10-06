@@ -460,6 +460,8 @@ export type LifeEnv = {
   nextSourceId?: () => number;
   inspecting?: object;
   clock?: number;
+  /** Viewer elapsed time for read-only moods; movement keeps its capped step clock. */
+  emojiTime?: { clock: number; dt: number };
   minutes?: number;
   cityLife?: Pick<CityLifeConfig, 'schedules'>;
   season?: string | null;
@@ -5982,6 +5984,7 @@ export class LifeWorld {
   private readonly scenes = new Map<string, ProcessionScene>();
   /** Seconds simulated, for played processions. */
   private clock = 0;
+  private emojiClock = 0;
   private played: { id: string; start: number } | undefined;
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
@@ -7087,6 +7090,7 @@ export class LifeWorld {
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
+    this.emojiClock += Math.max(0, dt);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.arrivals.clear();
@@ -7099,6 +7103,7 @@ export class LifeWorld {
     const env: LifeEnv = {
       inspecting: this.inspection?.owner,
       clock: this.clock,
+      emojiTime: { clock: this.emojiClock, dt: Math.max(0, dt) },
       levels: this.lastLevels,
       rain: this.lastRain,
       wind,

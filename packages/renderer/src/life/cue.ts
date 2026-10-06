@@ -255,6 +255,7 @@ export class CueController<C extends { id: string }> {
       (visible) => {
         if (this.pending?.serial !== serial) return;
         this.pending = undefined;
+        const readyAt = this.ready.get(candidate.key);
         this.ready.delete(candidate.key);
         if (visible === undefined) {
           this.continuation = undefined;
@@ -263,7 +264,7 @@ export class CueController<C extends { id: string }> {
         const completedAt = this.clock();
         this.latencies[this.latencyCursor++ % this.latencies.length] = Math.max(
           0,
-          completedAt - (this.arbiter ? (this.ready.get(candidate.key) ?? issuedAt) : issuedAt),
+          completedAt - (this.arbiter ? (readyAt ?? issuedAt) : issuedAt),
         );
         this.maxLatency = 0;
         for (const latency of this.latencies) this.maxLatency = Math.max(this.maxLatency, latency);

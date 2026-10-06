@@ -409,7 +409,8 @@ export class EmojiObserver {
     purchases: readonly { mover: Mover; stall: Stall; key: object }[] = [],
     completions: readonly { token: object; owners: readonly object[] }[] = [],
   ) {
-    this.clock = env.clock ?? this.clock + dt;
+    dt = env.emojiTime?.dt ?? dt;
+    this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
     if (!this.observes(zoom)) {
       this.dispose();
       this.freeze();

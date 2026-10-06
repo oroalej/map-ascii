@@ -12,6 +12,43 @@ import { pedestrianWorld } from './testing/pedestrians';
 
 afterEach(() => vi.restoreAllMocks());
 
+it('keeps emoji deadlines on elapsed time through slow frames without advancing movement faster', () => {
+  const a = pedestrianWorld();
+  const b = pedestrianWorld();
+  for (const { world, life, human } of [a, b]) {
+    world.setEmojiView([19, 1, [0, 0]]);
+    // Fix only observer rolls so the earliest permitted ambient opportunity is deterministic.
+    world.emojiMemory.track(
+      human,
+      0,
+      () => 0,
+      () => 0,
+    );
+    vi.spyOn(life.momentHost, 'speaking').mockReturnValue(false);
+  }
+  const weather = { rain: 0, minutes: 720, sunAltitude: 70 };
+  a.world.step(0.1, undefined, 19, undefined, undefined, weather);
+  b.world.step(0.1, undefined, 19, undefined, undefined, weather);
+  const deadline = a.world.emojiMemory.get(a.human)!.attemptAt!;
+  expect(deadline).toBeCloseTo(2.1);
+  for (let frame = 0; frame < 3; frame++) {
+    a.world.step(1, undefined, 19, undefined, undefined, weather);
+    b.world.step(0.1, undefined, 19, undefined, undefined, weather);
+    expect(completeScenarioState(a.world)).toEqual(completeScenarioState(b.world));
+  }
+  expect(a.world.signalClock).toBeCloseTo(0.4);
+  expect(a.life.emoji.cue(a.human)).toBeDefined();
+  expect(b.life.emoji.cue(b.human)).toBeUndefined();
+  const track = a.world.emojiMemory.get(a.human)!;
+  expect(track.attemptAt).toBeCloseTo(62.1);
+  const cue = a.life.emoji.cue(a.human);
+  a.world.step(0, undefined, 19, undefined, undefined, weather);
+  expect(a.life.emoji.cue(a.human)).toEqual(cue);
+  expect(track.clock).toBeCloseTo(3.1);
+  a.world.step(2, undefined, 19, undefined, undefined, weather);
+  expect(a.life.emoji.cue(a.human)).toBeUndefined();
+});
+
 it('reuses borrowed inputs without keeping actor references or stale passenger and visit fields', () => {
   const { world, life, car, human } = pedestrianWorld();
   world.setEmojiView([19, 1, [0, 0]]);
