@@ -22,8 +22,12 @@ test('naga: natural emoji appears at the central z19 view', async ({ page }) => 
   await mapReady(page);
   // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
   await page.getByText('Legend', { exact: true }).click();
+  // Layout can hide a moving cue between 200 ms updates; one-second samples can miss it.
   await expect
-    .poll(() => page.locator('[data-emoji-bubble]:visible').count(), { timeout: 30_000 })
+    .poll(() => page.locator('[data-emoji-bubble]:visible').count(), {
+      timeout: 30_000,
+      intervals: [100],
+    })
     .toBeGreaterThan(0);
 });
 
