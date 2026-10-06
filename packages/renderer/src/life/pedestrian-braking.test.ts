@@ -683,6 +683,25 @@ describe('pedestrian braking targets', () => {
   it('retains curb-service identity while predicting the actual lane path', () => {
     const { life, car } = brakingFixture();
     const original = structuredClone(car);
+    life.scenes.services.set(car, {
+      site: {
+        x: car.x,
+        y: car.y,
+        hx: car.hx,
+        hy: car.hy,
+        kind: 'stop',
+        modes: 0,
+        covered: false,
+        queue: [],
+        capacity: 1,
+        road: car.line,
+        roadWidth: 14,
+        direction: car.dir,
+      },
+      time: 10,
+      boarded: 0,
+      arriving: false,
+    });
     const curbScene = vi.spyOn(life.scenes, 'curbSite').mockReturnValue(car);
     const offset = vi
       .spyOn(life.scenes, 'offsetAt')
@@ -713,6 +732,7 @@ describe('pedestrian braking targets', () => {
       offset.mockRestore();
       currentOffset.mockRestore();
       curbScene.mockRestore();
+      life.scenes.services.delete(car);
     }
   });
   it('queries the known curved exit using actual lane poses without changing routing', () => {

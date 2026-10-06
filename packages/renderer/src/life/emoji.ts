@@ -615,42 +615,43 @@ export class EmojiObserver {
     for (const o of observations) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
-      for (const mood of priorities) {
-        if (!t.edges.has(mood)) continue;
-        if (
-          !o.eligible ||
-          o.speaking ||
-          t.group ||
-          this.clock < t.cooldownUntil ||
-          this.size >= EMOJI.capacity ||
-          t.rng() >= this.chance(o, mood)
-        )
-          continue;
-        let reply = t.replies.get(mood),
-          replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
-        if (
-          o.subject === 'driver' &&
-          (mood === 'impatient' || mood === 'angry') &&
-          (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
-        ) {
-          const m = o.mover!;
-          let nearest = Infinity;
-          reply = undefined;
-          for (const p of observations) {
-            if (!p.mover?.group || !p.eligible) continue;
-            const dx = p.owner.x - m.x,
-              dy = p.owner.y - m.y;
-            if (dx * m.hx + dy * m.hy <= 0) continue;
-            const distance = dx * dx + dy * dy;
-            if (distance < nearest) {
-              nearest = distance;
-              reply = p.owner;
+      if (t.edges.size)
+        for (const mood of priorities) {
+          if (!t.edges.has(mood)) continue;
+          if (
+            !o.eligible ||
+            o.speaking ||
+            t.group ||
+            this.clock < t.cooldownUntil ||
+            this.size >= EMOJI.capacity ||
+            t.rng() >= this.chance(o, mood)
+          )
+            continue;
+          let reply = t.replies.get(mood),
+            replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
+          if (
+            o.subject === 'driver' &&
+            (mood === 'impatient' || mood === 'angry') &&
+            (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
+          ) {
+            const m = o.mover!;
+            let nearest = Infinity;
+            reply = undefined;
+            for (const p of observations) {
+              if (!p.mover?.group || !p.eligible) continue;
+              const dx = p.owner.x - m.x,
+                dy = p.owner.y - m.y;
+              if (dx * m.hx + dy * m.hy <= 0) continue;
+              const distance = dx * dx + dy * dy;
+              if (distance < nearest) {
+                nearest = distance;
+                reply = p.owner;
+              }
             }
+            replyMood = 'sorry';
           }
-          replyMood = 'sorry';
+          this.admit(o, mood, observations, reply, replyMood);
         }
-        this.admit(o, mood, observations, reply, replyMood);
-      }
       t.edges.clear();
       t.replies.clear();
       if (!o.vendor)

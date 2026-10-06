@@ -198,10 +198,12 @@ export class SignalControl {
     clearing?: ReadonlySet<string>,
     diagnostics?: LifeDiagnostics,
   ): boolean {
+    const stops = this.stops.get(m.line);
+    if (!stops) return false;
     let held = false;
 
     const progress = this.along[m.from]! + m.dir * m.d;
-    for (const stop of this.stops.get(m.line) ?? []) {
+    for (const stop of stops) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
       if (stop.signal.key && clearing?.has(stop.signal.key)) continue;
       const ahead =

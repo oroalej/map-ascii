@@ -118,6 +118,9 @@ export class LocalScenes {
   usedReturnStep(m: Mover): boolean {
     return this.returnSteps.has(m);
   }
+  get hasReturnSteps(): boolean {
+    return this.returnSteps.size > 0;
+  }
 
   /** Effective walking offset during a scene or its checked route handoff. */
   walkingOffset(m: Mover, identity = m): number {

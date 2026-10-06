@@ -781,6 +781,7 @@ export class TileLife {
     );
     const visits = this.scenes.visits.size > 0;
     const services = this.scenes.services.size > 0;
+    const returned = this.scenes.hasReturnSteps;
     const movers = this.movers;
     if (this.eligible.length < movers.length) this.eligible = new Uint8Array(movers.length);
     const eligible = this.eligible;
@@ -797,7 +798,7 @@ export class TileLife {
             (!env?.levels || m.train || m.rank < env.levels[m.kind]) &&
             (!visits || !this.scenes.visits.has(m)),
         );
-      if (this.scenes.usedReturnStep(m)) eligible[i] = 0;
+      if (returned && this.scenes.usedReturnStep(m)) eligible[i] = 0;
       if (enabled) {
         if (this.inspected === m) {
           const state = vehicleEffects(m);
@@ -1864,7 +1865,7 @@ export class TileLife {
   offsetVaries(m: Mover, ahead = 0, behind = 0): boolean {
     if (m.kind !== 'vehicle' || !m.vehicle || m.train) return false;
     if (m.roadShift !== undefined) return true;
-    const profile = this.laneBendOf(m, m.line, m.dir);
+    const profile = this.laneTerrain ? this.laneBendOf(m, m.line, m.dir) : undefined;
     const next = m.routing?.plan?.exit ?? m.next;
     if (!profile && (next === undefined || next < 0) && m.came === undefined) return false;
     const length = this.lineLength(m.line) / this.perMeter,
@@ -1917,8 +1918,9 @@ export class TileLife {
     const next = m.routing?.plan?.exit ?? m.next;
     const normal =
       !this.laneTerrain && m.came === undefined && (next === undefined || next < 0)
-        ? this.mergeLane(m, m.line)
+        ? laneOffset(road, spec.width, m.lane, spec.curb)
         : this.routeLane(m, m.line, m.dir, this.travelled(m), m.came, next);
+    if (!this.scenes.hasCurbScenes) return this.shiftedOffset(m, normal);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
     const offset =
       identity === m
@@ -5066,7 +5068,7 @@ export class TileLife {
       input.held = this.scenes.held(m);
       input.passenger = this.scenes.services.get(m)?.passenger;
       input.arrival = this.emojiArrival(m);
-      input.still = m.pause > 0 || this.scenes.still(m);
+      input.still = m.pause > 0 || (!!input.visit && this.scenes.still(m));
     }
     for (const g of this.gatherers) {
       if (g.carabao !== undefined) continue;
