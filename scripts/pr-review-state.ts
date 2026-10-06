@@ -16,6 +16,7 @@ import {
 import type { Json, Phase, StartOptions } from './pr-review-checkpoint';
 import { phases } from './pr-review-checkpoint';
 import { importLegacy, legacySource } from './pr-review-legacy';
+import { reviewScope } from './pr-review-scope';
 import {
   parseProcessSpec,
   publishInterrupted,
@@ -85,7 +86,11 @@ export async function command(
             : await startReview(options, null, receiptActive);
   } else if (action === 'show') value = loadState(string(input, 'run'));
   else if (action === 'protect') value = await protectChanges(string(input, 'run'));
-  else if (action === 'begin') {
+  else if (action === 'scope') {
+    if (typeof input.round !== 'number' || !Number.isSafeInteger(input.round) || input.round < 1)
+      throw new Error('Expected round number');
+    value = reviewScope(string(input, 'run'), input.round);
+  } else if (action === 'begin') {
     if (
       'paths' in input &&
       (!Array.isArray(input.paths) || !input.paths.every((p: unknown) => typeof p === 'string'))
@@ -149,7 +154,7 @@ export async function command(
     return { value: result, exitCode: result.receipt.quota ? 75 : result.receipt.valid ? 0 : 1 };
   } else
     throw new Error(
-      'Expected inspect, init, show, protect, begin, finish, record, run, restore, or interrupt',
+      'Expected inspect, init, show, protect, scope, begin, finish, record, run, restore, or interrupt',
     );
   return { value, exitCode: 0 };
 }

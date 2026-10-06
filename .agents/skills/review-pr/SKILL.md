@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort, Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
+description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (later rounds review only the fixes), Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
 # Claude review → Codex validation → fixes, until clean, then CI
@@ -30,7 +30,7 @@ Always pass these explicitly. Claude effort is the resolved `--claude-effort` se
   - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
   `--fast` doesn't change Claude or this session.
-- `--claude-effort <level>`: select `low`, `medium`, `high`, `xhigh` or `max` for Claude PR reviews. Reject a missing or unsupported value before initialization or process launches. Resolve an explicit value first, then a resumed checkpoint's selection, then `high`. A fresh run without this option uses `high`. For example: `$review-pr 40 --claude-effort medium`. Save the resolved value as `claudeEffort`; use it for unfinished Claude reviews and later rounds. Completed verified work remains reusable at its original effort; use `--fresh` to repeat the full review. Codex settings are unchanged.
+- `--claude-effort <level>`: select `low`, `medium`, `high`, `xhigh` or `max` for Claude PR reviews. Reject a missing or unsupported value before initialization or process launches. Resolve an explicit value first, then a resumed checkpoint's explicitly chosen effort, then `medium`. A fresh run without this option uses `medium`, and so does a resumed run whose saved effort was only the default (`claudeEffortExplicit` is false). For example: `$review-pr 40 --claude-effort high`. Save the resolved value as `claudeEffort`; use it for unfinished Claude reviews and later rounds. Completed verified work remains reusable at its original effort; use `--fresh` to repeat the full review. Codex settings are unchanged.
 - `Result file: <path>`: a caller such as `$sync-review` passes this. Write the final result JSON there (step 7).
 - `--fresh`: start an independent review, retaining earlier invocations. Do not duplicate an active review process.
 - `--resume <run-path>`: select that checkpoint or verifiable legacy invocation. With no PR argument, resolve the PR from its saved identity; reject a mismatched explicit target. Reject combining `--fresh` and `--resume`.
@@ -115,9 +115,17 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
 
 ## 2. Round k: Claude reviews the PR
 
-Rounds start at k = 1 for a new review; recovery retains the saved k. Each round has its own folder, `<scratch>/round<k>/`. Refresh `headRefOid` with `gh pr view` at the start of every round. Launch through the recovery reference's `run` wrapper using the command arguments below; it creates a unique attempt folder, captures UTF-8 output and writes an independent receipt. A verified completed reviewer receipt at this head skips directly to validation.
+Rounds start at k = 1 for a new review; recovery retains the saved k. Each round has its own folder, `<scratch>/round<k>/`. Refresh `headRefOid` with `gh pr view` at the start of every round. Launch through the recovery reference's `run` wrapper using the command arguments below; it creates a unique attempt folder, captures UTF-8 output and writes an independent receipt. A verified completed reviewer receipt at this head and scope skips directly to validation.
 
-Run from `<pr-checkout>`, with a shell timeout of at least 20 minutes:
+**Scope first.** Before launching the reviewer, choose the round's scope (recovery reference, "Choose the review scope"):
+
+```
+pnpm.cmd -C <repo> --silent review:state scope --input <scratch>/round<k>/scope-input.json
+```
+
+It returns `mode` (`full` or `delta`), `since`, `reason`, `path` (the scope file), `ledger` and `delta`. A **delta** round reviews only the commits since the last reviewed commit (`since`) plus their callers and tests, guided by the ledger of earlier findings. It is chosen only when that commit is an ancestor of HEAD, no merge happened since, the change is at most 400 lines, and no dependency, build, CI or agent-instruction file changed. Everything else is a **full** review of the whole PR. Pass the scope file as the process's `scope`, so its receipt is bound to it.
+
+Run from `<pr-checkout>`, with a shell timeout of at least 20 minutes. The Claude prompt is `/review-pr <N> --report-only` for a full round, adding `--since <since>` for a delta round and `--ledger <ledger>` whenever the scope returned a ledger:
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-input.json
@@ -131,7 +139,7 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-i
 
 Run from `<pr-checkout>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is the absolute path of the folder holding this `SKILL.md` (`.agents/skills/review-pr/` in the checkout Codex loaded it from).
 
-Launch through `run` as in the recovery reference. Replace the `-o` output with `{report}` and pass `<claude-report>` as the input report. A recovered successful validator receipt skips to fixes.
+Launch through `run` as in the recovery reference. Replace the `-o` output with `{report}`, pass `<claude-report>` as the input report and the round's scope file as `scope` (the wrapper rejects a scope that differs from the review's). The prompt names the scope mode, `since` and the ledger path. A recovered successful validator receipt skips to fixes.
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/validation-input.json
@@ -160,8 +168,8 @@ Otherwise, work in `<pr-checkout>` on the PR's head branch:
 5. Commit with a gitmoji + conventional message that matches `git log` (e.g. `🐛 fix(renderer): …`). Use one commit, or one per area if the fixes are unrelated.
 6. Push to the PR's branch with a plain `git push`, then refresh and checkpoint `remoteSha`. If the fixes change what the PR description says, update it with `gh pr edit <N> --body-file`.
 
-Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeEffort, claudeVerdict, entries, noticed, commits}` (shape in step 7).
-Also record it in checkpoint `history`, with findings, noticed items, rejected decisions, commits and the next phase, before starting another round. Each round's `claudeEffort` is the actual value in its review receipt's `--effort` argument, including reused receipts; older records without effort proof use the original fixed `high`.
+Write this round's record to `<scratch>/round<k>/result.json`: `{round, reviewedHead, scope, claudeEffort, usage, claudeVerdict, entries, noticed, commits}` (shape in step 7). `reviewedHead` is the review receipt's `headSha`; the next round's scope starts from it. `scope` is `{mode, since, reason}` from the scope file. `usage` is the review receipt's `usage` (null when unavailable).
+Also record it in checkpoint `history`, with findings, noticed items, rejected decisions, commits and the next phase, before starting another round. Each history entry carries the same `round`, `reviewedHead`, `scope`, `usage` and `entries` fields, because the next round's scope and ledger are built from them. Each round's `claudeEffort` is the actual value in its review receipt's `--effort` argument, including reused receipts; older records without effort proof use the original fixed `high`.
 
 ## 5. Review loop (until clean)
 
@@ -200,6 +208,7 @@ Report:
 - Anything under "Noticed, not in Claude's review", with its severity. Noticed blockers and should-fix items were fixed as entries (step 4); noticed nits are listed for the user
 - The CI gate: reruns, fix attempts and fix commits, and the final check state
 - Which checks ran locally, and which were left to CI
+- One line per round: `round <k> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents`, or `usage unavailable`
 - The PR URL, the speed Codex #1 ran at (fast or normal), selected Claude effort and each completed round's actual effort, the `codex` and `claude` versions from step 1.6, and the final status
 
 End the report with a fenced block tagged `review-pr-result`, holding one JSON object:
@@ -210,7 +219,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "pr": 12,
   "headSha": "def5678",
   "fast": false,
-  "claudeEffort": "high",
+  "claudeEffort": "medium",
   "cli": { "codex": "0.159.3", "claude": "2.1.289" },
   "mainMerge": "current",
   "workTree": null,
@@ -218,7 +227,10 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "rounds": [
     {
       "round": 1,
-      "claudeEffort": "high",
+      "reviewedHead": "abc1234…",
+      "scope": { "mode": "full", "since": null, "reason": "No earlier reviewed commit in this review" },
+      "claudeEffort": "medium",
+      "usage": { "sessionId": "…", "main": { "turns": 27, "input": 0, "cacheWrite": 97000, "cacheRead": 2100000, "output": 17000 }, "subagents": { "count": 4, "turns": 140, "input": 0, "cacheWrite": 490000, "cacheRead": 13400000, "output": 7000 } },
       "claudeVerdict": "Changes requested — …",
       "entries": [
         {
@@ -251,6 +263,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `open` (carried into the PR body, with `openReason`) or `none`. `repeat` names the earlier round of a repeated entry; `decision` records an oscillation decision. `claudeSeverity` is `null` for an entry promoted from "Noticed". `outOfDiff` is `null`, or the files outside the PR's diff that the fix touched and why.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
 - `cli`: the versions step 1.6 resolved (`null` for one not resolved).
+- `scope` and `usage` per round: the scope decision and the Claude token totals from the review receipt. `usage` is null when the transcript was unavailable; never estimate it.
 - `claudeEffort`: the checkpoint's resolved selection for unfinished/future Claude reviews. Each round records its actual effort separately; changing the selection does not relabel completed work.
 - `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (ended before step 1.7).
 - `workTree`: `null`, or the detached work tree's path and why the PR's worktree wasn't used.

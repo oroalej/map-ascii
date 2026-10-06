@@ -1,7 +1,14 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { loadState, readJson, startReview, updateState } from './pr-review-checkpoint';
+import {
+  loadState,
+  parseReceipt,
+  readJson,
+  receiptValid,
+  startReview,
+  updateState,
+} from './pr-review-checkpoint';
 import { artifact, fixture, reviewText, validationText } from './pr-review-fixture';
 import { command } from './pr-review-state';
 import {
@@ -21,6 +28,99 @@ afterEach(() => {
 });
 
 describe('review process receipts', () => {
+  it('pins a Claude session and records its token usage after exit', async () => {
+    const { state } = await startReview(setup.options);
+    const config = join(setup.directory, 'claude-config');
+    const previous = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = config;
+    try {
+      const result = await runProcess({
+        run: state.run,
+        phase: 'review',
+        round: 1,
+        headSha: state.headSha,
+        executable: process.execPath,
+        args: [
+          '-e',
+          [
+            'const fs=require("node:fs"),p=require("node:path");',
+            'const dir=p.join(process.env.CLAUDE_CONFIG_DIR,"projects","repo");',
+            'fs.mkdirSync(p.join(dir,process.argv[2],"subagents"),{recursive:true});',
+            'const t=(id,n)=>JSON.stringify({type:"assistant",message:{id,usage:{cache_read_input_tokens:n,output_tokens:1}}});',
+            'fs.writeFileSync(p.join(dir,process.argv[2]+".jsonl"),t("m",5));',
+            'fs.writeFileSync(p.join(dir,process.argv[2],"subagents","a.jsonl"),t("s",9));',
+            'process.stdout.write(process.argv[1]);',
+          ].join(''),
+          reviewText,
+          '{sessionId}',
+        ],
+        output: 'stdout',
+      });
+      const sessionId = result.receipt.sessionId;
+      expect(sessionId).toMatch(/^[0-9a-f-]{36}$/);
+      expect(result.receipt.args).toContain(sessionId);
+      expect(result.receipt.usage).toMatchObject({
+        sessionId,
+        main: { turns: 1, cacheRead: 5, output: 1 },
+        subagents: { count: 1, turns: 1, cacheRead: 9, output: 1 },
+      });
+      expect(parseReceipt(readJson(result.path)).usage).toEqual(result.receipt.usage);
+      const plain = await runProcess({
+        run: state.run,
+        phase: 'review',
+        round: 1,
+        headSha: state.headSha,
+        executable: process.execPath,
+        args: ['-e', 'process.stdout.write(process.argv[1])', reviewText],
+        output: 'stdout',
+      });
+      expect(plain.receipt).toMatchObject({ sessionId: null, usage: null });
+    } finally {
+      if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previous;
+    }
+  });
+
+  it('binds review and validation receipts to the round scope', async () => {
+    const { state } = await startReview(setup.options);
+    const scope = join(state.run, 'round1', 'scope.json');
+    mkdirSync(join(state.run, 'round1'), { recursive: true });
+    writeFileSync(scope, '{"mode":"full"}');
+    const review = await runProcess({
+      run: state.run,
+      phase: 'review',
+      round: 1,
+      headSha: state.headSha,
+      executable: process.execPath,
+      args: ['-e', 'process.stdout.write(process.argv[1])', reviewText],
+      output: 'stdout',
+      scope,
+    });
+    expect(review.receipt.scope?.file).toBe(scope);
+    expect(receiptValid(review.receipt, state, state.headSha)).toBe(true);
+    const validate = (withScope?: string) =>
+      runProcess({
+        run: state.run,
+        phase: 'validation',
+        round: 1,
+        headSha: state.headSha,
+        executable: process.execPath,
+        args: [
+          '-e',
+          'require("node:fs").writeFileSync(process.argv[1],process.argv[2])',
+          '{report}',
+          validationText,
+        ],
+        output: 'file',
+        reviewReceipt: review.path,
+        scope: withScope,
+      });
+    await expect(validate()).rejects.toThrow('Validation scope does not match its review');
+    expect((await validate(scope)).receipt.valid).toBe(true);
+    writeFileSync(scope, '{"mode":"delta"}');
+    expect(receiptValid(review.receipt, state, state.headSha)).toBe(false);
+  });
+
   it('captures stdout and individual arguments without a shell', async () => {
     const { state } = await startReview(setup.options);
     const result = await runProcess({

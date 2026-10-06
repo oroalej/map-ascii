@@ -42,7 +42,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 `--fast` is also forwarded to `$review-handoff` and `$review-pr`. It doesn't change Claude, or this session's own speed.
 
-`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for PR reviews only. Reject missing/invalid values before changing the task or launching a process. Pass an explicit selection into PR checkpoint initialization as `claudeEffort`; omit it when absent so recovery inherits the saved setting or defaults to `high`. Preserve it on coordinator relaunches. Do not forward it to `$review-handoff`; its Claude review stays at `high`.
+`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for PR reviews only. Reject missing/invalid values before changing the task or launching a process. Pass an explicit selection into PR checkpoint initialization as `claudeEffort`; omit it when absent so recovery inherits an explicitly chosen saved setting or defaults to `medium`. Preserve it on coordinator relaunches. Do not forward it to `$review-handoff`; its Claude review stays at `high`.
 
 ## Rules
 

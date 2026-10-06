@@ -42,7 +42,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 `--fast` also gets forwarded to `$review-pr`, so Codex #1 uses the same speed in every round. It doesn't change Claude, or this session's own speed.
 
-`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for all listed branches' PR reviews. Reject missing/invalid values before any Git mutation or process launch. Forward an explicit selection into each branch's checkpoint initialization as `claudeEffort`; omit it when absent so each branch resumes its saved setting or defaults to `high`. Carry it through coordinator relaunches. Codex settings are unchanged.
+`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for all listed branches' PR reviews. Reject missing/invalid values before any Git mutation or process launch. Forward an explicit selection into each branch's checkpoint initialization as `claudeEffort`; omit it when absent so each branch resumes an explicitly chosen saved setting or defaults to `medium`. Carry it through coordinator relaunches. Codex settings are unchanged.
 
 ## Rules for every branch
 

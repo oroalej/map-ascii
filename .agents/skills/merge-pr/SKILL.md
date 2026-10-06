@@ -9,7 +9,7 @@ Usage: `$merge-pr [--claude-effort <level>] [<branch>] [Head: <sha>]`. Without a
 
 `Head: <sha>` is optional. A caller such as `$sync-review` passes the commit it reviewed and checked CI on, so nothing pushed after that review gets merged.
 
-`--claude-effort <level>` selects `low`, `medium`, `high`, `xhigh` or `max` for PR reviews required by the merge gates. Parse and reject missing/invalid values before mutations or process launches. Pass explicit effort into review checkpoint initialization and through relaunches; omit it when absent to inherit saved effort or default to `high`. Use the initialized state's effort for delegated and inline reviews. This option does not authorize repeating a completed review; `review-pr --fresh` does that.
+`--claude-effort <level>` selects `low`, `medium`, `high`, `xhigh` or `max` for PR reviews required by the merge gates. Parse and reject missing/invalid values before mutations or process launches. Pass explicit effort into review checkpoint initialization and through relaunches; omit it when absent to inherit explicitly chosen saved effort or default to `medium`. Use the initialized state's effort for delegated and inline reviews. This option does not authorize repeating a completed review; `review-pr --fresh` does that.
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 

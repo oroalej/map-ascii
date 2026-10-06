@@ -22,7 +22,7 @@ Before altering a worktree, run `inspect` with:
 }
 ```
 
-It returns the latest matching checkpoint or a legacy source. Add `claudeEffort: "<level>"` only when `--claude-effort` was explicitly supplied; omit it to inherit saved effort on resume. Accept only `low`, `medium`, `high`, `xhigh` or `max`. Reject missing/invalid option values before initialization or process launches. Add `fresh: true` or `resume: "<absolute-run-path>"` for the corresponding flags. Reject both together. A `--resume` target without a PR argument gets its PR and branch from the saved checkpoint, or verified `invocation.json`/`pr-round1.json` legacy metadata; then query that PR. Never use the main checkout's fallback PR selection for an explicit resume.
+It returns the latest matching checkpoint or a legacy source. Add `claudeEffort: "<level>"` only when `--claude-effort` was explicitly supplied; omit it to inherit an explicitly chosen saved effort on resume. Accept only `low`, `medium`, `high`, `xhigh` or `max`. Reject missing/invalid option values before initialization or process launches. Add `fresh: true` or `resume: "<absolute-run-path>"` for the corresponding flags. Reject both together. A `--resume` target without a PR argument gets its PR and branch from the saved checkpoint, or verified `invocation.json`/`pr-round1.json` legacy metadata; then query that PR. Never use the main checkout's fallback PR selection for an explicit resume.
 
 Inspect the original checkout, baseline, owned bytes and pending operations. Keep owned WIP only when the saved bytes and index/working-tree hashes still match. Preserve unknown changes; if a detached worktree is needed, replay only recorded owned bytes with `restore` below. Legacy dirty files have no ownership proof and remain baseline edits.
 
@@ -30,7 +30,7 @@ Fetch the branch and main, reconcile local and remote commits under the skill's 
 
 Set `<scratch>` to `state.run`. Retain `state.resumedFrom`, cumulative `round`, `history`, `rejected`, baseline, operations and reporting metadata. Write inherited rejection text to the new invocation's `rejected.md` before launching Claude. Resolve newest installed binaries again; saved executable paths are provenance only. Current speed applies to unfinished steps.
 
-Use `state.claudeEffort` for every new Claude PR-review attempt. Initialization resolves explicit effort, then resumed effort, then `high`; fresh runs default to `high`. Older version-1 checkpoints without effort normalize to `high` in memory, preserving their saved bytes. An explicit override applies to unfinished reviews and later rounds without invalidating completed verified reports. Keep their actual effort from receipt arguments in each round's history, defaulting legacy fixed-effort records to `high`.
+Use `state.claudeEffort` for every new Claude PR-review attempt. Initialization resolves explicit effort, then a resumed effort that was explicitly chosen (`claudeEffortExplicit: true`), then `medium`; fresh runs default to `medium`, and a resumed default moves to `medium`. Older version-1 checkpoints without effort normalize to `high` in memory for provenance, preserving their saved bytes, and their continuation uses `medium`. An explicit override applies to unfinished reviews and later rounds without invalidating completed verified reports. Keep their actual effort from receipt arguments in each round's history, defaulting legacy fixed-effort records to `high`.
 
 For `Worker checkpoint`, verify its identity with `show` and attach directly to that initialized invocation. Its saved effort is authoritative; reject a conflicting explicit worker option. The caller's coordinator receipt supervises this worker. Do not run `init` again. The worker checkpoints its own operations and launches reviewer/validator wrappers normally.
 
@@ -99,6 +99,15 @@ Reconcile a pending operation before repeating it:
 
 `restore` takes `{ "run": "<scratch>", "checkout": "<isolated-checkout>" }`. It verifies repository identity and every destination's saved base bytes before writing any owned changes. A mismatch requires manual reconciliation of the saved patch intent; never overwrite unrelated bytes. Then initialize a new continuation using that checkout. Saved deletions are applied only to matching base files.
 
+## Choose the review scope
+
+`scope` takes `{ "run": "<scratch>", "round": <k> }` after the round's head is synchronized and recorded. It finds the last history entry with a `reviewedHead` and compares it with HEAD:
+
+- **delta**: that commit is an ancestor of HEAD, no merge commit is in between, at most 400 lines changed, and no `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.github/`, `tsconfig*.json`, `*.config.*`, `.claude/` or `.agents/` file changed. It writes `round<k>/delta.patch`.
+- **full**: everything else, including the first round, a rewritten branch, a main synchronization, binary changes and an unchanged head.
+
+It always writes `round<k>/scope.json`, plus `round<k>/ledger.md` when earlier rounds recorded entries or rejected decisions. Ledger IDs are `r<round>.<id>` from the round that recorded the entry. The output contains paths beside the scope, but `scope.json` itself holds only commits, files, counts and content hashes. Rerunning it for the same commits and history reproduces the same bytes, so a resumed round keeps its reusable receipts. Pass `scope.json` as `scope` to the reviewer and validator processes. A receipt whose scope file no longer matches is not reusable, and validation refuses a scope different from its review's.
+
 ## Run native processes
 
 Use `run` with this shape; the wrapper creates a new attempt, substitutes `{report}` as an individual argument, and writes `receipt.json` even if the coordinating agent disappears:
@@ -110,16 +119,17 @@ Use `run` with this shape; the wrapper creates a new attempt, substitutes `{repo
   "round": 2,
   "headSha": "<full synchronized PR/local head>",
   "executable": "<newest resolved absolute claude path>",
-  "args": ["-p", "/review-pr 12 --report-only", "--model", "claude-opus-5-5", "--effort", "{claudeEffort}", "--dangerously-skip-permissions", "--output-format", "text"],
-  "output": "stdout"
+  "args": ["-p", "/review-pr 12 --report-only --since <since> --ledger <ledger>", "--model", "claude-opus-5-5", "--effort", "{claudeEffort}", "--session-id", "{sessionId}", "--dangerously-skip-permissions", "--output-format", "text"],
+  "output": "stdout",
+  "scope": "<scratch>/round2/scope.json"
 }
 ```
 
-For Claude, the wrapper substitutes `{claudeEffort}` from the checkpoint in review-phase arguments and records the resolved native arguments in the receipt. Append one `--append-system-prompt` argument combining the pinned head instruction and saved rejection text. Require review of the pinned commit; if the PR head differs, the report is unusable. Query the PR head after either reviewer exits and discard results if it moved.
+Drop `--since` for a full round and `--ledger` when the scope has no ledger. For Claude, the wrapper substitutes `{claudeEffort}` from the checkpoint in review-phase arguments and `{sessionId}` with a new UUID, and records the resolved native arguments in the receipt. After the process exits it reads that session's transcript and its subagents' transcripts under `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/` and saves `usage` (turns plus input, cache-write, cache-read and output tokens, main session and subagents kept separate) in the receipt. A missing transcript leaves `usage: null`. Append one `--append-system-prompt` argument combining the pinned head instruction and saved rejection text. Require review of the pinned commit; if the PR head differs, the report is unusable. Query the PR head after either reviewer exits and discard results if it moved.
 
 For validation, use `phase: "validation"`, `output: "file"`, `reviewReceipt: "<verified-review-receipt.json>"`, the exact Codex model/effort/speed flags from the skill, `-o`, `{report}`, and a prompt naming that receipt's actual report path and pinned head. The wrapper verifies the input receipt and report before launch and after completion, and records its token and report hash in the validation receipt. Recovery selects the latest verified review together with only its bound validation. Store prompts/config in the input JSON, never reference an unrelated run's output.
 
-Validation arguments are `exec`, `-m`, `gpt-6.1-sol`, `-c`, `model_reasoning_effort="max"`, the individual `<speed>` arguments, `-s`, `danger-full-access`, `-C`, `<pr-checkout>`, `-o`, `{report}`, then the prompt: `Follow <skill-dir>/references/validate-prompt.md exactly. PR: #<N> (<url>), head <headRefOid>, base <baseRefName>. Claude's review: <claude-report>.` Normal speed is the two arguments `--disable`, `fast_mode`; fast speed is `-c`, `service_tier="fast"`, `--enable`, `fast_mode`.
+Validation arguments are `exec`, `-m`, `gpt-6.1-sol`, `-c`, `model_reasoning_effort="max"`, the individual `<speed>` arguments, `-s`, `danger-full-access`, `-C`, `<pr-checkout>`, `-o`, `{report}`, then the prompt: `Follow <skill-dir>/references/validate-prompt.md exactly. PR: #<N> (<url>), head <headRefOid>, base <baseRefName>. Claude's review: <claude-report>. Scope: <full | delta since <since>>. Ledger: <ledger or none>.` Normal speed is the two arguments `--disable`, `fast_mode`; fast speed is `-c`, `service_tier="fast"`, `--enable`, `fast_mode`.
 
 For delegated coordinators and wrong-model relaunches, the caller first initializes the invocation, then uses `phase: "coordinator"`, `output: "file"`, the existing Codex xhigh/speed flags, `-o`, `{report}`, and a prompt with the same review invocation plus `Worker checkpoint: <scratch>` and the requested result path. Add `resultFile: "<caller-result-path>"` to the process input. This allows the wrapper to publish quota interruption even when the worker produces no final report.
 

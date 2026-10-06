@@ -51,19 +51,36 @@ describe('Claude review effort', () => {
     },
   );
 
-  it('defaults to high, inherits saved effort, and resets fresh runs to high', async () => {
-    expect((await startReview(setup.options)).state.claudeEffort).toBe('high');
+  it('defaults to medium, inherits explicit effort, and resets fresh runs to medium', async () => {
+    expect((await startReview(setup.options)).state.claudeEffort).toBe('medium');
     const selected = await startReview({ ...setup.options, claudeEffort: 'medium' });
     const folder = join(selected.state.run, 'checkpoints');
     const before = readdirSync(folder).map((name) => readFileSync(join(folder, name), 'utf8'));
     const resumed = await startReview({ ...setup.options, resume: selected.state.run });
     expect(resumed.state.claudeEffort).toBe('medium');
+    expect(resumed.state.claudeEffortExplicit).toBe(true);
     expect(readdirSync(folder).map((name) => readFileSync(join(folder, name), 'utf8'))).toEqual(
       before,
     );
     const fresh = await startReview({ ...setup.options, fresh: true });
-    expect(fresh.state.claudeEffort).toBe('high');
+    expect(fresh.state.claudeEffort).toBe('medium');
+    expect(fresh.state.claudeEffortExplicit).toBe(false);
     expect(fresh.state.resumedFrom).toBeNull();
+  });
+
+  it('moves a resumed implicit default to the current default and keeps explicit choices', async () => {
+    const { state } = await startReview(setup.options);
+    await updateState(state.run, (saved) => {
+      saved.claudeEffort = 'high';
+      saved.claudeEffortExplicit = false;
+    });
+    expect((await startReview(setup.options)).state.claudeEffort).toBe('medium');
+    const chosen = await startReview({ ...setup.options, fresh: true, claudeEffort: 'high' });
+    const resumed = await startReview({ ...setup.options, resume: chosen.state.run });
+    expect(resumed.state).toMatchObject({ claudeEffort: 'high', claudeEffortExplicit: true });
+    expect(() => parseState({ ...state, claudeEffortExplicit: 'yes' })).toThrow(
+      'Invalid review checkpoint',
+    );
   });
 
   it('normalizes old checkpoints in memory and leaves their saved bytes unchanged', async () => {
@@ -79,7 +96,7 @@ describe('Claude review effort', () => {
     expect(parseState(old).claudeEffort).toBe('high');
     expect(old).not.toHaveProperty('claudeEffort');
     expect(loadState(state.run).claudeEffort).toBe('high');
-    expect((await startReview(setup.options)).state.claudeEffort).toBe('high');
+    expect((await startReview(setup.options)).state.claudeEffort).toBe('medium');
     expect(readFileSync(path, 'utf8')).toBe(bytes);
     expect(() => parseState({ ...state, claudeEffort: 'auto' })).toThrow(
       'Invalid review checkpoint',

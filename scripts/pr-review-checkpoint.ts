@@ -15,6 +15,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { acquire } from './file-lock';
 import { git, gitRaw, gitSucceeds, mainCheckout } from './git';
+import type { ClaudeUsage } from './pr-review-usage';
 
 export const phases = [
   'sync',
@@ -30,6 +31,8 @@ export const phases = [
 export type Phase = (typeof phases)[number];
 export const claudeEfforts = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ClaudeEffort = (typeof claudeEfforts)[number];
+/** Default for new Claude review attempts; earlier checkpoints recorded `high` as their default. */
+export const defaultClaudeEffort: ClaudeEffort = 'medium';
 export function parseClaudeEffort(value: unknown): ClaudeEffort {
   if (typeof value !== 'string' || !claudeEfforts.some((effort) => effort === value))
     throw new Error('Invalid Claude effort: expected low, medium, high, xhigh or max');
@@ -71,6 +74,8 @@ export type ReviewState = Identity & {
   resumedFrom: string | null;
   fast: boolean;
   claudeEffort: ClaudeEffort;
+  /** True only when `--claude-effort` chose the effort; a resumed default takes the current default. */
+  claudeEffortExplicit?: boolean;
   phase: Phase;
   round: number;
   status: 'running' | 'interrupted' | 'clean' | 'error';
@@ -115,6 +120,11 @@ export type Receipt = Identity & {
   signal: string | null;
   reportHash: string | null;
   inputReview?: { token: string; reportHash: string } | null;
+  /** Review scope file the process was given; a changed scope makes the receipt unusable. */
+  scope?: { file: string; hash: string } | null;
+  /** Claude session pinned with `--session-id`, and its token totals read after exit. */
+  sessionId?: string | null;
+  usage?: ClaudeUsage | null;
   valid: boolean;
   quota: { reason: string; reset: string | null } | null;
   error: string | null;
@@ -163,6 +173,7 @@ export function parseState(v: unknown): ReviewState {
     !nullableString(v.resumedFrom) ||
     typeof v.fast !== 'boolean' ||
     ('claudeEffort' in v && !claudeEfforts.some((effort) => effort === v.claudeEffort)) ||
+    ('claudeEffortExplicit' in v && typeof v.claudeEffortExplicit !== 'boolean') ||
     !phase(v.phase) ||
     !integer(v.round) ||
     v.round === 0 ||
@@ -258,6 +269,13 @@ export function parseReceipt(v: unknown): Receipt {
         typeof v.inputReview.token === 'string' &&
         typeof v.inputReview.reportHash === 'string')
     ) ||
+    !(
+      v.scope === undefined ||
+      v.scope === null ||
+      (record(v.scope) && typeof v.scope.file === 'string' && typeof v.scope.hash === 'string')
+    ) ||
+    !(v.sessionId === undefined || nullableString(v.sessionId)) ||
+    !(v.usage === undefined || v.usage === null || record(v.usage)) ||
     typeof v.valid !== 'boolean' ||
     !nullableString(v.error) ||
     !(
@@ -453,7 +471,10 @@ export function receiptValid(receipt: Receipt, state: Identity, headSha: string)
   )
     return false;
   try {
-    return hash(readFileSync(receipt.report)) === receipt.reportHash;
+    return (
+      hash(readFileSync(receipt.report)) === receipt.reportHash &&
+      (!receipt.scope || hash(readFileSync(receipt.scope.file)) === receipt.scope.hash)
+    );
   } catch {
     return false;
   }
@@ -732,7 +753,7 @@ export async function startReview(
         run,
         resumedFrom: null,
         fast: !!options.fast,
-        claudeEffort: options.claudeEffort ?? 'high',
+        claudeEffort: options.claudeEffort ?? defaultClaudeEffort,
         phase: recovery.phase,
         round: recovery.round,
         status: 'running',
@@ -757,7 +778,10 @@ export async function startReview(
     resumedFrom: previous?.run ?? null,
     checkout: resolve(options.checkout),
     fast: !!options.fast,
-    claudeEffort: options.claudeEffort ?? previous?.claudeEffort ?? 'high',
+    claudeEffort:
+      options.claudeEffort ??
+      (previous?.claudeEffortExplicit ? previous.claudeEffort : defaultClaudeEffort),
+    claudeEffortExplicit: options.claudeEffort !== undefined || !!previous?.claudeEffortExplicit,
     phase: recovery.phase,
     round: recovery.round,
     status: 'running',

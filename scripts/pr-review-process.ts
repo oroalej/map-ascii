@@ -16,6 +16,7 @@ import {
 import type { Json, Receipt } from './pr-review-checkpoint';
 import { acquire } from './file-lock';
 import { git, mainCheckout } from './git';
+import { claudeUsage } from './pr-review-usage';
 
 export type ProcessSpec = {
   run: string;
@@ -27,6 +28,8 @@ export type ProcessSpec = {
   output: 'stdout' | 'file';
   resultFile?: string;
   reviewReceipt?: string;
+  /** Absolute `round<k>/scope.json` written by `review:state scope`. */
+  scope?: string;
 };
 
 /** Preserve literal reset text; a clock time without a date is not an ISO timestamp. */
@@ -170,6 +173,8 @@ export function parseProcessSpec(value: unknown): ProcessSpec {
     (typeof spec.reviewReceipt !== 'string' || !isAbsolute(spec.reviewReceipt))
   )
     throw new Error('Review receipt must be an absolute path');
+  if (spec.scope !== undefined && (typeof spec.scope !== 'string' || !isAbsolute(spec.scope)))
+    throw new Error('Scope must be an absolute scratch path');
   return spec;
 }
 
@@ -193,6 +198,17 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     return review;
   };
   const review = readReview();
+  const scope = spec.scope
+    ? {
+        file: spec.scope,
+        hash: hash(
+          readFileSync(contained(join(mainCheckout(state.checkout), '.plans'), spec.scope)),
+        ),
+      }
+    : null;
+  // Validation must judge the review against the same scope the reviewer was given.
+  if (review && (review.scope?.hash ?? null) !== (scope?.hash ?? null))
+    throw new Error('Validation scope does not match its review');
   const stepRoot = contained(spec.run, join(spec.run, `round${spec.round}`, spec.phase));
   mkdirSync(stepRoot, { recursive: true });
   const processLock = contained(
@@ -231,8 +247,9 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     mkdirSync(attempt);
     const report = join(attempt, 'report.md'),
       receiptPath = join(attempt, 'receipt.json');
+    const sessionId = spec.args.some((arg) => arg.includes('{sessionId}')) ? randomUUID() : null;
     const args = spec.args.map((arg) => {
-      const value = arg.replaceAll('{report}', report);
+      const value = arg.replaceAll('{report}', report).replaceAll('{sessionId}', sessionId ?? '');
       return spec.phase === 'review'
         ? value.replaceAll('{claudeEffort}', state.claudeEffort)
         : value;
@@ -263,6 +280,9 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
       signal: null,
       reportHash: null,
       inputReview: review ? { token: review.token, reportHash: review.reportHash! } : null,
+      scope,
+      sessionId,
+      usage: null,
       valid: false,
       quota: null,
       error: null,
@@ -301,6 +321,7 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     }
     receipt.finishedAt = new Date().toISOString();
     receipt.status = 'completed';
+    receipt.usage = sessionId ? claudeUsage(sessionId) : null;
     const body = existsSync(report) ? readFileSync(report, 'utf8').replace(/^\uFEFF/, '') : '';
     receipt.reportHash = existsSync(report) ? hash(readFileSync(report)) : null;
     receipt.valid =
