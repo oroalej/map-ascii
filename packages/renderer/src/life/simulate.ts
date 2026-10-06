@@ -5012,11 +5012,6 @@ export class TileLife {
     input.gatherer = undefined;
     input.visit = undefined;
     input.passenger = undefined;
-    input.figure = undefined;
-    input.held = undefined;
-    input.arrival = undefined;
-    input.still = undefined;
-    input.vendor = undefined;
   }
   private releaseEmojiInputs() {
     for (const input of this.emojiInputs) this.clearEmojiInput(input);
@@ -5055,6 +5050,9 @@ export class TileLife {
     const eligible = (p: { x: number; y: number }) =>
       inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
     const observations = this.emojiInputs;
+    const visits = this.scenes.visits.size > 0;
+    const services = this.scenes.services.size > 0;
+    const arrivals = this.scenes.speechEvents.length > 0;
     for (const m of this.movers) {
       if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
       const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
@@ -5064,10 +5062,11 @@ export class TileLife {
       const input = this.emojiInput(m, subject, admitted);
       input.mover = m;
       input.figure = m.group?.[0]?.figure;
-      input.visit = this.scenes.visits.get(m);
-      input.held = this.scenes.held(m);
-      input.passenger = this.scenes.services.get(m)?.passenger;
-      input.arrival = this.emojiArrival(m);
+      input.vendor = undefined;
+      input.visit = visits ? this.scenes.visits.get(m) : undefined;
+      input.held = services ? this.scenes.held(m) : false;
+      input.passenger = services ? this.scenes.services.get(m)?.passenger : undefined;
+      input.arrival = arrivals ? this.emojiArrival(m) : false;
       input.still = m.pause > 0 || (!!input.visit && this.scenes.still(m));
     }
     for (const g of this.gatherers) {
@@ -5077,6 +5076,7 @@ export class TileLife {
       const input = this.emojiInput(g, 'person', admitted);
       input.gatherer = g;
       input.figure = g.walker.figure;
+      input.held = input.arrival = input.still = input.vendor = undefined;
     }
     for (const s of this.seasonalStalls.length ? this.allStalls() : this.stalls) {
       const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
@@ -5084,6 +5084,7 @@ export class TileLife {
       const input = this.emojiInput(s, 'person', admitted);
       input.figure = 'adult';
       input.vendor = true;
+      input.held = input.arrival = input.still = undefined;
     }
     return observations;
   }
