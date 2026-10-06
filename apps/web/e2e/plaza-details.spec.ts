@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { DetailLayouts, normalizeCredits, type SiteDetail } from '@atlas/shared';
+import { DetailLayouts, normalizeCredits, type SiteDetail, type Landmark } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import { isCityMeta } from '../lib/guards';
@@ -72,8 +72,17 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const position = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
       const life = page.getByRole('button', { name: 'Life', exact: true });
       const lifeBox = (await life.boundingBox({ timeout: 5000 }))!;
-      const panel = page.getByRole('complementary', { name: 'Selected place' });
       const selectedId = detail.selection_osm_id ?? detail.osm_id;
+      const landmark = JSON.parse(
+        readFileSync(
+          new URL(
+            `../../../packages/content/cities/${city.slug}/landmarks/${sample.slug}.json`,
+            import.meta.url,
+          ),
+          'utf8',
+        ),
+      ) as Landmark;
+      const panel = page.getByRole('dialog', { name: landmark.name.en });
       await expect(life).toHaveAttribute('aria-pressed', 'false');
       for (const enabled of [false, true]) {
         if (enabled) {

@@ -13,7 +13,7 @@ function pickVariant(art: LandmarkArt) {
 
 /**
  * A landmark's front-view drawing (the city pack's `art/`), colored by its palette roles. It
- * belongs in the info panel, never on the map, which is strictly top-down (SPEC.md §4).
+ * belongs in the facts dialog's Drawing disclosure; the map is strictly top-down (SPEC.md §4).
  */
 export function ArtView({ art }: { art: LandmarkArt }) {
   const variant = pickVariant(art);

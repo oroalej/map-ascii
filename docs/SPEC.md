@@ -7,7 +7,7 @@ ASCII Atlas is a generic engine for explorable, ASCII-rendered city maps. Each c
 A city opens on its surrounding region drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through the region and into the city's subdivisions, its center, and individual streets and buildings. (For Naga: Bicol peninsula → Camarines Sur → barangays → the Centro → streets.) Visitors can:
 
 - drag and zoom around the map
-- tap a place to fly to it
+- tap a landmark with sourced facts to open its facts beside it
 - search with `/`
 - take a guided tour
 - scrub a year slider to watch the city change
@@ -23,7 +23,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 | City | 9.5–13 | City boundary, subdivision outlines, main rivers, highways | City and subdivision names |
 | District | 13–15.5 | All roads, building blocks as solid fill, parks, water | Districts, major roads, key landmarks |
 | Street | 15.5–17.5 | Individual building footprints, trees, minor roads, alleys | Key street names (primary to secondary roads), POIs |
-| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything, including the other street names; info panel auto-suggests |
+| Place | 17.5–21 | Detailed landmark rendering from above (roof ridges, belfries, domes, monument bases), entrances, plazas, street furniture, roads at their real width | Everything, including the other street names; facts for eligible landmarks |
 
 **Cell size.** Map characters get smaller as the visitor zooms in, in steps, so closer views fit more cells and more detail: 8 CSS px wide below z13, 7 from z13, 6 from z15, and 5 from z16.5, each 1.8× as tall as it is wide (configurable; small screens keep at least 6 px). A step switches only once the zoom is 0.15 past its edge, so it doesn't flicker there. Detail that is about cell size (building walls, road strips, roof ridges) follows the ground each cell covers, a "detail zoom" one level higher for every halving of the cell width, so at z17 with 5 px cells buildings already have walls. What shows at each level (the table above) still follows the zoom. Labels keep a fixed, readable 10×18 cell on their own grid.
 
@@ -31,7 +31,7 @@ Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail ch
 
 The map is strictly top-down and north-up: it never tilts or rotates, and there is one camera mode. Drag to pan; scroll or pinch to zoom around the cursor or pinch center.
 
-**Fly-to.** A tap, a search result, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
+**Fly-to.** A search result, a Places in view choice, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
 **Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom where the region fills the viewport, so no space outside it shows (never below 7). On a screen shaped differently from the region, the widest view crops the region on one axis, and the visitor pans to see the rest.
 
@@ -92,7 +92,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 - Statues, memorials, and monuments (`▲`) appear from z17, and trees, benches, fountains, flagpoles, fences, and entrances wherever OSM maps them.
 - From z18, roads are drawn at their real width (the OSM `width`, else `lanes` × 3.2 m, else a class default) as strips with curbs, instead of 1-cell lines.
 - From z19, roofs use the real sun direction: slopes facing it brighten, opposing slopes darken, and near-perpendicular slopes retain height shading. Night uses the established fallback light. Untagged roofs are stylized hips; explicit gabled, hipped, pyramidal and flat shapes are respected. Conservative L-, T- and cross-shaped footprints get a ridge per wing, with continuous feature identity. Flat roofs, grounds, woodwork and landmark parts keep their existing shading. Adjoining buildings of equal height and wall style share a single joined wall; below outline zoom a dark seam separates them. These shapes are inferred from footprints, not surveyed roof geometry.
-- **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong in the info panel (Phase 2).
+- **Strictly top-down.** Everything on the map is drawn as seen from above, including landmarks. Landmarks add plan-view parts from their city pack (`plans/`): belfries, domes, and cupolas at their positions on the footprint, and a monument's tiered base as nested rings or squares around its `▲`. They are outlined like buildings. Front-view (façade) drawings of landmarks (`art/`) are not drawn on the map; they belong inside the facts dialog’s Drawing disclosure.
 - The Place level reaches z21, where a cell is about 0.4 × 0.7 m.
 
 **Landmark grounds.** City packs can enrich plazas, campuses, religious grounds, building aprons and terminal sites while preserving their canonical landmark selection. Curated ground and landscaping appear from z12.5, parking and courts from z16, plan structures and trees from z17, seating and fixtures from z18, and shrubs from z19. Kept grounds retain their existing fill; curated paving adds only a ground surface beneath standing buildings. Position and dimension estimates remain draft and carry sources and attribution.
@@ -101,7 +101,7 @@ Default theme is dark (background ≈ `#04050a`), with an optional light theme. 
 
 **Street markings.** At road-strip zoom, sidewalks appear as paved dotted bands (`·`) outside the curbs. Mapped sides and widths follow OSM; cities may supplement untagged major and secondary roads with derived sidewalks, which the legend labels "Sidewalks (partly derived)". Naga shows mapped sidewalks only pending a sourced survey. Stop lines (`─` or `│`) cross the inbound half of two-way roads, or the full width of an inbound one-way approach, at resolved traffic signals and mapped stop nodes. Their positions are illustrative geometry derived from the road and junction, rather than surveyed paint. One-way arrows (`↑ ↗ → ↘ ↓ ↙ ← ↖`) follow OSM direction with sourced city-pack corrections, spaced every 30 m and kept 8 m from original segment vertices. Simulated vehicles follow the same corrected directions; on a one-way road with no legal exit, they brake and wait rather than turn against the flow. All these markings show with Life off; crosswalk stripes retain their existing appearance.
 
-**Hover and selection.** Landmark hover brightens its cells and shows a pointer cursor; clicking selects that landmark. Leaving it or dragging restores the normal cursor. The selected feature gets an accent color and a slow shimmer.
+**Hover and selection.** Only curated landmarks with facts respond to pointer hover or click. Hover brightens their cells and shows a pointer cursor and name tooltip. Clicking selects the landmark and opens its facts without moving the camera, cancelling any running flight and pausing the tour. Leaving it or dragging restores the normal cursor. Other landmarks retain their labels and drawings. Search, tours, Places in view and shared URLs can select any feature; the selected feature gets an accent color and a slow shimmer. Only a selection with facts opens a dialog.
 
 Visible simulated agents also show a mouse tooltip naming their craft, figure, species or activity, always ending in “(simulated)”. Agent hover uses the pointed ASCII cell and visible surface rather than exact font ink, has priority over landmark tooltips, and changes neither cursor nor selection. Trees, roofs and label halos suppress hidden agents; birds remain above foliage. Ropes, poles and bird shadows have no tooltip. Dragging, leaving the canvas, turning Life off or enabling reduced motion clears it; touch interaction is unchanged.
 
@@ -111,9 +111,9 @@ The tooltip remains while visibility checks are renewed, including pointer movem
 
 Tooltips prefer the space below and right of the pointer, flip away from overflowing edges, and stay at least 8 CSS pixels inside the visible viewport. Long names use ellipsis within the available width. Simulated visibility validation normally expires 250 ms after its sampled frame. At low frame rates, the limit adapts to four recent frame intervals, capped at one second, so normal asynchronous readback latency does not flicker while stalled reads still lose their tooltip.
 
-**Legend focus.** Clicking a map entry or simulated Life group focuses that entry: matching glyphs take the accent colour, a soft halo reaches neighboring cells, and other map and agent colours dim to about half brightness. One entry can be focused at a time; clicking it again or pressing Escape clears focus. Focus survives collapsing the legend and opening a place panel; closing the panel with Escape also clears focus. Focus clears if the entry disappears, becomes ineligible, or the city changes. The effect pulses slowly; reduced motion keeps map focus steady and removes Life entries. Native toggle buttons support keyboard activation and expose their pressed state. Shops, streetlights, street markings, traffic signals, fish and illustrative utility wires/poles remain explanatory entries. Labels and label halos retain their ordinary appearance; amber vehicle indicators and traffic signal colours retain their meaning. Focus is transient and is never shared or saved in the URL.
+**Legend focus.** Clicking a map entry or simulated Life group focuses that entry: matching glyphs take the accent colour, a soft halo reaches neighboring cells, and other map and agent colours dim to about half brightness. One entry can be focused at a time; clicking it again or pressing Escape clears focus. Focus survives collapsing the legend and opening a facts dialog; closing the dialog with Escape also clears focus. Focus clears if the entry disappears, becomes ineligible, or the city changes. The effect pulses slowly; reduced motion keeps map focus steady and removes Life entries. Native toggle buttons support keyboard activation and expose their pressed state. Shops, streetlights, street markings, traffic signals, fish and illustrative utility wires/poles remain explanatory entries. Labels and label halos retain their ordinary appearance; amber vehicle indicators and traffic signal colours retain their meaning. Focus is transient and is never shared or saved in the URL.
 
-While focus is active, a “Focus: <entry> ×” clear button stays beside the zoom readout, including with the legend collapsed or a place panel open. Clearing it preserves the selected place and returns keyboard focus to the visible legend summary or the map. On screens up to 640 CSS pixels wide, legend buttons, the summary and this clear button have at least 44 CSS pixels of height; the list scrolls above attribution, and expanded place sheets leave 8 pixels below the active focus control. Category identity is independent of display wording and the city's subdivision label.
+While focus is active, a “Focus: <entry> ×” clear button stays beside the zoom readout, including with the legend collapsed or a facts dialog open. Clearing it preserves the selected place and returns keyboard focus to the visible legend summary or the map. On screens up to 640 CSS pixels wide, legend buttons, the summary and this clear button have at least 44 CSS pixels of height; the list scrolls above attribution, and expanded place sheets leave 8 pixels below the active focus control. Category identity is independent of display wording and the city's subdivision label.
 
 **Life layer.** The map is inhabited by simulated agents drawn over it. They are decoration, not data, and the legend labels them "(simulated)". They are derived only from the OSM geometry in the tiles, so they work for any city.
 
@@ -227,28 +227,29 @@ Shop areas without a building or another rendered area class receive one interio
 |---|---|
 | Drag | Pan |
 | Scroll / pinch | Zoom (anchored at cursor) |
-| Click / tap landmark | Fly to it and open the info panel (anywhere else: close it) |
-| Hover landmark | Highlight and tooltip with the name |
+| Click / tap landmark with facts | Open its facts beside it, keeping the camera in place (anywhere else: close it) |
+| Hover landmark with facts | Highlight and tooltip with the name |
 | `/` | Focus search |
 | `+` / `-` | Zoom |
 | `T` | Open tours menu |
 | `Y` | Toggle timeline |
 | `Space` | Pause/resume tour or timeline playback |
-| `Esc` | Close panel, cancel fly and clear legend focus together |
+| `Esc` | Close facts, cancel fly and clear legend focus together |
 
 **Search**
 - Fuzzy search over the current city's landmarks, streets, subdivisions, schools, places of worship, markets, and train stations.
 - Results are grouped by type and show the subdivision.
 - Enter flies to the top result. Arrow keys move through results.
 
-**Info panel**
-- Right side on desktop, bottom sheet on mobile.
-- Contents: name, type, subdivision, short story, photo carousel with "then/now" pairs, year built/demolished with certainty badge, sources, and links.
-- "Show on timeline" jumps the slider to the feature's key years.
+**Landmark facts**
+- A non-modal dialog beside the selected landmark on desktop, flipping or shifting within the visible canvas viewport. It follows pans, zooms, flights and resizes, and hides while its anchor is unresolved or off screen without clearing the selection. At 640 CSS pixels or below, the same content appears in a bottom sheet with expand, close and swipe-to-close controls.
+- Contents: type, name, subdivision, years when known, 3–5 short facts with source links and exact/circa dates, an optional Drawing disclosure, story, sources and an OpenStreetMap link. Photos and timeline actions remain future work.
+- Keyboard selection focuses the heading once when the dialog becomes visible. Pointer and programmatic selection preserve focus.
+- The legend hides only while the facts shell is visible.
 
 **Share**
 - Copies a URL whose path is the city (`/<city>`) and whose query encodes `lat`, `lng`, `z`, `year`, `tour`, `step`, and `sel` (selected feature id).
-- Loading that URL restores the exact view.
+- Loading that URL or using Back/Forward restores its encoded camera and highlights its selection without another flight. Unlisted selections open no facts dialog.
 
 **HUD**
 - Top right: the current zoom value and level name (e.g. `z 15.3 · District`), and a collapsible legend of the glyphs on screen and what they mean. The legend is built from the theme and lists only the classes the renderer reports in view, so it always matches the map. With the life layer on, "Street vendors" (a cart and the vendor) follows "People". It lists "Streetlights" while they are lit and the roads they line are in view.
@@ -274,7 +275,7 @@ Tour narration must be fact-checked against sources before shipping; draft text 
 
 **Player behavior**
 - `T` or the Tours button opens the tours menu.
-- Steps auto-advance: each flies to its camera, then holds for its duration. Narration appears in a caption card (a bottom sheet on phones, in place of the info panel).
+- Steps auto-advance: each flies to its camera, then holds for its duration. Narration appears in a caption card (a bottom sheet on phones for tour-step selections; explicit pointer or keyboard facts temporarily take precedence while the tour is paused).
 - Controls: pause, next, previous, exit, plus a progress bar. `Space` pauses or resumes, and `Esc` exits.
 - If the visitor grabs the camera (drag, zoom, or selecting something else), the tour pauses and a "Resume tour" chip appears. Resuming flies back to the current step. A hidden browser tab pauses the tour too.
 - A step can set the timeline year. The slider animates to it.
@@ -305,8 +306,8 @@ The HUD cycles Quality through Auto (default), High, and Low, remembering the ch
 - Mobile first-class: touch gestures, bottom-sheet panels, a larger minimum map cell size on small screens.
 - `prefers-reduced-motion`: no water animation, no wind (the Wind chip is disabled) and no rain, instant cell transitions, shorter fly-to, and no life layer agents (the "Life" toggle is disabled). The time-of-day lighting still applies, without the window flicker.
 - While the tab is hidden or not focused, or the map is scrolled off screen, nothing on it moves on its own: water, wind, rain, and the life layer's agents pause, and pick up where they were when it is watched again. The map still redraws for anything new (tiles arriving, the camera, the time of day).
-- Full keyboard navigation. Search results and the info panel are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
-- **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there, like a click.
+- Full keyboard navigation. Search results and the facts dialog are real DOM, readable by screen readers. The canvas has an `aria-label` describing the current view.
+- **Places in view.** The first stop in the tab order (hidden until focused, like a skip link) is a "Places in view (n)" button. It opens a list of the places, landmarks, and monuments whose names are on screen; choosing one selects it and flies there. Landmarks with facts also open their dialog; other choices retain their highlight without a dialog.
 - **Debug overlay.** `?debug=1` shows the renderer's frame rate, frame and cell-pass times, tile counts, and tile decode time, for checking the performance budgets on real devices. It is not part of the view state, so share URLs leave it out.
 - Text-size setting adjusts the cell size.
 - Languages: English first and always required. Each city declares extra content languages in its config (Naga: `fil` and `bcl`), and names and narration can carry those fields.

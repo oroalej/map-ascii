@@ -16,7 +16,7 @@ ascii-atlas/
 │  └─ web/                    Next.js App Router, static export
 │     ├─ app/                 layout, global styles, `/` landing (redirect or city picker)
 │     │  └─ [city]/           per-city page, static params from the city registry
-│     ├─ components/          CityAtlas, AtlasCanvas, SearchBox, InfoPanel, Hud, Timeline, TourPlayer
+│     ├─ components/          CityAtlas, AtlasCanvas, SearchBox, LandmarkFacts, Hud, Timeline, TourPlayer
 │     ├─ state/               Zustand store + URL sync
 │     └─ public/tiles/        per city: <city>.pmtiles, <city>.meta.json,
 │                             <city>.search-index.json, <city>.detail-layouts.json,
@@ -84,6 +84,7 @@ const atlas = createAtlas(canvas, {
 atlas.setCamera(partial, { animate?: boolean, duration?: number });
 atlas.flyTo(target: Partial<CameraState>, { duration?: number });  // duration overrides 0.8–3 s
 atlas.getCamera(): CameraState;
+atlas.project(lngLat: readonly [number, number]): [number, number]; // current canvas CSS pixels, before the first frame too
 atlas.setYear(year: number, { animate?: boolean });
 atlas.setTheme('dark' | 'light');
 atlas.setSpeech(enabled: boolean);
@@ -156,7 +157,7 @@ Residential extraction requires both the pack's fireworks capability and an acti
    - Per-target memory retains accepted slots through pans; only retained layouts get a three-cell margin beyond the fully visible cell bounds. Tile copies are filtered for eligibility before consolidation: onscreen text, deeper source-tile geometry, an eligible accepted copy, then longest run and geographic ties. Focus-only frames rebuild the overlay without rasterizing cells or adding a crown frame.
    - Place labels use the glyph overlay. Street labels use a batched glyph-quad pass over it, rotating whole words in screen pixels with the same atlas, theme, halo and deterministic dissolve. Their conservative rotated bounds participate in the same collision grid; short straight runs fall back to beside placement.
 7. **Picking.**
-   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below). A feature that fails the `interactive` option (the web app passes "is a landmark") counts as a miss: it is neither highlighted nor reported.
+   - On hover or click, read back a single texel from `idTex` at the pointer cell, asynchronously (`readback.ts`, see the notes below). A feature that fails the `interactive` option (the web app passes "is a landmark with facts in its city pack") counts as a miss: it is neither highlighted nor reported.
 
 Rasterization runs only when the camera, year, or tiles change. While watched, animation redraws the crown, Life, lighting, select and glyph passes at up to 30 Hz when idle, and on every animation frame for 500 ms after input (`pacing.ts`). Reduced motion or an unwatched map pauses autonomous animation; dirty views still redraw.
 
@@ -674,7 +675,7 @@ Candidate pooling improved the large artificial crowd but regressed small views.
   - asserts expected layers and properties
 - **E2E (Playwright):** a small smoke suite (`apps/web/e2e/smoke.spec.ts`) for what unit tests can't see, run against the static export on desktop Chromium; tests tagged `@mobile` also run on a Pixel 7 (touch and the bottom sheet). Logic (tour player, URL state, life preferences) is unit-tested instead. For each registered city:
   - `/` reaches a city, and the canvas draws with attribution
-  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"), and a click on a place opens the panel
+  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"), and a click on a landmark with facts opens its dialog without moving the camera
   - share URL round-trips
   - the map redraws after a lost WebGL context is restored
   - the city's first tour plays end to end

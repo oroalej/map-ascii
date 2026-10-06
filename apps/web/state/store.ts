@@ -57,7 +57,7 @@ export const useAtlasStore = create<AtlasState & AtlasActions>()((set) => ({
 }));
 
 /**
- * The live renderer, for components that drive it (search, the info panel, the HUD). It is kept
+ * The live renderer and its canvas, for components that drive it (search, facts, the HUD). It is kept
  * apart from `AtlasState`, which holds only plain data that can be mirrored in the URL.
  */
 export const useAtlasInstance = create<{ atlas: Atlas | null; canvas: HTMLCanvasElement | null }>()(
