@@ -24,7 +24,7 @@ export function diagnosticFlags(args: readonly string[]) {
       resume = true;
       continue;
     }
-    const match = /^(--output|--case|--baseline|--probe-seconds)(?:=(.*))?$/.exec(arg);
+    const match = /^(--output|--case|--baseline|--probe-seconds|--input-root)(?:=(.*))?$/.exec(arg);
     if (!match || values.has(match[1]!))
       throw new Error(`Unknown or repeated diagnostic option: ${arg}`);
     const value = match[2] ?? args[++i];
@@ -44,7 +44,7 @@ export function diagnosticFlags(args: readonly string[]) {
     throw new Error('--baseline requires --output so snapshots stay beside the report');
   if (!diagnosticCases.some((c) => c.key.startsWith(prefix)))
     throw new Error(`No diagnostic cases match ${JSON.stringify(prefix)}`);
-  return { output, prefix, baseline, probe, resume };
+  return { output, prefix, baseline, probe, resume, inputRoot: values.get('--input-root') };
 }
 
 /** The currently executed observer and measurement harness qualify immutable engine snapshots. */

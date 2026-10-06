@@ -61,6 +61,21 @@ it('parses separated case flags without silently selecting the full matrix', () 
     expect(() => diagnosticFlags(args)).toThrow();
 });
 
+it('keeps a frozen input root explicit without changing matrix coverage or horizons', () => {
+  const flags = diagnosticFlags([
+    '--input-root',
+    'D:/task/frozen inputs',
+    '--baseline=d2d3d656',
+    '--output=D:/task/pre.json',
+  ]);
+  expect(flags.inputRoot).toBe('D:/task/frozen inputs');
+  expect(flags.prefix).toBe('');
+  expect(flags.probe).toBeUndefined();
+  expect(diagnosticFlags(['--input-root=D:/task/inputs']).inputRoot).toBe('D:/task/inputs');
+  expect(() => diagnosticFlags(['--input-root'])).toThrow('Missing value');
+  expect(() => diagnosticFlags(['--input-root=a', '--input-root=b'])).toThrow('repeated');
+});
+
 it('rejects resumes after any executed measurement harness file changes', () => {
   const files = diagnosticHarnessFiles.map((path) => ({ path, content: 'original\r\n' }));
   const prior = diagnosticObserverHash(files);

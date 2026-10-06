@@ -51,7 +51,12 @@ import {
 import { summary } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const { output, prefix, baseline, probe, resume } = diagnosticFlags(process.argv.slice(2));
+const { output, prefix, baseline, probe, resume, inputRoot } = diagnosticFlags(
+  process.argv.slice(2),
+);
+// Runtime snapshots remain in the task checkout; both measurement arms may
+// consume the same frozen city inputs when newer main data changes its format.
+const inputsRoot = inputRoot ? resolve(root, inputRoot) : root;
 const snapshotDestination = output && resolve(dirname(output), `diag-source-${Date.now()}`);
 const snapshot = baseline
   ? await snapshotRevision(root, baseline, snapshotDestination!)
@@ -106,19 +111,21 @@ const observerHash = diagnosticObserverHash(
     })),
   ),
 );
-const { packs, errors } = await loadCityPacks(resolve(root, 'packages/content'), { only: 'naga' });
+const { packs, errors } = await loadCityPacks(resolve(inputsRoot, 'packages/content'), {
+  only: 'naga',
+});
 if (errors.length || !packs[0]) throw new Error(JSON.stringify(errors));
 const pack = packs[0],
   config = pack.city;
-const metadata = await readFile(resolve(root, 'apps/web/public/tiles/naga.meta.json'));
+const metadata = await readFile(resolve(inputsRoot, 'apps/web/public/tiles/naga.meta.json'));
 const meta = CityMeta.parse(JSON.parse(metadata.toString()));
 const processionData = pack.content.processions.length
-  ? await readFile(resolve(root, `apps/web/public/tiles/${config.slug}.processions.json`))
+  ? await readFile(resolve(inputsRoot, `apps/web/public/tiles/${config.slug}.processions.json`))
   : undefined;
 const processions = processionData
   ? CityProcessions.parse(JSON.parse(processionData.toString())).processions
   : [];
-const archive = await openArchive(config.slug);
+const archive = await openArchive(config.slug, inputsRoot);
 const hash = (data: string | Uint8Array) => createHash('sha256').update(data).digest('hex');
 const size = { width: 1920, height: 1080 };
 const dt = 1 / 30,
@@ -203,6 +210,7 @@ async function save(complete: boolean) {
     revision,
     sourceHash,
     sourceSnapshot: snapshotDestination,
+    inputRoot: inputsRoot,
     dirty,
     ...diagnosticCompletion(
       complete,
@@ -278,7 +286,18 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
       travelled: yielding.travelled,
       path: yieldPath && structuredClone(yieldPath),
     },
+    localYield: yieldPath && structuredClone(yieldPath),
     junction: {
+      participants:
+        typeof state.junctions.snapshot === 'function'
+          ? state.junctions
+              .snapshot()
+              .filter((record) => record.movement.key === state.junctions.movement(m)?.key)
+              .map((record) => ({
+                ...record,
+                actor: structuredClone(state.tiles.get(record.tileKey)?.movers[record.index]),
+              }))
+          : undefined,
       movement: state.junctions.movement(m),
       granted: state.junctions.granted(m),
       waited: state.junctions.waited(m),
