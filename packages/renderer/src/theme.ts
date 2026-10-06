@@ -1,3 +1,4 @@
+import { PEDESTRIAN_GLYPHS } from './life/pedestrian-glyphs';
 import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
@@ -579,6 +580,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...personGlyphs().filter((glyph) => figureOf(glyph)?.stage !== undefined),
     ...PUFF_GLYPHS,
     ...CANDLE_GLYPHS,
+    ...PEDESTRIAN_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];

@@ -1,3 +1,5 @@
+import { PED_STOP, PED_WALK, PedestrianPart } from './pedestrian-glyphs';
+import { RoadAccess } from './terrain';
 import type { BuntingProjection } from './bunting-junctions';
 /** Static street hardware, independent of the life population and lighting texture. */
 import {
@@ -27,7 +29,7 @@ import {
   SIDE_CELLS,
   type LightGrid,
 } from './lights';
-import { signalState } from './signals';
+import { pedestrianState, signalState } from './signals';
 import {
   packSeasonalFixtures,
   isSeasonalFixture,
@@ -49,6 +51,13 @@ export type LegacyStreetFixture = FixtureBody &
         style?: 'streetlight' | 'lantern';
       }
     | { kind: 'signal'; group: 'a' | 'b'; midBlock: boolean }
+    | {
+        kind: 'pedestrian-signal';
+        group: 'a' | 'b';
+        midBlock: boolean;
+        crossing: string;
+        side: number;
+      }
     | { kind: 'flagpole'; flag: 'PH' }
   );
 export type StreetFixture = UtilityFixture | LegacyStreetFixture | SeasonalFixture;
@@ -58,6 +67,7 @@ const seasonalInputs = new WeakMap<readonly StreetFixture[], readonly SeasonalFi
 export type FixtureVisibility = {
   streetlights: boolean;
   trafficSignals: boolean;
+  pedestrianSignals?: boolean;
   utilities: boolean;
   seasonal?: SeasonalVisibility;
 };
@@ -78,6 +88,8 @@ export type FixtureGrid = LightGrid & {
 export const FixturePart = {
   ...UtilityPart,
   ...SeasonalPart,
+  pedestrianStop: PedestrianPart.stop,
+  pedestrianWalk: PedestrianPart.walk,
   base: 1,
   arm: 2,
   housing: 3,
@@ -205,6 +217,69 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
       }
     }
   }
+  const access = new RoadAccess(
+    (geo.areas ?? []).filter((a) => a.kind === 'carriageway').map((a) => a.rings),
+    [],
+  );
+  const vehicleBases = out
+    .filter((f) => f.kind === 'signal')
+    .map((f) => lngLatToTile(tile, ...f.base));
+  for (const crossing of geo.controlledCrossings ?? []) {
+    if (!crossing.sides) continue;
+    const control = lngLatToTile(tile, ...crossing.controller.at);
+    const theta = (crossing.bearing * Math.PI) / 180,
+      along = { x: Math.sin(theta), y: -Math.cos(theta) };
+    const projection =
+      (crossing.anchor.x - control.x) * along.x + (crossing.anchor.y - control.y) * along.y;
+    const preferred =
+      Math.abs(projection) > 0.01 ? Math.sign(projection) : crossing.controller.seed & 1 ? 1 : -1;
+    for (const [sideIndex, side] of crossing.sides.entries()) {
+      let anchor: { x: number; y: number } | undefined;
+      for (let depth = 0; depth < 10 && !anchor; depth++)
+        for (let extra = 0; extra < 12 && !anchor; extra++)
+          for (const direction of [preferred, -preferred]) {
+            const p = {
+              x:
+                side.centre.x +
+                along.x * direction * (1.8 + extra * 0.5) * perMeter -
+                side.inward.x * (0.3 + depth * 0.5) * perMeter,
+              y:
+                side.centre.y +
+                along.y * direction * (1.8 + extra * 0.5) * perMeter -
+                side.inward.y * (0.3 + depth * 0.5) * perMeter,
+            };
+            if (
+              access.allows(
+                [
+                  {
+                    ...p,
+                    hx: side.inward.x,
+                    hy: side.inward.y,
+                    length: 0.2 * perMeter,
+                    width: 0.2 * perMeter,
+                  },
+                ],
+                false,
+              ) &&
+              vehicleBases.every((v) => Math.hypot(v.x - p.x, v.y - p.y) >= 1.5 * perMeter)
+            ) {
+              anchor = p;
+              break;
+            }
+          }
+      if (!anchor || anchor.x < 0 || anchor.y < 0 || anchor.x >= EXTENT || anchor.y >= EXTENT)
+        continue;
+      out.push({
+        ...body(anchor.x, anchor.y, side.inward.x, side.inward.y, 1.2 * perMeter),
+        kind: 'pedestrian-signal',
+        crossing: crossing.id,
+        side: sideIndex,
+        group: crossing.controller.walk,
+        midBlock: crossing.controller.midBlock,
+        seed: crossing.controller.seed,
+      });
+    }
+  }
   return out;
 }
 
@@ -234,6 +309,13 @@ export type PackedFixtures = {
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
+  pedestrians?: {
+    seed: number;
+    group: 'a' | 'b';
+    midBlock: boolean;
+    cells: number[];
+    state: number;
+  }[];
   utilityCells: number[];
   /** Projected cloth envelopes; hardware owns its cells throughout the animation. */
   flags: FlagCloth[];
@@ -315,6 +397,15 @@ export function updateFixtureFlags(packed: PackedFixtures, motion: FixtureMotion
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
 export function updateFixtureSignals(packed: PackedFixtures, clock: number): boolean {
   let changed = false;
+  for (const ped of packed.pedestrians ?? []) {
+    const phase = pedestrianState(ped.seed, clock, ped.midBlock, ped.group);
+    const state =
+      phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
+    if (state === ped.state) continue;
+    ped.state = state;
+    for (const at of ped.cells) packed.texels[at + 2] = state;
+    changed = true;
+  }
   for (const signal of packed.signals) {
     const color = signalColor[signalState(signal.seed, clock, signal.midBlock)[signal.group]];
     if (color === signal.color) continue;
@@ -323,6 +414,22 @@ export function updateFixtureSignals(packed: PackedFixtures, clock: number): boo
     changed = true;
   }
   return changed;
+}
+
+export function updatePedestrianVisibility(
+  packed: PackedFixtures,
+  cols: number,
+  visible?: (c: number, r: number) => boolean,
+) {
+  const shown = (packed.pedestrians ?? []).some((p) =>
+    p.cells.some(
+      (at) =>
+        packed.texels[at + 3]! > 0 &&
+        (!visible || visible((at / 4) % cols, Math.floor(at / 4 / cols))),
+    ),
+  );
+  if (shown) packed.visibility.pedestrianSignals = true;
+  else delete packed.visibility.pedestrianSignals;
 }
 
 /**
@@ -348,6 +455,7 @@ export function packFixtures(
     texels: out,
     visibility: { streetlights: false, trafficSignals: false, utilities: false },
     signals: [],
+    pedestrians: [],
     utilityCells: [],
     flags: [],
     cloth: {
@@ -593,6 +701,90 @@ export function packFixtures(
       packed.signals.push(signal);
     }
   }
+  for (const fixture of fixtures) {
+    if (fixture.kind !== 'pedestrian-signal') continue;
+    const detail = Math.max(0, Math.min(1, (zoom - 18) / 0.5));
+    if (
+      detail === 0 ||
+      (detail < 1 && (placeSeed(fixture.seed, fixture.seed + 1) & 255) / 256 >= detail)
+    )
+      continue;
+    const [bc, br] = grid.toCell(...fixture.base),
+      baseC = Math.floor(bc),
+      baseR = Math.floor(br);
+    const plan = (dx: number, dy: number) => {
+      const c = baseC + dx,
+        r = baseR + dy,
+        cells: { c: number; r: number; glyph: string; part: number }[] = [];
+      for (let row = 0; row < 4; row++)
+        for (let col = -1; col <= 1; col++) {
+          const lens = col === 0 && (row === 1 || row === 2);
+          cells.push({
+            c: c + col,
+            r: r - 5 + row,
+            glyph: lens ? (row === 1 ? PED_STOP : PED_WALK) : col === 0 ? '─' : '│',
+            part: lens
+              ? row === 1
+                ? FixturePart.pedestrianStop
+                : FixturePart.pedestrianWalk
+              : FixturePart.housing,
+          });
+        }
+      cells.push(
+        { c, r: r - 1, glyph: '│', part: FixturePart.arm },
+        { c, r, glyph: '▪', part: FixturePart.base },
+      );
+      return cells;
+    };
+    let chosen: ReturnType<typeof plan> | undefined;
+    for (let radius = 0; radius <= 12 && !chosen; radius++)
+      for (let dy = -radius; dy <= radius && !chosen; dy++)
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const candidate = plan(dx, dy);
+          if (
+            candidate.every(
+              ({ c, r }) =>
+                c >= 0 &&
+                r >= 0 &&
+                c < grid.cols &&
+                r < grid.rows &&
+                owners[r * grid.cols + c] === -1,
+            )
+          ) {
+            chosen = candidate;
+            break;
+          }
+        }
+    if (
+      !chosen ||
+      chosen.some((cell) => glyphIndex(cell.glyph) <= 0 || glyphIndex(cell.glyph) > MAX_GLYPHS)
+    )
+      continue;
+    const phase = pedestrianState(fixture.seed, clock, fixture.midBlock, fixture.group);
+    const state =
+      phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
+    const ped = {
+      seed: fixture.seed,
+      group: fixture.group,
+      midBlock: fixture.midBlock,
+      cells: [] as number[],
+      state,
+    };
+    for (const { c, r, glyph, part } of chosen) {
+      const at = (r * grid.cols + c) * 4,
+        code = glyphIndex(glyph);
+      if (code <= 0 || code > MAX_GLYPHS) continue;
+      owners[r * grid.cols + c] = ordered.length + (packed.pedestrians?.length ?? 0);
+      [out[at], out[at + 1]] = packGlyph(code, part);
+      out[at + 2] = state;
+      out[at + 3] = Math.round(bandVisibility({ min: 17 }, zoom) * 255);
+      if (part === FixturePart.pedestrianStop || part === FixturePart.pedestrianWalk)
+        ped.cells.push(at);
+    }
+    packed.pedestrians!.push(ped);
+  }
+  updatePedestrianVisibility(packed, grid.cols, grid.visible);
   const utilities = fixtures.filter(
     (f): f is UtilityFixture => f.kind === 'utility-pole' || f.kind === 'utility-span',
   );

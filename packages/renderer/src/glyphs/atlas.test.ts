@@ -1,3 +1,4 @@
+import { PEDESTRIAN_GLYPHS } from '../life/pedestrian-glyphs';
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
@@ -316,7 +317,7 @@ describe('glyph set', () => {
     expect(draw(CANDLE_GLYPHS[0]).at(5, 12)).toBeGreaterThan(0);
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
-      expect(glyphs.slice(408)).toEqual([...CANDLE_GLYPHS]);
+      expect(glyphs.slice(408)).toEqual([...CANDLE_GLYPHS, ...PEDESTRIAN_GLYPHS]);
       expect(
         createHash('sha256')
           .update(JSON.stringify(glyphs.slice(0, 408)))
@@ -333,6 +334,7 @@ describe('glyph set', () => {
         ...arrowGlyphs,
         ...SEASONAL_GLYPHS,
         ...CANDLE_GLYPHS,
+        ...PEDESTRIAN_GLYPHS,
         ...ACCESS_GLYPHS,
         ...Object.values(theme.styles).flatMap((s) => [...s.glyphs]),
         ...singleWall,

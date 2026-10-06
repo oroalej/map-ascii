@@ -84,6 +84,7 @@ import {
   type FixtureMotion,
   type PackedFixtures,
   type StreetFixture,
+  updatePedestrianVisibility,
   type FixtureVisibility,
 } from './life/fixtures';
 import type { TileId } from './tiles';
@@ -887,6 +888,12 @@ export function fixturePass(
   ) {
     cache.packed.visibility.utilities = utilityViewportVisibility(
       cache.packed.utilityCells,
+      targets.cols,
+      (c, r) =>
+        c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
+    );
+    updatePedestrianVisibility(
+      cache.packed,
       targets.cols,
       (c, r) =>
         c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,

@@ -1,3 +1,4 @@
+import { PED_STOP, PED_WALK } from '../life/pedestrian-glyphs';
 /**
  * The glyph atlas: every glyph a theme uses, rasterized once at the device-pixel cell size into
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
@@ -382,6 +383,32 @@ function drawSeasonal(slot: Slot, glyph: string) {
     }
 }
 
+function drawPedestrian(slot: Slot, walking: boolean) {
+  const pixel = (x: number, y: number, w = 1, h = 1) =>
+    fill(
+      slot,
+      Math.floor((x * slot.w) / 7),
+      Math.floor((y * slot.h) / 11),
+      Math.ceil(((x + w) * slot.w) / 7),
+      Math.ceil(((y + h) * slot.h) / 11),
+    );
+  pixel(3, 1, 2, 2);
+  pixel(3, 3, 2, 4);
+  if (walking) {
+    pixel(1, 4, 2, 1);
+    pixel(5, 5, 1, 2);
+    pixel(2, 7, 1, 2);
+    pixel(1, 9, 1, 1);
+    pixel(4, 7, 1, 1);
+    pixel(5, 8, 1, 2);
+  } else {
+    pixel(2, 4, 1, 3);
+    pixel(5, 4, 1, 3);
+    pixel(3, 7, 1, 3);
+    pixel(5, 7, 1, 3);
+  }
+}
+
 /**
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
  * figure, a bird, a dog, or a vendor's cart.
@@ -400,6 +427,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
+  else if (glyph === PED_STOP || glyph === PED_WALK) drawPedestrian(slot, glyph === PED_WALK);
   else if (glyph === STALL_GLYPH) drawStall(slot);
   else if (
     (SEASONAL_GLYPHS as readonly string[]).includes(glyph) ||
