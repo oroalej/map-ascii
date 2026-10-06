@@ -1,4 +1,4 @@
-import { frameBetween } from './frames';
+import { metricFrame } from './frames';
 import { VEHICLES } from './vehicles';
 import { COS20, JUNCTION } from './config';
 import type { JunctionTable, Movement } from './junctions';
@@ -39,16 +39,16 @@ export class JunctionTraffic {
     const ref = this.reference!;
     let cached = this.frames.get(life);
     if (cached?.reference === ref) return cached;
-    const f = frameBetween(life.tile, ref.tile);
+    const f = metricFrame(life, ref);
     if (!cached) {
       cached = { reference: ref, x: 0, y: 0, units: 0, scale: 0 };
       this.frames.set(life, cached);
     }
     cached.reference = ref;
-    cached.x = f.x / ref.perMeter;
-    cached.y = f.y / ref.perMeter;
-    cached.units = f.scale / ref.perMeter;
-    cached.scale = life.perMeter * cached.units;
+    cached.x = f.x;
+    cached.y = f.y;
+    cached.units = f.scale / life.perMeter;
+    cached.scale = f.scale;
     return cached;
   }
   add(life: TileLife, m: Mover) {

@@ -12,7 +12,7 @@ import { MOMENTS } from './moments';
  */
 import { makeCellGuard } from './cell-guard';
 import type { SpeechCue } from './moments';
-import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
+import { frameBetween, metricFrame, overlaps, masked, cede, ownedFootprints } from './frames';
 import {
   projectMover,
   SegmentGrid,
@@ -1079,6 +1079,7 @@ export class TileLife {
   private readonly along: Float64Array;
   /** Line ends by position: packed position → line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
+  private readonly exitHeading = new Float64Array(4);
   private readonly curvable: Uint8Array;
   /** Fixed obstacles lanes bend around (`setLaneTerrain`); none without a world guard. */
   private laneTerrain?: LaneTerrain;
@@ -3458,6 +3459,20 @@ export class TileLife {
         ? plan.exit
         : undefined;
     const remembered = current ? m.next : undefined;
+    const headings = this.exitHeading;
+    let useTurnable = false;
+    const turnLimit = Math.cos((FILLET.maxAngle * Math.PI) / 180);
+    if (m.kind === 'vehicle') {
+      this.writeEndHeading(arrived, headings);
+      for (const code of exits ?? []) {
+        if (!this.legalExit(m, code, arrived)) continue;
+        this.writeEndHeading(code, headings, 2);
+        if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! >= turnLimit) {
+          useTurnable = true;
+          break;
+        }
+      }
+    }
     let only: number | undefined,
       count = 0;
     let hasReserved = false,
@@ -3465,6 +3480,10 @@ export class TileLife {
       hasRemembered = false;
     for (const code of exits ?? []) {
       if (!this.legalExit(m, code, arrived)) continue;
+      if (useTurnable) {
+        this.writeEndHeading(code, headings, 2);
+        if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! < turnLimit) continue;
+      }
       only = code;
       count++;
       hasReserved ||= code === reserved;
@@ -3602,6 +3621,11 @@ export class TileLife {
 
   /** Heading from a line end into that line, skipping repeated endpoint coordinates. */
   private endHeading(code: number): readonly [number, number] {
+    const result: [number, number] = [0, 0];
+    this.writeEndHeading(code, result);
+    return result;
+  }
+  private writeEndHeading(code: number, result: number[] | Float64Array, offset = 0): void {
     const line = code >> 1;
     const dir = (code & 1) === 0 ? 1 : -1;
     const end = dir === 1 ? this.first(line) : this.last(line);
@@ -3610,9 +3634,13 @@ export class TileLife {
       const dx = this.geo.coords[v * 2]! - this.geo.coords[end * 2]!;
       const dy = this.geo.coords[v * 2 + 1]! - this.geo.coords[end * 2 + 1]!;
       const length = Math.hypot(dx, dy);
-      if (length > 0) return [dx / length, dy / length];
+      if (length > 0) {
+        result[offset] = dx / length;
+        result[offset + 1] = dy / length;
+        return;
+      }
     }
-    return [0, 0];
+    result[offset] = result[offset + 1] = 0;
   }
 
   private plannedExit(
@@ -4165,7 +4193,10 @@ export class TileLife {
         }
         if (r.carried && !r.inside && candidate) {
           r.carried = false;
-          this.submitJunction(candidate, candidate.ahead < -0.05 * pm && candidate.line === m.line);
+          this.submitJunction(
+            candidate,
+            candidate.ahead < -JUNCTION.insideToleranceM * pm && candidate.line === m.line,
+          );
         } else if (r.carried) {
           const availableRoom = traffic.room(m, previous, this);
           this.junctionRoom = availableRoom;
@@ -4174,7 +4205,6 @@ export class TileLife {
             this.carriedReady,
             availableRoom,
             previous.key,
-            undefined,
             traffic,
           );
           if (refreshed) requests.push(refreshed);
@@ -4183,12 +4213,18 @@ export class TileLife {
           previous.boxAhead = previous.ahead;
           this.submitJunction(previous, true);
         } else if (candidate)
-          this.submitJunction(candidate, candidate.ahead < -0.05 * pm && candidate.line === m.line);
+          this.submitJunction(
+            candidate,
+            candidate.ahead < -JUNCTION.insideToleranceM * pm && candidate.line === m.line,
+          );
         else table.release(m, previous.key); // A committed route was abandoned, not rear-cleared.
         if (candidate) movements.splice(movements.indexOf(candidate), 1);
       }
       for (const movement of movements)
-        this.submitJunction(movement, movement.ahead < -0.05 * pm && movement.line === m.line);
+        this.submitJunction(
+          movement,
+          movement.ahead < -JUNCTION.insideToleranceM * pm && movement.line === m.line,
+        );
       requests.sort(
         (a, b) =>
           Number(b.inside) - Number(a.inside) ||
@@ -4306,8 +4342,10 @@ export class TileLife {
   private capJunction(index: number, movement: Movement, dt: number): void {
     const pm = this.perMeter;
     const ahead =
-      movement.ahead >= -0.05 * pm ? movement.ahead : (movement.boxAhead ?? movement.ahead);
-    if (ahead < -0.05 * pm) return;
+      movement.ahead >= -JUNCTION.insideToleranceM * pm
+        ? movement.ahead
+        : (movement.boxAhead ?? movement.ahead);
+    if (ahead < -JUNCTION.insideToleranceM * pm) return;
     const m = this.movers[index]!;
     this.speeds[index] = Math.min(
       this.speeds[index]!,
@@ -4410,7 +4448,7 @@ export class TileLife {
           }
         }
         for (const { movement } of table.holds(m)) {
-          if (!table.granted(m, movement.key)) this.capJunction(i, movement, dt);
+          if (!table.canEnter(m, movement.key)) this.capJunction(i, movement, dt);
         }
       }
     return speeds;
@@ -4580,7 +4618,8 @@ export class TileLife {
           const clearing = this.clearingJunctions;
           clearing.clear();
           for (const r of table.holds(m))
-            if (r.inside && table.granted(m, r.movement.key)) clearing.add(r.movement.key);
+            if (r.inside && r.since !== undefined && r.authorizedOutside)
+              clearing.add(r.movement.key);
           this.signals.vehicleLimit(m, dt, clock, limit, clearing);
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
@@ -4712,12 +4751,19 @@ export class TileLife {
           );
         if (m.kind === 'vehicle') {
           livePedestrians ??= this.standalonePedestrians(shows, near, env);
+          let revoked = false;
           for (const r of table.holds(m)) {
             const p = r.movement;
-            if (r.inside || this.junctionClear(p, livePedestrians)) continue;
+            if (r.inside || r.since === undefined || this.junctionClear(p, livePedestrians))
+              continue;
             table.revokeGrant(m, p.key);
             this.capJunction(i, p, dt);
+            revoked = true;
           }
+          if (revoked)
+            for (const r of table.holds(m))
+              if (!r.inside && !table.canEnter(m, r.movement.key))
+                this.capJunction(i, r.movement, dt);
         }
         if (pedestrianTarget && m.kind === 'vehicle') speeds[i] = pedestrianTarget(m, speeds[i]!);
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
@@ -5895,6 +5941,7 @@ export class LifeWorld {
   private readonly junctionTraffic = new JunctionTraffic();
   private crossingGeometryVersion = 0;
   private preparedCrossingVersion = -1;
+  private readonly dirtyCrossingConsumers = new Set<TileLife>();
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
@@ -6008,6 +6055,7 @@ export class LifeWorld {
     this.covers.clear();
     this.mixedZoom = false;
     this.junctions.clear();
+    this.dirtyCrossingConsumers.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
     this.groundBuffers = new WeakMap();
@@ -6357,7 +6405,7 @@ export class LifeWorld {
           [...this.tiles].find(([, life]) => life === target)![0],
           c.life,
         );
-        if (this.junctions.movement(c.m)) this.crossingGeometryVersion++;
+        if (this.junctions.movement(c.m)) this.dirtyCrossingConsumers.add(target);
         if (replace) {
           this.junctions.release(replace);
           guard.remove(replace);
@@ -6402,12 +6450,7 @@ export class LifeWorld {
     const origin = (life: TileLife) => {
       const found = terrain.origins.get(life);
       if (found) return found;
-      const scale = 2 ** (ref!.tile.z - life.tile.z);
-      const at = {
-        x: ((life.tile.x * scale - ref!.tile.x) * EXTENT) / ref!.perMeter,
-        y: ((life.tile.y * scale - ref!.tile.y) * EXTENT) / ref!.perMeter,
-        scale: (scale * life.perMeter) / ref!.perMeter,
-      };
+      const at = metricFrame(life, ref!);
       terrain.origins.set(life, at);
       return at;
     };
@@ -7085,15 +7128,18 @@ export class LifeWorld {
     this.junctionTraffic.begin(this.tiles.values().next().value!);
     for (const tile of this.tiles.values())
       for (const m of tile.movers) if (eligibility.get(tile)!(m)) this.junctionTraffic.add(tile, m);
-    if (this.preparedCrossingVersion !== this.crossingGeometryVersion) {
+    const crossingGeometryChanged = this.preparedCrossingVersion !== this.crossingGeometryVersion;
+    if (crossingGeometryChanged || this.dirtyCrossingConsumers.size) {
       const sources = [...this.tiles.values()];
       for (const tile of sources) {
+        if (!crossingGeometryChanged && !this.dirtyCrossingConsumers.has(tile)) continue;
         const bounds = tile.junctionCrossings.bounds(this.junctions);
         tile.junctionCrossings.prepare(
           sources.filter((source) => tile.junctionCrossings.relevant(source, bounds)),
-          this.crossingGeometryVersion,
+          crossingGeometryChanged ? this.crossingGeometryVersion : undefined,
         );
       }
+      this.dirtyCrossingConsumers.clear();
       this.preparedCrossingVersion = this.crossingGeometryVersion;
     }
     for (const [key, tile] of this.tiles)
@@ -7238,7 +7284,7 @@ export class LifeWorld {
             [...this.tiles].find(([, life]) => life === target)![0],
             source,
           );
-          this.crossingGeometryVersion++;
+          this.dirtyCrossingConsumers.add(target);
         }
         guard.remove(m);
         if (m.kind === 'vehicle') guard(target, m);

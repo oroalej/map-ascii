@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { JunctionTable, type Movement } from './junctions';
 import { JunctionTraffic } from './junction-traffic';
 import { LifeBuilder } from './geometry';
@@ -33,6 +33,142 @@ const movement = (key = 'a', vertical = false): Movement => ({
   exit: { line: 0, along: 0, out: 1, hx: 1, hy: 0 },
   ahead: 2,
 });
+
+for (const [separation, turning] of [
+  [10, false],
+  [12, false],
+  [10, true],
+] as const)
+  it(`holds before a denied downstream box with ${separation}m storage geometry (turning=${turning}) and resumes`, () => {
+    const tile = { z: 16, x: 55192, y: 30266 },
+      pm = 1 / metersPerUnit(tile),
+      b = new LifeBuilder(),
+      a = { x: 2000, y: 2000 },
+      next = { x: a.x + (turning ? 0 : separation * pm), y: a.y - (turning ? separation * pm : 0) };
+    if (turning) {
+      b.line([{ x: 1000, y: a.y }, a], 0, 4);
+      b.line([a, next, { x: next.x, y: next.y - 100 * pm }], 0, 4);
+      b.line([a, { x: a.x + 100 * pm, y: a.y }], 0, 4);
+      b.line(
+        [{ x: next.x - 100 * pm, y: next.y }, next, { x: next.x + 100 * pm, y: next.y }],
+        0,
+        4,
+      );
+    } else {
+      b.line([{ x: 1000, y: a.y }, a, next, { x: 3000, y: a.y }], 0, 4);
+      for (const point of [a, next])
+        b.line([{ x: point.x, y: 1000 }, point, { x: point.x, y: 3000 }], 0, 4);
+    }
+    const life = new TileLife(tile, b.finish(), 1),
+      table = new JunctionTable(),
+      m = car();
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    Object.assign(m, {
+      x: a.x - 20 * pm,
+      y: a.y,
+      d: 1000 - 20 * pm,
+      speed: 8 * pm,
+      v: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+      paint: 0,
+      ...(turning
+        ? {
+            next: 2,
+            routing: {
+              seed: 1,
+              turns: 0,
+              plan: { line: 0, dir: 1, vertex: 1, exit: 2, radius: 4 },
+            },
+          }
+        : {}),
+    });
+    life.movers.push(m);
+    const junctions = life.junctionIndex.movements(m, 60 * pm, (line, dir) =>
+      life.seamExit(m, line, dir),
+    );
+    expect(junctions).toHaveLength(2);
+    const firstKey = junctions[0]!.key,
+      nextKey = junctions[1]!.key,
+      radius = junctions[0]!.junction.radius;
+    let open = false,
+      independentlyReleased = false;
+    const gate = vi
+      .spyOn(life, 'junctionClear')
+      .mockImplementation((p) => p.key !== nextKey || open);
+    const step = (frame: number, closeBeforeMovement = false) => {
+      const clock = frame / 30;
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, clock);
+      table.resolve(clock);
+      if (closeBeforeMovement) open = false;
+      life.step(1 / 30, undefined, undefined, undefined, { clock, rain: 0 }, undefined, {
+        junctions: table,
+      });
+      independentlyReleased ||= !table.movement(m, firstKey) && !!table.movement(m, nextKey);
+    };
+    for (let frame = 0; frame < 600; frame++) step(frame);
+    expect(table.granted(m, nextKey)).toBe(false);
+    if (separation === 10) {
+      expect(m.x + 2.2 * pm).toBeLessThanOrEqual(a.x - radius + 1e-7);
+      expect(table.canEnter(m, firstKey)).toBe(false);
+    } else expect(m.x - 2.2 * pm).toBeGreaterThanOrEqual(a.x + radius);
+    open = true;
+    step(600, true);
+    expect(table.granted(m, nextKey)).toBe(false);
+    if (separation === 10) expect(m.x + 2.2 * pm).toBeLessThanOrEqual(a.x - radius + 1e-7);
+    open = true;
+    for (let frame = 601; frame < 1200; frame++) step(frame);
+    const past = turning ? next.y - m.y : m.x - next.x;
+    expect(past / pm).toBeGreaterThan(20);
+    expect(independentlyReleased).toBe(true);
+    expect(table.movement(m, firstKey)).toBeUndefined();
+    expect(table.movement(m, nextKey)).toBeUndefined();
+    gate.mockRestore();
+  });
+
+for (const authorized of [false, true])
+  it(`preserves ${authorized ? 'earned' : 'absent'} signal-clearance provenance through occupied adoption`, () => {
+    const life = empty(),
+      target = empty(),
+      table = new JunctionTable(),
+      m = car(),
+      p = movement();
+    life.movers.push(m);
+    if (authorized) {
+      table.begin(new Set([life]));
+      table.request({
+        m,
+        life,
+        tileKey: 'source',
+        index: 0,
+        movement: p,
+        ready: true,
+        inside: false,
+        atLine: true,
+      });
+      table.resolve(0);
+    }
+    table.begin(new Set([life]));
+    table.request({
+      m,
+      life,
+      tileKey: 'source',
+      index: 0,
+      movement: p,
+      ready: false,
+      inside: true,
+    });
+    table.resolve(1);
+    expect(table.granted(m)).toBe(true); // Physical occupancy remains protected in either case.
+    expect(table.snapshot()[0]!.authorizedOutside).toBe(authorized ? true : undefined);
+    target.movers.push(m);
+    table.rebind(m, target, 'target', life);
+    expect(table.snapshot()[0]!.authorizedOutside).toBe(authorized ? true : undefined);
+  });
 
 it('reuses route lookup scratch, queries each hop once and keeps retained movements and movers intact', () => {
   const tile = { z: 16, x: 55192, y: 30266 },

@@ -8,6 +8,18 @@ export function frameBetween(from: TileId, to: TileId) {
   return { x: (from.x * scale - to.x) * EXTENT, y: (from.y * scale - to.y) * EXTENT, scale };
 }
 
+/** Affine transform between metric body coordinates, using structural tile owners. */
+export function metricFrame(
+  from: { tile: TileId; perMeter: number },
+  to: { tile: TileId; perMeter: number },
+) {
+  const frame = frameBetween(from.tile, to.tile);
+  frame.x /= to.perMeter;
+  frame.y /= to.perMeter;
+  frame.scale = (frame.scale * from.perMeter) / to.perMeter;
+  return frame;
+}
+
 export function overlaps(a: TileId, b: TileId): boolean {
   const z = Math.min(a.z, b.z);
   const aa = ancestorAt(a, z),

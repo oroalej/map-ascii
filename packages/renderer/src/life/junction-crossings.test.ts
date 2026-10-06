@@ -10,11 +10,107 @@ import { signalState } from './signals';
 import { kinematicsOf } from './config';
 import { reach } from './occupancy';
 import { VEHICLES } from './vehicles';
+import { continuityMover, continuityTile, left, right } from './testing/continuity';
 
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
 const humanView = (life: TileLife) =>
   (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians();
+
+it('keeps original and copied acute-fork arms tied to their own crossing', () => {
+  const b = new LifeBuilder(),
+    center = { x: 2000, y: 2000 },
+    hx = Math.cos(Math.PI / 9),
+    hy = Math.sin(Math.PI / 9);
+  for (const [x, y] of [
+    [1, 0],
+    [hx, hy],
+    [-1, 0],
+  ])
+    b.line([center, { x: center.x + x! * 100 * pm, y: center.y + y! * 100 * pm }], 0, 12);
+  const x = center.x + 12 * hx * pm,
+    y = center.y + 12 * hy * pm;
+  b.area('crossing', [
+    [
+      [-1.5, -6.5],
+      [1.5, -6.5],
+      [1.5, 6.5],
+      [-1.5, 6.5],
+    ].map(([a, s]) => ({
+      x: x + (hx * a! - hy * s!) * pm,
+      y: y + (hy * a! + hx * s!) * pm,
+    })),
+  ]);
+  b.line(
+    [
+      { x: x - 10 * hy * pm, y: y + 10 * hx * pm },
+      { x: x + 10 * hy * pm, y: y - 10 * hx * pm },
+    ],
+    3,
+    3,
+  );
+  const life = new TileLife(tile, b.finish(), 1);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  const j = life.junctionIndex.junctions[0]!,
+    arm = j.arms.find((a) => a.line === 1)!;
+  expect(life.junctionCrossings.forArm(j, arm)).toHaveLength(1);
+  expect(life.junctionCrossings.forArm(j, { ...arm })).toHaveLength(1);
+  expect(
+    life.junctionCrossings.forArm(
+      j,
+      j.arms.find((a) => a.line === 0),
+    ),
+  ).toHaveLength(0);
+  const car: Mover = {
+    kind: 'vehicle',
+    vehicle: 'car',
+    line: 2,
+    from: 5,
+    dir: -1,
+    d: 70 * pm,
+    x: center.x - 30 * pm,
+    y: center.y,
+    hx: 1,
+    hy: 0,
+    speed: 8 * pm,
+    paint: 0,
+    lane: 0,
+    pause: 0,
+    rank: 0,
+    next: 2,
+  };
+  const human: Mover = {
+    kind: 'person',
+    line: 3,
+    from: 6,
+    dir: 1,
+    d: 10 * pm,
+    x,
+    y,
+    hx: -hy,
+    hy: hx,
+    speed: 0,
+    paint: 0,
+    lane: 0,
+    pause: 100,
+    rank: 0,
+    group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
+  };
+  life.movers.push(car, human);
+  const movement = life.junctionIndex.movement(car, 60 * pm)!;
+  expect(movement.exit).toBe(arm);
+  expect(life.junctionClear(movement, humanView(life))).toBe(false);
+  const inbound = {
+    ...movement,
+    entry: arm,
+    inHx: -hx,
+    inHy: -hy,
+    ahead: 30 * pm,
+    boxAhead: 30 * pm,
+  };
+  life.junctionCrossings.holdAhead(inbound, false);
+  expect(inbound.ahead).toBeLessThan(inbound.boxAhead);
+});
 function fixture(signal = false, remoteCrossing?: number) {
   const b = new LifeBuilder(),
     center = { x: 2000, y: 2000 },
@@ -106,6 +202,27 @@ function fixture(signal = false, remoteCrossing?: number) {
   const table = (world as unknown as { junctions: JunctionTable }).junctions;
   return { world, life, car, human, table };
 }
+
+it('does not repeat live crossing queries for a denied and already capped hold', () => {
+  const { life, car, human, table } = fixture();
+  life.movers.push(human);
+  life.prepareTraffic(() => true);
+  life.requestJunctions(table, () => true, 0, '', undefined, humanView(life));
+  table.resolve(0);
+  expect(table.granted(car)).toBe(false);
+  const clear = vi.spyOn(life, 'junctionClear'),
+    distance = car.d,
+    movement = table.movement(car)!;
+  life.step(0.1, undefined, undefined, undefined, { clock: 0, rain: 0 }, undefined, {
+    junctions: table,
+  });
+  expect(clear).not.toHaveBeenCalled();
+  expect(car.d - distance).toBeLessThanOrEqual(
+    Math.max(0, movement.boxAhead ?? movement.ahead) + 1e-7,
+  );
+  expect(table.granted(car)).toBe(false);
+  clear.mockRestore();
+});
 
 it('excludes a remote road crossing while retaining the nearby entrance stripe', () => {
   const { life, car, human } = fixture(false, 30),
@@ -371,6 +488,106 @@ it('caches relevant crossing sources and invalidates on addition, replacement an
   f.world.step(0.01);
   expect(prepare).toHaveBeenCalledTimes(3);
   expect(owner.junctionCrossings.forArm(j, east)).toHaveLength(1);
+});
+it('refreshes only the receiving crossing consumer after a retained-hold seam transfer', () => {
+  const b = new LifeBuilder(),
+    x = 4096 - pm;
+  b.line(
+    [
+      { x: 3800, y: 2000 },
+      { x, y: 2000 },
+      { x: 4200, y: 2000 },
+    ],
+    0,
+    6,
+    77,
+  );
+  b.line(
+    [
+      { x, y: 1000 },
+      { x, y: 2000 },
+      { x, y: 3000 },
+    ],
+    1,
+    6,
+    88,
+  );
+  b.splitRoadJunctions(pm, 40);
+  const world = new LifeWorld(),
+    entry = { ...continuityTile(left), life: b.finish() },
+    remote = continuityTile({ ...right, x: right.x + 100 });
+  const remoteBuilder = new LifeBuilder(),
+    stripeX = 2000 + 8 * pm;
+  remoteBuilder.line(
+    [
+      { x: -100, y: 2000 },
+      { x: 4196, y: 2000 },
+    ],
+    0,
+    6,
+    77,
+  );
+  remoteBuilder.area('crossing', [
+    [
+      { x: stripeX - 1.5 * pm, y: 2000 - 6.5 * pm },
+      { x: stripeX + 1.5 * pm, y: 2000 - 6.5 * pm },
+      { x: stripeX + 1.5 * pm, y: 2000 + 6.5 * pm },
+      { x: stripeX - 1.5 * pm, y: 2000 + 6.5 * pm },
+    ],
+  ]);
+  remote.life = remoteBuilder.finish();
+  world.sync([entry, continuityTile(right), remote]);
+  const source = world.active(entry.key)!,
+    target = world.active(continuityTile(right).key)!,
+    far = world.active(remote.key)!;
+  for (const life of [source, target, far]) {
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+  }
+  const m = continuityMover(source, 4096 - 11 * pm);
+  Object.assign(m, { d: m.x - 3800, v: 10 * pm, next: 2 });
+  source.movers.push(m);
+  world.step(1 / 30);
+  const sourceBounds = vi.spyOn(source.junctionCrossings, 'bounds'),
+    sourceRelevant = vi.spyOn(source.junctionCrossings, 'relevant'),
+    targetBounds = vi.spyOn(target.junctionCrossings, 'bounds'),
+    targetPrepare = vi.spyOn(target.junctionCrossings, 'prepare');
+  for (let i = 0; i < 120 && source.movers.includes(m); i++) world.step(1 / 30);
+  expect(target.movers).toContain(m);
+  const table = (world as unknown as { junctions: JunctionTable }).junctions;
+  expect([...table.holds(m)].length).toBeGreaterThan(0);
+  const previousSources = [...targetPrepare.mock.calls];
+  world.step(1 / 30);
+  expect(sourceBounds).not.toHaveBeenCalled();
+  expect(sourceRelevant).not.toHaveBeenCalled();
+  expect(targetBounds).toHaveBeenCalledTimes(1);
+  expect(targetPrepare).toHaveBeenCalledTimes(previousSources.length + 1);
+  expect(targetPrepare.mock.lastCall![0]).toEqual([source, target]);
+  expect(targetPrepare.mock.lastCall![0]).not.toContain(far);
+
+  // A carried box can extend beyond the receiver's usual footprint. Its bounds must
+  // still admit newly relevant sources without invalidating any other consumer.
+  const hold = [...table.holds(m)][0]!,
+    carried = hold.movement.junction;
+  hold.movement.junction = {
+    ...carried,
+    x: 100 * 4096 + 2000,
+    arms: carried.arms.map((arm) => ({ ...arm, x: 100 * 4096 + 2000, y: carried.y })),
+  };
+  (world as unknown as { dirtyCrossingConsumers: Set<TileLife> }).dirtyCrossingConsumers.add(
+    target,
+  );
+  world.step(1 / 30);
+  expect(targetPrepare.mock.lastCall![0]).toContain(far);
+  const extended = hold.movement.junction;
+  expect(
+    target.junctionCrossings.forArm(
+      extended,
+      extended.arms.find((arm) => arm.hx === 1),
+    ),
+  ).toHaveLength(1);
+  expect(sourceBounds).not.toHaveBeenCalled();
+  expect(sourceRelevant).not.toHaveBeenCalled();
 });
 it('includes prepared crossings from a finer neighboring footprint', () => {
   const f = fixture(),

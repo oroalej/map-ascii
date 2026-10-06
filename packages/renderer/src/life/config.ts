@@ -159,6 +159,7 @@ export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookahe
 /** A terrain-cleared corner may run this far past its vertex, m. */
 export const FILLET_RUN_ON_M = 2 * FILLET.maxM;
 export const JUNCTION = {
+  insideToleranceM: 0.05,
   atLine: 3,
   linkedLookaheadM: 60,
   gap: 1.5,

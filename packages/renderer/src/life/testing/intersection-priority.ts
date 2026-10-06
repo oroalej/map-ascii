@@ -81,6 +81,9 @@ export function priorityFixture(
   if (!transit) life.scenes.sites.length = 0;
   // Remove ambient pausing/running only in the deterministic clearing fixture.
   Object.assign(life, { walkerRng: () => 0.999, runRng: () => 0.999 });
+  // These four residents are crossing witnesses, rather than boarding passengers.
+  // Service dwell remains finite and jeepneys still use both sites.
+  Object.assign(life.scenes, { rng: () => 0.999 });
   for (let arm = 0; arm < 4; arm++)
     for (let n = 0; n < 3; n++) {
       const [ox, oy] = arms[arm]!,
@@ -150,24 +153,6 @@ export function priorityFixture(
             },
           };
         }
-      for (const m of cursors.keys()) {
-        // Recovery can reverse an ordinary walker after a collision. The scripted clearing
-        // fixture commits to the legal clockwise loop instead; this does not move a walker.
-        if (m.dir === -1) {
-          const previous = m.from - 1,
-            coords = life.geo.coords;
-          const length = Math.hypot(
-            coords[m.from * 2]! - coords[previous * 2]!,
-            coords[m.from * 2 + 1]! - coords[previous * 2 + 1]!,
-          );
-          m.from = previous;
-          m.d = length - m.d;
-          m.dir = 1;
-          m.hx = -m.hx;
-          m.hy = -m.hy;
-        }
-        m.waiting = 0;
-      }
       for (const [m, from] of cursors)
         if (m.from !== from) {
           // Corners are outside every stripe and inward-curb query; provide finite clear windows.
@@ -197,6 +182,10 @@ export function observePriority(fixture: Fixture) {
     entriesPer60 = [0, 0, 0],
     unsafeEntriesPer60 = [0, 0, 0],
     pedestrianEpisodes = [0, 0, 0, 0],
+    walkers = life.movers.filter((m) => m.kind === 'person'),
+    walkerPositions = walkers.map((m) => ({ x: m.x, y: m.y })),
+    walkerDistancePer60 = Array.from({ length: 3 }, () => walkers.map(() => 0)),
+    crossingClearSecondsPer60 = Array.from({ length: 3 }, () => [0, 0, 0, 0]),
     occupied = [false, false, false, false],
     episodes = new Map<Mover, Map<string, { age: number; reported: boolean }>>(),
     positions = new Map<Mover, { x: number; y: number }>(),
@@ -264,6 +253,15 @@ export function observePriority(fixture: Fixture) {
       return guard?.pedestrians(life);
     },
     afterStep(dt: number) {
+      const window = Math.min(2, Math.floor((seconds + 1e-7) / 60));
+      for (let i = 0; i < walkers.length; i++) {
+        const m = walkers[i]!,
+          previous = walkerPositions[i]!;
+        walkerDistancePer60[window]![i]! +=
+          Math.hypot(m.x - previous.x, m.y - previous.y) / life.perMeter;
+        previous.x = m.x;
+        previous.y = m.y;
+      }
       const snapshots = table.snapshot();
       requests += snapshots.length;
       let frozenInside = 0;
@@ -305,6 +303,7 @@ export function observePriority(fixture: Fixture) {
           const now = guard.pedestrians(life).walkersInArea(crossings[i]!);
           if (now && !occupied[i]) pedestrianEpisodes[i]!++;
           occupied[i] = now;
+          if (!now) crossingClearSecondsPer60[window]![i]! += dt;
         }
       seconds += dt;
     },
@@ -328,6 +327,8 @@ export function observePriority(fixture: Fixture) {
         entriesPer60,
         unsafeEntriesPer60,
         pedestrianEpisodes,
+        walkerDistancePer60,
+        crossingClearSecondsPer60,
         entries,
         unsafeEntries,
         twoCarFreezes,

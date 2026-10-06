@@ -212,6 +212,17 @@ export class JunctionIndex {
     const linked = this.hasLinked ? this.movement(m, 60 * this.pm) : undefined;
     if (linked?.junction.linked && linked.ahead < 0) return false;
     const spec = VEHICLES[m.vehicle!];
+    const progress = this.along[m.from]! + m.dir * m.d;
+    for (const j of this.lines.get(m.line) ?? []) {
+      if (!j.controlled) continue;
+      const entry = j.arms.find(
+        (a) => a.line === m.line && a.out === -m.dir && a.inbound !== false,
+      );
+      if (entry?.stopAlong === undefined) continue;
+      const frontPastStop = m.dir * (progress - entry.stopAlong) + (spec.length * this.pm) / 2;
+      const rearPastBox = m.dir * (progress - entry.along) - (spec.length * this.pm) / 2;
+      if (frontPastStop > 0 && rearPastBox <= j.radius) return false;
+    }
     const body = this.spawnBody;
     body.x = m.x / this.pm;
     body.y = m.y / this.pm;
@@ -443,9 +454,13 @@ export type JunctionRequest = {
 type Hold = JunctionRequest & {
   arrival?: number;
   since?: number;
+  /** Signal clearing is earned by an outside grant, never by first observing occupancy. */
+  authorizedOutside?: boolean;
   carried?: boolean;
   seen?: boolean;
   surrenderedAt?: number;
+  /** Derived from the current committed-route requests. */
+  followingKey?: string;
 };
 const NO_RECORDS: readonly Hold[] = [];
 function sameExit(a: Hold, b: Hold): boolean {
@@ -508,6 +523,42 @@ export class JunctionTable {
   granted(m: Mover, key?: string): boolean {
     return this.record(m, key)?.since !== undefined;
   }
+  /** Keep provisional reservations available to the next box, while holding entry upstream
+   * when a denied downstream stop cannot store the complete vehicle outside this box. */
+  canEnter(m: Mover, key: string): boolean {
+    const records = this.records.get(m),
+      r = records?.get(key);
+    return !!records && !!r && this.admission(r, records, records.size);
+  }
+  private admission(r: Hold, records: Map<string, Hold>, remaining: number): boolean {
+    if (r.since === undefined) return false;
+    if (r.inside) return true;
+    if (remaining <= 0) return false;
+    const next = r.followingKey === undefined ? undefined : records.get(r.followingKey);
+    return !next || this.admission(next, records, remaining - 1) || this.storage(r, next);
+  }
+  private storage(a: Hold, b: Hold): boolean {
+    const first = a.movement,
+      next = b.movement;
+    if (a.life !== b.life || first.outHx * next.inHx + first.outHy * next.inHy <= COS20)
+      return false;
+    const half = (VEHICLES[a.m.vehicle!].length * a.life.perMeter) / 2,
+      entry = next.entry,
+      offset =
+        entry?.stopAlong !== undefined
+          ? next.dir * (entry.along - entry.stopAlong) + half
+          : next.junction.radius +
+            JUNCTION.gap * a.life.perMeter +
+            half +
+            ((next.boxAhead ?? next.ahead) - next.ahead),
+      dx = (entry?.x ?? next.junction.x) - next.inHx * offset - (first.exit.x ?? first.junction.x),
+      dy = (entry?.y ?? next.junction.y) - next.inHy * offset - (first.exit.y ?? first.junction.y);
+    return dx * first.outHx + dy * first.outHy >= first.junction.radius + half;
+  }
+  private revoke(r: Hold): void {
+    r.since = undefined;
+    r.authorizedOutside = undefined;
+  }
   waited(m: Mover, key?: string): number {
     const r = this.record(m, key);
     return r?.arrival === undefined ? 0 : this.clock - r.arrival;
@@ -515,13 +566,13 @@ export class JunctionTable {
   revokeGrant(m: Mover, key: string): void {
     const r = this.record(m, key);
     if (!r || r.inside) return;
-    r.since = undefined;
+    this.revoke(r);
     const records = this.records.get(m)!;
     for (const downstream of records.values()) {
       let preceding = downstream.precedingKey;
       for (let remaining = records.size; preceding !== undefined && remaining > 0; remaining--) {
         if (preceding === key) {
-          if (!downstream.inside) downstream.since = undefined;
+          if (!downstream.inside) this.revoke(downstream);
           break;
         }
         preceding = records.get(preceding)?.precedingKey;
@@ -585,7 +636,6 @@ export class JunctionTable {
     ready: (movement: Movement) => boolean,
     room: number,
     key?: string,
-    atLine?: boolean,
     traffic?: JunctionTraffic,
   ) {
     const r = this.record(m, key);
@@ -601,10 +651,10 @@ export class JunctionTable {
     }
     p.ahead = boxAhead(m, p, pm);
     p.boxAhead = p.ahead;
-    r.inside = p.boxAhead < -0.05 * pm;
+    r.inside = p.boxAhead < -JUNCTION.insideToleranceM * pm;
     r.room = room;
     r.ready = ready(p);
-    r.atLine = traffic ? traffic.atLine(m, p, r.life, this) : (atLine ?? false);
+    r.atLine = traffic ? traffic.atLine(m, p, r.life, this) : false;
     r.traffic = traffic;
     this.request(r);
     return r;
@@ -621,6 +671,7 @@ export class JunctionTable {
         movement: r.movement,
         arrival: r.arrival,
         since: r.since,
+        authorizedOutside: r.authorizedOutside,
         inside: r.inside,
         ready: r.ready,
         key: r.movement.key,
@@ -661,7 +712,7 @@ export class JunctionTable {
             (upstream.room ?? Infinity) < VEHICLES[m.vehicle!].length + JUNCTION.gap
           ) {
             r.ready = false;
-            r.since = undefined;
+            this.revoke(r);
             break;
           }
           preceding = upstream.precedingKey;
@@ -681,11 +732,11 @@ export class JunctionTable {
       if (r.inside) r.since ??= clock;
       else if (r.since !== undefined) {
         if (clock - r.since > JUNCTION.holdMax) {
-          r.since = undefined;
+          this.revoke(r);
           r.arrival = r.atLine === true ? clock : undefined;
           r.surrenderedAt = clock;
         } else if (!r.ready || (r.room ?? Infinity) < VEHICLES[r.m.vehicle!].length + JUNCTION.gap)
-          r.since = undefined;
+          this.revoke(r);
       }
       records.set(r.movement.key, r);
       r.seen = true;
@@ -696,6 +747,12 @@ export class JunctionTable {
     for (const [m, records] of this.records) {
       for (const [key, r] of records) if (!r.seen) records.delete(key);
       if (!records.size) this.records.delete(m);
+      for (const r of records.values()) r.followingKey = undefined;
+      for (const r of records.values())
+        if (r.precedingKey !== undefined) {
+          const previous = records.get(r.precedingKey);
+          if (previous) previous.followingKey = r.movement.key;
+        }
     }
     this.revalidateRoutes();
     this.eligibleRows.clear();
@@ -712,15 +769,14 @@ export class JunctionTable {
     for (const group of groups.values())
       for (const r of group)
         if (!r.inside && group.some((b) => this.oncoming(r, b))) {
-          r.since = undefined;
+          this.revoke(r);
           this.yielded.add(r);
         }
     this.revalidateRoutes();
     for (const group of groups.values()) {
-      const over = (r: Hold) => r.arrival !== undefined && clock - r.arrival >= JUNCTION.maxWait;
       group.sort(
         (a, b) =>
-          Number(over(b)) - Number(over(a)) ||
+          Number(this.over(b)) - Number(this.over(a)) ||
           (a.arrival ?? Infinity) - (b.arrival ?? Infinity) ||
           stable(a, b),
       );
@@ -728,7 +784,7 @@ export class JunctionTable {
       ordered.length = 0;
       for (let i = 0; i < group.length;) {
         const anchor = group[i]!;
-        if (over(anchor) || anchor.arrival === undefined || !anchor.ready) {
+        if (this.over(anchor) || anchor.arrival === undefined || !anchor.ready) {
           ordered.push(anchor);
           i++;
           continue;
@@ -756,7 +812,7 @@ export class JunctionTable {
       const surrender = (a: Hold, b: Hold) =>
         !this.yielded.has(a) &&
         b.surrenderedAt !== undefined &&
-        !over(b) &&
+        !this.over(b) &&
         a.surrenderedAt === undefined &&
         a.arrival !== undefined &&
         a.arrival <= b.surrenderedAt &&
@@ -791,6 +847,7 @@ export class JunctionTable {
           continue;
         if (blocking.every((b) => b === r || compatible(r.movement, b.movement))) {
           r.since = clock;
+          r.authorizedOutside = true;
           r.surrenderedAt = undefined;
           blocking.push(r);
         } else if (r.arrival !== undefined) blocking.push(r);

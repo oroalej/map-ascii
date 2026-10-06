@@ -1,6 +1,6 @@
 import { FOLLOW, MAX_TILE_AGENTS, usableLines } from './config';
 import { LifeLine, inTile } from './geometry';
-import { frameBetween } from './frames';
+import { metricFrame } from './frames';
 import { bodiesOverlap } from './occupancy';
 import type { ContinuityCounter, ContinuityRejection } from './diagnostics';
 import type { WorldGroundGuard } from './simulate';
@@ -324,12 +324,12 @@ function birthFits(
     for (const otherLife of context.lives)
       for (const other of otherLife.movers) {
         if (!other.train || !context.owns(otherLife, other)) continue;
-        const f = frameBetween(otherLife.tile, life.tile),
-          scale = (f.scale * otherLife.perMeter) / life.perMeter;
+        const f = metricFrame(otherLife, life),
+          scale = f.scale;
         const otherBodies = otherLife.birthBodies(other).map((b) => ({
           ...b,
-          x: f.x / life.perMeter + b.x * scale,
-          y: f.y / life.perMeter + b.y * scale,
+          x: f.x + b.x * scale,
+          y: f.y + b.y * scale,
           length: b.length * scale + 2 * FOLLOW.minGap,
           width: b.width * scale,
         }));

@@ -1,6 +1,6 @@
 import type { Arm, Junction, JunctionTable, Movement } from './junctions';
 import type { TileLife } from './simulate';
-import { frameBetween } from './frames';
+import { metricFrame } from './frames';
 import { EXTENT } from '../raster/geometry';
 import { COS30, DEFAULT_ROAD_WIDTH_M, JUNCTION, PEDESTRIAN } from './config';
 import { reach } from './occupancy';
@@ -64,11 +64,8 @@ export class JunctionCrossings {
     return bounds;
   }
   relevant(source: TileLife, bounds: Bounds): boolean {
-    const f = frameBetween(source.tile, this.life.tile),
-      other = source.junctionCrossings.extent(),
-      scale = (source.perMeter * f.scale) / this.life.perMeter,
-      x = f.x / this.life.perMeter,
-      y = f.y / this.life.perMeter;
+    const { x, y, scale } = metricFrame(source, this.life),
+      other = source.junctionCrossings.extent();
     return (
       x + other.x1 * scale >= bounds.x0 &&
       x + other.x0 * scale <= bounds.x1 &&
@@ -85,12 +82,7 @@ export class JunctionCrossings {
     this.associations = new WeakMap();
     const unique = new Map<string, PedestrianCrossing>();
     for (const source of sources) {
-      const f = frameBetween(source.tile, this.life.tile),
-        frame = {
-          x: f.x / this.life.perMeter,
-          y: f.y / this.life.perMeter,
-          scale: (source.perMeter * f.scale) / this.life.perMeter,
-        };
+      const frame = metricFrame(source, this.life);
       for (const lines of [
         source.pedestrianCrossings.uncontrolledAssociations,
         source.pedestrianCrossings.controlledAssociations,
@@ -149,13 +141,19 @@ export class JunctionCrossings {
   }
   forArm(j: Junction, arm: Arm | undefined): readonly PedestrianCrossing[] {
     if (!arm) return NO_CROSSINGS;
-    const associated = j.arms.find(
-      (a) =>
-        a === arm ||
-        ((a.x ?? j.x) === (arm.x ?? j.x) &&
-          (a.y ?? j.y) === (arm.y ?? j.y) &&
-          a.hx * arm.hx + a.hy * arm.hy > COS30),
-    );
+    let associated = j.arms.includes(arm) ? arm : undefined;
+    if (!associated) {
+      let best = COS30;
+      for (const candidate of j.arms) {
+        if ((candidate.x ?? j.x) !== (arm.x ?? j.x) || (candidate.y ?? j.y) !== (arm.y ?? j.y))
+          continue;
+        const score = candidate.hx * arm.hx + candidate.hy * arm.hy;
+        if (score > best + 1e-9) {
+          associated = candidate;
+          best = score;
+        }
+      }
+    }
     return associated ? (this.arms(j).get(associated) ?? NO_CROSSINGS) : NO_CROSSINGS;
   }
   clear(p: Movement, view: PedestrianView, controlled: boolean): boolean {

@@ -114,6 +114,108 @@ const clockFor = (life: TileLife, group: 'a' | 'b', color: 'green' | 'red' | 'am
   )!;
 
 describe('authoritative signal approaches', () => {
+  for (const authorized of [false, true])
+    it(`${authorized ? 'clears earned green entry' : 'holds newly adopted traffic'} just past an unlinked red painted stop`, () => {
+      const b = new LifeBuilder(),
+        center = { x: 2000, y: 2000 };
+      b.line(
+        [{ x: center.x - 100 * pm, y: center.y }, center, { x: center.x + 100 * pm, y: center.y }],
+        LifeLine.roadMajor,
+        10,
+        hashString('single/0'),
+      );
+      b.line(
+        [{ x: center.x, y: center.y - 100 * pm }, center, { x: center.x, y: center.y + 100 * pm }],
+        LifeLine.roadMajor,
+        10,
+        hashString('single/1'),
+      );
+      const layout: SignalLayout = {
+        members: [tileToLngLat(tile, center)],
+        arms: [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ].map(([hx, hy], i) => ({
+          road_id: `single/${i < 2 ? 0 : 1}`,
+          junction: tileToLngLat(tile, center),
+          toward: tileToLngLat(tile, {
+            x: center.x + hx! * 100 * pm,
+            y: center.y + hy! * 100 * pm,
+          }),
+          direction: i % 2 === 0 ? 1 : -1,
+          inbound: true,
+          outbound: true,
+          group: i < 2 ? ('a' as const) : ('b' as const),
+          bearing: ((Math.atan2(-hx!, hy!) * 180) / Math.PI + 360) % 360,
+          width: 10,
+          stop: tileToLngLat(tile, { x: center.x + hx! * 10 * pm, y: center.y + hy! * 10 * pm }),
+          stop_width: 5,
+        })),
+      };
+      b.signal(center, 6, 90, 0, true, layout);
+      b.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
+      const life = new TileLife(tile, b.finish(), 1),
+        table = new JunctionTable();
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+      const m: Mover = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 80 * pm,
+        x: center.x - 20 * pm,
+        y: center.y,
+        hx: 1,
+        hy: 0,
+        speed: 8 * pm,
+        v: 0,
+        paint: 0,
+        lane: 0,
+        pause: 0,
+        rank: 0,
+        next: 2,
+      };
+      life.movers.push(m);
+      const movement = life.junctionIndex.movement(m, 60 * pm)!;
+      expect(movement.junction.linked).toBe(false);
+      expect(movement.junction.controlled).toBe(true);
+      if (authorized) {
+        const green = clockFor(life, 'a', 'green');
+        life.prepareTraffic(() => true);
+        table.begin(new Set([life]));
+        life.requestJunctions(table, () => true, green);
+        table.resolve(green);
+        expect(table.granted(m)).toBe(true);
+      }
+      const distance = movement.ahead + 0.1 * pm;
+      m.d += distance;
+      m.x += distance;
+      expect(life.junctionIndex.canSpawnVehicle(m)).toBe(false);
+      const red = clockFor(life, 'a', 'red');
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, red);
+      table.resolve(red);
+      expect(table.snapshot()[0]!.inside).toBe(true);
+      const x = m.x;
+      life.step(0.1, undefined, undefined, undefined, { clock: red, rain: 0 }, undefined, {
+        junctions: table,
+      });
+      if (authorized) expect(m.x).toBeGreaterThan(x);
+      else expect(m.x).toBe(x);
+      Object.assign(m, {
+        line: movement.exit.line,
+        from: life.geo.starts[movement.exit.line]!,
+        dir: 1,
+        d: 25 * pm,
+        x: center.x + 25 * pm,
+      });
+      expect(life.junctionIndex.canSpawnVehicle(m)).toBe(true);
+    });
   it('varies the first linked-route fallback across bicycle ranks deterministically', () => {
     const route = (rank: number) => {
       const { life, car } = fixture();
