@@ -1,16 +1,16 @@
 ---
 name: review-pr
-description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (later rounds review only the fixes), Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
+description: Review a pull request until clean (at most 3 rounds) and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (later rounds review only the fixes), Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
-# Claude review → Codex validation → fixes, until clean, then CI
+# Claude review → Codex validation → fixes, up to 3 rounds, then CI
 
 Invoking `$review-pr` authorizes the whole flow, without confirmation between steps:
 
 - opening the branch's PR if it has none
 - creating the PR branch's worktree, or a detached work tree
 - merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles) and pushing
-- review rounds until one is clean: Claude's review, the validation run, then fixes committed and pushed to the PR's branch
+- review rounds until one is clean, at most 3: Claude's review, the validation run, then fixes committed and pushed to the PR's branch
 - the CI gate until CI is green, with CI fixes committed and pushed
 
 Never merge the PR.
@@ -159,7 +159,7 @@ Classify before editing:
 
 - **Clean:** no valid blocker or should-fix, noticed ones included. Fix any valid nits as below, then go to step 6.
 - **Outside the PR's diff:** allowed. Find why the fix reaches those files (a caller, a shared helper, a fixture), keep the change scoped, and record why in the commit message and the entry's `outOfDiff`.
-- **Repeat** (round 2+): a valid blocker or should-fix with the same `path` and claim as an entry an earlier round marked `fixed`. That fix didn't work: learn why from its commit, fix it differently, and set `repeat` to that round.
+- **Repeat** (round 2+): a valid blocker or should-fix with the same `path` and claim as an entry an earlier round marked `fixed`. That fix didn't work: learn why from its commit, fix it differently, and set `repeat` to that round. An entry that has already repeated once isn't fixed a third time: mark it `open` with both attempts and carry it into the PR body (step 4.2).
 - **Oscillation:** a fix that would revert all or part of an earlier round's commit (`git show <commit>`). Decide, don't stall: record the decision in the commit body and the entry's `decision`, and add the losing claim to `rejected.md`.
 
 Then, in `<pr-checkout>` on the PR's head branch:
@@ -181,10 +181,14 @@ Write the round's record to `<scratch>/round<k>/result.json` with `{round, revie
 
 Record the same fields in checkpoint `history` before another round starts, plus findings, noticed items, rejected decisions, commits and the next phase. The next scope and ledger are built from them.
 
-## 5. Review loop (until clean)
+## 5. Review loop (until clean, at most 3 rounds)
 
 - **Clean** (no valid blocker or should-fix, apart from entries already carried as `open`) → step 6.
-- **Fixed** (valid blockers or should-fix items were fixed and pushed) → round k+1 at step 2. There's no round cap: Repeat, Oscillation and `rejected.md` keep rounds converging.
+- **Fixed** (valid blockers or should-fix items were fixed and pushed):
+  - k < 3 → round k+1 at step 2.
+  - k = 3 → no round 4. Round 3's fixes stay pushed without another review, and any entry left unfixed is carried as `open` in the PR body. Go to step 6. Record `roundCap: true` in the report.
+
+Round 1 is the full review that should find everything; rounds 2 and 3 check the fixes. Repeat, Oscillation and `rejected.md` keep them converging.
 
 Nits are fixed as they come up. A round whose only valid entries are nits is clean, so nits never start another round.
 
@@ -203,14 +207,14 @@ Checkpoint CI attempts, reruns and fixes:
      - Fix the cause. Change the test only if the test is wrong. A failure that also happens on plain `origin/main` gets fixed too; record why the fix is outside the diff.
      - Commit (`🐛 fix(<scope>): …` or `💚 ci(<scope>): …`) with step 4's staging rules, push, and go back to 1.
      - Count each attempt in `ci.attempts`. There's no attempt cap; change the approach when one keeps failing.
-3. **Review CI fixes:** after a CI fix to non-test source, run one more round (steps 2–4) once CI is green. Not clean → step 5. Clean → repeat this step from 1 for its pushes.
+3. **Review CI fixes:** after a CI fix to non-test source, run one more round (steps 2–4) once CI is green, if fewer than 3 rounds have run. It counts toward the 3. Not clean → step 5. Clean → repeat this step from 1 for its pushes. With 3 rounds already run, skip the review, list the CI fix commits as unreviewed in the report, and go to step 7.
 
 ## 7. Report and clean up
 
 The report covers:
 
 - **Main merge:** `mainMerge` with its `Conflict decisions:`, and failures that also happen on `main`.
-- **Rounds:** the round count (every round, including one after a CI fix). One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
+- **Rounds:** the round count (every round, including one after a CI fix), and `round cap reached; round 3 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
 - **Per round:** Claude's verdict and the validation table (# / Claude's severity / verdict / evidence / final severity).
 - **Entries:** fixed entries with commit hashes; open entries carried into the PR body, with what was tried; noticed items with severity (noticed nits are listed for the user).
 - **Checkout:** the detached work tree used, if any, and the untouched worktree's state.
@@ -262,17 +266,18 @@ End with a fenced `review-pr-result` block holding one JSON object:
     { "round": 1, "path": "scripts/y.ts", "line": 7, "claim": "one line", "severity": "nit" }
   ],
   "ci": { "status": "green", "reruns": 0, "attempts": 0, "fixCommits": [] },
+  "roundCap": false,
   "stopReason": null
 }
 ```
 
 - **`status`:**
-  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries) and `ci.status` is `green` or `fixed`.
+  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 3 ended with its fixes pushed (`roundCap: true`), and `ci.status` is `green` or `fixed`.
   - `error`: an Ends case; `stopReason` names it.
   - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes live in checkpoint operations, and no clean result is implied for WIP. `resume` is null otherwise.
 - **`headSha`:** the PR head when the run ends (`gh pr view <N> --json headRefOid`). The results apply to this commit only.
 - **`claudeEffort`:** the resolved selection for unfinished and future reviews. Each round keeps its actual effort.
-- **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`roundCount`:** the report's round count.
+- **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`roundCount`:** the report's round count. **`roundCap`:** true when round 3 had fixes and no round 4 ran.
 - **`mainMerge`:** `current`, `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (ended before step 1.7).
 - **Per round:**
   - `scope` and `usage` come from the review receipt; `usage` is null when unavailable, never estimated.
