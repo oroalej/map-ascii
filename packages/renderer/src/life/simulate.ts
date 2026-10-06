@@ -1864,11 +1864,13 @@ export class TileLife {
   offsetVaries(m: Mover, ahead = 0, behind = 0): boolean {
     if (m.kind !== 'vehicle' || !m.vehicle || m.train) return false;
     if (m.roadShift !== undefined) return true;
+    const profile = this.laneBendOf(m, m.line, m.dir);
+    const next = m.routing?.plan?.exit ?? m.next;
+    if (!profile && (next === undefined || next < 0) && m.came === undefined) return false;
     const length = this.lineLength(m.line) / this.perMeter,
       travelled = this.travelled(m),
       low = Math.max(0, travelled - behind),
       high = Math.min(length, travelled + ahead);
-    const profile = this.laneBendOf(m, m.line, m.dir);
     if (profile) {
       let interval = this.bendIntervals.get(profile);
       if (!interval) {
@@ -1884,7 +1886,6 @@ export class TileLife {
       if (high >= interval[0] && low <= interval[1]) return true;
     }
     const lane = this.mergeLane(m, m.line);
-    const next = m.routing?.plan?.exit ?? m.next;
     if (next !== undefined && next >= 0) {
       const outLine = next >> 1,
         outDir = next & 1 ? -1 : 1;
@@ -1913,14 +1914,11 @@ export class TileLife {
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
-    const normal = this.routeLane(
-      m,
-      m.line,
-      m.dir,
-      this.travelled(m),
-      m.came,
-      m.routing?.plan?.exit ?? m.next,
-    );
+    const next = m.routing?.plan?.exit ?? m.next;
+    const normal =
+      !this.laneTerrain && m.came === undefined && (next === undefined || next < 0)
+        ? this.mergeLane(m, m.line)
+        : this.routeLane(m, m.line, m.dir, this.travelled(m), m.came, next);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
     const offset =
       identity === m
@@ -5018,6 +5016,10 @@ export class TileLife {
     input.still = undefined;
     input.vendor = undefined;
   }
+  private releaseEmojiInputs() {
+    for (const input of this.emojiInputs) this.clearEmojiInput(input);
+    this.emojiInputs.length = 0;
+  }
   private emojiInput(
     owner: EmojiObservation['owner'],
     subject: EmojiObservation['subject'],
@@ -5025,7 +5027,6 @@ export class TileLife {
   ): EmojiObservation {
     const index = this.emojiInputs.length;
     const input = this.emojiInputPool[index] ?? (this.emojiInputPool[index] = {});
-    this.clearEmojiInput(input);
     input.owner = owner;
     input.subject = subject;
     input.eligible = eligible;
@@ -5045,13 +5046,13 @@ export class TileLife {
     near?: (x: number, y: number) => boolean,
     owns?: (p: { x: number; y: number }) => boolean,
   ): EmojiObservation[] {
+    this.releaseEmojiInputs();
     const levels = env.emojiView?.levels ?? env.levels;
     const crowd = env.emojiView?.crowd ?? 1;
     const visible = viewIn(this.tile, env.emojiView?.bounds, 0);
     const eligible = (p: { x: number; y: number }) =>
       inTile(p) && (!owns || owns(p)) && visible(p.x, p.y) && (!near || near(p.x, p.y));
     const observations = this.emojiInputs;
-    observations.length = 0;
     for (const m of this.movers) {
       if (m.train || !EMOJI_MOVER_KINDS.has(m.kind)) continue;
       const subject = m.kind === 'vehicle' ? 'driver' : (m.kind as 'person' | 'dog' | 'cat');
@@ -5229,8 +5230,7 @@ export class TileLife {
       );
     else this.emoji.step(dt, emojiZoom, emojiEnv, []);
     // Inputs are borrowed only for this observer call; do not retain actor references.
-    for (let i = 0; i < this.emojiInputs.length; i++) this.clearEmojiInput(this.emojiInputPool[i]!);
-    this.emojiInputs.length = 0;
+    this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
     const speeds = this.followLimits(dt, table, env?.diagnostics);

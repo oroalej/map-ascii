@@ -526,7 +526,8 @@ export class EmojiObserver {
         if (!gap && o.arrival && o.visit?.state === 'wait') t.edges.add('happy');
       }
       const edges = conditions & ~t.triggers;
-      if (!gap) for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
+      if (!gap && edges)
+        for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
       t.triggers = conditions;
       t.resting = resting;
       t.stopped = stopped;

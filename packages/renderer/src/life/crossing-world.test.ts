@@ -178,16 +178,18 @@ it('runs dense signalized crossroads with exact stops and only off-road waiting 
   expect(life.crossingWaits.records).toHaveLength(4);
   expect(life.signals.signals[0]!.approaches).toHaveLength(4);
   expect(life.signals.signals[0]!.approaches!.every((a) => a.stopAlong !== undefined)).toBe(true);
-  let waiting = 0;
+  let waiting = 0,
+    offRoad = true;
   for (let frame = 0; frame < 300; frame++) {
     world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
     for (const m of life.movers)
       if (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing) {
         waiting++;
-        expect(life.roadTerrain.access.allows(life.groundBodies(m, 0.9), false)).toBe(true);
+        offRoad &&= life.roadTerrain.access.allows(life.groundBodies(m, 0.9), false);
       }
   }
   expect(waiting).toBeGreaterThan(0);
+  expect(offRoad).toBe(true);
 });
 
 it('clamps an oversized ordinary step after its bend and restores a rejected full trial', () => {
