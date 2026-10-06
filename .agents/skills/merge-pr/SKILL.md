@@ -9,7 +9,7 @@ Usage: `$merge-pr [--claude-effort <level>] [<branch>] [Head: <sha>]`. Without a
 
 `Head: <sha>` is optional. A caller such as `$sync-review` passes the commit it reviewed and checked CI on, so nothing pushed after that review gets merged.
 
-`--claude-effort <level>` selects `low`, `medium`, `high`, `xhigh` or `max` for PR reviews required by the merge gates. Parse and reject missing/invalid values before mutations or process launches. Pass explicit effort into review checkpoint initialization and through relaunches; omit it when absent to inherit explicitly chosen saved effort or default to `medium`. Use the initialized state's effort for delegated and inline reviews. This option does not authorize repeating a completed review; `review-pr --fresh` does that.
+`--claude-effort <level>` applies to PR reviews the merge gates require (shared.md, Claude effort). Use the initialized state's effort for delegated and inline reviews. It doesn't authorize repeating a completed review; `review-pr --fresh` does that.
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 
@@ -21,17 +21,21 @@ Invoking `$merge-pr` authorizes these actions, for that branch only:
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
 - deleting its local branch and its worktree folder
 
-Don't ask for confirmation between steps. An interrupted delegated PR review ends this invocation with its saved checkpoint, before merging or cleanup. Other ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no PR, a closed PR, or `main` as the branch) or a missing tool. Retry, Detached work tree and the other cases there apply here too.
+Don't ask for confirmation between steps. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns and Rules.
+
+- **Interrupted review:** an interrupted delegated PR review ends this invocation with its saved checkpoint, before merging or cleanup.
+- **Nothing to do:** no PR, a closed PR, or `main` as the branch.
 
 ## Rules
 
-- **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, or pass `--no-verify`. The only commits this skill makes are main-sync merges (gate 3) and CI fixes (gate 4); `$review-pr` makes its own.
+shared.md's Rules apply, plus:
+
+- **Commits:** this skill commits only main-sync merges (gate 3) and CI fixes (gate 4); `$review-pr` makes its own.
 - **Main moves on; keep going.** Other sessions merge into `main` all the time. A PR that is behind or conflicting gets `origin/main` merged in here, not sent back to `$review-pr`.
 - **Remote branch stays:** never pass `--delete-branch` to `gh pr merge`, and never run `git push --delete` or `git push origin :<branch>`.
-- **Deleting:** delete only with `pnpm plans:clean` and `pnpm worktree:remove`. Never delete files or folders with shell commands (`Remove-Item`, `rm`, `del`, `rmdir`): Codex rejects recursive deletes as "blocked by policy".
 - **Working directory:** run steps 4–6 with `<main-checkout>` as the command working directory. On Windows, also determine the session process's own directory, using its startup context (not a child command's directory). If that directory is inside `<wt>`, or cannot be established, defer the actual removal in step 6. A child command running in main does not release the session's handle on `<wt>`.
 - **On "end with `error`"**, skip straight to step 7 with that status and a `stopReason`. Only the "Ends" cases do this.
-- **Work tree:** `<work>` is where this skill commits. It is `<wt>` when that worktree exists, is clean, and its `HEAD` equals the PR's head. Otherwise it is a detached work tree at `origin/<branch>` (review-pr Shared patterns), pushing with `git push origin HEAD:<branch>`. `<wt>` is never touched in that case.
+- **Work tree:** `<work>` is where this skill commits. It is `<wt>` when that worktree exists, is clean, and its `HEAD` equals the PR's head. Otherwise it is a detached work tree at `origin/<branch>` (shared.md), pushing with `git push origin HEAD:<branch>`. `<wt>` is never touched in that case.
 
 ## 1. Resolve
 
@@ -46,13 +50,13 @@ Don't ask for confirmation between steps. An interrupted delegated PR review end
 ## 2. Gate
 
 Each gate either passes or gets solved; none ends the run. `<skill-dir>` is the absolute folder of this `SKILL.md`.
-Exception: when gate 2 or gate 4 delegates into `review-pr`, use `<skill-dir>/../review-pr/references/recovery.md`'s initialized coordinator wrapper, preserving the pinned models, Codex effort/speed settings and resolved Claude effort. Initialize with explicit `claudeEffort` only when supplied, and pass `--claude-effort <state.claudeEffort>` plus `Worker checkpoint` to the coordinator. Retain its resolved effort for inline CI reviews. An `interrupted` result, quota receipt or wrapper exit 75 ends this merge invocation before the merge or cleanup. Return `merge-pr-result` with status `interrupted`, null mergeCommit, the review's `resume` object and stopReason. Preserve all task scratch/worktrees; the next invocation resumes the saved review. Inspect receipts before retrying an absent final result and await live children.
+When gate 2 or gate 4 needs `$review-pr`, make the delegated review call (shared.md). An `interrupted` result ends this invocation before the merge or cleanup. Return `merge-pr-result` with status `interrupted`, a null `mergeCommit`, the review's `resume` object and `stopReason`. The next invocation resumes the saved review.
 
 1. **Pick `<work>`** (Rules). Uncommitted files in `<wt>` belong to the user or another session: they never block the merge, and a detached work tree keeps them untouched. Step 4's dry-run reports them for cleanup.
 2. **Pin the head.** Fetch `origin/<branch>` (with Retry). The PR's `headRefOid` is what gets merged; local-only commits in `<wt>` stay local, and cleanup reports them.
-   - With `Head: <sha>`, `headRefOid` must equal `<sha>`, or `<sha>` must be an ancestor of it and every commit in `git rev-list --first-parent <sha>..<headRefOid>` must be a main-sync merge: a merge commit whose message starts with `🔀 merge(` and whose second parent is an ancestor of `origin/main` (such as one an earlier `$merge-pr` run pushed). If anything else was pushed after the caller's review, run `$review-pr <N>` (`<skill-dir>/../review-pr/SKILL.md`, following it exactly) so the new commits get reviewed, then use its result's `headSha` as `<sha>` and repeat this gate.
+   - With `Head: <sha>`, `headRefOid` must equal `<sha>`, or `<sha>` must be an ancestor of it and every commit in `git rev-list --first-parent <sha>..<headRefOid>` must be a main-sync merge: a merge commit whose message starts with `🔀 merge(` and whose second parent is an ancestor of `origin/main` (such as one an earlier `$merge-pr` run pushed). If anything else was pushed after the caller's review, run `$review-pr <N>` through the delegated review call so the new commits get reviewed, then use its result's `headSha` as `<sha>` and repeat this gate.
    - Set `<gated-sha>` to the verified `headRefOid`, including when the caller's `<sha>` is older.
-3. **Sync with main.** Run `git -C <work> fetch origin main`. If `git -C <work> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise make sure `<work>` is at `<gated-sha>` (fast-forward it, or switch to a detached work tree), then follow `<skill-dir>/../review-pr/SKILL.md` step 1.7 (items 2–7) in `<work>` as `<pr-checkout>`, with an empty baseline. It merges `origin/main`, resolves every conflict and pushes. If git refuses because the merge would overwrite uncommitted files, switch to a detached work tree and merge there. It ends only with that procedure's `merge tool unavailable` (`error`). This merge comes after the PR's review, so if its commit has a `Conflict decisions:` body, post that list as a PR comment (`gh pr comment <N> --body-file <file>`, the file in the OS temp folder) and include it in the report. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`.
+3. **Sync with main.** Run `git -C <work> fetch origin main`. If `git -C <work> merge-base --is-ancestor origin/main <gated-sha>` succeeds, go on. Otherwise make sure `<work>` is at `<gated-sha>` (fast-forward it, or switch to a detached work tree), then follow [merge-main.md](../review-pr/references/merge-main.md) items 2–7 in `<work>`, with an empty baseline. It merges `origin/main`, resolves every conflict and pushes. If git refuses because the merge would overwrite uncommitted files, switch to a detached work tree and merge there. It ends only with that procedure's `merge tool unavailable` (`error`). This merge comes after the PR's review, so if its commit has a `Conflict decisions:` body, post that list as a PR comment (`gh pr comment <N> --body-file <file>`, the file in the OS temp folder) and include it in the report. After the push, set `<gated-sha>` to the new `HEAD` and add 1 to `mainSyncs`.
 4. **CI passes on `<gated-sha>`.** Wait until the PR has checks for it (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. If a check fails, run `<skill-dir>/../review-pr/SKILL.md` step 6 (the CI gate) in `<work>` until CI is green, including its review round when a CI fix touched non-test source code. Then set `<gated-sha>` to the new head and go back to gate 3.
 5. **Mergeable.** `gh pr view <N> --json mergeable,mergeStateStatus` shows `MERGEABLE`. If it shows `CONFLICTING`, `main` moved again: go back to gate 3. If it shows `UNKNOWN`, wait and query again (Retry). A `CLEAN` or `MERGEABLE` response does not prove that the head contains current `main` when branch protection has no freshness requirement; §3 step 1 explicitly checks ancestry. GitHub doesn't enforce CI on this repo, so these gates are the only ones.
 
@@ -145,7 +149,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
   "mainSyncs": 0,
   "cleanup": {
     "plans": ["done/stable-labels: deleted 12, kept 3", "pr12-review-fixes: deleted 4, removed folder"],
-  "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
+    "worktree": "removed D:/Projects/naga-ascii/worktrees/labels",
     "branch": "deleted codex/stable-labels"
   },
   "stopReason": null
