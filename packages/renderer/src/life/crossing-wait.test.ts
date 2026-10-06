@@ -160,15 +160,25 @@ it('eases immutable poses into compatible slots, rolls back rejection, and relea
   expect(m.group).toEqual(original);
   expect(m.crossingWait?.waiting?.slots).toEqual([0, 1]);
   expect(m.crossingWait?.waiting?.age).toBeCloseTo(0.8);
+  const request = vi.spyOn(waits.registry, 'request');
+  waits.accept(m, structuredClone(m), clock);
+  expect(request).not.toHaveBeenCalled();
   const bs = bodies(m);
   expect(bodiesOverlap(bs[0]!, bs[1]!, 0.15)).toBe(false);
   expect(waits.limit(m, { x: 0, y: 20 }, 20, phase('walk'))).toBe(0);
   waits.tick(m, 0.1, phase('walk'), 0, () => true);
   expect(m.crossingWait?.waiting?.releasing).toBe(true);
   expect(waits.limit(m, { x: 0, y: 20 }, 20, phase('walk'))).toBe(20);
+  const beforeRelease = structuredClone(m);
+  m.y += 2;
+  waits.accept(m, beforeRelease, phase('walk'));
+  expect(m.crossingWait?.waiting?.slots).toHaveLength(2);
+  expect(m.crossingWait?.commitments).toHaveLength(1);
+  expect(waits.permits({ ...m }, undefined, phase('walk'))).toBe(true);
 });
 it('uses collision-safe geographic keys and preserves stable clipped slot ids', () => {
   const registry = new CrossingReservations();
+  expect(registry.empty).toBe(true);
   const wait = (id: string, side: number, index: number): WaitingPose => ({
     id,
     side,
@@ -183,6 +193,9 @@ it('uses collision-safe geographic keys and preserves stable clipped slot ids', 
     start: [],
   });
   registry.request(wait('a:1', 2, 3), 2, [0, 1, 2, 3]);
+  expect(registry.empty).toBe(false);
+  registry.retain(new Set(['owner:3']));
+  expect(registry.snapshot().requests).toHaveLength(1);
   registry.request(wait('a', 12, 2), 2, [0, 1, 2, 3]);
   registry.request(wait('a:1', 2, 1), 2, [0, 1, 2, 3]);
   registry.resolve();
@@ -194,6 +207,8 @@ it('uses collision-safe geographic keys and preserves stable clipped slot ids', 
   expect(registry.canDepart(wait('a:1', 2, 3))).toBe(true);
   registry.retain(new Set(['owner:2']));
   expect(registry.snapshot().claims).toHaveLength(1);
+  registry.retain(new Set());
+  expect(registry.empty).toBe(true);
 });
 it('retains a safe upstream footprint when coarse bodies cannot fit any slot', () => {
   const waits = fixture(),

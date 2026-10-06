@@ -1,9 +1,9 @@
-import { PED_STOP, PED_WALK } from '../life/pedestrian-glyphs';
 /**
  * The glyph atlas: every glyph a theme uses, rasterized once at the device-pixel cell size into
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { PED_STOP, PED_WALK } from '../life/pedestrian-glyphs';
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
 import { catOf, catPixels } from '../life/cats';

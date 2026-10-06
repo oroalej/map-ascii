@@ -3,9 +3,119 @@ import { LifeWorld, TileLife } from './simulate';
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import { pedestrianState } from './signals';
-import { bodyCorners } from './occupancy';
+import { bodyCorners, bodyInside, type Point } from './occupancy';
+import { frameBetween } from './frames';
+import { walkingBefore } from './continuity';
+import type { TileId } from '../tiles';
 import { signalizedCrossroads } from './testing/signalized-crossroads';
 import { controlledTile } from './testing/signalized-crossing';
+
+function projectedCrossing(tile: TileId, routeSnapM = 0) {
+  const entry = signalizedCrossingEntry(),
+    geo = structuredClone(entry.life),
+    frame = frameBetween(entry.tile, tile);
+  const point = (p: Point) => ({
+    ...p,
+    x: frame.x + p.x * frame.scale,
+    y: frame.y + p.y * frame.scale,
+  });
+  for (let i = 0; i < geo.coords.length; i++)
+    geo.coords[i] = (i % 2 ? frame.y : frame.x) + geo.coords[i]! * frame.scale;
+  for (const area of geo.areas ?? []) area.rings = area.rings.map((ring) => ring.map(point));
+  for (const crossing of geo.controlledCrossings ?? []) {
+    crossing.anchor = point(crossing.anchor);
+    crossing.quad = crossing.quad?.map(point);
+    for (const side of crossing.sides ?? []) {
+      side.centre = point(side.centre);
+      side.gate = side.gate.map(point) as [Point, Point];
+      side.pads = side.pads.map((ring) => ring.map(point));
+      side.slots = side.slots.map(point);
+    }
+  }
+  const destination = new TileLife(tile, geo, 2);
+  // Snap the destination walking route while leaving the physical crossing unchanged.
+  for (let i = geo.starts[1]!; i < geo.starts[2]!; i++)
+    geo.coords[i * 2] = geo.coords[i * 2]! + routeSnapM * destination.perMeter;
+  return destination;
+}
+
+function waitingPair() {
+  const world = new LifeWorld();
+  world.sync([signalizedCrossingEntry()]);
+  const { life, m } = seedSignalizedCrossing(world);
+  (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+  m.group!.push({ ...m.group![0]!, lateral: 1.2 });
+  for (let i = 0; i < 120; i++)
+    world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+  expect(m.crossingWait?.waiting?.slots).toHaveLength(2);
+  return { world, life, m };
+}
+
+for (const tile of [
+  { z: 17, x: controlledTile.x * 2, y: controlledTile.y * 2 },
+  { ...controlledTile, x: controlledTile.x + 1 },
+])
+  it(`preserves waiting member poses through a snapped transfer to z${tile.z}/${tile.x}`, () => {
+    const { world, life, m } = waitingPair(),
+      destination = projectedCrossing(tile, 0.025),
+      payload = structuredClone(m.crossingWait),
+      frame = frameBetween(life.tile, tile),
+      before = life.groundBodies(m),
+      claims = world.crossingReservations.snapshot();
+    destination.crossingWaits.registry = world.crossingReservations;
+    const preview = destination.projectFrom(m, life)!;
+    expect(preview).toBeDefined();
+    expect(Math.abs(preview.x - (frame.x + m.x * frame.scale))).toBeGreaterThan(
+      0.01 * destination.perMeter,
+    );
+    const ratio = (frame.scale * life.perMeter) / destination.perMeter;
+    for (const owner of [preview, walkingBefore(destination, life, m, preview)]) {
+      const bodies = destination.groundBodies(owner);
+      for (let i = 0; i < bodies.length; i++) {
+        expect(bodies[i]!.x).toBeCloseTo(frame.x / destination.perMeter + before[i]!.x * ratio);
+        expect(bodies[i]!.y).toBeCloseTo(frame.y / destination.perMeter + before[i]!.y * ratio);
+        expect(bodies[i]!.hx).toBe(before[i]!.hx);
+        expect(bodies[i]!.hy).toBe(before[i]!.hy);
+      }
+    }
+    expect(m.crossingWait).toEqual(payload);
+    expect(destination.adoptFrom(m, life)).toBe(true);
+    expect(destination.movers).toContain(m);
+    expect(life.movers).not.toContain(m);
+    expect(m.crossingWait?.waiting?.owner).toBe(payload!.waiting!.owner);
+    expect(world.crossingReservations.snapshot()).toEqual(claims);
+  });
+
+it('adopts a releasing two-person cohort across zoom after it leaves the pad', () => {
+  const { world, life, m } = waitingPair();
+  let released = false;
+  for (let i = 0; i < 400; i++) {
+    world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+    const wait = m.crossingWait?.waiting;
+    if (!wait?.releasing || !wait.slots.length) continue;
+    const side = life.crossingWaits.records[0]!.sides[wait.side]!;
+    if (life.groundBodies(m, 0.9).every((body) => side.pads.some((pad) => bodyInside(body, [pad]))))
+      continue;
+    released = true;
+    const destination = projectedCrossing({
+        z: 17,
+        x: controlledTile.x * 2,
+        y: controlledTile.y * 2,
+      }),
+      payload = structuredClone(m),
+      claims = world.crossingReservations.snapshot();
+    destination.crossingWaits.registry = world.crossingReservations;
+    expect(m.crossingWait!.commitments).toHaveLength(1);
+    expect(destination.adoptFrom(m, life, {}, () => false)).toBe(false);
+    expect(m).toEqual(payload);
+    expect(world.crossingReservations.snapshot()).toEqual(claims);
+    expect(destination.adoptFrom(m, life)).toBe(true);
+    expect(m.crossingWait?.waiting?.releasing).toBe(true);
+    expect(m.crossingWait?.commitments).toEqual(payload.crossingWait!.commitments);
+    break;
+  }
+  expect(released).toBe(true);
+});
 
 it('runs dense signalized crossroads with exact stops and only off-road waiting bodies', () => {
   const geo = signalizedCrossroads(controlledTile),
@@ -70,10 +180,12 @@ it('avoids queue scans and crossing cursor trials in a world without controlled 
   world.sync([entry]);
   const { life, m } = seedSignalizedCrossing(world);
   const index = vi.spyOn(life.movers, 'indexOf'),
-    limit = vi.spyOn(life.crossingWaits, 'limit');
+    limit = vi.spyOn(life.crossingWaits, 'limit'),
+    retain = vi.spyOn(world.crossingReservations, 'retain');
   world.step(1 / 60, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
   expect(m.crossingWait).toBeUndefined();
   expect(index).not.toHaveBeenCalled();
+  expect(retain).not.toHaveBeenCalled();
   expect(limit.mock.calls.every((call) => call[5] === undefined)).toBe(true);
 });
 for (const hz of [30, 60, 120])

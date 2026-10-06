@@ -5,7 +5,7 @@ import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState } from './testing/scenarios';
 import { tileToLngLat } from '../raster/geometry';
-it('matches waiting reservations, phase release and geometry transfer in worker and inline worlds', () => {
+it('matches controlled-tile frames and final simulation state in worker and inline worlds', () => {
   const worlds: LifeWorld[] = [];
   // eslint-disable-next-line @typescript-eslint/unbound-method -- apply supplies the intercepted instance.
   const sync = LifeWorld.prototype.sync;

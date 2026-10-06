@@ -408,7 +408,7 @@ export class PedestrianCrossings {
       if (!prepared.lines.size) continue;
       const shared = this.derive(polygon, prepared.hx, prepared.hy);
       for (const line of prepared.lines) {
-        const controlled = signals.controlsCrossing(line, {
+        const controlled = signals.controlsCrossing({
           x: prepared.centre.x * this.pm,
           y: prepared.centre.y * this.pm,
         });

@@ -16,8 +16,8 @@ export function finalizeControlledCrossings(
   anchors: readonly ControlledCrossingAnchor[],
   roads: readonly Polygon[],
   perMeter: number,
+  access = RoadAccess.fromPrepared(roads, []),
 ): void {
-  const access = new RoadAccess(roads, []);
   const roadBounds = roads.map((road) => ({ road, bounds: boundsOf(road[0]!) }));
   const probe: Body = { x: 0, y: 0, hx: 1, hy: 0, length: 0, width: 0 },
     probes = [probe];
@@ -133,9 +133,9 @@ export function controlledCrossingConnectors(
   obstacles: readonly Polygon[],
   perMeter: number,
   identify: (id: string) => number,
+  access = new RoadAccess(roads, cuts),
 ) {
-  const access = new RoadAccess(roads, cuts),
-    blocked = new PolygonIndex();
+  const blocked = new PolygonIndex();
   for (const polygon of obstacles) blocked.add(polygon);
   const joins = new Map<number, { segment: number; t: number; point: Point }[]>(),
     connectors: { points: Point[]; id: number }[] = [];

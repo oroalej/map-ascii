@@ -78,9 +78,9 @@ describe('signals', () => {
       },
     ];
     const life = new TileLife(tile, geo, 1);
-    expect(life.signals.controlsCrossing(0, stripe)).toBe(true);
-    expect(life.signals.controlsCrossing(0, { x: 2048, y: 2048 })).toBe(false);
-    expect(life.signals.controlsCrossing(0, { x: stripe.x + 8, y: stripe.y })).toBe(false);
+    expect(life.signals.controlsCrossing(stripe)).toBe(true);
+    expect(life.signals.controlsCrossing({ x: 2048, y: 2048 })).toBe(false);
+    expect(life.signals.controlsCrossing({ x: stripe.x + 8, y: stripe.y })).toBe(false);
   });
   it('does not substitute a radius stop when exact layout stops fail local road matching', () => {
     const geo = geography(true, false);

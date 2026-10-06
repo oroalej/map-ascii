@@ -128,7 +128,8 @@ function routes(connect = true) {
     stripRing({ x: 2000 - 1.5 * pm, y: 2000 }, { x: 2000 + 1.5 * pm, y: 2000 }, 6.5 * pm),
   ]);
   if (connect) {
-    finalizeControlledCrossings([c], b.roadPolygons, pm);
+    const access = new RoadAccess(b.roadPolygons, b.crossingCuts);
+    finalizeControlledCrossings([c], b.roadPolygons, pm, access);
     const joins = controlledCrossingConnectors(
       [c],
       b.walkingLinesView,
@@ -137,6 +138,7 @@ function routes(connect = true) {
       [],
       pm,
       hashString,
+      access,
     );
     expect(joins.connectors).toHaveLength(2);
     expect(

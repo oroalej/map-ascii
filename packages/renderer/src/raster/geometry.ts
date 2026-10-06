@@ -75,7 +75,7 @@ import {
   type SeasonalPayload,
 } from '../life/geometry';
 import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
-import { stripRing } from '../life/terrain';
+import { RoadAccess, stripRing } from '../life/terrain';
 import {
   finalizeControlledCrossings,
   controlledCrossingConnectors,
@@ -1538,7 +1538,8 @@ export function buildTileGeometry(
 
   for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
   if (unitMeters && life.crossingAnchors.length) {
-    finalizeControlledCrossings(life.crossingAnchors, life.roadPolygons, 1 / unitMeters);
+    const access = new RoadAccess(life.roadPolygons, life.crossingCuts);
+    finalizeControlledCrossings(life.crossingAnchors, life.roadPolygons, 1 / unitMeters, access);
     const routes = controlledCrossingConnectors(
       life.crossingAnchors,
       life.walkingLinesView,
@@ -1547,6 +1548,7 @@ export function buildTileGeometry(
       life.walkingObstacles(1 / unitMeters, stripRing),
       1 / unitMeters,
       hashString,
+      access,
     );
     life.joinWalking(routes.joins, routes.connectors);
     for (const crossing of life.crossingAnchors)

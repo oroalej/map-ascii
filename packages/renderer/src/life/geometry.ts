@@ -196,7 +196,6 @@ export type LifeGeometry = {
   /** Exact scalar uint32 values; undefined distinguishes old archives from seed zero. */
   signalSeeds?: (number | undefined)[];
   signalStops?: (SignalStops | undefined)[];
-  signalIds?: (string | undefined)[];
   controlledCrossings?: ControlledCrossingAnchor[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
@@ -820,7 +819,6 @@ export class LifeBuilder {
       signalLayouts: this.signalLayouts,
       signalSeeds: this.signalSeeds,
       signalStops: this.signalStops,
-      signalIds: this.signalIds,
       controlledCrossings: this.controlledCrossings,
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),

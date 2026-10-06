@@ -218,7 +218,7 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
     }
   }
   if (!geo.controlledCrossings?.some((crossing) => crossing.sides)) return out;
-  const access = new RoadAccess(
+  const access = RoadAccess.fromPrepared(
     (geo.areas ?? []).filter((a) => a.kind === 'carriageway').map((a) => a.rings),
     [],
   );
@@ -786,7 +786,6 @@ export function packFixtures(
     for (const { c, r, glyph, part } of chosen) {
       const at = (r * grid.cols + c) * 4,
         code = glyphIndex(glyph);
-      if (code <= 0 || code > MAX_GLYPHS) continue;
       owners[r * grid.cols + c] = ordered.length + (packed.pedestrians?.length ?? 0);
       [out[at], out[at + 1]] = packGlyph(code, part);
       out[at + 2] = state;

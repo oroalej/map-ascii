@@ -2522,10 +2522,7 @@ export class TileLife {
       const size = memberSize(w.figure);
       const footprint =
         Math.hypot(Math.max(size.length, minimum), Math.max(size.width, minimum)) / 2;
-      const pose = a.crossingWait?.waiting?.poses[i];
-      const extent = pose
-        ? Math.hypot(pose.x, pose.y) + footprint
-        : lane + Math.hypot(w.lateral, w.back) * scale + footprint;
+      const extent = lane + Math.hypot(w.lateral, w.back) * scale + footprint;
       radius = Math.max(radius, extent);
     }
     return radius;
@@ -3179,9 +3176,11 @@ export class TileLife {
       const dx = g.tx - g.x;
       const dy = g.ty - g.y;
       const dist = Math.hypot(dx, dy);
+      this.crossingTarget.x = g.tx;
+      this.crossingTarget.y = g.ty;
       const move = this.crossingWaits.limit(
         g,
-        { x: g.tx, y: g.ty },
+        this.crossingTarget,
         g.speed * dt,
         this.crossingClock,
         this.crossingMinimum,
@@ -4720,7 +4719,16 @@ export class TileLife {
           return true;
         };
       }
-      for (const owner of [...this.movers, ...this.gatherers]) {
+      for (const owner of this.movers) {
+        if (
+          owner === this.inspected ||
+          (near && !near(owner.x, owner.y)) ||
+          (pass?.owns && !pass.owns(owner))
+        )
+          continue;
+        this.crossingWaits.tick(owner, dt, clock, minimum, guard);
+      }
+      for (const owner of this.gatherers) {
         if (
           owner === this.inspected ||
           (near && !near(owner.x, owner.y)) ||
@@ -5066,6 +5074,7 @@ export class TileLife {
         }
         if (m.kind === 'vehicle')
           m.terrainWait = !fits && terrainRejected ? (before.terrainWait ?? 0) + dt : undefined;
+        if (walking) m.walked = (before.walked ?? 0) + moved / this.perMeter;
         const blockedWalk = walking && distance > 0 && moved <= distance * 1e-6;
         m.waiting = fits && !blockedWalk ? 0 : (before.waiting ?? 0) + dt;
         // A curb, wall or planter won't move: turn back from it at once, unless the last turn
@@ -5097,8 +5106,6 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
-      if (walking && this.crossingWaits.records.length)
-        m.walked = (before.walked ?? 0) + moved / this.perMeter;
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
@@ -5799,12 +5806,19 @@ export class LifeWorld {
   readonly crossingReservations = new CrossingReservations();
   private crossingCellMeters = 0;
   private retainCrossingClaims() {
+    if (this.crossingReservations.empty) return;
     const active = new Set<string>();
-    for (const life of this.tiles.values())
-      for (const owner of [...life.movers, ...life.gatherers]) {
+    for (const life of this.tiles.values()) {
+      if (!life.crossingWaits.records.length) continue;
+      for (const owner of life.movers) {
         const wait = owner.crossingWait?.waiting;
         if (wait && this.owns(life, owner)) active.add(wait.owner);
       }
+      for (const owner of life.gatherers) {
+        const wait = owner.crossingWait?.waiting;
+        if (wait && this.owns(life, owner)) active.add(wait.owner);
+      }
+    }
     this.crossingReservations.retain(active);
   }
   private sourceSerial = 0;

@@ -1,7 +1,11 @@
 import { expect, it } from 'vitest';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
-import { crossingControllerProperties, type SignalController } from '@atlas/shared';
+import {
+  canonicalSignalSeed,
+  crossingControllerProperties,
+  type SignalController,
+} from '@atlas/shared';
 import { encodeTile, type TestFeature } from '../../../data/scripts/lib/utility-tiles.fixture';
 import {
   buildTileGeometry,
@@ -16,6 +20,19 @@ import { lifeTransferables } from '../life/geometry';
 import { TileLife } from '../life/simulate';
 import { tileFixtures } from '../life/fixtures';
 import { placeSeed } from '../life/lights';
+
+it('keeps the renderer legacy hash aligned with pinned canonical controller seeds', () => {
+  for (const [lng, lat, seed] of [
+    [123.1859231, 13.6248803, 1892173763],
+    [0, 0, 4166576904],
+    [-179, 80, 3591633896],
+  ] as const) {
+    const p = lngLatToTile({ z: 16, x: 0, y: 0 }, lng, lat),
+      scale = MERCATOR_METERS / 2 ** 16 / EXTENT;
+    expect(placeSeed(Math.round(p.x) * scale, Math.round(p.y) * scale)).toBe(seed);
+    expect(canonicalSignalSeed(lng, lat, 16)).toBe(seed);
+  }
+});
 
 const tile = { z: 16, x: 55194, y: 30264 };
 const at = tileToLngLat(tile, { x: 2000, y: 2000 });

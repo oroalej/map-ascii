@@ -401,8 +401,44 @@ export function legendEntries(
       id: 'info:pedestrian-signals',
       classes: [],
       label: 'Pedestrian signals (synced with traffic signals)',
-      glyphs: '●',
+      glyphs: '',
       color: css(theme.fixturePaints[5]!),
+      icons: [
+        {
+          pixels: [
+            '.......',
+            '...##..',
+            '...##..',
+            '...##..',
+            '..####.',
+            '..####.',
+            '..####.',
+            '...#.#.',
+            '...#.#.',
+            '...#.#.',
+            '.......',
+          ],
+          paint: css(theme.fixturePaints[3]!),
+          tone: css(theme.fixturePaints[3]!),
+        },
+        {
+          pixels: [
+            '.......',
+            '...##..',
+            '...##..',
+            '...##..',
+            '.####..',
+            '...###.',
+            '...###.',
+            '..#.#..',
+            '..#..#.',
+            '.#...#.',
+            '.......',
+          ],
+          paint: css(theme.fixturePaints[5]!),
+          tone: css(theme.fixturePaints[5]!),
+        },
+      ],
     });
   if (fixtures?.utilities)
     entries.push({

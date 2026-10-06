@@ -164,7 +164,7 @@ export class SignalControl {
     return Math.min(out.target, out.cap);
   }
   /** The extra entrance hold belongs only to crossings without an existing controller. */
-  controlsCrossing(_line: number, centre: Point): boolean {
+  controlsCrossing(centre: Point): boolean {
     return (this.geo.controlledCrossings ?? []).some(
       (crossing) =>
         Math.hypot(crossing.anchor.x - centre.x, crossing.anchor.y - centre.y) <=

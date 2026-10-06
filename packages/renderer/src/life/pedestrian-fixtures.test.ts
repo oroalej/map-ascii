@@ -16,6 +16,8 @@ import { PED_STOP, PED_WALK } from './pedestrian-glyphs';
 import { drawProcedural } from '../glyphs/atlas';
 import { signalizedCrossingEntry } from './testing/signalized-crossing';
 import { legendEntries } from '../legend';
+import { lngLatToTile, tileToLngLat, metersPerUnit } from '../raster/geometry';
+import { RoadAccess, stripRing } from './terrain';
 
 const signal: StreetFixture = {
   kind: 'signal',
@@ -105,9 +107,11 @@ it('reports only visible lenses and gives them their own legend entry', () => {
   updatePedestrianVisibility(p, grid.cols, () => true);
   expect(p.visibility.pedestrianSignals).toBe(true);
   const entries = legendEntries('dark', 19, undefined, { fixtures: p.visibility });
-  expect(entries.find((e) => e.id === 'info:pedestrian-signals')?.label).toBe(
-    'Pedestrian signals (synced with traffic signals)',
-  );
+  const entry = entries.find((e) => e.id === 'info:pedestrian-signals')!;
+  expect(entry.label).toBe('Pedestrian signals (synced with traffic signals)');
+  expect(entry.icons).toHaveLength(2);
+  expect(entry.icons![0]!.pixels).not.toEqual(entry.icons![1]!.pixels);
+  expect(entry.icons![0]!.paint).not.toBe(entry.icons![1]!.paint);
 });
 
 it('retains reachable edge heads and rejects unreachable or nonfinite projected bases', () => {
@@ -173,3 +177,74 @@ it('owns two synchronized curb heads even when the controller point is outside t
     ),
   ).toHaveLength(0);
 });
+
+for (const configuration of [
+  'preferred',
+  'vehicle-conflict',
+  'road-conflict',
+  'mid-block',
+] as const)
+  it(`keeps pedestrian head anchors clear of carriageways and vehicle heads: ${configuration}`, () => {
+    const entry = signalizedCrossingEntry(),
+      pm = 1 / metersPerUnit(entry.tile),
+      crossing = entry.life.controlledCrossings![0]!,
+      controller = {
+        x: 2000 - (configuration === 'vehicle-conflict' ? 3.2 : 10) * pm,
+        y: 2000 + (configuration === 'vehicle-conflict' ? 1.8 : 0) * pm,
+      };
+    crossing.controller.at = tileToLngLat(entry.tile, controller);
+    crossing.controller.midBlock = configuration === 'mid-block';
+    entry.life.signals = Float32Array.of(
+      controller.x,
+      controller.y,
+      5,
+      crossing.controller.midBlock ? -1 : 90,
+      crossing.controller.midBlock ? 90 : 0,
+      1,
+    );
+    entry.life.signalSeeds = [7];
+    if (configuration === 'road-conflict')
+      entry.life.areas!.push({
+        kind: 'carriageway',
+        rings: [
+          stripRing(
+            { x: 2000 + 1.8 * pm, y: 2000 - 12 * pm },
+            { x: 2000 + 1.8 * pm, y: 2000 + 12 * pm },
+            0.5 * pm,
+          ),
+        ],
+      });
+    const fixtures = tileFixtures(entry.tile, entry.life),
+      vehicleBases = fixtures
+        .filter((f) => f.kind === 'signal')
+        .map((f) => lngLatToTile(entry.tile, ...f.base)),
+      heads = fixtures.filter((f) => f.kind === 'pedestrian-signal'),
+      access = RoadAccess.fromPrepared(
+        entry.life.areas!.filter((area) => area.kind === 'carriageway').map((area) => area.rings),
+        [],
+      );
+    expect(vehicleBases.length).toBeGreaterThan(0);
+    expect(heads).toHaveLength(2);
+    for (const head of heads) {
+      const p = lngLatToTile(entry.tile, ...head.base),
+        side = crossing.sides![head.side]!;
+      expect(
+        access.allows(
+          [{ ...p, hx: side.inward.x, hy: side.inward.y, length: 0.2 * pm, width: 0.2 * pm }],
+          false,
+        ),
+      ).toBe(true);
+      const clearance = (point: { x: number; y: number }) =>
+        Math.min(...vehicleBases.map((v) => Math.hypot(v.x - point.x, v.y - point.y) / pm));
+      expect(clearance(p)).toBeGreaterThanOrEqual(1.5 - 1e-6);
+      if (configuration === 'preferred') expect(p.x).toBeGreaterThan(crossing.anchor.x);
+      if (configuration === 'mid-block')
+        expect(clearance(p)).toBeGreaterThanOrEqual(
+          clearance({ x: 2 * crossing.anchor.x - p.x, y: p.y }) - 1e-6,
+        );
+    }
+    if (configuration === 'vehicle-conflict' || configuration === 'road-conflict')
+      expect(
+        heads.some((head) => lngLatToTile(entry.tile, ...head.base).x < crossing.anchor.x),
+      ).toBe(true);
+  });

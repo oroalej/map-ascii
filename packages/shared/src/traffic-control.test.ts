@@ -7,7 +7,6 @@ import {
   SignalStops,
 } from './traffic-control';
 import { SignalArm } from './signal-layout';
-import { lngLatToTile, MERCATOR_METERS, TILE_EXTENT } from './tile-space';
 
 it('round-trips scalar coordinates and exact uint32 seeds, rejecting partial or malformed tags', () => {
   for (const seed of [0, 0xffffffff]) {
@@ -40,20 +39,14 @@ it('round-trips scalar coordinates and exact uint32 seeds, rejecting partial or 
     expect(ControllerSeed.safeParse(seed).success).toBe(false);
 });
 
-it('hashes the rounded maximum-zoom world grid using the legacy hash arithmetic', () => {
-  for (const [lng, lat] of [
-    [123.1859231, 13.6248803],
-    [0, 0],
-    [-179, 80],
-  ]) {
-    const p = lngLatToTile({ z: 16, x: 0, y: 0 }, lng!, lat!);
-    const scale = MERCATOR_METERS / 2 ** 16 / TILE_EXTENT;
-    const legacy =
-      (Math.imul(Math.round(Math.round(p.x) * scale) | 0, 0x8da6b343) ^
-        Math.imul(Math.round(Math.round(p.y) * scale) | 0, 0xd8163841)) >>>
-      0;
-    expect(canonicalSignalSeed(lng!, lat!, 16)).toBe(legacy);
-  }
+it('preserves pinned legacy seeds on the rounded maximum-zoom world grid', () => {
+  // The renderer's traffic-control test pins placeSeed to these same literal values.
+  for (const [lng, lat, seed] of [
+    [123.1859231, 13.6248803, 1892173763],
+    [0, 0, 4166576904],
+    [-179, 80, 3591633896],
+  ] as const)
+    expect(canonicalSignalSeed(lng, lat, 16)).toBe(seed);
 });
 
 it('allows old stop bearings but requires complete local bearings in exact stop records', () => {

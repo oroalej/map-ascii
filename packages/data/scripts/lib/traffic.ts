@@ -292,7 +292,7 @@ export function mergeTraffic(
         const mid = entry.s.properties.signal_a! < 0;
         if (
           d === undefined ||
-          (mid ? d < 0 : d <= 0) ||
+          (!mid && d <= 0) ||
           d > entry.s.properties.signal_radius! + (mid ? 3 : 15)
         )
           continue;

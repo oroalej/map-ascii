@@ -45,6 +45,9 @@ export class CrossingReservations {
   private next = 0;
   private readonly claims = new Map<string, Claim>();
   private readonly requests = new Map<string, Request>();
+  get empty() {
+    return this.claims.size === 0 && this.requests.size === 0;
+  }
   ownerKey() {
     return `crossing-owner:${this.next++}`;
   }
@@ -145,8 +148,8 @@ export class CrossingReservations {
     this.requests.delete(owner);
   }
   retain(active: ReadonlySet<string>) {
-    for (const owner of [...this.claims.keys(), ...this.requests.keys()])
-      if (!active.has(owner)) this.release(owner);
+    for (const owner of this.claims.keys()) if (!active.has(owner)) this.release(owner);
+    for (const owner of this.requests.keys()) if (!active.has(owner)) this.release(owner);
   }
   snapshot() {
     return {
@@ -303,6 +306,7 @@ export class CrossingWaits {
         return false;
       if (
         !previous &&
+        !waiting.releasing &&
         waiting.slots.length &&
         after.some((body) => !side.pads.some((pad) => bodyInside(body, [pad])))
       )
@@ -456,7 +460,7 @@ export class CrossingWaits {
       this.registry.restore(waiting);
       const record = this.byId.get(waiting.id)!;
       const side = record.sides[waiting.side]!;
-      if (!waiting.releasing) {
+      if (!waiting.releasing && !this.registry.claim(waiting.owner)) {
         const allowed = side.slots.flatMap((slot, i) =>
           after.every((body) => {
             const at = { ...body, ...slot, hx: side.inward.x, hy: side.inward.y };
@@ -466,7 +470,7 @@ export class CrossingWaits {
             : [],
         );
         this.registry.request(waiting, after.length, allowed);
-      } else {
+      } else if (waiting.releasing) {
         const vacated = (this.registry.claim(waiting.owner)?.slots ?? []).filter((id) => {
           const slot = side.slots[side.slotIds.indexOf(id)];
           return (
