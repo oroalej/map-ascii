@@ -187,7 +187,7 @@ export function AtlasCanvas({
       reducedMotion: prefersReducedMotion(),
       gpuTiming: isDebugRequested(),
       profiling: isDebugRequested(),
-      interactive: isPickable,
+      interactive: (feature) => isPickable(feature, useUiStore.getState().clickable),
       life: lifeSettings(lifePrefs),
       traffic,
       climate,

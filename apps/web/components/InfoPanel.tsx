@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { loadSearch } from '@/lib/search';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
+import { selectPlace } from '@/state/selection';
 import { ArtView } from './ArtView';
 import styles from './InfoPanel.module.css';
 
@@ -114,7 +115,7 @@ export function InfoPanel({ city, subdivisionLabel, landmarks, art }: InfoPanelP
   const approximate = feature ? feature.subdivisionApprox : entry?.approximate;
   const years = yearsLine(landmark);
   const osm = osmUrl(id);
-  const close = () => useAtlasStore.getState().setSelected(null);
+  const close = () => selectPlace(null);
 
   return (
     <aside

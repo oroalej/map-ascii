@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from './store';
 import { setTourRunner, tourControls, useTourStore } from './tour';
 import { attachUrlSync } from './useUrlSync';
+import { selectPlace } from './selection';
+import { useUiStore } from './ui';
 
 let detach: (() => void) | undefined;
 const camera = { lat: 1, lng: 2, zoom: 15 };
@@ -41,6 +43,17 @@ function history(search: string) {
   window.dispatchEvent(new PopStateEvent('popstate'));
   return { push, replace };
 }
+
+it('same-ID history clears a map anchor and restores only the encoded camera', () => {
+  selectPlace('osm:way/1', { origin: 'pointer', anchor: [7, 8] });
+  history('lat=3&lng=4&z=17&sel=osm:way/1');
+  expect(useUiStore.getState()).toMatchObject({
+    anchor: null,
+    picked: null,
+    selection: { origin: 'programmatic' },
+  });
+  expect(atlas.setCamera).toHaveBeenLastCalledWith({ lat: 3, lng: 4, zoom: 17 });
+});
 
 it('restores year and selection, cancels a pending write, and does not rewrite history', () => {
   useAtlasStore.getState().setCamera({ zoom: 16 });

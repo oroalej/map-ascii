@@ -7,6 +7,12 @@ import { create } from 'zustand';
  * renderer said about the selected feature when it was picked.
  */
 export type UiState = {
+  clickable: ReadonlySet<string>;
+  selectionSequence: number;
+  selection: { id: string; origin: SelectionOrigin; sequence: number } | null;
+  anchor: { id: string; lngLat: readonly [number, number]; sequence: number } | null;
+  focusRequest: number | null;
+  factsVisible: boolean;
   hover: { feature: FeatureInfo; point: [number, number] } | null;
   lifeHover: Exclude<LifeHover, { label: null }> | null;
   legendFocus: LegendEntryId | null;
@@ -23,6 +29,12 @@ export type UiState = {
 };
 
 export const useUiStore = create<UiState>()(() => ({
+  clickable: new Set(),
+  selectionSequence: 0,
+  selection: null,
+  anchor: null,
+  focusRequest: null,
+  factsVisible: false,
   hover: null,
   lifeHover: null,
   legendFocus: null,
@@ -34,8 +46,13 @@ export const useUiStore = create<UiState>()(() => ({
 }));
 
 /**
- * Only landmarks respond to the pointer: hovering anything else does nothing, and clicking it
+ * Only landmarks with facts respond to the pointer: hovering anything else does nothing, and clicking it
  * clears the selection. Other places are still selected through search, tours, and the URL.
  */
-export const isPickable = (feature: FeatureInfo | null): feature is FeatureInfo =>
-  feature !== null && feature.landmarkId !== undefined;
+export type SelectionOrigin = 'pointer' | 'keyboard' | 'programmatic';
+
+export const isPickable = (
+  feature: FeatureInfo | null,
+  clickable: ReadonlySet<string>,
+): feature is FeatureInfo =>
+  feature !== null && feature.landmarkId !== undefined && clickable.has(feature.landmarkId);

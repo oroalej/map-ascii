@@ -9,7 +9,8 @@ import type {
   TrafficMix,
   Tour,
 } from '@atlas/shared';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useUiStore } from '@/state/ui';
 import dynamic from 'next/dynamic';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
@@ -72,6 +73,17 @@ export function CityAtlas({
   art,
   tours,
 }: CityAtlasProps) {
+  const clickable = useMemo(
+    () => new Set(landmarks.filter((l) => l.facts).map((l) => l.id)),
+    [landmarks],
+  );
+  useEffect(() => {
+    useUiStore.setState({ clickable });
+    return () => {
+      if (useUiStore.getState().clickable === clickable)
+        useUiStore.setState({ clickable: new Set() });
+    };
+  }, [clickable]);
   useEffect(() => {
     useAtlasStore.getState().setCity(slug);
   }, [slug]);
