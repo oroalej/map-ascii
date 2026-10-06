@@ -738,7 +738,6 @@ export const SIGNAL = {
   brake: 3,
   walkMin: 5,
   /** Additional radius for associating crossing quads with signal controllers, m. */
-  crossingMargin: 3.5,
 } as const;
 
 /** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */

@@ -168,6 +168,8 @@ export type CrossingSide = {
   centre: TilePoint;
   pads: TilePoint[][];
   slots: TilePoint[];
+  /** Stable row/column identities, even when clipping removes earlier candidates. */
+  slotIds: number[];
 };
 export type ControlledCrossingAnchor = {
   id: string;

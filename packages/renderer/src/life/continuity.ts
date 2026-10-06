@@ -177,6 +177,18 @@ export function projectMover(
     avoid: m.avoid,
     waiting: m.waiting,
   };
+  if (m.crossingWait) {
+    const wait = m.crossingWait.waiting;
+    const project = (p: { x: number; y: number; hx: number; hy: number }) => ({
+      ...p,
+      x: (frame.x + (m.x + p.x * source.perMeter) * frame.scale - preview.x) / target.perMeter,
+      y: (frame.y + (m.y + p.y * source.perMeter) * frame.scale - preview.y) / target.perMeter,
+    });
+    preview.crossingWait = {
+      commitments: m.crossingWait.commitments,
+      waiting: wait && { ...wait, poses: wait.poses.map(project), start: wait.start.map(project) },
+    };
+  }
   if (m.routing) {
     preview.routing = {
       seed: m.routing.seed,
@@ -252,14 +264,27 @@ export function walkingBefore(
   preview: Mover,
 ): Mover {
   const f = frameBetween(source.tile, target.tile);
+  const x = f.x + mover.x * f.scale,
+    y = f.y + mover.y * f.scale;
+  const wait = preview.crossingWait?.waiting;
+  const shift = (p: { x: number; y: number; hx: number; hy: number }) => ({
+    ...p,
+    x: p.x + (preview.x - x) / target.perMeter,
+    y: p.y + (preview.y - y) / target.perMeter,
+  });
   return {
     ...preview,
-    x: f.x + mover.x * f.scale,
-    y: f.y + mover.y * f.scale,
+    x,
+    y,
     hx: mover.hx,
     hy: mover.hy,
+    crossingWait: preview.crossingWait && {
+      ...preview.crossingWait,
+      waiting: wait && { ...wait, poses: wait.poses.map(shift), start: wait.start.map(shift) },
+    },
   };
 }
+
 export function walkingTransfer(target: TileLife, source: TileLife, mover: Mover, preview: Mover) {
   const f = frameBetween(source.tile, target.tile),
     ratio = (f.scale * source.perMeter) / target.perMeter;

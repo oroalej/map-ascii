@@ -74,7 +74,8 @@ export function finalizeControlledCrossings(
       // A tiny numerical margin keeps rotated slots from losing capacity at exact contact.
       const spacing = { depth: size.length + 0.1501, lateral: size.width + 0.1501 };
       const accepted: Body[] = [],
-        slots: Point[] = [];
+        slots: Point[] = [],
+        slotIds: number[] = [];
       for (let row = 0; row < 2; row++)
         for (let column = 0; column < 2; column++) {
           const centre = at(
@@ -97,8 +98,9 @@ export function finalizeControlledCrossings(
             continue;
           accepted.push(body);
           slots.push(centre);
+          slotIds.push(row * 2 + column);
         }
-      return { gate, inward, centre: at(side, depth, 0), pads, slots };
+      return { gate, inward, centre: at(side, depth, 0), pads, slots, slotIds };
     }) as [CrossingSide, CrossingSide];
     crossing.sides = sides;
     crossing.quad = [
