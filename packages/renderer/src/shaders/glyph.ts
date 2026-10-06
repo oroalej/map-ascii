@@ -455,8 +455,8 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   }
   if (part == ${FixturePart.pedestrianStop} || part == ${FixturePart.pedestrianWalk}) {
     bool stop = part == ${FixturePart.pedestrianStop};
-    bool active = stop ? info == 0 : info == 1 || info == 2;
-    color = u_fixturePaints[stop ? 3 : 5] * (active ? 1.0 : 0.35);
+    bool lensActive = stop ? info == 0 : info == 1 || info == 2;
+    color = u_fixturePaints[stop ? 3 : 5] * (lensActive ? 1.0 : 0.35);
     under = mix(under, daylit(u_fixturePaints[1]), fixture.a * 0.85);
   }
   if (part == ${FixturePart.signal}) color = u_fixturePaints[3 + min(info, 2)];

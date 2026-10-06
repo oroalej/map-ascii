@@ -171,14 +171,14 @@ it('resolves phases and complete vehicle stop metadata without the controller fe
 });
 
 it('rejects partial, malformed and inconsistent controlled scalar records on real MVT decode', () => {
-  for (const extra of [
+  const cases: Record<string, string | number | boolean>[] = [
     { crossing_signal_at: 'broken' },
     { crossing_signal_seed: -1 },
     { crossing_walk: 'c' },
     { crossing_signal_control: '{}' },
     { crossing_signal_control: JSON.stringify({ ...controller(1), seed: 2 }) },
-  ])
-    expect(() => decode(1, false, tile, extra)).toThrow();
+  ];
+  for (const extra of cases) expect(() => decode(1, false, tile, extra)).toThrow();
   const feature = point(
     1,
     { id: 'cross', class: 'furniture', variant: 'crossing', crossing_signal: 'signal' },

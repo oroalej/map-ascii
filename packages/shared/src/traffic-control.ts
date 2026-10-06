@@ -79,9 +79,10 @@ export function decodeCrossingController(
   if (!crossingKeys.some((key) => properties[key] !== undefined)) return;
   if (typeof properties.crossing_signal_at !== 'string')
     throw new Error('crossing_signal_at must be scalar JSON');
+  const at: unknown = JSON.parse(properties.crossing_signal_at);
   return CrossingController.parse({
     id: properties.crossing_signal,
-    at: JSON.parse(properties.crossing_signal_at),
+    at,
     seed: properties.crossing_signal_seed,
     midBlock: properties.crossing_mid ?? false,
     walk: properties.crossing_walk,

@@ -39,7 +39,7 @@ const mover = (count = 1): Mover => ({
 const bodies = (owner: GroundAgent, minimum = 0, natural = false): Body[] => {
   if (!('kind' in owner)) return [];
   return (owner.group ?? []).map((w, i) => {
-    const p = !natural && owner.crossingWait?.waiting?.poses[i];
+    const p = natural ? undefined : owner.crossingWait?.waiting?.poses[i];
     return {
       x: owner.x + (p?.x ?? -owner.hy * w.lateral - owner.hx * w.back),
       y: owner.y + (p?.y ?? owner.hx * w.lateral - owner.hy * w.back),

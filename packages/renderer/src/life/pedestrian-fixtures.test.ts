@@ -128,4 +128,28 @@ it('owns two synchronized curb heads even when the controller point is outside t
   const heads = fixtures.filter((f) => f.kind === 'pedestrian-signal');
   expect(heads).toHaveLength(2);
   expect(heads.every((f) => f.seed === 7 && f.group === 'a')).toBe(true);
+  const dropped = structuredClone(entry.life);
+  for (const side of dropped.controlledCrossings![0]!.sides!) {
+    side.pads = [];
+    side.slots = [];
+    side.slotIds = [];
+  }
+  expect(
+    tileFixtures(entry.tile, dropped).filter((f) => f.kind === 'pedestrian-signal'),
+  ).toHaveLength(2);
+  const buffered = structuredClone(dropped);
+  for (const crossing of buffered.controlledCrossings!) {
+    crossing.anchor.x -= 4096;
+    for (const side of crossing.sides!) {
+      side.centre.x -= 4096;
+      for (const p of side.gate) p.x -= 4096;
+    }
+  }
+  for (const area of buffered.areas ?? [])
+    for (const ring of area.rings) for (const point of ring) point.x -= 4096;
+  expect(
+    tileFixtures({ ...entry.tile, x: entry.tile.x + 1 }, buffered).filter(
+      (f) => f.kind === 'pedestrian-signal',
+    ),
+  ).toHaveLength(0);
 });

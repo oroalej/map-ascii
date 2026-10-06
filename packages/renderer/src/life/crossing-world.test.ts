@@ -4,6 +4,28 @@ import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signa
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import { pedestrianState } from './signals';
 import { bodyCorners } from './occupancy';
+import { signalizedCrossroads } from './testing/signalized-crossroads';
+import { controlledTile } from './testing/signalized-crossing';
+
+it('runs dense signalized crossroads with exact stops and only off-road waiting bodies', () => {
+  const geo = signalizedCrossroads(controlledTile),
+    world = new LifeWorld();
+  world.sync([{ key: 'dense-signals', tile: controlledTile, life: geo }]);
+  const life = worldTiles(world).get('dense-signals')!;
+  expect(life.crossingWaits.records).toHaveLength(4);
+  expect(life.signals.signals[0]!.approaches).toHaveLength(4);
+  expect(life.signals.signals[0]!.approaches!.every((a) => a.stopAlong !== undefined)).toBe(true);
+  let waiting = 0;
+  for (let frame = 0; frame < 300; frame++) {
+    world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+    for (const m of life.movers)
+      if (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing) {
+        waiting++;
+        expect(life.roadTerrain.access.allows(life.groundBodies(m, 0.9), false)).toBe(true);
+      }
+  }
+  expect(waiting).toBeGreaterThan(0);
+});
 
 it('clamps an oversized ordinary step after its bend and restores a rejected full trial', () => {
   const entry = signalizedCrossingEntry(),
@@ -16,11 +38,11 @@ it('clamps an oversized ordinary step after its bend and restores a rejected ful
   )!;
   (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
   const before = structuredClone(m);
-  life.step(0.1, undefined, undefined, undefined, { clock: red }, () => false);
+  life.step(0.1, undefined, undefined, undefined, { clock: red, rain: 0 }, () => false);
   expect(m.x).toBe(before.x);
   expect(m.y).toBe(before.y);
   expect(m.crossingWait).toBeUndefined();
-  life.step(20, undefined, undefined, undefined, { clock: red });
+  life.step(20, undefined, undefined, undefined, { clock: red, rain: 0 });
   expect(m.from).toBe(3);
   expect((m.y - 2000) / pm).toBeCloseTo(-5.46);
   expect(m.crossingWait?.waiting).toBeDefined();

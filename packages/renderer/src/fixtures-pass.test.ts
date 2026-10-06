@@ -6,6 +6,68 @@ import type { StreetFixture } from './life/fixtures';
 import { signalState } from './life/signals';
 import * as utilities from './life/utilities';
 import { SeasonalPart } from './life/seasonal-glyphs';
+import { pedestrianState } from './life/signals';
+
+it('updates flashing pedestrian lenses without reprojection and reports their independent viewport visibility', () => {
+  const upload = vi.fn(),
+    project = vi.fn((x: number, y: number): [number, number] => [x, y]);
+  const gl = { bindTexture: vi.fn(), pixelStorei: vi.fn(), texSubImage2D: upload } as unknown as GL;
+  const targets = { cols: 100, rows: 100, fixtureTex: {}, signalLightTex: {} } as CellTargets;
+  const resources = { map: { atlas: { index: () => 300 } } } as unknown as ThemeResources;
+  const view: View = {
+    camera: { lng: 0, lat: 0, zoom: 19 },
+    dpr: 1,
+    width: 500,
+    height: 500,
+    cellDev: { w: 5, h: 9 },
+    labelDev: { w: 10, h: 18 },
+    detailZoom: 20,
+  };
+  const placement = { ...placeGrid(view, view.cellDev, 100, 100), toCell: project };
+  const fixtures: StreetFixture[] = [
+    {
+      kind: 'pedestrian-signal',
+      crossing: 'c',
+      side: 0,
+      base: [40, 40],
+      tip: [41, 40],
+      forward: [41, 40],
+      right: [40, 41],
+      seed: 7,
+      group: 'a',
+      midBlock: false,
+    },
+  ];
+  const flash = Array.from({ length: 1000 }, (_, i) => i / 10).find(
+    (t) => pedestrianState(7, t, false, 'a') === 'flash',
+  )!;
+  const first = fixturePass(gl, targets, resources, view, placement, fixtures, flash, false);
+  expect(first.pedestrianSignals).toBe(true);
+  expect(first.trafficSignals).toBe(false);
+  const bytes = (upload.mock.calls[0]!.at(-1) as Uint8Array).slice();
+  project.mockClear();
+  fixturePass(gl, targets, resources, view, placement, fixtures, flash + 0.5, false);
+  expect(project).not.toHaveBeenCalled();
+  expect(upload).toHaveBeenCalledTimes(4);
+  const after = upload.mock.calls[2]!.at(-1) as Uint8Array;
+  expect(after).not.toEqual(bytes);
+  for (let i = 0; i < bytes.length; i++) if (i % 4 !== 2) expect(after[i]).toBe(bytes[i]);
+  expect((upload.mock.calls[3]!.at(-1) as Uint8Array).every((v) => v === 0)).toBe(true);
+  fixturePass(gl, targets, resources, view, placement, fixtures, flash + 0.5, false);
+  expect(upload).toHaveBeenCalledTimes(4);
+  expect(
+    fixturePass(
+      gl,
+      targets,
+      resources,
+      { ...view, camera: { ...view.camera, zoom: 18 } },
+      placement,
+      fixtures,
+      flash,
+      false,
+    ).pedestrianSignals,
+  ).toBeUndefined();
+});
 
 it('keeps seasonal geometry, ownership and texture uploads cached while wind and time change', () => {
   const upload = vi.fn();

@@ -1,3 +1,4 @@
+import { activityLevels } from './config';
 import { expect, it, vi } from 'vitest';
 import { LifeWorld } from './simulate';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
@@ -43,11 +44,7 @@ it('matches waiting reservations, phase release and geometry transfer in worker 
           weather: { rain: 0 },
           cellMeters: 0.9,
         },
-        visible: [
-          19,
-          { person: 1, vehicle: 1, boat: 1, train: 1, bird: 1, dog: 1, cat: 1 },
-          center,
-        ],
+        visible: [19, activityLevels(1), center],
       };
       expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
     }

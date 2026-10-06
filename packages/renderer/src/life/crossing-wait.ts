@@ -361,7 +361,7 @@ export class CrossingWaits {
         const entered = record.sides.findIndex((side) =>
           after.some((body, i) =>
             previous
-              ? !!before[i] && this.entry(before[i]!, body, side)
+              ? !!before[i] && this.entry(before[i], body, side)
               : bodyCorners(body).some((p) => pointInside(p, [record.quad])),
           ),
         );
@@ -484,7 +484,7 @@ export class CrossingWaits {
     });
     const before = { ...owner };
     owner.crossingWait = {
-      commitments: state!.commitments,
+      commitments: state.commitments,
       waiting: {
         ...wait,
         slots,

@@ -4739,7 +4739,12 @@ export class TileLife {
             running -= Number(this.stopRun(m));
             continue;
           }
-        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+        } else if (
+          idle &&
+          this.walkerRng() < PERSON_TURN_CHANCE * dt &&
+          !dashing &&
+          !m.crossingWait?.waiting
+        ) {
           running -= Number(this.stopRun(m));
           this.beginTurn(m);
           this.turnBack(m);
@@ -4757,7 +4762,7 @@ export class TileLife {
       }
       const walking = isWalker(m.kind);
       if (walking) {
-        if (m.kind === 'person' && speeds[i] > 0 && this.trafficTooClose(m, speeds[i] * dt))
+        if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
           speeds[i] = 0;
       }
       if (m.vehicle) {
@@ -4925,6 +4930,8 @@ export class TileLife {
         }
       }
       if (m.vehicle) m.v = moved / dt;
+      if (walking && this.crossingWaits.records.length)
+        m.walked = (before.walked ?? 0) + moved / this.perMeter;
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
@@ -7744,7 +7751,10 @@ export class LifeWorld {
                 paint: w.shirt,
                 ...place(w, member),
                 // Standing still, feet together.
-                flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+                flap:
+                  m.pause > 0 || (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing)
+                    ? 0
+                    : (stride + w.step) & 1,
                 pose: life.momentHost.pose(m, member),
               },
               w,
