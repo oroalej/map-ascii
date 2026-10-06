@@ -149,6 +149,11 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length,
   );
+  for (const theme of Object.values(themes)) {
+    const glyphs = mapGlyphs(theme);
+    expect(glyphs.slice(409)).toEqual(PEDESTRIAN_GLYPHS);
+    expect(glyphs.slice(409 - CANDLE_GLYPHS.length, 409)).toEqual(CANDLE_GLYPHS);
+  }
   for (const figure of ['adult', 'child'] as const)
     for (const pose of ['attentive', 'gesture'] as const)
       for (const scale of [0.5, 3, 8])
