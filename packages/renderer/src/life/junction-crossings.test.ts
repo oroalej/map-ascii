@@ -298,6 +298,23 @@ for (const inside of [false, true])
     table.resolve(0);
     expect(table.granted(car)).toBe(true);
     expect(table.snapshot()[0]!.inside).toBe(inside);
+    if (inside) {
+      // Move onto the committed exit, close enough for courtesy to slow the
+      // vehicle but still outside the late-arrival commitment distance.
+      Object.assign(car, {
+        line: 0,
+        from: 0,
+        dir: 1,
+        x: 2000 + pm,
+        d: pm,
+        routing: undefined,
+        next: undefined,
+      });
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, 0.1);
+      table.resolve(0.1);
+    }
     const target = (
       life as unknown as {
         pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
@@ -309,8 +326,12 @@ for (const inside of [false, true])
       walkersInArea: () => true,
     };
     const limited = target(car, 8 * pm, view, 0.1);
-    if (inside) expect(limited).toBe(8 * pm);
-    else expect(limited).toBeLessThan(8 * pm);
+    if (inside) {
+      expect(limited).toBe(8 * pm);
+      const associations = vi.spyOn(life.junctionCrossings, 'forArm').mockReturnValue([]);
+      expect(target(car, 8 * pm, view, 0.1)).toBeLessThan(8 * pm);
+      associations.mockRestore();
+    } else expect(limited).toBeLessThan(8 * pm);
     expect(car.pedestrianHolds?.length).toBeGreaterThan(0);
     expect(target(car, 8 * pm, { ...view, walkersAlong: () => 5 }, 0.1)).toBeLessThan(8 * pm);
     expect(table.snapshot()[0]!.inside).toBe(inside);
