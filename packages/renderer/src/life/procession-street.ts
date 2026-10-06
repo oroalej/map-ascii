@@ -14,12 +14,19 @@ import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
 import type { LifeInspection } from './inspection';
 import { VEHICLES } from './vehicles';
+import { eventActor, identifyEventActor, eventBodySize } from './event-actors';
+import { bodyCorners, segmentBody } from './occupancy';
 
 type Point = [number, number];
 const MASS_CELL = PROCESSION_GEOMETRY.massCell;
 const PERSON_REACH =
   Math.max(PROCESSION_GEOMETRY.person.length, PROCESSION_GEOMETRY.person.width) / 2 +
   PROCESSION_GEOMETRY.probePadding;
+// Mass walkers face the church throughout approach/exit, so sweeps enclose every heading.
+const PERSON_RADIUS = Math.hypot(
+  PROCESSION_GEOMETRY.person.length / 2 + PROCESSION_GEOMETRY.probePadding,
+  PROCESSION_GEOMETRY.person.width / 2 + PROCESSION_GEOMETRY.probePadding,
+);
 type Actor = {
   id: string;
   seed: number;
@@ -66,10 +73,10 @@ export class GroundProcessionScene {
     this.ground = groundForRoute(route);
     this.build();
     this.tail =
-      this.actors.reduce(
+      this.actors.reduce<number>(
         (tail, actor) => (actor.destination ? tail : Math.max(tail, actor.back)),
-        10,
-      ) + 10;
+        PROCESSION.street.tailPadding,
+      ) + PROCESSION.street.tailPadding;
   }
   get playDuration() {
     return Math.max(
@@ -119,16 +126,25 @@ export class GroundProcessionScene {
             x++
           ) {
             const q: Point = [x * MASS_CELL, y * MASS_CELL];
-            if (
-              eventGroundAllows(
-                permission,
-                [
-                  [q[0] - PERSON_REACH, q[1] - PERSON_REACH],
-                  [q[0] + PERSON_REACH, q[1] + PERSON_REACH],
-                ].map((q) => this.frame.from(q as Point)),
-              )
-            )
-              cells.set(key(x, y), q);
+            const footprint = bodyCorners({
+              x: q[0],
+              y: q[1],
+              hx: 1,
+              hy: 0,
+              length: MASS_CELL,
+              width: MASS_CELL,
+            }).map((p) => this.frame.from([p.x, p.y]));
+            // Quantized row edges can shift slightly around a 2 m lattice cell. Require
+            // every heading's padded body inside the row, and the whole cell clear of roofs.
+            const probes = bodyCorners({
+              x: q[0],
+              y: q[1],
+              hx: 1,
+              hy: 0,
+              length: 2 * PERSON_RADIUS,
+              width: 2 * PERSON_RADIUS,
+            }).map((p) => this.frame.from([p.x, p.y]));
+            if (eventGroundAllows(permission, probes, footprint)) cells.set(key(x, y), q);
           }
       }
       const anchor = this.frame.to(r.site.anchor),
@@ -177,10 +193,14 @@ export class GroundProcessionScene {
       const f = this.route.formation;
       add(0, 0, 4, ProcessionGlyph.andas);
       for (let i = 0; i < (f?.bearers ?? PROCESSION_DEFAULTS.procession.bearers); i++)
-        add(1 + Math.floor(i / 2) * 1.2, (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.bearerOffset, 3);
+        add(
+          PROCESSION.street.bearerStart + Math.floor(i / 2) * PROCESSION.street.bearerGap,
+          (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.bearerOffset,
+          3,
+        );
       for (let i = 0; i < (f?.marshals ?? PROCESSION_DEFAULTS.procession.marshals); i++)
         add(
-          -8 - Math.floor(i / 2) * 3,
+          -PROCESSION.street.marshalLead - Math.floor(i / 2) * PROCESSION.street.marshalGap,
           (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.marshalOffset,
           6,
           ProcessionGlyph.flag,
@@ -188,7 +208,7 @@ export class GroundProcessionScene {
       for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.procession.ranks); r++)
         for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
           add(
-            10 + r * 2,
+            PROCESSION.street.devoteeStart + r * PROCESSION.street.rankGap,
             (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
             3 + Math.floor(rng() * 5),
           );
@@ -197,41 +217,47 @@ export class GroundProcessionScene {
       let back = 0;
       for (let i = 0; i < (f?.color_guard ?? PROCESSION_DEFAULTS.parade.color_guard); i++)
         add(
-          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * 2,
+          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * PROCESSION.street.rankGap,
           ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
             PROCESSION_GEOMETRY.columnPitch,
           5,
           ProcessionGlyph.flag,
         );
-      back += 8;
+      back += PROCESSION.street.guardGap;
       for (let i = 0; i < (f?.band ?? PROCESSION_DEFAULTS.parade.band); i++)
         add(
-          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * 2,
+          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * PROCESSION.street.rankGap,
           ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
             PROCESSION_GEOMETRY.columnPitch,
           4,
           i % 2 ? ProcessionGlyph.bugle : ProcessionGlyph.drum,
         );
       back +=
-        Math.ceil((f?.band ?? PROCESSION_DEFAULTS.parade.band) / PROCESSION_GEOMETRY.columns) * 2 +
-        5;
+        Math.ceil((f?.band ?? PROCESSION_DEFAULTS.parade.band) / PROCESSION_GEOMETRY.columns) *
+          PROCESSION.street.rankGap +
+        PROCESSION.street.bandGap;
       for (let k = 0; k < (f?.contingents ?? PROCESSION_DEFAULTS.parade.contingents); k++) {
         for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks); r++)
           for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
             add(
-              back + r * 2,
+              back + r * PROCESSION.street.rankGap,
               (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
               3 + k,
             );
-        back += (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks) * 2 + 6;
+        back +=
+          (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks) * PROCESSION.street.rankGap +
+          PROCESSION.street.contingentGap;
       }
       for (const vehicle of f?.vehicles ?? []) {
         add(back, 0, 5, undefined, vehicle);
-        back += VEHICLES[vehicle].length + 6;
+        back += VEHICLES[vehicle].length + PROCESSION.street.vehicleGap;
       }
     }
     // Both sidewalks; weight the start and arrival without independent random reseeding.
-    const spacing = Math.max(5, this.route.length_m / PROCESSION.eventSpectators);
+    const spacing = Math.max(
+      PROCESSION.street.spectatorSpacing,
+      this.route.length_m / PROCESSION.eventSpectators,
+    );
     for (
       let s = 0;
       s <= this.route.length_m && this.actors.length < PROCESSION.eventActors;
@@ -240,12 +266,12 @@ export class GroundProcessionScene {
       for (const side of [-1, 1]) {
         const at = this.at(s),
           segment = this.route.segments[at.index]!;
-        if (segment.sidewalk_m < 1) continue;
-        add(
-          -s,
-          side * (segment.width_m / 2 + Math.min(segment.sidewalk_m / 2, 0.8)),
-          3 + Math.floor(rng() * 5),
+        const inset = Math.min(
+          PROCESSION.street.spectatorInset,
+          segment.sidewalk_m - PERSON_REACH - PROCESSION.street.spectatorMargin,
         );
+        if (inset < 0) continue;
+        add(-s, side * (segment.width_m / 2 + inset), 3 + Math.floor(rng() * 5));
         this.actors.at(-1)!.destination = this.frame.from([
           at.x - at.hy * this.actors.at(-1)!.off,
           at.y + at.hx * this.actors.at(-1)!.off,
@@ -260,12 +286,12 @@ export class GroundProcessionScene {
       if (actor.kind !== 'person' || actor.prop || actor.vehicle || actor.aboard) continue;
       const q = this.frame.to([actor.lng, actor.lat]);
       const footprint = [
-        [-PERSON_REACH, -PERSON_REACH],
-        [-PERSON_REACH, PERSON_REACH],
-        [PERSON_REACH, -PERSON_REACH],
-        [PERSON_REACH, PERSON_REACH],
+        [-PERSON_RADIUS, -PERSON_RADIUS],
+        [PERSON_RADIUS, -PERSON_RADIUS],
+        [PERSON_RADIUS, PERSON_RADIUS],
+        [-PERSON_RADIUS, PERSON_RADIUS],
       ].map(([dx, dy]) => this.frame.from([q[0] + dx!, q[1] + dy!]));
-      if (!eventGroundAllows(this.ground, footprint)) continue;
+      if (!eventGroundAllows(this.ground, footprint, footprint)) continue;
       let nearest: string | undefined,
         distance = Infinity;
       const cx = Math.round(q[0] / MASS_CELL),
@@ -290,6 +316,11 @@ export class GroundProcessionScene {
           MASS_CELL
       )
         continue;
+      const cell = this.massCells.get(nearest)!;
+      const swept = bodyCorners(
+        segmentBody({ x: q[0], y: q[1] }, { x: cell[0], y: cell[1] }, PERSON_RADIUS),
+      ).map((p) => this.frame.from([p.x, p.y]));
+      if (!eventGroundAllows(this.ground, swept, swept)) continue;
       const approach: Point[] = [q];
       for (
         let node: string | undefined = nearest;
@@ -332,7 +363,7 @@ export class GroundProcessionScene {
     if (route.kind === 'mass') return [];
     const head = this.head(progress),
       from = Math.max(0, head - this.tail),
-      to = Math.min(this.along.at(-1)!, head + 15);
+      to = Math.min(this.along.at(-1)!, head + PROCESSION.street.headMargin);
     if (to < from) return [];
     return this.points.slice(1).flatMap((b, i) =>
       this.along[i + 1]! >= from && this.along[i]! <= to
@@ -364,7 +395,7 @@ export class GroundProcessionScene {
     for (let i = 0; i < this.actors.length; i++) {
       const a = this.actors[i]!;
       const adopted = this.adopted[i],
-        id = adopted?.eventActor ?? this.scopedIds.ids[i]!;
+        id = eventActor(adopted) ?? this.scopedIds.ids[i]!;
       const owner = options.owner?.(id);
       const actorProgress =
         owner && options.inspection ? options.inspection.progress(owner, progress) : progress;
@@ -376,13 +407,15 @@ export class GroundProcessionScene {
         const path = a.approach!;
         // Queue new walkers over the arrival window instead of placing hundreds at the
         // same approach point. Adopted walkers keep their existing position immediately.
-        const delay = adopted ? 0 : (i / Math.max(1, this.actors.length)) * 0.15;
+        const delay = adopted
+          ? 0
+          : (i / Math.max(1, this.actors.length)) * PROCESSION.mass.queueSpread;
         if (!adopted && actorProgress < delay) continue;
         const t =
-          actorProgress < 0.25
-            ? (actorProgress - delay) / (0.25 - delay)
-            : actorProgress > 0.75
-              ? (1 - actorProgress) / 0.25
+          actorProgress < PROCESSION.mass.arrivalEnd
+            ? (actorProgress - delay) / (PROCESSION.mass.arrivalEnd - delay)
+            : actorProgress > PROCESSION.mass.disperseStart
+              ? (1 - actorProgress) / (1 - PROCESSION.mass.disperseStart)
               : 1;
         const travel = Math.max(0, Math.min(1, t)) * (path.length - 1),
           k = Math.min(path.length - 2, Math.floor(travel)),
@@ -405,41 +438,40 @@ export class GroundProcessionScene {
         y = at.y + hx * a.off;
       }
       const q = this.frame.from([x, y]);
-      const dimensions = a.vehicle
-        ? PROCESSION_GEOMETRY.vehicles[a.vehicle]
-        : a.glyph === ProcessionGlyph.andas
-          ? PROCESSION_GEOMETRY.andas
-          : PROCESSION_GEOMETRY.person;
-      const length = dimensions.length / 2 + PROCESSION_GEOMETRY.probePadding,
-        width = dimensions.width / 2 + PROCESSION_GEOMETRY.probePadding;
-      const corners: Point[] = [];
-      for (const along of [-1, 1])
-        for (const across of [-1, 1])
-          corners.push(
-            this.frame.from([
-              x + along * hx * length - across * hy * width,
-              y + along * hy * length + across * hx * width,
-            ]),
-          );
-      if (!eventGroundAllows(this.ground, [q, ...corners])) continue;
-      out.push({
-        kind: a.vehicle ? 'vehicle' : 'person',
-        lng: q[0],
-        lat: q[1],
-        ahead: this.frame.from([x + hx, y + hy]),
-        side: this.frame.from([x + hy, y - hx]),
-        flap:
-          this.route.kind === 'mass' && actorProgress >= 0.25 && actorProgress <= 0.75
-            ? 0
-            : Math.floor(actorTime * 2 + a.phase) & 1,
-        ...(a.glyph && { prop: 'event', glyph: a.glyph }),
-        ...(a.vehicle && { vehicle: a.vehicle }),
-        candle: (adopted?.candle ?? a.candle) && !a.glyph && !a.vehicle,
-        candleSeed: adopted?.candleSeed ?? a.seed,
-        paint: adopted?.paint ?? a.paint,
-        eventActor: id,
-        eventGround: this.route.id,
-      });
+      const dimensions = eventBodySize(a);
+      const corners = bodyCorners({
+        x,
+        y,
+        hx,
+        hy,
+        length: dimensions.length + 2 * PROCESSION_GEOMETRY.probePadding,
+        width: dimensions.width + 2 * PROCESSION_GEOMETRY.probePadding,
+      }).map((point) => this.frame.from([point.x, point.y]));
+      if (!eventGroundAllows(this.ground, [q, ...corners], corners)) continue;
+      out.push(
+        identifyEventActor(
+          {
+            kind: a.vehicle ? 'vehicle' : 'person',
+            lng: q[0],
+            lat: q[1],
+            ahead: this.frame.from([x + hx, y + hy]),
+            side: this.frame.from([x + hy, y - hx]),
+            flap:
+              this.route.kind === 'mass' &&
+              actorProgress >= PROCESSION.mass.arrivalEnd &&
+              actorProgress <= PROCESSION.mass.disperseStart
+                ? 0
+                : Math.floor(actorTime * 2 + a.phase) & 1,
+            ...(a.glyph && { prop: 'event', glyph: a.glyph }),
+            ...(a.vehicle && { vehicle: a.vehicle }),
+            candle: (adopted?.candle ?? a.candle) && !a.glyph && !a.vehicle,
+            candleSeed: adopted?.candleSeed ?? a.seed,
+            paint: adopted?.paint ?? a.paint,
+            eventGround: this.route.id,
+          },
+          id,
+        ),
+      );
     }
     return out;
   }

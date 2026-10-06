@@ -4,7 +4,7 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
-import { OsmId, OsmAreaId, MercatorPosition } from './schema-primitives';
+import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitives';
 export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
@@ -662,7 +662,7 @@ export const ParadeFormation = z.strictObject({
   ),
   vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
 });
-const EventPoint = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
+const EventPoint = LngLat;
 const EventRing = z
   .array(EventPoint)
   .min(4)
@@ -901,10 +901,7 @@ export function contentSchemas(languages?: readonly string[]) {
   const streetRoute = z.strictObject({
     from: OsmId,
     to: OsmId,
-    via: z
-      .array(z.string().regex(/^osm:way\/\d+$/))
-      .min(1)
-      .optional(),
+    via: z.array(OsmWayId).min(1).optional(),
   });
   const Procession = z
     .discriminatedUnion('kind', [
@@ -939,6 +936,8 @@ export function contentSchemas(languages?: readonly string[]) {
         kind: z.literal('mass'),
         site: OsmId,
         grounds: z.array(OsmAreaId).min(1),
+        /** Authored exterior forecourt; the pipeline snaps only to safe connected cells. */
+        gathering_anchor: LngLat.optional(),
         radius_m: z.number().positive().max(PROCESSION_LIMITS.radius),
       }),
     ])

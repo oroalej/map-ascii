@@ -4,6 +4,8 @@ import type { Feature, Geometry } from 'geojson';
 import { routeProcessions } from './procession';
 import { requiredFormationWidth } from './procession-ground';
 import { localFrame } from './geo';
+import { intersection } from 'polyclip-ts';
+import { seatingFootprint } from './footprints';
 
 type F = Feature<Geometry, Record<string, unknown>>;
 const point = (id: string, at: number[]): F => ({
@@ -69,6 +71,61 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it('uses an exterior Mass anchor and excludes complete cells and approaches from a thin diagonal church footprint', () => {
+    const frame = localFrame([0, 0]);
+    const church: F = {
+      type: 'Feature',
+      properties: { id: 'osm:way/10', class: 'building_worship', height: 5 },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-10, -10.2],
+            [10.2, 10],
+            [10, 10.2],
+            [-10.2, -10],
+            [-10, -10.2],
+          ].map((q) => frame.toLngLat(q as [number, number])),
+        ],
+      },
+    };
+    const ground = area('osm:way/11', 'park', -0.0002, -0.0002, 0.0002, 0.0002);
+    const event = Procession.parse({
+      title: base.title,
+      story: base.story,
+      status: base.status,
+      schedule: base.schedule,
+      id: 'procession/exterior',
+      kind: 'mass',
+      site: 'osm:way/10',
+      grounds: ['osm:way/11'],
+      radius_m: 25,
+      gathering_anchor: frame.toLngLat([-8, 0]),
+    });
+    const route = routeProcessions([church, ground], [event]).routes[0]!;
+    if (route.kind !== 'mass' || church.geometry.type !== 'Polygon') throw Error();
+    const roof = church.geometry.coordinates.map((ring) =>
+      ring.map((q): [number, number] => [q[0]!, q[1]!]),
+    );
+    expect(
+      Math.hypot(...frame.toMeters(route.site.anchor).map((v, i) => v - [-8, 0][i]!)),
+    ).toBeLessThanOrEqual(2);
+    for (const ring of route.site.grounds) expect(intersection([ring], roof).length).toBe(0);
+    for (const line of route.site.approaches)
+      for (let i = 1; i < line.length; i++)
+        expect(
+          intersection(
+            seatingFootprint([line[i - 1]!, line[i]!], 1.1).coordinates as [number, number][][][],
+            roof,
+          ).length,
+        ).toBe(0);
+    expect(() =>
+      routeProcessions(
+        [church, ground],
+        [Procession.parse({ ...event, gathering_anchor: [0, 0] })],
+      ),
+    ).toThrow('safe exterior');
+  });
   it.each([
     { kind: 'procession', formation: { bearers: 4 } },
     { kind: 'procession', formation: { bearers: 8 } },

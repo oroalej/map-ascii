@@ -21,6 +21,7 @@ import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
+import { identifyEventActor } from './event-actors';
 import { Paint, PENNANT_GLYPH, VEHICLES, type CraftType } from './vehicles';
 
 export const PROCESSION = {
@@ -31,6 +32,24 @@ export const PROCESSION = {
   playSpeed: 10,
   eventActors: 300,
   eventSpectators: 90,
+  mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },
+  street: {
+    bearerStart: 1,
+    bearerGap: 1.2,
+    marshalLead: 8,
+    marshalGap: 3,
+    devoteeStart: 10,
+    rankGap: 2,
+    guardGap: 8,
+    bandGap: 5,
+    contingentGap: 6,
+    vehicleGap: 6,
+    tailPadding: 10,
+    headMargin: 15,
+    spectatorInset: 0.8,
+    spectatorMargin: 0.01,
+    spectatorSpacing: 5,
+  },
   playSeconds: 180,
   columns: PROCESSION_DEFAULTS.fluvial.columns,
   ranks: PROCESSION_DEFAULTS.fluvial.ranks,
@@ -679,7 +698,6 @@ export class ProcessionScene {
           kind: 'person',
           inspectionId: undefined,
           candleSeed: p.candleSeed,
-          ...(handover && { eventActor: `${scope}/${p.id}` }),
           effectClock: undefined,
           lng,
           lat,
@@ -689,7 +707,8 @@ export class ProcessionScene {
           flap: 0,
           candle: p.candle,
         };
-        out.push(owner ? inspection.present(owner, agent) : agent);
+        const presented = owner ? inspection.present(owner, agent) : agent;
+        out.push(handover ? identifyEventActor(presented, `${scope}/${p.id}`) : presented);
       }
     }
     // Ropes under the boats, poles over the pagoda.

@@ -419,7 +419,9 @@ function ProcessionControls() {
         <div className={styles.row}>
           <p className={styles.line} role="status">
             {current.title.en} (simulated){run.live ? ' · happening now' : ''}
-            {current.status === 'draft' ? ' · draft: route and schedule not yet verified' : ''}
+            {current.status === 'draft'
+              ? ` · draft: ${current.kind === 'mass' ? 'gathering' : 'route'} and schedule not yet verified`
+              : ''}
           </p>
           {!run.live && (
             <button type="button" className={styles.button} onClick={() => atlas?.stopProcession()}>

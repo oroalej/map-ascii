@@ -3,6 +3,8 @@ import * as fs from 'node:fs/promises';
 import { describe, expect, it, vi } from 'vitest';
 import { contentRoot, loadCityPacks } from './validate';
 
+const eventRoot = fileURLToPath(new URL('./__fixtures__/event-references', import.meta.url));
+import.meta.glob('./__fixtures__/event-references/**/*.json');
 const badRoot = fileURLToPath(new URL('./__fixtures__/bad', import.meta.url));
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on pack edits.
 import.meta.glob('../cities/**/*.json');
@@ -18,7 +20,7 @@ describe('loadCityPacks', () => {
       const text = await original(...args);
       if (
         typeof args[0] !== 'string' ||
-        !args[0].replaceAll('\\', '/').endsWith('/processions/penafrancia-traslacion.json')
+        !args[0].replaceAll('\\', '/').endsWith('/processions/street.json')
       )
         return text;
       const value = JSON.parse(String(text)) as { schedule: Record<string, unknown> };
@@ -26,10 +28,10 @@ describe('loadCityPacks', () => {
       return JSON.stringify(value);
     });
     try {
-      const { packs, errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+      const { packs, errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
       expect(packs).toEqual([]);
       expect(errors).toContainEqual({
-        file: 'cities/naga/processions/cathedral-arrival-mass.json',
+        file: 'cities/fixture/processions/arrival.json',
         message: expect.stringContaining('resolved offset 32') as string,
       });
     } finally {
@@ -45,8 +47,8 @@ describe('loadCityPacks', () => {
         if (typeof args[0] !== 'string') return text;
         const path = args[0].replaceAll('\\', '/');
         if (
-          !path.endsWith('/processions/cathedral-arrival-mass.json') &&
-          !(kind === 'cycle' && path.endsWith('/processions/penafrancia-traslacion.json'))
+          !path.endsWith('/processions/arrival.json') &&
+          !(kind === 'cycle' && path.endsWith('/processions/street.json'))
         )
           return text;
         const value = JSON.parse(String(text)) as {
@@ -62,17 +64,17 @@ describe('loadCityPacks', () => {
                 ? 'procession/missing'
                 : kind === 'self'
                   ? value.id
-                  : value.id === 'procession/penafrancia-traslacion'
-                    ? 'procession/cathedral-arrival-mass'
-                    : 'procession/penafrancia-traslacion',
+                  : value.id === 'procession/street'
+                    ? 'procession/arrival'
+                    : 'procession/street',
             duration_min: 90,
           };
         return JSON.stringify(value);
       });
       try {
-        const { errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+        const { errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
         expect(errors).toContainEqual({
-          file: 'cities/naga/processions/cathedral-arrival-mass.json',
+          file: 'cities/fixture/processions/arrival.json',
           message: expect.stringMatching(
             kind === 'season'
               ? /unknown season/

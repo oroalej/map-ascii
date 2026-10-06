@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { eventActor, identifyEventActor } from './event-actors';
+import { describe, expect, it, vi } from 'vitest';
+import { FrameProfiler } from '../profile';
 import {
   eventOccurrence,
   processionFormationWidth,
@@ -11,12 +13,14 @@ import { GroundProcessionScene } from './procession-street';
 import { LifeInspection } from './inspection';
 import { liveProgress } from './procession';
 import { eventGroundAllows, eventBridgeAllows, groundForRoute } from './ground-events';
+import * as groundEvents from './ground-events';
 import { LifeWorld, type Mover, type Stall } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
 import { CellBit, EVENT_PERSON_BITS, MAX_TILE_AGENTS } from './config';
 import { metersPerUnit, tileToLngLat, lngLatToTile } from '../raster/geometry';
 import { worldTiles } from './testing/scenarios';
 import { createInlineHost } from './host';
+import { createLifeWorkerApi } from './worker-api';
 import { makeCellGuard } from './cell-guard';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';
 import { buildLifeGlyphs, packLife } from './draw';
@@ -85,7 +89,7 @@ function ordinaryPerson(x: number, y = 2000, rank = 0): Mover {
     group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
   };
 }
-function world(inspection = false) {
+function world(inspection = false, profiler?: FrameProfiler) {
   const b = new LifeBuilder();
   b.line(
     [
@@ -97,7 +101,7 @@ function world(inspection = false) {
     1,
     1,
   );
-  const w = new LifeWorld(undefined, undefined, undefined, inspection);
+  const w = new LifeWorld(undefined, profiler, undefined, inspection);
   w.setProcessions([street, mass]);
   w.sync([{ key: 'road', tile, life: b.finish() }]);
   const life = worldTiles(w).get('road')!;
@@ -106,6 +110,137 @@ function world(inspection = false) {
   return { w, life };
 }
 describe('street event simulation', () => {
+  it('rejects narrow roofs crossing complete footprints even when every sample is outside', () => {
+    const corners = [point(1000, 2000), point(1010, 2000), point(1010, 2010), point(1000, 2010)];
+    const roof = [
+      point(1003, 1995),
+      point(1004, 1995),
+      point(1004, 2015),
+      point(1003, 2015),
+      point(1003, 1995),
+    ];
+    const ground = { regions: [mass.site.grounds[0]!], blocked: [roof] };
+    expect(eventGroundAllows(ground, corners)).toBe(true);
+    expect(eventGroundAllows(ground, corners, corners)).toBe(false);
+    const guard = makeCellGuard(
+      { tile, perMeter: pm },
+      { roads: { hits: () => false }, forbidden: { hits: () => false } },
+      { hits: () => false },
+      (lng, lat) => {
+        const at = lngLatToTile(tile, lng, lat);
+        return [at.x / 10, at.y / 10];
+      },
+      new Map([['test', ground]]),
+    );
+    expect(guard({ kind: 'person', lng: 0, lat: 0, flap: 0, eventGround: 'test' }, 100, 200)).toBe(
+      false,
+    );
+  });
+  it('keeps actor identities in simulation without transferring them in worker frames', () => {
+    const { w, life } = world(true);
+    const api = createLifeWorkerApi(undefined, () => w);
+    api.init({ processions: [street, mass], itemInspection: true });
+    api.sync([{ key: 'road', tile, life: life.geo }]);
+    api.setLive(street.id, 0.5);
+    const center = point(1000 + 100 * pm);
+    const result = api.frame({
+      gust: {
+        camera: { lng: center[0], lat: center[1], zoom: 18 },
+        size: { width: 800, height: 600 },
+        cssCell: { w: 5, h: 7.5 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 18,
+        bounds: undefined,
+        wind: undefined,
+        weather: undefined,
+        cellMeters: 0,
+      },
+      visible: [18, 1, center],
+    });
+    const actors = result.agents.filter((a) => a.eventGround);
+    expect(actors.length).toBeGreaterThan(0);
+    expect(actors.every((a) => eventActor(a) && !Object.hasOwn(a, 'eventActor'))).toBe(true);
+    expect(
+      structuredClone(actors).every((a) => !eventActor(a) && !Object.hasOwn(a, 'eventActor')),
+    ).toBe(true);
+    w.step(0.1, () => 0, 18);
+    expect(w.visible(18, 1, center).some((a) => eventActor(a))).toBe(true);
+  });
+  it('caches cell permissions separately for each ground and cell', () => {
+    const permission = vi.spyOn(groundEvents, 'eventGroundAllows');
+    try {
+      const ground = groundForRoute(street);
+      const denied = { regions: ground.regions, blocked: ground.regions };
+      const toCell = (lng: number, lat: number): [number, number] => {
+        const q = lngLatToTile(tile, lng, lat);
+        return [q.x / pm, q.y / pm];
+      };
+      const empty = { hits: () => false };
+      const guard = makeCellGuard(
+        { tile, perMeter: pm },
+        { roads: empty, forbidden: empty },
+        empty,
+        toCell,
+        new Map([
+          ['allowed', ground],
+          ['denied', denied],
+        ]),
+      );
+      const agent = {
+        kind: 'person' as const,
+        lng: point(1500)[0],
+        lat: point(1500)[1],
+        flap: 0,
+        eventGround: 'allowed',
+      };
+      const col = Math.floor(1500 / pm),
+        row = Math.floor(2000 / pm);
+      for (let i = 0; i < 20; i++) expect(guard(agent, col, row)).toBe(true);
+      expect(permission).toHaveBeenCalledTimes(1);
+      expect(guard({ ...agent, eventGround: 'denied' }, col, row)).toBe(false);
+      expect(guard({ ...agent, eventGround: 'denied' }, col, row)).toBe(false);
+      expect(permission).toHaveBeenCalledTimes(2);
+      expect(guard(agent, col + 1, row)).toBe(true);
+      expect(permission).toHaveBeenCalledTimes(3);
+    } finally {
+      permission.mockRestore();
+    }
+  });
+  it.each([
+    [179.999, 89.999],
+    [-179.999, -89.999],
+    [0.00025, -16.384],
+  ] as const)('indexes geographic permissions without local-bin aliases at %j', (x, y) => {
+    const ground = {
+      regions: [
+        [
+          [x - 0.00001, y - 0.00001],
+          [x + 0.00001, y - 0.00001],
+          [x + 0.00001, y + 0.00001],
+          [x - 0.00001, y + 0.00001],
+          [x - 0.00001, y - 0.00001],
+        ] as [number, number][],
+      ],
+      blocked: [],
+    };
+    expect(eventGroundAllows(ground, [[x, y]])).toBe(true);
+    expect(eventGroundAllows(ground, [[0, 0]])).toBe(false);
+  });
+  it('builds both initial occupancies in one steady-event pass', () => {
+    const profiler = new FrameProfiler();
+    const builds = vi.spyOn(profiler, 'add');
+    const { w, life } = world(false, profiler);
+    life.movers.push(ordinaryPerson(3000));
+    w.setLive(street.id, 0.6, 'test');
+    w.step(0.1, undefined, 18);
+    builds.mockClear();
+    w.step(0.1, undefined, 18);
+    expect(builds.mock.calls.filter(([stage]) => stage === 'clearanceBuild')).toHaveLength(1);
+  });
   it.each(['car', 'attendant'] as const)(
     'checks off-view %s bodies during admission independently of camera bounds',
     (obstacle) => {
@@ -150,9 +285,11 @@ describe('street event simulation', () => {
         w.visible(18, 0.01, point(1500), undefined, bounds);
         w.setLive(street.id, 0.6, 'test');
         w.step(0.1, undefined, 18, bounds);
-        const admitted = w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor);
+        const admitted = w.visible(18, 1, point(1500)).filter((actor) => eventActor(actor));
         expect(admitted.length).toBeGreaterThan(0);
-        expect(admitted.some((actor) => actor.eventActor === candidate.eventActor)).toBe(false);
+        expect(admitted.some((actor) => eventActor(actor) === eventActor(candidate))).toBe(
+          obstacle === 'car',
+        );
       }
     },
   );
@@ -162,27 +299,51 @@ describe('street event simulation', () => {
     w.step(0.1, undefined, 18);
     const ids = w
       .visible(18, 1, point(1500))
-      .filter((actor) => actor.eventActor)
-      .map((actor) => actor.eventActor);
+      .filter((actor) => eventActor(actor))
+      .map((actor) => eventActor(actor));
     const neighbor = {
       key: 'neighbor',
       tile: { ...tile, x: tile.x + 1 },
       life: new LifeBuilder().finish(),
     };
     w.sync([neighbor]);
-    expect(w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor)).toEqual([]);
+    expect(w.visible(18, 1, point(1500)).filter((actor) => eventActor(actor))).toEqual([]);
     w.sync([neighbor, { key: 'road', tile, life: life.geo }]);
     w.step(0.1, undefined, 18);
     expect(
       w
         .visible(18, 1, point(1500))
-        .filter((actor) => actor.eventActor)
-        .map((actor) => actor.eventActor),
+        .filter((actor) => eventActor(actor))
+        .map((actor) => eventActor(actor)),
     ).toEqual(ids);
     w.stop();
     w.setLive(undefined);
     expect(life.eventPopulation).toBe(0);
   });
+  it.each(['procession', 'parade'] as const)(
+    'admits both sidewalk crowds on one-metre %s sidewalks',
+    (kind) => {
+      const scene = new GroundProcessionScene({
+        ...street,
+        kind,
+        formation: undefined,
+        segments: street.segments.map((segment) => ({ ...segment, sidewalk_m: 1 })),
+      });
+      const spectators = new Set(
+        scene.actors.filter((actor) => actor.destination).map((actor) => `test/${actor.id}`),
+      );
+      const admitted = scene
+        .agents(0.6, 0, { scope: 'test' })
+        .filter((actor) => spectators.has(eventActor(actor)!));
+      expect(admitted.length).toBeGreaterThan(spectators.size * 0.9);
+      expect(admitted.filter((actor) => actor.lat > street.route[0]![1]).length).toBeGreaterThan(
+        20,
+      );
+      expect(admitted.filter((actor) => actor.lat < street.route[0]![1]).length).toBeGreaterThan(
+        20,
+      );
+    },
+  );
   it('keeps a parade actor visible through a rounded bend and rejects ground beyond it', () => {
     const frame = localMetricProjection(street.route[0]!);
     const route: StreetRoute = {
@@ -203,7 +364,7 @@ describe('street event simulation', () => {
       expect(
         scene
           .agents((head + tail) / (200 + tail), 0)
-          .some((actor) => actor.eventActor?.endsWith('/0')),
+          .some((actor) => eventActor(actor)?.endsWith('/0')),
       ).toBe(true);
     expect(eventGroundAllows(scene.ground, [frame.from([102.5, -2.5])])).toBe(true);
     expect(eventGroundAllows(scene.ground, [frame.from([104, -4])])).toBe(false);
@@ -281,10 +442,10 @@ describe('street event simulation', () => {
     life.scenes.sites.length = 0;
     w.setLive(route.id, 0.6, '2026');
     w.step(0.1, undefined, 18);
-    expect(w.visible(18, 1, point(1500)).filter((a) => a.eventActor).length).toBeGreaterThan(30);
+    expect(w.visible(18, 1, point(1500)).filter((a) => eventActor(a)).length).toBeGreaterThan(30);
     w.setProcessions([{ ...route, bridges: [] }]);
     w.step(0.1, undefined, 18);
-    expect(w.visible(18, 1, point(1500)).filter((a) => a.eventActor)).toEqual([]);
+    expect(w.visible(18, 1, point(1500)).filter((a) => eventActor(a))).toEqual([]);
   });
   it('indexes permission queries while retaining roofs and off-bridge water rejection', () => {
     const ring = (w: number, s: number, e: number, n: number): [number, number][] => [
@@ -318,7 +479,7 @@ describe('street event simulation', () => {
       w.setLive(route.id, 0.6, '2026');
       w.step(0.1, undefined, 18);
       const expected = new GroundProcessionScene(route).agents(0.6, 0);
-      const admitted = w.visible(18, 1, point(1500)).filter((a) => a.eventActor);
+      const admitted = w.visible(18, 1, point(1500)).filter((a) => eventActor(a));
       expect(admitted).toHaveLength(expected.length);
       expect(life.eventPopulation).toBe(expected.length);
     }
@@ -346,7 +507,7 @@ describe('street event simulation', () => {
     });
     w.setLive(street.id, 0.6, '2026');
     w.step(0.1, undefined, 18);
-    const before = w.visible(18, 1, point(1500)).filter((a) => a.eventActor);
+    const before = w.visible(18, 1, point(1500)).filter((a) => eventActor(a));
     const population = life.eventPopulation;
     const auxiliary = w as unknown as {
       groundGuard(
@@ -358,14 +519,14 @@ describe('street event simulation', () => {
       ): void;
     };
     auxiliary.groundGuard(0, undefined, undefined, true, new Set());
-    expect(w.visible(18, 1, point(1500)).filter((a) => a.eventActor)).toEqual(before);
+    expect(w.visible(18, 1, point(1500)).filter((a) => eventActor(a))).toEqual(before);
     expect(life.eventPopulation).toBe(population);
   });
   it('stages Mass arrivals without admitting overlapping bodies', () => {
     const { w } = world();
     w.setLive(mass.id, 0.05, '2026');
     w.step(0.1, undefined, 18);
-    const agents = w.visible(18, 1, point(1500)).filter((a) => a.eventActor);
+    const agents = w.visible(18, 1, point(1500)).filter((a) => eventActor(a));
     expect(agents.length).toBeGreaterThan(0);
     const scene = new GroundProcessionScene(mass),
       occupied = new Occupancy();
@@ -392,7 +553,7 @@ describe('street event simulation', () => {
     const options = { scope: 'play/1', inspection, owner };
     inspection.begin(1);
     const before = scene.agents(0.2, 1, options)[0]!;
-    inspection.present(owner(before.eventActor!), before);
+    inspection.present(owner(eventActor(before)!), before);
     inspection.select({ id: before.inspectionId!, revision: 1, time: 1 }, 1);
     const held = scene.agents(0.22, 2, options)[0]!;
     expect([held.lng, held.lat, held.flap, held.candleSeed]).toEqual([
@@ -489,7 +650,7 @@ describe('street event simulation', () => {
     w.step(180, undefined, 18);
     expect(w.procession()).toBeUndefined();
     expect(life.eventPopulation).toBe(0);
-    expect(w.visible(18, 1, point(1500)).some((a) => a.eventActor)).toBe(false);
+    expect(w.visible(18, 1, point(1500)).some((a) => eventActor(a))).toBe(false);
     expect(new GroundProcessionScene(mass).agents(1, 0)).toEqual([]);
   });
   it('holds traffic before a reserved span across a tile seam, then transfers after release', () => {
@@ -541,8 +702,8 @@ describe('street event simulation', () => {
     expect(car.v).toBe(0);
     expect(car.x).toBeLessThan(lngLatToTile(tile, ...entrance).x);
     const visible = w.visible(18, 1, point(4096));
-    expect(new Set(visible.filter((a) => a.eventActor).map((a) => a.eventActor)).size).toBe(
-      visible.filter((a) => a.eventActor).length,
+    expect(new Set(visible.filter((a) => eventActor(a)).map((a) => eventActor(a))).size).toBe(
+      visible.filter((a) => eventActor(a)).length,
     );
     expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
     expect(next.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
@@ -564,13 +725,13 @@ describe('street event simulation', () => {
       point(4096, 0)[1],
     ];
     expect(
-      w.visible(18, 1, point(1500), undefined, bounds).filter((actor) => !actor.eventActor).length,
+      w.visible(18, 1, point(1500), undefined, bounds).filter((actor) => !eventActor(actor)).length,
     ).toBeGreaterThan(30);
     w.setLive(street.id, 0.6, '2026');
     w.step(0.1, undefined, 18);
     const event = w.visible(18, 1, point(1500), undefined, bounds, 1, 30);
     expect(event.length).toBeLessThanOrEqual(30);
-    expect(event.some((a) => a.eventActor)).toBe(true);
+    expect(event.some((a) => eventActor(a))).toBe(true);
     expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
     for (let repeat = 0; repeat < 3; repeat++) {
       w.play(street.id);
@@ -615,8 +776,8 @@ describe('street event simulation', () => {
       expect(eventGroundAllows(scene.ground, [[a.lng, a.lat]])).toBe(true);
     scene.adopt(standing.slice(0, 10));
     const adopted = scene.agents(0, 2).slice(0, 10);
-    expect(adopted.map((a) => a.eventActor)).toEqual(
-      standing.slice(0, 10).map((a) => a.eventActor),
+    expect(adopted.map((a) => eventActor(a))).toEqual(
+      standing.slice(0, 10).map((a) => eventActor(a)),
     );
     expect(adopted.map((a) => [a.lng, a.lat, a.candle, a.candleSeed])).toEqual(
       standing.slice(0, 10).map((a) => [a.lng, a.lat, a.candle, a.candleSeed]),
@@ -628,8 +789,8 @@ describe('street event simulation', () => {
     const actor = scene.agents(0.5, 0)[20]!;
     const q = scene.frame.to([actor.lng, actor.lat]);
     const shifted = scene.frame.from([q[0] + 0.99, q[1] + 0.99]);
-    scene.adopt([{ ...actor, lng: shifted[0], lat: shifted[1], eventActor: 'retained' }]);
-    expect(scene.agents(0, 0).some((a) => a.eventActor === 'retained')).toBe(true);
+    scene.adopt([identifyEventActor({ ...actor, lng: shifted[0], lat: shifted[1] }, 'retained')]);
+    expect(scene.agents(0, 0).some((a) => eventActor(a) === 'retained')).toBe(true);
     const extra: [number, number][] = [
       [350, 0],
       [360, 0],
@@ -643,8 +804,8 @@ describe('street event simulation', () => {
       site: { ...mass.site, grounds: [...mass.site.grounds, extra] },
     });
     const remote = separated.frame.from([356, 6]);
-    separated.adopt([{ ...actor, lng: remote[0], lat: remote[1], eventActor: 'remote' }]);
-    expect(separated.agents(0, 0).some((a) => a.eventActor === 'remote')).toBe(false);
+    separated.adopt([identifyEventActor({ ...actor, lng: remote[0], lat: remote[1] }, 'remote')]);
+    expect(separated.agents(0, 0).some((a) => eventActor(a) === 'remote')).toBe(false);
   });
   it('adopts nearby predecessor actors without duplicate admission and preserves them across camera changes', () => {
     const { w } = world();
@@ -652,19 +813,19 @@ describe('street event simulation', () => {
     w.step(0.1, undefined, 18);
     const before = w
       .visible(18, 1, point(1500))
-      .filter((a) => a.eventActor && a.kind === 'person' && !a.prop);
+      .filter((a) => eventActor(a) && a.kind === 'person' && !a.prop);
     w.setLive(mass.id, 0, '2026');
     w.step(0.1, undefined, 18);
-    const after = w.visible(18, 1, point(1500)).filter((a) => a.eventActor);
-    const retained = after.filter((a) => before.some((b) => b.eventActor === a.eventActor));
+    const after = w.visible(18, 1, point(1500)).filter((a) => eventActor(a));
+    const retained = after.filter((a) => before.some((b) => eventActor(b) === eventActor(a)));
     expect(retained.length).toBeGreaterThan(0);
     for (const a of retained) {
-      const old = before.find((b) => b.eventActor === a.eventActor)!;
+      const old = before.find((b) => eventActor(b) === eventActor(a))!;
       expect([a.lng, a.lat, a.candleSeed]).toEqual([old.lng, old.lat, old.candleSeed]);
     }
-    expect(new Set(after.map((a) => a.eventActor)).size).toBe(after.length);
-    expect(w.visible(18, 1, point(1400)).map((a) => a.eventActor)).toEqual(
-      w.visible(18, 1, point(1500)).map((a) => a.eventActor),
+    expect(new Set(after.map((a) => eventActor(a))).size).toBe(after.length);
+    expect(w.visible(18, 1, point(1400)).map((a) => eventActor(a))).toEqual(
+      w.visible(18, 1, point(1500)).map((a) => eventActor(a)),
     );
   });
   it.each(['fluvial-live', 'street-played'] as const)(
@@ -702,7 +863,7 @@ describe('street event simulation', () => {
         w.play(arrival.id, eventOccurrence(arrival.schedule, new Date('2026-06-01')));
         w.step(1e-6, undefined, 18);
       }
-      const after = w.visible(18, 1, point(1500)).filter((actor) => actor.eventActor);
+      const after = w.visible(18, 1, point(1500)).filter((actor) => eventActor(actor));
       const retained = after.filter((actor) =>
         before.some((old) => old.inspectionId === actor.inspectionId),
       );
@@ -717,13 +878,162 @@ describe('street event simulation', () => {
           old.candleSeed,
         ]);
       }
-      expect(new Set(after.map((actor) => actor.eventActor)).size).toBe(after.length);
+      expect(new Set(after.map((actor) => eventActor(actor))).size).toBe(after.length);
       expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
       w.stop();
       w.setLive(undefined);
       expect(life.eventPopulation).toBe(0);
     },
   );
+  it.each(['stop', 'completion', 'no-playback'] as const)(
+    'preserves adopted live Mass actors and inspection tokens after %s',
+    (end) => {
+      const { w } = world(true);
+      w.setLive(street.id, 0.9, '2026');
+      w.step(0.1, undefined, 18);
+      const predecessor = w.visible(18, 1, point(1500));
+      w.setLive(mass.id, 0, '2026');
+      w.step(0.1, undefined, 18);
+      const before = w
+        .visible(18, 1, point(1500))
+        .filter((a) => predecessor.some((b) => b.inspectionId === a.inspectionId));
+      expect(before.length).toBeGreaterThan(0);
+      if (end !== 'no-playback') {
+        w.play(street.id, eventOccurrence(street.schedule, new Date('2026-06-01')));
+        w.step(end === 'completion' ? 180 : 1, undefined, 18);
+      }
+      w.stop();
+      w.step(0.1, undefined, 18);
+      const after = w.visible(18, 1, point(1500));
+      for (const actor of before) {
+        const retained = after.find((a) => eventActor(a) === eventActor(actor));
+        expect(retained).toBeDefined();
+        expect([
+          retained!.inspectionId,
+          retained!.paint,
+          retained!.candleSeed,
+          retained!.lng,
+          retained!.lat,
+        ]).toEqual([actor.inspectionId, actor.paint, actor.candleSeed, actor.lng, actor.lat]);
+      }
+      w.setProcessions([street, mass]);
+      w.setLive(mass.id, 0, 'replacement');
+      w.step(0.1, undefined, 18);
+      expect(
+        w
+          .visible(18, 1, point(1500))
+          .every((a) => !before.some((old) => eventActor(a) === eventActor(old))),
+      ).toBe(true);
+    },
+  );
+  it.each(['procession', 'parade'] as const)(
+    'clears moving and parked traffic across the full %s route for live and played events, then restores identities',
+    (kind) => {
+      for (const live of [true, false]) {
+        const { w, life } = world();
+        const route: StreetRoute =
+          kind === 'parade'
+            ? {
+                ...street,
+                kind: 'parade',
+                formation: {
+                  contingents: 2,
+                  ranks: 3,
+                  band: 8,
+                  color_guard: 4,
+                  vehicles: ['car'],
+                },
+              }
+            : street;
+        w.setProcessions([route]);
+        const car = (x: number, y = 2000): Mover => ({
+          ...ordinaryPerson(x, y),
+          kind: 'vehicle',
+          vehicle: 'car',
+          group: undefined,
+          v: 0,
+        });
+        const start = car(1000 + 10 * pm),
+          end = car(1000 + 190 * pm),
+          unrelated = car(800, 2000 + 12 * pm);
+        const parked = {
+          x: 1000 + 190 * pm,
+          y: 2000 + 4.6 * pm,
+          hx: 1,
+          hy: 0,
+          vehicle: 'car' as const,
+          paint: 0,
+        };
+        const offRoute = { ...parked, y: 2000 + 10 * pm };
+        life.movers.push(start, end, unrelated);
+        life.parked.push(parked, offRoute);
+        if (live) w.setLive(route.id, 0.6, '2026');
+        else {
+          w.play(route.id, eventOccurrence(route.schedule, new Date('2026-06-01')));
+          w.step(108, undefined, 18);
+        }
+        w.step(0.1, undefined, 18);
+        expect(life.movers).toEqual([unrelated]);
+        expect(life.parked).toEqual([offRoute]);
+        expect([...life.residentMovers()]).toContain(start);
+        const shown = w.visible(18, 1, point(1500));
+        expect(
+          shown.filter((a) => a.kind === 'vehicle' && !eventActor(a) && !a.parked),
+        ).toHaveLength(1);
+        if (kind === 'parade')
+          expect(shown.some((a) => a.vehicle === 'car' && eventActor(a))).toBe(true);
+        const newcomer = car(1000 + 170 * pm);
+        const guardWorld = w as unknown as {
+          groundGuard(): (target: typeof life, owner: Mover) => boolean;
+        };
+        expect(guardWorld.groundGuard()(life, newcomer)).toBe(false);
+        // A freshly loaded tile on the route must also yield its ordinary vehicles.
+        w.sync([
+          { key: 'road', tile, life: life.geo },
+          {
+            key: 'new',
+            tile: { ...tile, z: tile.z + 1, x: tile.x * 2, y: tile.y * 2 },
+            life: life.geo,
+          },
+        ]);
+        w.sync([{ key: 'road', tile, life: life.geo }]);
+        w.step(0.1, undefined, 18);
+        expect(life.movers).not.toContain(start);
+        expect(life.movers).not.toContain(end);
+        if (live) w.setLive(route.id, 1, '2026');
+        else w.stop();
+        expect(life.movers).toEqual([start, end, unrelated]);
+        expect(life.parked).toEqual([parked, offRoute]);
+        expect(guardWorld.groundGuard()(life, newcomer)).toBe(true);
+        if (!live) {
+          w.play(route.id, eventOccurrence(route.schedule, new Date('2026-06-01')));
+          expect(life.movers).not.toContain(start);
+          w.step(180, undefined, 18);
+          expect(w.procession()).toBeUndefined();
+          expect(life.movers).toContain(start);
+          expect(life.parked).toContain(parked);
+        }
+      }
+    },
+  );
+  it('reuses event time only at unchanged progress and retains exact sub-minute time', () => {
+    const { w } = world();
+    const timing = eventOccurrence(street.schedule, new Date('2026-06-01'));
+    w.play(street.id, timing);
+    const time = w.procession()!.time!;
+    expect(w.procession()!.time).toBe(time);
+    w.step(0.01);
+    const next = w.procession()!.time!;
+    expect(next.minute).toBe(time.minute);
+    expect(next.instantMs).toBeGreaterThan(time.instantMs);
+    expect(w.procession()!.time).toBe(next);
+    w.stop();
+    w.play(street.id, timing);
+    expect(w.procession()!.time!.instantMs).toBe(time.instantMs);
+    expect(w.procession()!.time).not.toBe(time);
+    w.step(180);
+    expect(w.procession()).toBeUndefined();
+  });
   it.each(['procession', 'mass'] as const)(
     'respects saturated tile quotas for %s across a seam',
     (kind) => {
@@ -773,8 +1083,8 @@ describe('street event simulation', () => {
         expect(target.eventPopulation).toBeGreaterThan(0);
         expect(target.eventPopulation).toBeLessThanOrEqual(5);
       }
-      const actors = w.visible(18, 1, point(4096)).filter((actor) => actor.eventActor);
-      expect(new Set(actors.map((actor) => actor.eventActor)).size).toBe(actors.length);
+      const actors = w.visible(18, 1, point(4096)).filter((actor) => eventActor(actor));
+      expect(new Set(actors.map((actor) => eventActor(actor))).size).toBe(actors.length);
       w.setLive(undefined);
       expect(life.eventPopulation + next.eventPopulation).toBe(0);
     },

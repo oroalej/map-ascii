@@ -1,0 +1,17 @@
+{
+  "id": "procession/street",
+  "title": { "en": "Street" },
+  "story": { "en": "Illustrative" },
+  "status": "draft",
+  "kind": "procession",
+  "route": { "from": "osm:node/1", "to": "osm:node/2" },
+  "schedule": {
+    "month": 9,
+    "weekday": 6,
+    "nth": 3,
+    "offset_days": -8,
+    "start": "12:00",
+    "duration_min": 240,
+    "timezone": "Asia/Manila"
+  }
+}

@@ -5,7 +5,12 @@ import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, normalizeCredits, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
-import { TILE_ZOOMS, type AtlasProperties, type AtlasFeature } from './03-normalize';
+import {
+  EVENT_ACCESS_TAGS,
+  TILE_ZOOMS,
+  type AtlasProperties,
+  type AtlasFeature,
+} from './03-normalize';
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
 import { roofTileRecords } from './lib/roof-tiles';
 import { landcoverCredits } from './lib/landcover';
@@ -89,15 +94,7 @@ export const step: Step = {
       `--minimum-zoom=${TILE_ZOOMS.min}`,
       `--maximum-zoom=${TILE_ZOOMS.max}`,
       '--drop-densest-as-needed',
-      '--exclude=highway',
-      '--exclude=foot',
-      '--exclude=access',
-      '--exclude=vehicle',
-      '--exclude=motor_vehicle',
-      '--exclude=motorcar',
-      '--exclude=motorcycle',
-      '--exclude=hgv',
-      '--exclude=bridge',
+      ...EVENT_ACCESS_TAGS.map((tag) => `--exclude=${tag}`),
       '--exclude=event_path_width',
       `--name=${city.name.en}`,
       '--attribution=© OpenStreetMap contributors',

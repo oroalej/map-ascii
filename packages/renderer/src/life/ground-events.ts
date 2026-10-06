@@ -14,8 +14,11 @@ export type EventGround = {
   bridges?: Point[][];
 };
 type RingBounds = { ring: Point[]; w: number; s: number; e: number; n: number };
-type RingIndex = { bins: Map<string, RingBounds[]>; large: RingBounds[] };
+type RingIndex = { bins: Map<number, RingBounds[]>; large: RingBounds[] };
 const BIN = 0.00025;
+// Latitude spans ±90 degrees, far beyond occupancy's local 16-bit metric bins.
+const BIN_ROWS = Math.ceil(180 / BIN) + 1;
+const binKey = (x: number, y: number) => x * BIN_ROWS + y;
 const ringIndexes = new WeakMap<Point[][], RingIndex>();
 const indexes = new WeakMap<
   EventGround,
@@ -102,7 +105,7 @@ function index(rings: Point[][]): RingIndex {
     }
     for (let y = y0; y <= y1; y++)
       for (let x = x0; x <= x1; x++) {
-        const key = `${x}/${y}`;
+        const key = binKey(x, y);
         let bin = out.bins.get(key);
         if (!bin) out.bins.set(key, (bin = []));
         bin.push(r);
@@ -114,10 +117,53 @@ function index(rings: Point[][]): RingIndex {
 const contains = (q: Point, r: RingBounds) =>
   q[0] >= r.w && q[0] <= r.e && q[1] >= r.s && q[1] <= r.n && pointInPolygon(q, [r.ring]);
 function inside(index: RingIndex, q: Point) {
-  const nearby = index.bins.get(`${Math.floor(q[0] / BIN)}/${Math.floor(q[1] / BIN)}`);
+  const nearby = index.bins.get(binKey(Math.floor(q[0] / BIN), Math.floor(q[1] / BIN)));
   return nearby?.some((r) => contains(q, r)) || index.large.some((r) => contains(q, r));
 }
-export function eventGroundAllows(ground: EventGround, points: readonly Point[]) {
+function crosses(a: Point, b: Point, c: Point, d: Point) {
+  const side = (a: Point, b: Point, q: Point) =>
+    (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0]);
+  return (
+    Math.max(a[0], b[0]) >= Math.min(c[0], d[0]) &&
+    Math.max(c[0], d[0]) >= Math.min(a[0], b[0]) &&
+    Math.max(a[1], b[1]) >= Math.min(c[1], d[1]) &&
+    Math.max(c[1], d[1]) >= Math.min(a[1], b[1]) &&
+    side(a, b, c) * side(a, b, d) <= 0 &&
+    side(c, d, a) * side(c, d, b) <= 0
+  );
+}
+/** Test full edges and enclosed obstacles, including roofs narrower than the sample grid. */
+function outlineHits(index: RingIndex, outline: readonly Point[]) {
+  const xs = outline.map((q) => q[0]),
+    ys = outline.map((q) => q[1]);
+  const w = Math.min(...xs),
+    e = Math.max(...xs),
+    s = Math.min(...ys),
+    n = Math.max(...ys);
+  const nearby = new Set(index.large);
+  for (let y = Math.floor(s / BIN); y <= Math.floor(n / BIN); y++)
+    for (let x = Math.floor(w / BIN); x <= Math.floor(e / BIN); x++)
+      for (const r of index.bins.get(binKey(x, y)) ?? []) nearby.add(r);
+  return [...nearby].some(
+    (r) =>
+      r.w <= e &&
+      r.e >= w &&
+      r.s <= n &&
+      r.n >= s &&
+      (outline.some((q) => contains(q, r)) ||
+        r.ring.some((q) => pointInPolygon(q, [outline])) ||
+        outline.some((a, i) =>
+          r.ring.some((c, j) =>
+            crosses(a, outline[(i + 1) % outline.length]!, c, r.ring[(j + 1) % r.ring.length]!),
+          ),
+        )),
+  );
+}
+export function eventGroundAllows(
+  ground: EventGround,
+  points: readonly Point[],
+  outline?: readonly Point[],
+) {
   let cached = indexes.get(ground);
   if (!cached)
     indexes.set(
@@ -129,11 +175,14 @@ export function eventGroundAllows(ground: EventGround, points: readonly Point[])
         bridges: index(ground.bridges ?? EMPTY),
       }),
     );
-  return points.every(
-    (q) =>
-      inside(cached.regions, q) &&
-      !inside(cached.blocked, q) &&
-      (!inside(cached.water, q) || inside(cached.bridges, q)),
+  return (
+    (!outline || !outlineHits(cached.blocked, outline)) &&
+    points.every(
+      (q) =>
+        inside(cached.regions, q) &&
+        !inside(cached.blocked, q) &&
+        (!inside(cached.water, q) || inside(cached.bridges, q)),
+    )
   );
 }
 /** Water is crossed only inside the explicitly baked bridge carriageway. */

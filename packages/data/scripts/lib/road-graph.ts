@@ -2,7 +2,7 @@
 import centroid from '@turf/centroid';
 import type { SeasonalPoint } from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
-import { lines, width } from './road-geometry';
+import { lines, width, eventWidth } from './road-geometry';
 import { localFrame } from './geo';
 type Node = { key: string; at: SeasonalPoint; xy: SeasonalPoint; edges: Edge[] };
 type Edge = { id: string; road: string; width: number; a: Node; b: Node; length: number };
@@ -13,9 +13,11 @@ export function roadGraph(
   roads: readonly AtlasFeature[],
   config: { from?: string; to?: string },
   label: string,
-  requireConnected = true,
-  allows?: (road: AtlasFeature, a: SeasonalPoint, b: SeasonalPoint) => boolean,
+  options: {
+    event?: { allows: (road: AtlasFeature, a: SeasonalPoint, b: SeasonalPoint) => boolean };
+  } = {},
 ) {
+  const allows = options.event?.allows;
   const positions = roads.flatMap((f) => lines(f).flat());
   const latitude = positions.reduce((n, p) => n + p[1]!, 0) / positions.length;
   // Keep the legacy pipeline scale, world lattice and coordinate-derived identities.
@@ -57,9 +59,7 @@ export function roadGraph(
           add(
             `${f.properties.id}/${part}/${i}${allows ? '/' + k : ''}`,
             f.properties.id,
-            allows && f.properties.class === 'path'
-              ? Number(f.properties.event_path_width ?? 0)
-              : width(f),
+            options.event ? eventWidth(f) : width(f),
             node(start),
             node(end),
           );
@@ -152,8 +152,7 @@ export function roadGraph(
         }
       }
     }
-    if (requireConnected && dist.size !== nodes.size)
-      throw new Error(`${label}: disconnected roads`);
+    if (!options.event && dist.size !== nodes.size) throw new Error(`${label}: disconnected roads`);
     return { dist, previous };
   };
   if (to && !from) {

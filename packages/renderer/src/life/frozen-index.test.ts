@@ -25,7 +25,7 @@ describe('transferred polygon indexes', () => {
   it('matches mutable terrain for seeded bodies, bin edges, degenerate and distant bodies', () => {
     const terrain = makeScenario('crossroads', 4).world.cellTerrain()!;
     const { snapshot, transferables } = snapshotOf(terrain);
-    expect(transferables).toHaveLength(21);
+    expect(transferables).toHaveLength(28);
     const received = structuredClone(snapshot, { transfer: transferables });
     expect(transferables.every((buffer) => buffer.byteLength === 0)).toBe(true);
     let seed = 12345;
@@ -42,7 +42,7 @@ describe('transferred polygon indexes', () => {
       };
     });
     bodies.push({ x: 100000, y: -100000, hx: 1, hy: 0, length: 1, width: 1 });
-    for (const name of ['roads', 'forbidden', 'trees'] as const) {
+    for (const name of ['blocked', 'roads', 'forbidden', 'trees'] as const) {
       const frozen = new FrozenPolygonIndex(received[name]);
       for (const body of bodies) expect(frozen.hits([body])).toBe(terrain[name].hits([body]));
       // Multiple bodies must reset the per-body deduplication state.

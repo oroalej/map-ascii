@@ -111,6 +111,7 @@ it('keeps seasonal buttons in one row, preserves captions across seasons and res
     time: eventTime(timing, progress),
   });
   act(() => useUiStore.setState({ procession: run(0) }));
+  expect(container.textContent).toContain('draft: route and schedule not yet verified');
   expect(buttons().find((b) => b.textContent === '12:00 · event')?.disabled).toBe(true);
   act(() => useUiStore.setState({ procession: run(0.25) }));
   expect(buttons().find((b) => b.textContent === '13:00 · event')?.disabled).toBe(true);
@@ -127,6 +128,11 @@ it('keeps seasonal buttons in one row, preserves captions across seasons and res
       .click(),
   );
   expect(stop).toHaveBeenCalledOnce();
+  for (const id of ['cathedral', 'basilica']) {
+    act(() => useUiStore.setState({ procession: { ...run(0), id } }));
+    expect(container.textContent).toContain('draft: gathering and schedule not yet verified');
+    expect(container.textContent).not.toContain('draft: route and schedule not yet verified');
+  }
   act(() => useUiStore.setState({ procession: null }));
   expect(buttons().find((b) => b.textContent === 'Time: 22:00')?.disabled).toBe(false);
   expect(useLifeStore.getState().time).toBe('night');

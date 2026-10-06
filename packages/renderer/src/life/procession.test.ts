@@ -1,3 +1,4 @@
+import { eventActor } from './event-actors';
 import type { ProcessionRoute } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { LifeLine, LifeBuilder } from './geometry';
@@ -61,12 +62,12 @@ it('keeps bank candle seeds stable and emits identities only for arrival handove
     next = scene.agents(0.5, 2, options);
   expect(first.length).toBeGreaterThan(0);
   expect(next.map((actor) => actor.candleSeed)).toEqual(first.map((actor) => actor.candleSeed));
-  expect(first.every((actor) => actor.eventActor === undefined)).toBe(true);
+  expect(first.every((actor) => eventActor(actor) === undefined)).toBe(true);
   const arrival = scene.arrivalCrowd(0.5, 1, 'play/1'),
     owners = scene.arrivalOwners('play/1');
   expect(arrival.map((actor) => actor.candleSeed)).toEqual(first.map((actor) => actor.candleSeed));
-  expect(arrival.every((actor) => owners.has(actor.eventActor!))).toBe(true);
-  expect(new Set(arrival.map((actor) => actor.eventActor)).size).toBe(arrival.length);
+  expect(arrival.every((actor) => owners.has(eventActor(actor)!))).toBe(true);
+  expect(new Set(arrival.map((actor) => eventActor(actor))).size).toBe(arrival.length);
 });
 
 it.each(['voyador', 'pagoda', 'crew'] as const)(

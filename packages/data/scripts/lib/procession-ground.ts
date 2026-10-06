@@ -9,9 +9,9 @@ import {
 import type { Feature, Geometry, Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { localFrame } from './geo';
-import { lines, width } from './road-geometry';
+import { lines, width, eventWidth } from './road-geometry';
 import { roadGraph } from './road-graph';
-import { featurePoint } from './procession';
+import { featurePoint, ROUTE_STEP_M } from './procession';
 import { isStandingBuilding } from './obstacles';
 import { intersection, union } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
@@ -20,6 +20,9 @@ type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
 type Street = Extract<Procession, { kind: 'procession' | 'parade' }>;
 type Mass = Extract<Procession, { kind: 'mass' }>;
+const BRIDGE_APPROACH_M = 25,
+  BARRIER_HALF_WIDTH_M = 0.5,
+  MASS_CORRIDOR_INSET_M = 0.7;
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
 const sidewalkWidth = (road: AtlasFeature) =>
   road.properties.class === 'path' || road.properties.sidewalk === 'none'
@@ -115,8 +118,8 @@ function obstacles(
               b = frame.toMeters(line[i]!);
             const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
             if (!d) continue;
-            const nx = (-(b[1] - a[1]) / d) * 0.5,
-              ny = ((b[0] - a[0]) / d) * 0.5;
+            const nx = (-(b[1] - a[1]) / d) * BARRIER_HALF_WIDTH_M,
+              ny = ((b[0] - a[0]) / d) * BARRIER_HALF_WIDTH_M;
             const ring: Point[] = [
               [a[0] + nx, a[1] + ny],
               [b[0] + nx, b[1] + ny],
@@ -148,8 +151,7 @@ export function routeStreet(features: readonly F[], p: Street) {
       (blockedAccess(tags.access) && tags.foot !== 'yes')
     )
       return false;
-    const effective =
-      tags.class === 'path' ? Number(tags.event_path_width ?? 0) : width(f as AtlasFeature);
+    const effective = eventWidth(f as AtlasFeature);
     if (!Number.isFinite(effective) || effective < needed) return false;
     if (p.kind === 'parade' && p.formation?.vehicles.length) {
       if (
@@ -187,7 +189,10 @@ export function routeStreet(features: readonly F[], p: Street) {
       (end) =>
         lines(road).some((line) =>
           [line[0]!, line.at(-1)!].some((q) => q[0] === end[0] && q[1] === end[1]),
-        ) && [a, b].every((q) => Math.hypot(...localFrame(end as Point).toMeters(q)) <= 25),
+        ) &&
+        [a, b].every(
+          (q) => Math.hypot(...localFrame(end as Point).toMeters(q)) <= BRIDGE_APPROACH_M,
+        ),
     );
   };
   const allows = (road: AtlasFeature, a: Point, b: Point) => {
@@ -204,14 +209,9 @@ export function routeStreet(features: readonly F[], p: Street) {
         .length === 0
     );
   };
-  const { selected, dist, root, unproject, project } = roadGraph(
-    byId,
-    roads,
-    p.route,
-    p.id,
-    false,
-    allows,
-  );
+  const { selected, dist, root, unproject, project } = roadGraph(byId, roads, p.route, p.id, {
+    event: { allows },
+  });
   const ordered = selected
     .slice()
     .sort(
@@ -223,7 +223,7 @@ export function routeStreet(features: readonly F[], p: Street) {
   for (const e of ordered) {
     const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b;
     const b = a === e.a ? e.b : e.a;
-    const count = Math.ceil(e.length / 10);
+    const count = Math.ceil(e.length / ROUTE_STEP_M);
     const road = byId.get(e.road)!;
     const sidewalk_m = sidewalkWidth(road);
     for (let k = 1; k <= count; k++) {
@@ -328,7 +328,10 @@ export function bakeMassSite(
           dy = b[1] - a[1],
           d = dx * dx + dy * dy;
         const u = d ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / d)) : 0;
-        return Math.hypot(q[0] - a[0] - u * dx, q[1] - a[1] - u * dy) < r.width_m / 2 - 0.7;
+        return (
+          Math.hypot(q[0] - a[0] - u * dx, q[1] - a[1] - u * dy) <
+          r.width_m / 2 - MASS_CORRIDOR_INSET_M
+        );
       }),
     );
   const safe = (xy: Point) => {
@@ -342,6 +345,34 @@ export function bakeMassSite(
   const step = PROCESSION_GEOMETRY.massCell,
     radius = Math.ceil(p.radius_m / step),
     cells = new Map<string, Point>();
+  const exclusions = blocked.map((ring) => {
+    const xy = ring.map(frame.toMeters);
+    return {
+      xy,
+      w: Math.min(...xy.map((q) => q[0])),
+      e: Math.max(...xy.map((q) => q[0])),
+      s: Math.min(...xy.map((q) => q[1])),
+      n: Math.max(...xy.map((q) => q[1])),
+    };
+  });
+  const clearCell = ([x, y]: Point) => {
+    const h = step / 2;
+    const ring: Point[] = [
+      [x - h, y - h],
+      [x + h, y - h],
+      [x + h, y + h],
+      [x - h, y + h],
+      [x - h, y - h],
+    ];
+    return !exclusions.some(
+      (r) =>
+        r.w <= x + h &&
+        r.e >= x - h &&
+        r.s <= y + h &&
+        r.n >= y - h &&
+        intersection([ring], [r.xy]).length > 0,
+    );
+  };
   const key = (x: number, y: number) => `${x}/${y}`;
   for (let y = -radius; y <= radius; y++)
     for (let x = -radius; x <= radius; x++) {
@@ -353,7 +384,8 @@ export function bakeMassSite(
           [-step / 2, step / 2],
           [step / 2, -step / 2],
           [step / 2, step / 2],
-        ].every(([dx, dy]) => safe([xy[0] + dx!, xy[1] + dy!]))
+        ].every(([dx, dy]) => safe([xy[0] + dx!, xy[1] + dy!])) &&
+        clearCell(xy)
       )
         cells.set(key(x, y), xy);
     }
@@ -361,6 +393,20 @@ export function bakeMassSite(
   // connected gathering region first, then its nearest outdoor church-facing anchor.
   const visited = new Set<string>();
   let largest: string[] = [];
+  const anchor = p.gathering_anchor && frame.toMeters(p.gathering_anchor);
+  const nearest =
+    anchor &&
+    [...cells.keys()].sort((a, b) => {
+      const distance = (id: string) =>
+        Math.hypot(cells.get(id)![0] - anchor[0], cells.get(id)![1] - anchor[1]);
+      return distance(a) - distance(b);
+    })[0];
+  if (
+    anchor &&
+    (!nearest ||
+      Math.hypot(cells.get(nearest)![0] - anchor[0], cells.get(nearest)![1] - anchor[1]) > step)
+  )
+    throw new Error(`${p.id}: gathering_anchor is not on safe exterior ground`);
   for (const start of cells.keys()) {
     if (visited.has(start)) continue;
     const component = [start];
@@ -380,11 +426,12 @@ export function bakeMassSite(
         }
       }
     }
-    if (component.length > largest.length) largest = component;
+    if (nearest ? component.includes(nearest) : component.length > largest.length)
+      largest = component;
   }
-  const seedId = largest.sort(
-    (a, b) => Math.hypot(...cells.get(a)!) - Math.hypot(...cells.get(b)!),
-  )[0];
+  const seedId =
+    nearest ??
+    largest.sort((a, b) => Math.hypot(...cells.get(a)!) - Math.hypot(...cells.get(b)!))[0];
   const seed = seedId ? ([seedId, cells.get(seedId)!] as const) : undefined;
   if (!seed) throw new Error(`${p.id}: no safe outdoor gathering area`);
   const connected = new Map<string, string | undefined>([[seed[0], undefined]]),

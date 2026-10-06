@@ -96,6 +96,7 @@ export function createInlineHost(
             terrain.trees,
             toCell,
             terrain.events,
+            terrain.blocked,
           ),
       };
       preparation.schedule();
@@ -295,6 +296,7 @@ export function createWorkerHost(
                     cellTerrain.trees,
                     toCell,
                     eventGrounds,
+                    cellTerrain.blocked,
                   ),
               };
             return;
@@ -320,6 +322,7 @@ export function createWorkerHost(
                 cellTerrain.trees,
                 toCell,
                 eventGrounds,
+                cellTerrain.blocked,
               ),
           };
           if (result.profile) profiler?.merge(result.profile);

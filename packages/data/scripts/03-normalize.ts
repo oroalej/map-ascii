@@ -49,6 +49,18 @@ import { files, type Step } from './step';
 
 /** The zoom range of the tiles (DATA.md §2 step 05). */
 export const TILE_ZOOMS = { min: 6, max: 16 } as const;
+/** Full-source event routing tags, excluded from display tiles after route baking. */
+export const EVENT_ACCESS_TAGS = [
+  'highway',
+  'foot',
+  'access',
+  'vehicle',
+  'motor_vehicle',
+  'motorcar',
+  'motorcycle',
+  'hgv',
+  'bridge',
+] as const satisfies readonly (keyof AtlasProperties)[];
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = Partial<ShopAnchor> & {
@@ -279,18 +291,7 @@ export function normalize(
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
     if (cls.startsWith('road_') || cls === 'path') {
-      for (const tag of [
-        'highway',
-        'foot',
-        'access',
-        'vehicle',
-        'motor_vehicle',
-        'motorcar',
-        'motorcycle',
-        'hgv',
-        'bridge',
-      ] as const)
-        if (tags[tag]) properties[tag] = tags[tag];
+      for (const tag of EVENT_ACCESS_TAGS) if (tags[tag]) properties[tag] = tags[tag];
     }
     if (cls.startsWith('building')) {
       const frontage = fromRegion.has(item)
