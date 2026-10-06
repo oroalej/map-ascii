@@ -1096,6 +1096,7 @@ export class LocalScenes {
         [0, true],
       ];
       if (departure > 0 && length > d) trials.push([Math.min(departure, length - d), true]);
+      if (departure > 0 && d > 0) trials.push([-Math.min(departure, d), true]);
       for (const [distance, retainFacing] of trials) {
         restoreMover(m, previous);
         m.d = d;
@@ -1108,13 +1109,14 @@ export class LocalScenes {
           m.hy = hy;
           m.momentFacing = { hx: heading.hx, hy: heading.hy };
         } else faceGroup(m, hx, hy);
-        if (distance > 0) {
+        if (distance !== 0) {
           const target = { x: m.x + hx * distance, y: m.y + hy * distance };
-          const step = walkLimit ? walkLimit(m, target, distance) : distance;
+          const requested = Math.abs(distance);
+          const step = walkLimit ? walkLimit(m, target, requested) : requested;
           if (step <= 0) continue;
-          m.d += step;
-          m.x += hx * step;
-          m.y += hy * step;
+          m.d += Math.sign(distance) * step;
+          m.x += hx * Math.sign(distance) * step;
+          m.y += hy * Math.sign(distance) * step;
           m.walked = (previous.walked ?? 0) + step / this.perMeter;
         }
         const unchanged =
@@ -1123,7 +1125,7 @@ export class LocalScenes {
           Math.hypot(heading.hx - hx, heading.hy - hy) <= 1e-8;
         if (unchanged) return true;
         const bodies = this.walkingBodies(m, m, m.avoid);
-        if (distance > 0) {
+        if (distance !== 0) {
           const previousBodies = this.walkingBodies(previous, previous, 0);
           if (
             bodies.some((body, i) => {

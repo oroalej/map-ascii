@@ -280,6 +280,95 @@ it('departs a finished scene through decreasing inherited clearance without spen
   expect((p.x - start.x) / pm).toBeGreaterThan(0.5);
 });
 
+it.each([0, 2.9])('backs away from a blocked group scene return at minimum %s', (minimum) => {
+  const angle = Math.atan2(0.8385267812337976, -0.5448603831750726);
+  const { world, life } = fixture(LifeLine.path, 4, false, undefined, 0, angle);
+  const p = mover('person', 70, 1),
+    blocker = mover('person', 70, 1);
+  p.hx = Math.cos(angle);
+  p.hy = Math.sin(angle);
+  p.x = 1000 + p.d * p.hx;
+  p.y = 2048 + p.d * p.hy;
+  p.group!.push(walker(-1));
+  p.avoid = 1.5805003;
+  p.momentFacing = { hx: -p.hx, hy: -p.hy };
+  blocker.x = p.x + 0.114908 * pm;
+  blocker.y = p.y + 0.878862 * pm;
+  blocker.hx = p.hx;
+  blocker.hy = p.hy;
+  blocker.avoid = 0;
+  blocker.waiting = 0;
+  blocker.group!.push(walker(1), { ...walker(), figure: 'child', back: 1 });
+  blocker.pause = Infinity;
+  blocker.speed = 0;
+  const start = { x: p.x, y: p.y };
+  const group = p.group,
+    members = [...group!],
+    fixed = structuredClone(blocker);
+  life.scenes.visits.set(p, {
+    site: {
+      ...start,
+      kind: 'vendor',
+      modes: 0,
+      covered: false,
+      queue: [p],
+      capacity: 4,
+      hx: 1,
+      hy: 0,
+      road: -1,
+      roadWidth: 0,
+      direction: 1,
+    },
+    state: 'return',
+    path: [start, start],
+    trail: [start],
+    next: 2,
+    time: 0,
+    seat: 0,
+    sheltering: false,
+    blocked: 20,
+    handoffBlocked: true,
+  });
+  life.movers.push(p, blocker);
+  const held = structuredClone(p),
+    guard = guardFor(world, minimum);
+  life.scenes.step(
+    1 / 30,
+    [p],
+    {},
+    undefined,
+    undefined,
+    (next, before, reserve) => guard(life, next, before, undefined, reserve),
+    undefined,
+    () => 0,
+  );
+  expect(p).toEqual(held);
+  expect(life.scenes.visits.has(p)).toBe(true);
+  let released = false;
+  for (let frame = 0; frame < 240; frame++) {
+    const returning = life.scenes.visits.has(p);
+    const before = life.pose(p);
+    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, minimum);
+    const after = life.pose(p);
+    if (returning)
+      expect(
+        Math.hypot(after.x - before.x, after.y - before.y),
+        `frame ${frame}`,
+      ).toBeLessThanOrEqual(p.speed / 30 + 1e-7);
+    expect(blocker).toEqual(fixed);
+    expect(p.group).toBe(group);
+    p.group!.forEach((member, i) => expect(member).toBe(members[i]));
+    released ||= !life.scenes.visits.has(p);
+  }
+  expect(released).toBe(true);
+  expect(Math.hypot(life.pose(p).x - start.x, life.pose(p).y - start.y) / pm).toBeGreaterThan(0.5);
+  expect(
+    life
+      .groundBodies(p)
+      .some((a) => life.groundBodies(blocker).some((b) => bodiesOverlap(a, b, 0))),
+  ).toBe(false);
+});
+
 it.each([
   [0, false],
   [1, false],
