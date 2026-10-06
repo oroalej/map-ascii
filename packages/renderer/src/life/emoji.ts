@@ -126,6 +126,9 @@ export type EmojiObservation = {
   vendor?: boolean;
 };
 type Weighted = { mood: EmojiMood; weight: number };
+function selectedSeason(env: Pick<LifeEnv, 'emojiSeasons' | 'season'>) {
+  return env.emojiSeasons?.find((season) => season.id === env.season);
+}
 export function seasonalPool(
   o: EmojiObservation,
   env: LifeEnv,
@@ -153,6 +156,7 @@ export function ambientPool(
   env: LifeEnv,
   entries: readonly SeasonEmojiEntry[] = [],
   cruise = 0,
+  graveVisitors = !!selectedSeason(env)?.visitors,
 ): Weighted[] {
   const pool = seasonalPool(o, env, entries);
   const add = (mood: EmojiMood, weight = 1.5) => pool.push({ mood, weight });
@@ -207,8 +211,7 @@ export function ambientPool(
         if (inHours(env.minutes, EMOJI.hours.churchMorning)) add('yawn', EMOJI.churchWeight);
       }
       add('music', EMOJI.churchWeight);
-      if (env.emojiSeasons?.find((season) => season.id === env.season)?.visitors)
-        add('candle', EMOJI.churchWeight);
+      if (graveVisitors) add('candle', EMOJI.churchWeight);
     }
   }
   if (subject === 'driver' && cruise >= EMOJI.driver.coolCruise) add('cool', 1);
@@ -357,6 +360,7 @@ export class EmojiObserver {
   private table?: LifeEnv['emojiSeasons'];
   private season?: string | null;
   private entries: readonly SeasonEmojiEntry[] = [];
+  private graveVisitors = false;
   constructor(
     seed: number,
     readonly perMeter: number,
@@ -498,7 +502,9 @@ export class EmojiObserver {
     if (this.table !== env.emojiSeasons || this.season !== env.season) {
       this.table = env.emojiSeasons;
       this.season = env.season;
-      this.entries = this.table?.find((s) => s.id === this.season)?.emoji ?? [];
+      const selected = selectedSeason(env);
+      this.entries = selected?.emoji ?? [];
+      this.graveVisitors = !!selected?.visitors;
     }
     const night = inHours(env.minutes, EMOJI.hours.night);
     for (const o of observations) {
@@ -660,6 +666,7 @@ export class EmojiObserver {
       } else t.visit = undefined;
       if (!gap) {
         for (const p of purchases) {
+          if (p.mover !== o.owner && o.subject !== 'dog') continue;
           if (t.seen.has(p.key)) continue;
           if (p.mover === o.owner) {
             t.seen.add(p.key);
@@ -738,7 +745,9 @@ export class EmojiObserver {
     ];
     // Give latched purchase owners their opportunity before any dog claims a buyer.
     const buying = (o: EmojiObservation) => this.memory.get(o.owner)?.edges.has('yummy');
-    const evaluation = [...observations.filter(buying), ...observations.filter((o) => !buying(o))];
+    const evaluation = observations.some(buying)
+      ? [...observations.filter(buying), ...observations.filter((o) => !buying(o))]
+      : observations;
     for (const o of evaluation) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
@@ -812,7 +821,7 @@ export class EmojiObserver {
       t.followups.length = 0;
       if (!o.eligible || t.attemptAt === undefined || this.clock + 1e-8 < t.attemptAt) continue;
       t.attemptAt = this.clock + EMOJI.ambientWindow;
-      const pool = ambientPool(o, env, this.entries, t.cruise);
+      const pool = ambientPool(o, env, this.entries, t.cruise, this.graveVisitors);
       const applicable = seasonalPool(o, env, this.entries).length > 0;
       if (t.rng() >= (applicable ? EMOJI.seasonalChance : EMOJI.ambientChance) || !pool.length)
         continue;

@@ -780,6 +780,27 @@ describe('funny emoji events', () => {
       else expect(rng).toHaveBeenCalledTimes(1);
     }
   });
+  it('honks alone at a distant pedestrian and stays impatient when nobody is ahead', () => {
+    for (const distance of [5, null]) {
+      const f = fixture('vehicle');
+      const person = fixture().o;
+      person.owner.x = f.m.x + (distance ?? 0) * f.tile.perMeter;
+      person.owner.y = f.m.y;
+      f.m.hx = 1;
+      f.m.hy = 0;
+      const observations = distance === null ? [f.o] : [f.o, person];
+      f.step(0, {}, observations);
+      quiet(f);
+      const rng = vi.fn(() => 0);
+      f.observer.memory.get(f.m)!.rng = rng;
+      f.m.waiting = EMOJI.driver.impatientWait;
+      f.step(0.5, {}, observations);
+      expect(f.observer.cue(f.m)?.mood).toBe(distance === null ? 'impatient' : 'honk');
+      expect(f.observer.cue(f.m)?.pair).toBeUndefined();
+      expect(f.observer.cue(person.owner)).toBeUndefined();
+      expect(rng).toHaveBeenCalledTimes(distance === null ? 1 : 2);
+    }
+  });
   it('gossips only for adult completion follow-ups and keeps both original outcomes', () => {
     for (const [figure, share, split, mood] of [
       ['adult', 0, 0, 'gossip'],
@@ -1236,6 +1257,30 @@ describe('emoji ambient eligibility', () => {
             .every((p) => p.weight < 1.5),
         ).toBe(true);
       }
+    // Exercise the observer's cached selection through real ambient admissions.
+    g.pause = 0;
+    const observer = new EmojiObserver(123, 1, { rng: () => 0 });
+    observer.step(0, 19, { rain: 0, clock: 0 }, [o]);
+    const track = observer.memory.get(o.owner)!;
+    let clock = 0;
+    for (const [emojiSeasons, season, mood] of [
+      [table, 'remembrance', 'candle'],
+      [table, 'absent', 'happy'],
+      [table, 'remembrance', 'candle'],
+      [[{ id: 'remembrance' }], 'remembrance', 'happy'],
+      [table, 'remembrance', 'candle'],
+      [table, null, 'happy'],
+      [table, 'combined', 'candle'],
+      [undefined, 'combined', 'happy'],
+    ] as const) {
+      observer.release(o.owner);
+      track.cooldownUntil = 0;
+      track.attemptAt = clock += 0.5;
+      // With no stationary choices, this selects candle when present, else happy.
+      track.rng = vi.fn(() => 0.08).mockReturnValueOnce(0);
+      observer.step(0.5, 19, { rain: 0, clock, emojiSeasons, season }, [o]);
+      expect(observer.cue(o.owner)?.mood).toBe(mood);
+    }
     g.place = 'monument';
     expect(moods(o, { rain: 0, season: calendar.id, emojiSeasons: table })).not.toContain('candle');
   });
