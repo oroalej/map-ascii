@@ -1193,8 +1193,8 @@ describe('packLife people', () => {
       );
       expect(calls).toBe(0);
     }
-    for (const scale of [6]) {
-      const [g, agent] = person(1, 0, scale, { mappedPersonMover: true });
+    {
+      const [g, agent] = person(1, 0, 6, { mappedPersonMover: true });
       let calls = 0;
       packLife(
         new Uint8Array(g.cols * g.rows * 4),
@@ -1303,6 +1303,74 @@ describe('packLife people', () => {
       expect(calls).toBe(outside ? 0 : 1);
       expect([...owners].filter(Boolean)).toHaveLength(outside ? 0 : 4);
     }
+  });
+
+  it.each([
+    [40, 15],
+    [20, 30],
+    [0, 15],
+    [20, 0],
+  ])('clips seated figures at grid edge %s,%s without a collision', (col, row) => {
+    const [g, agent] = person(1, 0, 3, { people: [look({ figure: 'seated' })] });
+    g.toCell = (lng, lat) => [lng * 3, lat * 3];
+    agent.lng = col / 3;
+    agent.lat = row / 3;
+    agent.ahead = [agent.lng + 1, agent.lat];
+    const out = new Uint8Array(g.cols * g.rows * 4),
+      owners = new Uint32Array(g.cols * g.rows),
+      outcomes = new Uint8Array(1),
+      denials = new Uint8Array(1);
+    expect(
+      packLife(
+        out,
+        { ...g, outcomes, denials },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(1);
+    expect([...owners].filter(Boolean)).toHaveLength(2);
+    expect(outcomes[0]).toBe(PackingOutcome.drawn);
+    expect(denials[0]).toBe(0);
+
+    // A real forbidden cell still rejects the whole clipped figure.
+    expect(
+      packLife(
+        out,
+        { ...g, outcomes, denials, allowsGroundCell: () => false },
+        [agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(0);
+    expect(out.every((byte) => byte === 0)).toBe(true);
+    expect(outcomes[0]).toBe(PackingOutcome.cellGuard);
+    expect(denials[0]).toBe(2);
+
+    // Earlier ground owners keep their cells when this clipped figure collides.
+    const outcomesWithBlocker = new Uint8Array(2),
+      denialsWithBlocker = new Uint8Array(2);
+    expect(
+      packLife(
+        out,
+        { ...g, outcomes: outcomesWithBlocker, denials: denialsWithBlocker },
+        [agent, agent],
+        themes.dark,
+        glyphIndex,
+        null,
+        undefined,
+        { owners },
+      ),
+    ).toBe(1);
+    expect(outcomesWithBlocker[1]).toBe(PackingOutcome.collision);
+    expect(denialsWithBlocker[1]).toBe(1);
+    expect([...owners].filter(Boolean)).toEqual([1, 1]);
   });
 
   it('places complete second-ring figures with original bytes, members, speech and clock cells', () => {

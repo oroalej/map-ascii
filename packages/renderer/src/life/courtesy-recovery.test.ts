@@ -1,4 +1,4 @@
-﻿import { expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { FrameProfiler } from '../profile';
 import { LifeDiagnostics, PackingOutcome } from './diagnostics';
 import { LifeBuilder, LifeLine } from './geometry';

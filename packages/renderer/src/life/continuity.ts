@@ -99,7 +99,19 @@ export class SegmentGrid {
 
   /** Candidate line order matches the full geometry scan, including duplicate identities. */
   linesNear(x: number, y: number, reach: number): readonly number[] {
-    return [...new Set(this.near(x, y, reach).map((segment) => segment.line))];
+    const found = new Set<number>();
+    for (
+      let row = Math.floor((y - reach) / this.cell);
+      row <= Math.floor((y + reach) / this.cell);
+      row++
+    )
+      for (
+        let col = Math.floor((x - reach) / this.cell);
+        col <= Math.floor((x + reach) / this.cell);
+        col++
+      )
+        for (const segment of this.bins.get(row)?.get(col) ?? []) found.add(segment.line);
+    return [...found].sort((a, b) => a - b);
   }
 }
 
@@ -212,7 +224,6 @@ export function projectMover(
     avoid: m.avoid,
     waiting: m.waiting,
   };
-  if (m.roadShift !== undefined) preview.roadShift = m.roadShift;
   if (m.roadSteering !== undefined) preview.roadSteering = m.roadSteering;
   if (m.curveLengthM !== undefined) preview.curveLengthM = m.curveLengthM;
   if (m.curveCorner) {
@@ -234,10 +245,7 @@ export function projectMover(
       if (!id) break;
       const x = frame.x + source.geo.coords[old.vertex * 2]! * frame.scale;
       const y = frame.y + source.geo.coords[old.vertex * 2 + 1]! * frame.scale;
-      const hx =
-        source.geo.coords[(old.vertex + old.dir) * 2]! - source.geo.coords[old.vertex * 2]!;
-      const hy =
-        source.geo.coords[(old.vertex + old.dir) * 2 + 1]! - source.geo.coords[old.vertex * 2 + 1]!;
+      const [hx, hy] = source.endHeading(code, old.vertex);
       let mapped: number | undefined;
       for (const line of grid.linesNear(x, y, ADOPT.vertexSnap)) {
         if (target.geo.lineIds?.[line] !== id) continue;
@@ -250,8 +258,7 @@ export function projectMover(
               (target.geo.oneway?.[line] && target.geo.oneway[line] !== direction)
             )
               continue;
-            const dx = target.geo.coords[next * 2]! - target.geo.coords[v * 2]!;
-            const dy = target.geo.coords[next * 2 + 1]! - target.geo.coords[v * 2 + 1]!;
+            const [dx, dy] = target.endHeading(line * 2 + (direction === 1 ? 0 : 1), v);
             if (hx * dx + hy * dy > 0) {
               mapped = line * 2 + (direction === 1 ? 0 : 1);
               break;
@@ -303,10 +310,8 @@ export function projectMover(
         const oldVertex =
           plan.target?.vertex ??
           (oldDir === 1 ? source.geo.starts[oldLine]! : source.geo.starts[oldLine + 1]! - 1);
-        const hx = source.geo.coords[(oldVertex + oldDir) * 2]! - source.geo.coords[oldVertex * 2]!;
-        const hy =
-          source.geo.coords[(oldVertex + oldDir) * 2 + 1]! - source.geo.coords[oldVertex * 2 + 1]!;
-        for (const line of grid.linesNear(
+        const [hx, hy] = source.endHeading(plan.exit, oldVertex);
+        mappedPlan: for (const line of grid.linesNear(
           target.geo.coords[vertex * 2]!,
           target.geo.coords[vertex * 2 + 1]!,
           ADOPT.vertexSnap,
@@ -321,8 +326,7 @@ export function projectMover(
               target.geo.coords[ref.vertex * 2 + 1] !== target.geo.coords[vertex * 2 + 1]
             )
               continue;
-            const dx = target.geo.coords[to * 2]! - target.geo.coords[ref.vertex * 2]!;
-            const dy = target.geo.coords[to * 2 + 1]! - target.geo.coords[ref.vertex * 2 + 1]!;
+            const [dx, dy] = target.endHeading(line * 2 + (direction === 1 ? 0 : 1), ref.vertex);
             if (
               dx * hx + dy * hy <= 0 ||
               (target.geo.oneway?.[line] && target.geo.oneway[line] !== direction)
@@ -340,7 +344,7 @@ export function projectMover(
                 target: ref,
               },
             };
-            break;
+            break mappedPlan;
           }
         }
       }

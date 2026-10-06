@@ -33,7 +33,7 @@ import * as workingTiles from '../src/tiles';
 import * as workingGeometry from '../src/raster/geometry';
 import { decodeLifeTiles, openArchive } from './archive';
 import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
-import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
+import { classifyTerminalStops, MEASUREMENT_VERSION, referenceBodies } from './observe-life';
 import { simulationSeasons } from '../src/life/seasonal-simulation';
 import { configureLifeWorld } from '../src/life/worker-api';
 import { liveProgress } from '../src/life/procession';
@@ -42,22 +42,16 @@ import {
   diagnosticPackingOutcomes,
   requireDiagnosticPacking,
   requireDiagnosticProfiler,
+  diagnosticFlags,
+  diagnosticCases,
+  diagnosticHarnessFiles,
+  diagnosticObserverHash,
+  requireDiagnosticObserver,
 } from './diag-status';
 import { summary } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
-const prefix = process.argv.find((arg) => arg.startsWith('--case='))?.slice(7) ?? '';
-const baseline = process.argv.find((arg) => arg.startsWith('--baseline='))?.slice(11);
-const probe = process.argv.find((arg) => arg.startsWith('--probe-seconds='))?.slice(16);
-const resume = process.argv.includes('--resume');
-if (resume && !output) throw new Error('--resume requires an existing --output report');
-if (probe && (!prefix || baseline || ![30, 60].includes(Number(probe))))
-  throw new Error(
-    '--probe-seconds=30|60 requires a case prefix and the current engine; probes do not satisfy acceptance',
-  );
-if (baseline && !output)
-  throw new Error('--baseline requires --output so snapshots stay beside the report');
+const { output, prefix, baseline, probe, resume } = diagnosticFlags(process.argv.slice(2));
 const snapshotDestination = output && resolve(dirname(output), `diag-source-${Date.now()}`);
 const snapshot = baseline
   ? await snapshotRevision(root, baseline, snapshotDestination!)
@@ -104,20 +98,14 @@ const [
   moduleAt('raster/geometry.ts', workingGeometry),
 ]);
 const sourceHash = snapshot?.hash ?? (await currentSourceHash(root));
-const observerHash = createHash('sha256')
-  .update(
-    (await readFile(resolve(root, 'packages/renderer/src/life/diagnostics.ts'), 'utf8')).replace(
-      /\r\n/g,
-      '\n',
-    ),
-  )
-  .update(
-    (await readFile(resolve(root, 'packages/renderer/scripts/observe-life.ts'), 'utf8')).replace(
-      /\r\n/g,
-      '\n',
-    ),
-  )
-  .digest('hex');
+const observerHash = diagnosticObserverHash(
+  await Promise.all(
+    diagnosticHarnessFiles.map(async (path) => ({
+      path,
+      content: await readFile(resolve(root, path), 'utf8'),
+    })),
+  ),
+);
 const { packs, errors } = await loadCityPacks(resolve(root, 'packages/content'), { only: 'naga' });
 if (errors.length || !packs[0]) throw new Error(JSON.stringify(errors));
 const pack = packs[0],
@@ -174,13 +162,7 @@ const inputs = {
   path: 'east-west at one horizontal cell/second; reflect at region longitude bounds',
 };
 const started = performance.now();
-const expectedCases = [17, 16, 18, 15, 19].flatMap((zoom) =>
-  [720, 1080].flatMap((minutes) =>
-    [1, 0.4].flatMap((crowd) =>
-      ['fixed', 'pan'].map((mode) => `z${zoom}/${minutes}/crowd${crowd}/${mode}`),
-    ),
-  ),
-);
+const expectedCases = diagnosticCases.map((c) => c.key);
 const selectedCases = expectedCases.filter((key) => key.startsWith(prefix));
 if (!selectedCases.length) throw new Error(`No diagnostic cases match ${JSON.stringify(prefix)}`);
 let priorRuntime = 0;
@@ -266,12 +248,7 @@ function describeOwner(world: workingSimulate.LifeWorld, owner: object, minimum:
   if (!life || !terrain || !origin) return;
   const m = owner as Mover;
   const legal = (bodies: Body[]) => {
-    for (const b of bodies) {
-      b.x = origin.x + b.x * origin.scale;
-      b.y = origin.y + b.y * origin.scale;
-      b.length *= origin.scale;
-      b.width *= origin.scale;
-    }
+    referenceBodies(bodies, origin);
     return {
       building: terrain.blocked.hits(bodies),
       water: m.kind === 'person' && terrain.water.hits(bodies),
@@ -341,10 +318,10 @@ try {
       runtimeSeconds?: unknown;
       cases?: typeof cases;
     };
+    requireDiagnosticObserver(previous.observerHash, observerHash);
     if (
       previous.revision !== revision ||
       previous.sourceHash !== sourceHash ||
-      previous.observerHash !== observerHash ||
       previous.measurementVersion !== MEASUREMENT_VERSION ||
       previous.inputHash !== hash(JSON.stringify(inputs)) ||
       !!previous.probe !== !!probe ||
@@ -359,10 +336,7 @@ try {
           !Number.isFinite(c.report.seconds) ||
           Math.abs(c.report.seconds - seconds) > 1e-6 ||
           c.key !== `z${c.zoom}/${c.minutes}/crowd${c.crowd}/${c.mode}` ||
-          ![15, 16, 17, 18, 19].includes(c.zoom) ||
-          ![720, 1080].includes(c.minutes) ||
-          ![1, 0.4].includes(c.crowd) ||
-          !['fixed', 'pan'].includes(c.mode),
+          !diagnosticCases.some((expected) => expected.key === c.key),
       ) ||
       new Set(previous.cases.map((c) => c.key)).size !== previous.cases.length
     )
@@ -385,288 +359,279 @@ try {
       archive.header.maxLat,
     ] as [number, number, number, number],
   };
-  for (const zoom of [17, 16, 18, 15, 19])
-    for (const minutes of [720, 1080])
-      for (const crowd of [1, 0.4])
-        for (const mode of ['fixed', 'pan']) {
-          const key = `z${zoom}/${minutes}/crowd${crowd}/${mode}`;
-          if (!key.startsWith(prefix)) continue;
-          if (cases.some((c) => c.key === key)) continue;
-          console.log(`${key}: preparing`);
-          const caseStart = performance.now();
-          const diagnostics = new LifeDiagnostics({ rawMotion: true });
-          const profiler = new FrameProfiler(() => 0, diagnostics);
-          requireDiagnosticProfiler(profiler, diagnostics);
-          const world = new LifeWorld(config.traffic, profiler, {
-            dialogue: runtime && dialogueChoices(runtime),
-            periods: runtime?.periods,
-          });
-          if (typeof world.setShopSchedule === 'function')
-            configureLifeWorld(world, {
-              shopSchedule: inputs.worldConfiguration.shopSchedule ?? undefined,
-              seasons: inputs.worldConfiguration.seasons,
-              processions: inputs.worldConfiguration.processions,
-            });
-          else world.setProcessions(inputs.worldConfiguration.processions);
-          const flickerSamples: unknown[] = [];
-          const packingTimes: number[] = [];
-          const packingWork = {
-            secondRingCalls: 0,
-            secondRingPlacements: 0,
-            exhausted: 0,
-            rigidAttempts: 0,
-            assignmentAttempts: 0,
-            maxAssignmentAttempts: 0,
-            loneCalls: 0,
-            lonePlacements: 0,
-            loneRigidAttempts: 0,
-            loneTargetCellChecks: 0,
-          };
-          let measuring = false;
-          const groupRetry: NonNullable<workingDraw.LifePackMetadata['groupRetry']> = (result) => {
-            if (!measuring) return;
-            packingWork.secondRingCalls++;
-            packingWork.secondRingPlacements += Number(!!result.offsets);
-            packingWork.exhausted += Number(result.exhausted);
-            packingWork.rigidAttempts += result.rigidAttempts;
-            packingWork.assignmentAttempts += result.assignmentAttempts;
-            packingWork.maxAssignmentAttempts = Math.max(
-              packingWork.maxAssignmentAttempts,
-              result.assignmentAttempts,
-            );
-          };
-          const loneRetry: NonNullable<workingDraw.LifePackMetadata['loneRetry']> = (result) => {
-            if (!measuring) return;
-            packingWork.loneCalls++;
-            packingWork.lonePlacements += Number(!!result.offset);
-            packingWork.loneRigidAttempts += result.rigidAttempts;
-            packingWork.loneTargetCellChecks += result.targetCellChecks;
-          };
-          let camera = { ...meta.defaultCamera, zoom };
-          const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
-          const cellMeters = metersPerCssPx(camera) * cell.width;
-          const cellDev = { w: cell.width, h: cell.height };
-          const cols = Math.ceil(size.width / cell.width) + 3,
-            rows = Math.ceil(size.height / cell.height) + 3;
-          const texels = new Uint8Array(cols * rows * 4);
-          const glyphs = new Map<string, number>();
-          const glyphIndex = (glyph: string) => {
-            if (!glyph) return 0;
-            let index = glyphs.get(glyph);
-            if (index === undefined) {
-              index = glyphs.size + 1;
-              glyphs.set(glyph, index);
-            }
-            return index;
-          };
-          const lifeGlyphs = buildLifeGlyphs(glyphIndex);
-          const zone = { timezone: config.timezone, lng: camera.lng };
-          const date = atCityMinutes(new Date('2026-10-04T12:00:00Z'), zone, minutes);
-          const clock = cityTime(date, zone);
-          world.setLive(undefined);
-          for (const route of processions) {
-            const progress = liveProgress(route.schedule, date);
-            if (progress === undefined) continue;
-            const local = cityTime(date, { ...zone, timezone: route.schedule.timezone });
-            world.setLive(route.id, progress, `${route.id}/${local.year}`);
-            break;
-          }
-          const season = activeSeason(config.life?.seasons, clock.year, clock.day)?.id ?? null;
-          if (season && typeof world.setSeasons !== 'function')
-            throw new Error(
-              'Legacy PRE cannot reproduce an active seasonal calendar; use an observability-only PRE from current main',
-            );
-          const sun = solarPosition(date, camera.lng, camera.lat);
-          const levels = activityLevels(daylight(sun.altitude), {
-            minutes,
-            weekday: clock.weekday,
-            life: config.life,
-          });
-          const weather = { rain: 0, sunAltitude: sun.altitude };
-          const [west] = project(meta.regionBounds[0], camera.lat, zoom);
-          const [east] = project(meta.regionBounds[2], camera.lat, zoom);
-          const projected = project(camera.lng, camera.lat, zoom),
-            y = projected[1],
-            stepWeather = { rain: 0, minutes, cityLife: config.life, season };
-          let x = projected[0],
-            direction = 1,
-            previousTiles = '';
-          for (let frame = 0; frame < (warmup + seconds) / dt; frame++) {
-            if (mode === 'pan' && frame) {
-              x += direction * cell.width * dt;
-              if (x > east) {
-                x = east - (x - east);
-                direction = -1;
-              }
-              if (x < west) {
-                x = west + (west - x);
-                direction = 1;
-              }
-              const [lng, lat] = unproject(x, y, zoom);
-              camera = { lng, lat, zoom };
-            }
-            const [[w, s], [e, n]] = viewportFor(camera, size).getBounds() as [
-              [number, number],
-              [number, number],
-            ];
-            const bounds: [number, number, number, number] = [w, s, e, n];
-            const center: [number, number] = [camera.lng, camera.lat];
-            const ids = viewTiles(camera, size, header);
-            const missing = ids.filter((id) => !cache.has(tileKey(id)));
-            if (missing.length) {
-              for (const id of missing) cache.set(tileKey(id), null);
-              for (const tile of await decodeLifeTiles(archive.archive, missing, buildTileGeometry))
-                cache.set(tile.key, tile);
-              if (frame === 0)
-                console.log(
-                  `${key}: decoded ${ids.length} tiles in ${((performance.now() - caseStart) / 1000).toFixed(1)}s`,
-                );
-            }
-            const keys = ids.map(tileKey).join('|');
-            if (keys !== previousTiles) {
-              world.sync(
-                ids.flatMap((id) => cache.get(tileKey(id)) ?? []),
-                center,
-                { bounds, spawnMarginM: spawnMargin(cellMeters, cell.height / cell.width) },
-              );
-              previousTiles = keys;
-              if (frame === 0)
-                console.log(
-                  `${key}: synchronized in ${((performance.now() - caseStart) / 1000).toFixed(1)}s`,
-                );
-            }
-            if (frame === 0) world.visible(zoom, levels, center, weather, bounds, crowd);
-            diagnostics.beginFrame(dt, bounds, zoom, crowd, frame >= warmup / dt);
-            world.step(
-              dt,
-              undefined,
-              zoom,
-              bounds,
-              undefined,
-              stepWeather,
-              cellMeters,
-              cell.height / cell.width,
-            );
-            const agents = world.visible(zoom, levels, center, weather, bounds, crowd);
-            const placement = placeGrid({ camera, ...size, dpr: 1 }, cellDev, cols, rows);
-            const outcomes = diagnosticPackingOutcomes(agents.length);
-            const denials = new Uint8Array(agents.length);
-            const cellGuard = world.groundCellGuard(placement.toCell);
-            measuring = frame >= warmup / dt;
-            const packingStart = performance.now();
-            packLife(
-              texels,
-              {
-                cols,
-                rows,
-                cellWidth: cell.width,
-                cellHeight: cell.height,
-                toCell: placement.toCell,
-                allowsGroundCell: cellGuard,
-                outcomes,
-                denials,
-              },
-              agents,
-              themes.dark,
-              glyphIndex,
-              sun,
-              lifeGlyphs,
-              { groupRetry, loneRetry },
-            );
-            if (measuring) packingTimes.push(performance.now() - packingStart);
-            requireDiagnosticPacking(outcomes);
-            classifyTerminalStops(world, diagnostics);
-            if (frame >= warmup / dt && flickerSamples.length < 100) {
-              // Read-only examples supplement the common observer's counters. They
-              // never call movement guards or change the PRE/POST definitions.
-              const drawn = new Set<object>();
-              agents.forEach((agent, i) => {
-                const owner = diagnostics.views.get(agent);
-                if (owner && outcomes[i] === PackingOutcome.drawn) drawn.add(owner);
-              });
-              const seen = new Set<object>();
-              for (const [i, agent] of agents.entries()) {
-                const example = diagnostics.packingExample(agent);
-                const owner = example?.owner;
-                const id = example?.id;
-                if (
-                  !owner ||
-                  id === undefined ||
-                  seen.has(owner) ||
-                  drawn.has(owner) ||
-                  !example?.previousDrawn ||
-                  !example.candidate ||
-                  (outcomes[i] !== PackingOutcome.collision &&
-                    outcomes[i] !== PackingOutcome.cellGuard)
-                )
-                  continue;
-                seen.add(owner);
-                flickerSamples.push({
-                  id,
-                  at: frame * dt - warmup,
-                  outcome: outcomes[i],
-                  denials: denials[i],
-                  view: {
-                    kind: agent.kind,
-                    vehicle: agent.vehicle,
-                    people: agent.people,
-                    cell: placement.toCell(agent.lng, agent.lat),
-                  },
-                  details: describeOwner(world, owner, cellMeters),
-                  allowedNeighbors:
-                    cellGuard &&
-                    Array.from({ length: 9 }, (_, index) => {
-                      const [col, row] = placement.toCell(agent.lng, agent.lat);
-                      const dx = (index % 3) - 1,
-                        dy = Math.floor(index / 3) - 1;
-                      return {
-                        dx,
-                        dy,
-                        allowed: cellGuard(agent, Math.floor(col) + dx, Math.floor(row) + dy),
-                      };
-                    }),
-                });
-                if (flickerSamples.length >= 100) break;
-              }
-            }
-            diagnostics.finishFrame(agents, outcomes, denials);
-            if ((frame + 1) % 900 === 0)
-              console.log(
-                `${key}: ${(frame + 1) / 30}s simulated, ${((performance.now() - caseStart) / 1000).toFixed(1)}s elapsed`,
-              );
-          }
-          const packingSummary = packingTimes.length
-            ? summary(packingTimes)
-            : { median: 0, p95: 0 };
-          cases.push({
-            key,
-            zoom,
-            minutes,
-            crowd,
-            mode,
-            cell,
-            cellMeters,
-            tileZoom: Math.min(zoom, header.maxZoom),
-            clock,
-            sun,
-            runtimeSeconds: (performance.now() - caseStart) / 1000,
-            packingCpu: {
-              medianMs: packingSummary.median,
-              p95Ms: packingSummary.p95,
-              samples: packingTimes.length,
-              ...packingWork,
-            },
-            flickerSamples,
-            report: diagnostics.report(),
-            owners: diagnostics.longestStuck(50, (owner) =>
-              describeOwner(world, owner, cellMeters),
-            ),
-            recoveryEvents: diagnostics.recentRecoveries(),
-          });
-          world.clearTiles();
-          await save(false);
-          console.log(`${key}: ${JSON.stringify(cases.at(-1)!.report.motion)}`);
+  for (const { key, zoom, minutes, crowd, mode } of diagnosticCases) {
+    if (!key.startsWith(prefix)) continue;
+    if (cases.some((c) => c.key === key)) continue;
+    console.log(`${key}: preparing`);
+    const caseStart = performance.now();
+    const diagnostics = new LifeDiagnostics({ rawMotion: true });
+    const profiler = new FrameProfiler(() => 0, diagnostics);
+    requireDiagnosticProfiler(profiler, diagnostics);
+    const world = new LifeWorld(config.traffic, profiler, {
+      dialogue: runtime && dialogueChoices(runtime),
+      periods: runtime?.periods,
+    });
+    if (typeof world.setShopSchedule === 'function')
+      configureLifeWorld(world, {
+        shopSchedule: inputs.worldConfiguration.shopSchedule ?? undefined,
+        seasons: inputs.worldConfiguration.seasons,
+        processions: inputs.worldConfiguration.processions,
+      });
+    else world.setProcessions(inputs.worldConfiguration.processions);
+    const flickerSamples: unknown[] = [];
+    const packingTimes: number[] = [];
+    const packingWork = {
+      secondRingCalls: 0,
+      secondRingPlacements: 0,
+      exhausted: 0,
+      rigidAttempts: 0,
+      assignmentAttempts: 0,
+      maxAssignmentAttempts: 0,
+      loneCalls: 0,
+      lonePlacements: 0,
+      loneRigidAttempts: 0,
+      loneTargetCellChecks: 0,
+    };
+    let measuring = false;
+    const groupRetry: NonNullable<workingDraw.LifePackMetadata['groupRetry']> = (result) => {
+      if (!measuring) return;
+      packingWork.secondRingCalls++;
+      packingWork.secondRingPlacements += Number(!!result.offsets);
+      packingWork.exhausted += Number(result.exhausted);
+      packingWork.rigidAttempts += result.rigidAttempts;
+      packingWork.assignmentAttempts += result.assignmentAttempts;
+      packingWork.maxAssignmentAttempts = Math.max(
+        packingWork.maxAssignmentAttempts,
+        result.assignmentAttempts,
+      );
+    };
+    const loneRetry: NonNullable<workingDraw.LifePackMetadata['loneRetry']> = (result) => {
+      if (!measuring) return;
+      packingWork.loneCalls++;
+      packingWork.lonePlacements += Number(!!result.offset);
+      packingWork.loneRigidAttempts += result.rigidAttempts;
+      packingWork.loneTargetCellChecks += result.targetCellChecks;
+    };
+    let camera = { ...meta.defaultCamera, zoom };
+    const cell = stepCell(DEFAULT_CELLS, cellStep(DEFAULT_CELLS, zoom));
+    const cellMeters = metersPerCssPx(camera) * cell.width;
+    const cellDev = { w: cell.width, h: cell.height };
+    const cols = Math.ceil(size.width / cell.width) + 3,
+      rows = Math.ceil(size.height / cell.height) + 3;
+    const texels = new Uint8Array(cols * rows * 4);
+    const glyphs = new Map<string, number>();
+    const glyphIndex = (glyph: string) => {
+      if (!glyph) return 0;
+      let index = glyphs.get(glyph);
+      if (index === undefined) {
+        index = glyphs.size + 1;
+        glyphs.set(glyph, index);
+      }
+      return index;
+    };
+    const lifeGlyphs = buildLifeGlyphs(glyphIndex);
+    const zone = { timezone: config.timezone, lng: camera.lng };
+    const date = atCityMinutes(new Date('2026-10-04T12:00:00Z'), zone, minutes);
+    const clock = cityTime(date, zone);
+    world.setLive(undefined);
+    for (const route of processions) {
+      const progress = liveProgress(route.schedule, date);
+      if (progress === undefined) continue;
+      const local = cityTime(date, { ...zone, timezone: route.schedule.timezone });
+      world.setLive(route.id, progress, `${route.id}/${local.year}`);
+      break;
+    }
+    const season = activeSeason(config.life?.seasons, clock.year, clock.day)?.id ?? null;
+    if (season && typeof world.setSeasons !== 'function')
+      throw new Error(
+        'Legacy PRE cannot reproduce an active seasonal calendar; use an observability-only PRE from current main',
+      );
+    const sun = solarPosition(date, camera.lng, camera.lat);
+    const levels = activityLevels(daylight(sun.altitude), {
+      minutes,
+      weekday: clock.weekday,
+      life: config.life,
+    });
+    const weather = { rain: 0, sunAltitude: sun.altitude };
+    const [west] = project(meta.regionBounds[0], camera.lat, zoom);
+    const [east] = project(meta.regionBounds[2], camera.lat, zoom);
+    const projected = project(camera.lng, camera.lat, zoom),
+      y = projected[1],
+      stepWeather = { rain: 0, minutes, cityLife: config.life, season };
+    let x = projected[0],
+      direction = 1,
+      previousTiles = '';
+    for (let frame = 0; frame < (warmup + seconds) / dt; frame++) {
+      if (mode === 'pan' && frame) {
+        x += direction * cell.width * dt;
+        if (x > east) {
+          x = east - (x - east);
+          direction = -1;
         }
+        if (x < west) {
+          x = west + (west - x);
+          direction = 1;
+        }
+        const [lng, lat] = unproject(x, y, zoom);
+        camera = { lng, lat, zoom };
+      }
+      const [[w, s], [e, n]] = viewportFor(camera, size).getBounds() as [
+        [number, number],
+        [number, number],
+      ];
+      const bounds: [number, number, number, number] = [w, s, e, n];
+      const center: [number, number] = [camera.lng, camera.lat];
+      const ids = viewTiles(camera, size, header);
+      const missing = ids.filter((id) => !cache.has(tileKey(id)));
+      if (missing.length) {
+        for (const id of missing) cache.set(tileKey(id), null);
+        for (const tile of await decodeLifeTiles(archive.archive, missing, buildTileGeometry))
+          cache.set(tile.key, tile);
+        if (frame === 0)
+          console.log(
+            `${key}: decoded ${ids.length} tiles in ${((performance.now() - caseStart) / 1000).toFixed(1)}s`,
+          );
+      }
+      const keys = ids.map(tileKey).join('|');
+      if (keys !== previousTiles) {
+        world.sync(
+          ids.flatMap((id) => cache.get(tileKey(id)) ?? []),
+          center,
+          { bounds, spawnMarginM: spawnMargin(cellMeters, cell.height / cell.width) },
+        );
+        previousTiles = keys;
+        if (frame === 0)
+          console.log(
+            `${key}: synchronized in ${((performance.now() - caseStart) / 1000).toFixed(1)}s`,
+          );
+      }
+      if (frame === 0) world.visible(zoom, levels, center, weather, bounds, crowd);
+      diagnostics.beginFrame(dt, bounds, zoom, crowd, frame >= warmup / dt);
+      world.step(
+        dt,
+        undefined,
+        zoom,
+        bounds,
+        undefined,
+        stepWeather,
+        cellMeters,
+        cell.height / cell.width,
+      );
+      const agents = world.visible(zoom, levels, center, weather, bounds, crowd);
+      const placement = placeGrid({ camera, ...size, dpr: 1 }, cellDev, cols, rows);
+      const outcomes = diagnosticPackingOutcomes(agents.length);
+      const denials = new Uint8Array(agents.length);
+      const cellGuard = world.groundCellGuard(placement.toCell);
+      measuring = frame >= warmup / dt;
+      const packingStart = performance.now();
+      packLife(
+        texels,
+        {
+          cols,
+          rows,
+          cellWidth: cell.width,
+          cellHeight: cell.height,
+          toCell: placement.toCell,
+          allowsGroundCell: cellGuard,
+          outcomes,
+          denials,
+        },
+        agents,
+        themes.dark,
+        glyphIndex,
+        sun,
+        lifeGlyphs,
+        { groupRetry, loneRetry },
+      );
+      if (measuring) packingTimes.push(performance.now() - packingStart);
+      requireDiagnosticPacking(outcomes);
+      classifyTerminalStops(world, diagnostics);
+      if (frame >= warmup / dt && flickerSamples.length < 100) {
+        // Read-only examples supplement the common observer's counters. They
+        // never call movement guards or change the PRE/POST definitions.
+        const drawn = new Set<object>();
+        agents.forEach((agent, i) => {
+          const owner = diagnostics.views.get(agent);
+          if (owner && outcomes[i] === PackingOutcome.drawn) drawn.add(owner);
+        });
+        const seen = new Set<object>();
+        for (const [i, agent] of agents.entries()) {
+          const example = diagnostics.packingExample(agent);
+          const owner = example?.owner;
+          const id = example?.id;
+          if (
+            !owner ||
+            id === undefined ||
+            seen.has(owner) ||
+            drawn.has(owner) ||
+            !example?.previousDrawn ||
+            !example.candidate ||
+            (outcomes[i] !== PackingOutcome.collision && outcomes[i] !== PackingOutcome.cellGuard)
+          )
+            continue;
+          seen.add(owner);
+          flickerSamples.push({
+            id,
+            at: frame * dt - warmup,
+            outcome: outcomes[i],
+            denials: denials[i],
+            view: {
+              kind: agent.kind,
+              vehicle: agent.vehicle,
+              people: agent.people,
+              cell: placement.toCell(agent.lng, agent.lat),
+            },
+            details: describeOwner(world, owner, cellMeters),
+            allowedNeighbors:
+              cellGuard &&
+              Array.from({ length: 9 }, (_, index) => {
+                const [col, row] = placement.toCell(agent.lng, agent.lat);
+                const dx = (index % 3) - 1,
+                  dy = Math.floor(index / 3) - 1;
+                return {
+                  dx,
+                  dy,
+                  allowed: cellGuard(agent, Math.floor(col) + dx, Math.floor(row) + dy),
+                };
+              }),
+          });
+          if (flickerSamples.length >= 100) break;
+        }
+      }
+      diagnostics.finishFrame(agents, outcomes, denials);
+      if ((frame + 1) % 900 === 0)
+        console.log(
+          `${key}: ${(frame + 1) / 30}s simulated, ${((performance.now() - caseStart) / 1000).toFixed(1)}s elapsed`,
+        );
+    }
+    const packingSummary = packingTimes.length ? summary(packingTimes) : { median: 0, p95: 0 };
+    cases.push({
+      key,
+      zoom,
+      minutes,
+      crowd,
+      mode,
+      cell,
+      cellMeters,
+      tileZoom: Math.min(zoom, header.maxZoom),
+      clock,
+      sun,
+      runtimeSeconds: (performance.now() - caseStart) / 1000,
+      packingCpu: {
+        medianMs: packingSummary.median,
+        p95Ms: packingSummary.p95,
+        samples: packingTimes.length,
+        ...packingWork,
+      },
+      flickerSamples,
+      report: diagnostics.report(),
+      owners: diagnostics.longestStuck(50, (owner) => describeOwner(world, owner, cellMeters)),
+      recoveryEvents: diagnostics.recentRecoveries(),
+    });
+    world.clearTiles();
+    await save(false);
+    console.log(`${key}: ${JSON.stringify(cases.at(-1)!.report.motion)}`);
+  }
   await save(true);
 } finally {
   await archive.close();

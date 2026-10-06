@@ -1386,14 +1386,14 @@ it('requires accepted travel before rearming a vehicle recovery', () => {
   const m = mover('vehicle', 70, 1);
   life.movers.push(m);
   const table = new JunctionTable();
-  expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(true);
+  expect(life.recoverVehicle(m, () => true, table, new Set(), undefined, 1 / 30)).toBe(true);
   const recovered = snapshotMover(m);
-  expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(false);
+  expect(life.recoverVehicle(m, () => true, table, new Set(), undefined, 1 / 30)).toBe(false);
   expect(m).toEqual(recovered);
   for (let frame = 0; frame < 150; frame++)
     life.step(1 / 30, undefined, undefined, undefined, { rain: 0 }, () => true);
   expect(Math.abs(m.x - recovered.x) / pm).toBeGreaterThan(4.4);
-  expect(life.recoverVehicle(m, () => true, table, new Set())).toBe(true);
+  expect(life.recoverVehicle(m, () => true, table, new Set(), undefined, 1 / 30)).toBe(true);
 });
 
 it.each(['activity', 'near', 'inspection', 'removed'] as const)(
@@ -1730,7 +1730,9 @@ it('rejects recovery departure corridors that would enter an unreserved junction
   const before = snapshotMover(m),
     lines = new Set<number>();
   expect(life.junctionIndex.junctions).toHaveLength(1);
-  expect(life.recoverVehicle(m, () => true, new JunctionTable(), lines)).toBe(false);
+  expect(life.recoverVehicle(m, () => true, new JunctionTable(), lines, undefined, 1 / 30)).toBe(
+    false,
+  );
   expect(m).toEqual(before);
   expect(lines.size).toBe(0);
 });
@@ -1743,19 +1745,57 @@ it('rolls back rejected vehicle recoveries, retains routing identity, and admits
   const before = { ...m };
   const table = new JunctionTable(),
     lines = new Set<number>();
-  expect(life.recoverVehicle(m, () => false, table, lines)).toBe(false);
+  expect(life.recoverVehicle(m, () => false, table, lines, undefined, 1 / 30)).toBe(false);
   expect(m).toEqual(before);
   expect(m.routing).toBe(before.routing);
   expect(lines.size).toBe(0);
-  expect(life.recoverVehicle(m, () => true, table, lines)).toBe(true);
+  expect(
+    life.recoverVehicle(m, () => true, table, lines, undefined, RECOVERY.contactRetrySeconds),
+  ).toBe(true);
   expect(m.hx).toBe(-1);
   expect(m.routing).toEqual({ seed: 12, turns: 3 });
   expect(Object.hasOwn(m, 'next')).toBe(false);
   expect(m.waiting).toBe(0);
   expect(m.v).toBe(0);
-  expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, lines)).toBe(false);
+  expect(
+    life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, lines, undefined, 1 / 30),
+  ).toBe(false);
   life.geo.oneway![0] = 1;
-  expect(life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, new Set())).toBe(false);
+  expect(
+    life.recoverVehicle(mover('vehicle', 90, 1), () => true, table, new Set(), undefined, 1 / 30),
+  ).toBe(false);
+});
+
+it('spaces failed vehicle candidate searches without delaying a selected retreat', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8),
+    m = mover('vehicle', 70, 1);
+  const guard = vi.fn(() => false),
+    table = new JunctionTable();
+  expect(life.recoverVehicle(m, guard, table, new Set(), undefined, 0.1)).toBe(false);
+  const calls = guard.mock.calls.length;
+  expect(calls).toBeGreaterThan(0);
+  for (let frame = 0; frame < 4; frame++) {
+    expect(life.recoverVehicle(m, guard, table, new Set(), undefined, 0.1)).toBe(false);
+    expect(guard).toHaveBeenCalledTimes(calls);
+  }
+  life.recoverVehicle(m, guard, table, new Set(), undefined, 0.1);
+  expect(guard).toHaveBeenCalledTimes(calls * 2);
+});
+
+it('spaces failed walker rotations in eligible simulation time', () => {
+  const { life } = fixture(LifeLine.path, 4),
+    m = mover('person', 70, 1);
+  m.waiting = WALK_RECOVERY.blockedTurnSeconds;
+  life.movers.push(m);
+  const turn = vi.spyOn(life as unknown as { turnBack(m: Mover): void }, 'turnBack');
+  life.step(0.1, undefined, undefined, undefined, undefined, () => false);
+  const calls = turn.mock.calls.length;
+  expect(calls).toBeGreaterThan(0);
+  for (let frame = 0; frame < 4; frame++)
+    life.step(0.1, undefined, undefined, undefined, undefined, () => false);
+  expect(turn).toHaveBeenCalledTimes(calls);
+  life.step(0.1, undefined, undefined, undefined, undefined, () => false);
+  expect(turn).toHaveBeenCalledTimes(calls * 2);
 });
 
 it('rejects a recovered lane pose outside the source even when its route cursor is inside', () => {
@@ -1774,7 +1814,9 @@ it('rejects a recovered lane pose outside the source even when its route cursor 
   const m = { ...mover('vehicle', 70, -1), x: 0.05 * pm, y: 1000 + 70 * pm, hx: 0, hy: -1 };
   const before = { ...m };
   expect(life.pose(m).x).toBeGreaterThan(0);
-  expect(life.recoverVehicle(m, () => true, new JunctionTable(), new Set())).toBe(false);
+  expect(
+    life.recoverVehicle(m, () => true, new JunctionTable(), new Set(), undefined, 1 / 30),
+  ).toBe(false);
   expect(m).toEqual(before);
 });
 
@@ -1873,6 +1915,8 @@ it('checks intermediate occupancy even during terrain inflation escape', () => {
   const previous = { ...before };
   before.x += 20 * pm;
   expect(guard(life, before, previous)).toBe(false);
+  life.parked.length = 0;
+  expect(guardFor(world, 2.9)(life, before, previous)).toBe(true);
 });
 
 it('admits a physically safe turn with a new inflation-only terrain conflict', () => {

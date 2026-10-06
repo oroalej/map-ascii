@@ -1,8 +1,19 @@
 import type { LifeDiagnostics } from '../src/life/diagnostics';
 import type { LifeWorld, TileLife, Mover } from '../src/life/simulate';
-import type { PolygonIndex } from '../src/life/occupancy';
+import type { Body, PolygonIndex } from '../src/life/occupancy';
 
 export const MEASUREMENT_VERSION = 3;
+
+/** Convert fresh diagnostic footprints into the world's reference tile frame. */
+export function referenceBodies(bodies: Body[], origin: { x: number; y: number; scale: number }) {
+  for (const b of bodies) {
+    b.x = origin.x + b.x * origin.scale;
+    b.y = origin.y + b.y * origin.scale;
+    b.length *= origin.scale;
+    b.width *= origin.scale;
+  }
+  return bodies;
+}
 
 /** Read-only classification, shared verbatim by immutable PRE and POST engines. */
 export function classifyTerminalStops(world: LifeWorld, diagnostics: LifeDiagnostics) {
@@ -53,13 +64,7 @@ export function classifyTerminalStops(world: LifeWorld, diagnostics: LifeDiagnos
         life as unknown as { oneWayEndRoom(m: Mover): number | undefined }
       ).oneWayEndRoom(m);
       if (room === undefined || room > 1e-8 * life.perMeter) continue;
-      const bodies = life.groundBodies(m);
-      for (const b of bodies) {
-        b.x = origin.x + b.x * origin.scale;
-        b.y = origin.y + b.y * origin.scale;
-        b.length *= origin.scale;
-        b.width *= origin.scale;
-      }
+      const bodies = referenceBodies(life.groundBodies(m), origin);
       if (!terrain.blocked.hits(bodies)) diagnostics.classifyTerminal(m);
     }
   }

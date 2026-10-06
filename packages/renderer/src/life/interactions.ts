@@ -63,6 +63,8 @@ export type Visit = {
   seat: number;
   sheltering: boolean;
   blocked: number;
+  /** A completed mapped return still owns its blockage until the final pose is accepted. */
+  handoffBlocked?: boolean;
   retryAt?: number;
   progress?: {
     x: number;
@@ -456,13 +458,7 @@ export class LocalScenes {
     owns?: (p: WalkPoint) => boolean,
   ) {
     if (guard?.passing?.(m)) this.clearBypass(m);
-    if (this.yieldStep(m, dt, guard, walkLimit, owns)) {
-      if (!this.yieldHeld.has(m)) {
-        visit.blocked += dt;
-        this.blockedTimeout(m, visit);
-      }
-      return false;
-    }
+    if (this.yieldStep(m, dt, guard, walkLimit, owns)) return false;
     const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
     const next = visit.next;
     const bypassBefore = visit.bypass;
@@ -683,7 +679,7 @@ export class LocalScenes {
         this.blockedTimeout(m, visit);
       }
     } else if (visit.progress) this.blockedProgress(m, visit, dt);
-    else visit.blocked = 0;
+    else if (!visit.handoffBlocked) visit.blocked = 0;
     if (visit.returnPending && this.canIdle(m)) {
       this.returning(m, visit);
       return false;
@@ -775,13 +771,21 @@ export class LocalScenes {
   }
 
   travelHeading(m: Mover, retained = false) {
-    const target = this.travelPath(m, retained)?.find(
-      (point) => dist(m, point) > 1e-8 * this.perMeter,
-    );
-    const d = target && dist(m, target);
-    return target && d && d > 1e-8 * this.perMeter
-      ? { hx: (target.x - m.x) / d, hy: (target.y - m.y) / d }
-      : { hx: m.hx, hy: m.hy };
+    const visit = this.visits.get(m),
+      bypass = visit?.bypass;
+    if (visit)
+      for (let i = visit.next; i < visit.path.length; i++) {
+        const point = visit.path[i]!;
+        if (
+          retained &&
+          bypass &&
+          (point === bypass.side || point === bypass.retreat || point === bypass.target)
+        )
+          continue;
+        const d = dist(m, point);
+        if (d > 1e-8 * this.perMeter) return { hx: (point.x - m.x) / d, hy: (point.y - m.y) / d };
+      }
+    return { hx: m.hx, hy: m.hy };
   }
 
   /** Remaining mapped visit path, optionally excluding temporary bypass points. */
@@ -854,15 +858,18 @@ export class LocalScenes {
       };
       for (const direct of [false, true]) {
         for (const retreat of RECOVERY.retreats) {
+          // Zero retreat has the same checked corridor in both passes.
+          if (direct && retreat === 0) continue;
+          restoreMover(m, anchor);
+          const back = {
+            x: anchor.x - heading.hx * retreat * this.perMeter,
+            y: anchor.y - heading.hy * retreat * this.perMeter,
+          };
+          if (!direct && retreat !== 0 && !admissible(anchor, back)) continue;
+          const previous = snapshotMover(m);
           for (const side of [1, -1]) {
             for (const offset of RECOVERY.holdingOffsets) {
-              restoreMover(m, anchor);
-              const back = {
-                x: anchor.x - heading.hx * retreat * this.perMeter,
-                y: anchor.y - heading.hy * retreat * this.perMeter,
-              };
-              if (!direct && retreat !== 0 && !admissible(anchor, back)) continue;
-              const previous = snapshotMover(m);
+              restoreMover(m, previous);
               const holding = {
                 x: back.x - heading.hy * side * offset * this.perMeter,
                 y: back.y + heading.hx * side * offset * this.perMeter,
@@ -1171,7 +1178,13 @@ export class LocalScenes {
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
         if (!this.move(m, visit, dt, guard, walkLimit, owns)) continue;
         if (visit.state === 'return') {
-          if (!this.finishReturn(m, visit.trail[0]!, guard, owns)) continue;
+          if (!this.finishReturn(m, visit.trail[0]!, guard, owns)) {
+            visit.handoffBlocked = true;
+            visit.blocked += dt;
+            diagnostics?.tag(m, 'blockedReturn');
+            this.blockedTimeout(m, visit);
+            continue;
+          }
           m.pause = 0;
           m.lying = false;
           this.visits.delete(m);

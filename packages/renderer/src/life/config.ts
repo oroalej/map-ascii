@@ -99,8 +99,8 @@ export const frontClearance = (length: number): number => length / 2 + FOLLOW.mi
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
 /**
- * Terrain recovery for vehicles: sideways metres per metre travelled while shifting or returning
- * (no sideways move while stopped); clear road edge allowance for inferred widths, m.
+ * Vehicle terrain recovery: lane slope in m/m; bounded steering and restoring speeds in m/s.
+ * Recovery steering can retreat while stopped; road edge allowance for inferred widths is in m.
  */
 export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
 /**

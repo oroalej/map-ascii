@@ -1250,14 +1250,20 @@ describe('parked vehicles', () => {
       b.spot({ x: 2500, y: 2300 }, 1, 0);
       return b.finish();
     };
+    let excludedWitness = false,
+      laterWitness = false;
     for (const seed of seeds) {
       const ordinary = new TileLife(tile, make(false), seed),
         through = new TileLife(tile, make(true), seed);
+      excludedWitness ||= ordinary.parked.some((p) => p.x === 2000);
+      laterWitness ||= ordinary.parked.some((p) => p.x === 2500);
       expect(through.parked.some((p) => p.x === 2000)).toBe(false);
       expect(through.parked.filter((p) => p.x === 2500)).toEqual(
         ordinary.parked.filter((p) => p.x === 2500),
       );
     }
+    expect(excludedWitness).toBe(true);
+    expect(laterWitness).toBe(true);
   });
 
   it('show from their zoom, day and night, lamps off', () => {

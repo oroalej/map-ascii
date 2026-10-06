@@ -256,6 +256,52 @@ describe('cross-zoom continuity', () => {
 
 describe('transactional adoption', () => {
   it.each([1, -1] as const)(
+    'keeps repeated-coordinate routing on the first matching arm (direction %i)',
+    (dir) => {
+      const a = new LifeBuilder(),
+        b = new LifeBuilder();
+      for (const builder of [a, b]) {
+        builder.line(
+          [
+            { x: 0, y: 2000 },
+            { x: 400, y: 2000 },
+          ],
+          LifeLine.roadMajor,
+          8,
+          77,
+        );
+        const arm = [
+          { x: 400, y: 2000 },
+          { x: 400, y: 2000 },
+          { x: 400, y: 3000 },
+        ];
+        builder.line(dir === 1 ? arm : [...arm].reverse(), LifeLine.roadMajor, 8, 88, dir);
+      }
+      const duplicate = [
+        { x: 400, y: 2000 },
+        { x: 400, y: 2000 },
+        { x: 400, y: 3000 },
+      ];
+      b.line(dir === 1 ? duplicate : [...duplicate].reverse(), LifeLine.roadMajor, 8, 88, dir);
+      const source = new TileLife(left, a.finish(), 1),
+        target = new TileLife(left, b.finish(), 2);
+      const m = continuityMover(source, 100),
+        exit = dir === 1 ? 2 : 3;
+      m.d = 100;
+      m.junctionRoute = { key: 'repeated', exits: [exit] };
+      m.routing = {
+        seed: 10,
+        turns: 7,
+        plan: { line: 0, dir: 1, vertex: 1, exit, target: source.directedExit(exit, 1), radius: 4 },
+      };
+      const before = structuredClone(m),
+        preview = target.projectFrom(m, source)!;
+      expect(preview.junctionRoute?.exits).toEqual([exit]);
+      expect(preview.routing?.plan?.exit).toBe(exit);
+      expect(m).toEqual(before);
+    },
+  );
+  it.each([1, -1] as const)(
     'remaps an interior arm in direction %i without connecting a merely nearby plan',
     (direction) => {
       const a = new LifeBuilder(),

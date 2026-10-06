@@ -886,6 +886,25 @@ describe('retained pedestrian query geometry', () => {
     };
     return { life, car, tracer, pm };
   }
+  it('keeps shortened curve variants out of the permanent terrain cache', () => {
+    const { life, car } = retained();
+    life.setLaneTerrain({ near: () => true, hits: () => false });
+    const cache = life as unknown as {
+      clearCorners: Map<string, unknown>;
+      transientCorners: WeakMap<Mover, unknown>;
+    };
+    for (let i = 0; i < 100; i++) {
+      car.curveLengthM = 10 - i * 0.05;
+      const before = { ...car };
+      life.pose(before, undefined, car);
+      expect(cache.transientCorners.has(car)).toBe(true);
+      expect(cache.transientCorners.has(before)).toBe(false);
+    }
+    expect(cache.clearCorners.size).toBe(0);
+    car.curveLengthM = undefined;
+    life.pose(car);
+    expect(cache.clearCorners.size).toBeGreaterThan(0);
+  });
   it('starts at the actual shortened pose and invalidates warm stopped paths without cursor movement', () => {
     const { life, car, tracer, pm } = retained();
     const before = structuredClone(car);

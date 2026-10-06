@@ -383,7 +383,7 @@ export function packLife(
             !detailedPeopleStamp &&
             !agent.parked &&
             !agent.aboard &&
-            !agent.vehicle?.includes('cart') &&
+            agent.vehicle !== 'cart' &&
             !agent.prop &&
             !agent.line &&
             !agent.people?.some((look) => look.figure === 'seated') &&
@@ -450,9 +450,22 @@ export function packLife(
               break;
             }
           }
+          const completeLonePayload =
+            payload &&
+            journal.members?.length === 1 &&
+            journal.members[0]!.cells.length === journal.members[0]!.expected &&
+            payload.length === journal.members[0]!.cells.length &&
+            journal.members[0]!.cells.every((cell) =>
+              payload.some(
+                ({ at, bytes }) =>
+                  at === (cell.row * grid.cols + cell.col) * 4 &&
+                  cell.bytes.every((byte, i) => byte === bytes[i]),
+              ),
+            );
           if (
             !placed &&
             eligible &&
+            !completeLonePayload &&
             journal.members &&
             journal.members.length <= 4 &&
             journal.members.reduce((sum, m) => sum + m.cells.length, 0) <= 16
@@ -788,7 +801,7 @@ function drawPeople(
       }
     }
     if (c < 0 || r < 0 || c >= cols || r >= rows) {
-      if (captured >= 0 && journal) journal.denied = journal.incomplete = true;
+      if (captured >= 0 && journal) journal.incomplete = true;
       return false;
     }
     const at = (r * cols + c) * 4;

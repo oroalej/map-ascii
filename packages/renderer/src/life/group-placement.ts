@@ -191,9 +191,10 @@ export function placeCoarseGroup(
   const allowed = (col: number, row: number) =>
     col >= 0 && col < grid.cols && row >= 0 && row < grid.rows && permits(col, row);
   // Prefer a common translation; preserve formation before assigning members separately.
+  const used = new Set<number>();
   for (const offset of offsets.ring) {
     result.rigidAttempts++;
-    const used = new Set<number>();
+    used.clear();
     let clear = true;
     for (const member of members) {
       for (const cell of member.cells) {

@@ -126,8 +126,11 @@ describe('local interaction scenes', () => {
     const bodies = physical(p),
       occupied = new Occupancy();
     occupied.set({}, [{ x: 40, y: 31.125, hx: 1, hy: 0, ...memberSize('adult') }]);
-    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    for (let frame = 0; frame < 200; frame++)
+      scene.step(0.1, [p], {}, undefined, undefined, () => false);
     expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.blocked).toBeCloseTo(20);
+    expect(visit.retryAt).toBeGreaterThan(visit.blocked);
     expect(physical(p)).toEqual(bodies);
     scene.step(
       0.1,
@@ -306,7 +309,7 @@ describe('local interaction scenes', () => {
       },
       { yielding: () => (active ? priority : undefined), holding: () => true, cancelYield: cancel },
     );
-    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    for (let frame = 0; frame < 10; frame++) scene.step(0.1, [p], {}, undefined, undefined, guard);
     expect(p.y).toBeGreaterThan(anchor.y);
     const holding = structuredClone(p);
     // A zero-time call must preserve the active timeout and complete pose.
@@ -314,10 +317,13 @@ describe('local interaction scenes', () => {
     expect(cancel).not.toHaveBeenCalled();
     expect(p).toEqual(holding);
     for (let frame = 10; frame < (RECOVERY.yieldSeconds + 1) * 10; frame++)
-      scene.yieldStep(p, 0.1, guard);
+      scene.step(0.1, [p], {}, undefined, undefined, guard);
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(p.y).toBe(holding.y);
     expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.state).toBe('approach');
+    expect(visit.blocked).toBe(0);
+    expect(scene.sites[0]!.queue).toContain(p);
     expect(visit.trail).toEqual(trail);
     blockReturn = false;
     for (let frame = 0; frame < 12; frame++) scene.yieldStep(p, 0.1, guard);

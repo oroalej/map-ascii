@@ -77,6 +77,56 @@ describe('runtime geographic seam handover', () => {
     expect(source.seamExit(mover, 1, 1)).toBeUndefined();
   });
 
+  it.each([1, -1] as const)(
+    'carries only unconsumed reserved exits across a seam (direction %i)',
+    (dir) => {
+      const xs = dir === 1 ? [3600, 3700, 3900, 4300, 4500] : [-404, -204, 196, 396, 496];
+      const builder = new LifeBuilder();
+      builder.line(
+        xs.map((x) => ({ x, y: 2000 })),
+        LifeLine.roadMajor,
+        8,
+        77,
+      );
+      for (const x of xs.slice(1, -1))
+        builder.line(
+          [
+            { x, y: 2000 },
+            { x, y: 3000 },
+          ],
+          LifeLine.roadMinor,
+          6,
+          x + 10000,
+        );
+      builder.splitRoadJunctions(1 / metersPerUnit(left), 40);
+      const entry = continuityTile(left);
+      entry.life = builder.finish();
+      const { lives } = fixture([entry]);
+      const source = lives[0]!;
+      const mover = continuityMover(source, dir === 1 ? 3650 : 446);
+      Object.assign(mover, {
+        line: dir === 1 ? 0 : 3,
+        from: dir === 1 ? 0 : 7,
+        dir,
+        d: 50,
+        hx: dir,
+      });
+      mover.junctionRoute = { key: 'reserved', exits: dir === 1 ? [2, 4, 6] : [5, 3, 1] };
+      mover.routing = { seed: 123, turns: 7 };
+      const before = structuredClone(mover);
+      const preview = seamAhead(source, mover, [], 1000)!;
+      expect(preview.preview.line).toBe(dir === 1 ? 2 : 1);
+      expect(preview.preview.junctionRoute?.exits).toEqual(dir === 1 ? [6] : [1]);
+      const targetEntry = continuityTile(left);
+      targetEntry.life = structuredClone(entry.life);
+      const { lives: targets } = fixture([targetEntry]);
+      expect(targets[0]!.projectFrom(preview.preview, source)?.junctionRoute?.exits).toEqual(
+        dir === 1 ? [6] : [1],
+      );
+      expect(mover).toEqual(before);
+    },
+  );
+
   it('keeps a missing-owner timeout across a committed junction continuation', () => {
     const pm = 1 / metersPerUnit(left);
     const junctionX = 4096 - pm;
@@ -656,6 +706,35 @@ it('starts a fresh seam episode after an intervening safe preflight', () => {
   denied.mockRestore();
 });
 
+it('retains final-adoption failure age across alternating preflight refusals', () => {
+  const { world, lives } = fixture([continuityTile(left), continuityTile(right)]);
+  const source = lives[0]!,
+    target = lives[1]!;
+  for (const life of lives) life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  const m = continuityMover(source, 4095);
+  source.movers.push(m);
+  const initial = { ...m };
+  let refusePreview = false;
+  const project = target.projectFrom.bind(target);
+  vi.spyOn(target, 'projectFrom').mockImplementation((...args) =>
+    refusePreview ? undefined : project(...args),
+  );
+  const adoption = vi.spyOn(target, 'adoptFrom').mockReturnValue(false);
+  for (let frame = 0; frame < 120 && m.dir === 1; frame++) {
+    refusePreview = frame % 2 === 1;
+    world.step(0.1);
+  }
+  expect(adoption).toHaveBeenCalled();
+  expect(m.dir).toBe(-1);
+  expect(source.elapsed).toBeGreaterThanOrEqual(SEAMS.rejectedSeconds);
+  expect(source.elapsed).toBeLessThan(12);
+  expect(source.movers).toContain(m);
+  expect(target.movers).not.toContain(m);
+  expect(m.x).toBeLessThan(4096);
+  expect(m.routing?.seed).toBe(initial.routing?.seed);
+  expect(m.routing?.turns).toBe(initial.routing?.turns);
+});
+
 it.each([false, true])(
   'preserves a red-light seam queue, including retained recovery %s',
   (queued) => {
@@ -865,7 +944,6 @@ it.each([30, 60, 120])(
       m,
       history,
     );
-    (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
     (world as unknown as { queuedSeams: Map<Mover, TileLife> }).queuedSeams.set(m, source);
     for (let frame = 0; frame < 3; frame++) {
       recover.mockClear();

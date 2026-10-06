@@ -657,7 +657,7 @@ export class PolygonIndex {
 }
 
 /** Exact swept convex footprint of a fixed-orientation translation. */
-export function bodyTranslationHull(body: Body, target: Point): Point[] {
+function bodyTranslationHull(body: Body, target: Point): Point[] {
   const points = [...bodyCorners(body), ...bodyCorners({ ...body, ...target })].sort(
     (a, b) => a.x - b.x || a.y - b.y,
   );
