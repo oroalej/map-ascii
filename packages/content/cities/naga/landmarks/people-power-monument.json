@@ -15,6 +15,35 @@
     {
       "title": "Owner-supplied civic and seminary reference",
       "note": "Undated owner reference. Draft landscaping and important built forms; dimensions and layout are estimated, with no construction date inferred."
+    },
+    {
+      "title": "The Philippine Star: Batang Pinoy national finals opening",
+      "url": "https://www.philstar.com/sports/2011/12/10/756617/b-pinoy-natl-finals-under-way",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The monument honors former president Corazon Aquino."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "It was unveiled on December 9, 2011 during the opening of the Batang Pinoy National Championships in Naga."
+      },
+      "source": 2,
+      "year": 2011,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Jesse Robredo and Education Secretary Armin Luistro attended the opening ceremonies that included the unveiling."
+      },
+      "source": 2,
+      "year": 2011,
+      "certainty": "exact"
     }
   ]
 }

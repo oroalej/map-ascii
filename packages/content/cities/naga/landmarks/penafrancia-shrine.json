@@ -20,6 +20,39 @@
       "title": "OpenStreetMap: Plaza de Covarrubias",
       "url": "https://www.openstreetmap.org/way/724187419",
       "note": "Outdoor detail includes the existing monument court beside the Shrine."
+    },
+    {
+      "title": "Naga City Tourism: Our Lady of Peñafrancia Parish Church",
+      "url": "https://tourism.naga.gov.ph/attractions/our-lady-of-penafrancia-parish-church-2/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The old Shrine housed the image of Our Lady of Peñafrancia before the basilica was built."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The Traslación procession begins here and carries the image to Naga Metropolitan Cathedral."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The Shrine became a parish on October 30, 1973, with Fr. Concordio Sarte as its first parish priest."
+      },
+      "source": 3,
+      "year": 1973,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Its forecourt contains a monument honoring Miguel Robles de Covarrubias, who introduced the local devotion."
+      },
+      "source": 3
     }
   ]
 }

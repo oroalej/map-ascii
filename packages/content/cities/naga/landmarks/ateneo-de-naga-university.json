@@ -11,6 +11,43 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/222268858",
       "note": "Location and name only; no construction date inferred."
+    },
+    {
+      "title": "Ateneo de Naga University: History",
+      "url": "https://www.adnu.edu.ph/history/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Jesuits founded Ateneo de Naga as a boys' school in 1940 at Bishop Pedro P. Santos's invitation."
+      },
+      "source": 1,
+      "year": 1940,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Japanese forces occupied the campus and used it as a prison during World War II."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "The college opened on June 5, 1947 with 87 male students."
+      },
+      "source": 1,
+      "year": 1947,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The college became coeducational in 1953 when five women enrolled."
+      },
+      "source": 1,
+      "year": 1953,
+      "certainty": "exact"
     }
   ]
 }

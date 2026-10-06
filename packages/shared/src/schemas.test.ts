@@ -10,6 +10,7 @@ import {
   Event,
   Landcover,
   Landmark,
+  LandmarkFact,
   LandmarkArt,
   LandmarkPlan,
   LocalizedText,
@@ -130,6 +131,48 @@ const landmark = {
 };
 
 const camera = { lat: 13.6218, lng: 123.1948, zoom: 13 };
+
+describe('landmark facts', () => {
+  const fact = { text: { en: 'A sourced fact.' }, source: 0 };
+  const facts = [fact, fact, fact];
+  it('validates the count and every source reference with the fact path', () => {
+    expect(Landmark.safeParse({ ...landmark, facts }).success).toBe(true);
+    for (const count of [0, 1, 2, 6]) {
+      expect(Landmark.safeParse({ ...landmark, facts: Array(count).fill(fact) }).success).toBe(
+        false,
+      );
+    }
+    for (const source of [-1, 0.5, 1]) {
+      const result = Landmark.safeParse({ ...landmark, facts: [fact, { ...fact, source }, fact] });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0]?.path).toEqual(['facts', 1, 'source']);
+    }
+  });
+  it('limits English text while respecting declared translations', () => {
+    expect(LandmarkFact.safeParse({ ...fact, text: { en: 'x'.repeat(240) } }).success).toBe(true);
+    expect(LandmarkFact.safeParse({ ...fact, text: { en: 'x'.repeat(241) } }).success).toBe(false);
+    const schema = contentSchemas(['fil']).LandmarkFact;
+    expect(schema.safeParse({ ...fact, text: { en: 'English', fil: 'Filipino' } }).success).toBe(
+      true,
+    );
+    expect(schema.safeParse({ ...fact, text: { en: 'English', de: 'Deutsch' } }).success).toBe(
+      false,
+    );
+  });
+  it('uses certainty only for a known fact date', () => {
+    expect(LandmarkFact.safeParse(fact).success).toBe(true);
+    for (const certainty of [undefined, 'exact', 'circa']) {
+      expect(LandmarkFact.safeParse({ ...fact, year: 1900, certainty }).success).toBe(true);
+    }
+    for (const certainty of ['exact', 'circa', 'unknown']) {
+      expect(LandmarkFact.safeParse({ ...fact, certainty }).success).toBe(false);
+    }
+    expect(LandmarkFact.safeParse({ ...fact, year: 1900, certainty: 'unknown' }).success).toBe(
+      false,
+    );
+    expect(LandmarkFact.safeParse({ ...fact, extra: true }).success).toBe(false);
+  });
+});
 
 describe('Landmark', () => {
   it('accepts a valid landmark', () => {

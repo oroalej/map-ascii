@@ -15,6 +15,39 @@
     {
       "title": "Owner-supplied church and Science High School reference",
       "note": "Inspected 2026-10-02. Owner-supplied reference guides relative foliage, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped buildings and full road/path widths govern fits where image geometry differs. Positions, sizes and heights are undated estimates; parking areas are schematic spaces, not a surveyed bay inventory. No species, construction history or building opening inferred. Reference bitmaps remain ignored evidence."
+    },
+    {
+      "title": "Naga City Tourism: Immaculate Conception Parish Church",
+      "url": "https://tourism.naga.gov.ph/attractions/immaculate-conception-parish-church/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The parish in Concepcion Pequeña was established on December 8, 1964."
+      },
+      "source": 2,
+      "year": 1964,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Its parish feast is celebrated on December 8."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Fr. Alfonso Grageda was the parish's first priest."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Fr. Mario Gaite built the church's Dome of the Twelve Apostles."
+      },
+      "source": 2
     }
   ]
 }
