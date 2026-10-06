@@ -22,7 +22,7 @@ import { Hud } from './Hud';
 import { InfoPanel } from './InfoPanel';
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
-import { SpeechBubbles } from './SpeechBubbles';
+import { CueBubbles } from './CueBubbles';
 import { TourMenu } from './TourMenu';
 import { TourPlayer } from './TourPlayer';
 
@@ -105,7 +105,7 @@ export function CityAtlas({
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
       <TourMenu />
       <HoverTooltip />
-      {dialogue && <SpeechBubbles catalog={dialogue} />}
+      <CueBubbles catalog={dialogue} />
       <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
       <TourPlayer />
       <Attribution />

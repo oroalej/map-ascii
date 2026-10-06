@@ -13,6 +13,7 @@ type Pending = {
   buffer: PackBuffer;
   bytes: number;
   done: (data: Uint8Array) => void;
+  retired?: () => void;
 };
 
 type PackBuffer = { handle: WebGLBuffer; capacity: number };
@@ -40,10 +41,14 @@ export class Readback {
     attachment: number,
     rect: ReadRect,
     done: (data: Uint8Array) => void,
+    retired?: () => void,
   ) {
     const { gl } = this;
     const bytes = rect.width * rect.height * 4;
-    if (bytes <= 0) return;
+    if (bytes <= 0) {
+      retired?.();
+      return;
+    }
     const buffer = this.take(bytes);
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
     gl.readBuffer(attachment);
@@ -54,11 +59,12 @@ export class Readback {
     const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     if (!sync) {
       this.free.push(buffer);
+      retired?.();
       return;
     }
     // Make sure the fence reaches the GPU, or it may never signal.
     gl.flush();
-    this.pending.push({ sync, buffer, bytes, done });
+    this.pending.push({ sync, buffer, bytes, done, retired });
     while (this.pending.length > MAX_PENDING_READS) this.drop(this.pending.shift()!);
   }
 
@@ -76,7 +82,11 @@ export class Readback {
       // After the read: Chrome ties its readback shadow copy to the fence.
       gl.deleteSync(read.sync);
       this.free.push(read.buffer);
-      read.done(data);
+      try {
+        read.done(data);
+      } finally {
+        read.retired?.();
+      }
     }
   }
 
@@ -88,7 +98,7 @@ export class Readback {
     if (!lost) {
       for (const read of this.pending) this.drop(read);
       for (const buffer of this.free) this.gl.deleteBuffer(buffer.handle);
-    }
+    } else for (const read of this.pending) read.retired?.();
     this.pending = [];
     this.free = [];
   }
@@ -96,6 +106,7 @@ export class Readback {
   private drop(read: Pending) {
     this.gl.deleteSync(read.sync);
     this.free.push(read.buffer);
+    read.retired?.();
   }
 
   /** A free pack buffer of at least `bytes`, grown or created as needed. */

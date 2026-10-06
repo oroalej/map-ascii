@@ -42,6 +42,8 @@ import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
+import { cityTime, atCityMinutes } from './life/clock';
+import { solarPosition } from './life/sun';
 
 const vehicleBuffers = () => ({
   stampedVehicles: new Uint8Array(0),
@@ -312,6 +314,58 @@ describe('live motion preference', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', () => {
+    const step = vi.spyOn(LifeWorld.prototype, 'step');
+    const date = new Date('2026-12-24T16:30:00Z'),
+      zone = { timezone: 'Asia/Manila', lng: 0 };
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 19 },
+      year: 1900,
+      now: () => date,
+      timezone: zone.timezone,
+      life: { time: 720, wind: 'gusty', season: 'preview' },
+      cityLife: {
+        source: 'Fixture',
+        seasons: [
+          {
+            id: 'winter',
+            title: { en: 'Winter' },
+            window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
+            emoji: [{ mood: 'gift', subjects: ['person'], weight: 1 }],
+          },
+          {
+            id: 'preview',
+            title: { en: 'Preview' },
+            window: { from: { month: 7, day: 1 }, to: { month: 7, day: 2 } },
+            emoji: [{ mood: 'party', subjects: ['person'], weight: 1 }],
+          },
+        ],
+      },
+    });
+    draw(10);
+    const weather = () => step.mock.calls.at(-1)![5]!;
+    expect(weather().date).toEqual({
+      epochDay: cityTime(date, zone).day,
+      weekday: cityTime(date, zone).weekday,
+      preview: true,
+    });
+    expect(weather().sunAltitude).toBe(
+      solarPosition(atCityMinutes(date, zone, 720), 0, 0).altitude,
+    );
+    expect(weather().windPreset).toBe('gusty');
+    atlas.setLife({ time: 1380, wind: 'storm', season: 'unknown' });
+    draw(30);
+    expect(weather().date?.preview).toBe(false);
+    expect(weather().season).toBe('winter');
+    expect(weather().sunAltitude).toBe(
+      solarPosition(atCityMinutes(date, zone, 1380), 0, 0).altitude,
+    );
+    expect(weather().windPreset).toBe('storm');
+    expect(weather().rain).toBe(1);
+  });
   it('compiles residential samplers only while a fireworks season is selected', () => {
     atlas.destroy();
     labelFixture.enabled = true;

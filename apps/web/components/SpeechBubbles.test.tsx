@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useSpeechStore } from '@/state/speech';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useLifeStore } from '@/state/life';
-import { SpeechBubbles } from './SpeechBubbles';
+import { CueBubbles } from './CueBubbles';
 import { SpeechControls } from './SpeechControls';
 
 const catalog: DialogueCatalog = {
@@ -29,6 +29,7 @@ const catalog: DialogueCatalog = {
 };
 let container: HTMLDivElement, root: Root, listener: ((cues: SpeechInView[]) => void) | undefined;
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.stubGlobal('matchMedia', () => ({
     matches: false,
@@ -56,7 +57,7 @@ beforeEach(() => {
         'div',
         null,
         createElement(SpeechControls, { catalog }),
-        createElement(SpeechBubbles, { catalog }),
+        createElement(CueBubbles, { catalog }),
       ),
     ),
   );
@@ -67,6 +68,7 @@ afterEach(() => {
   useAtlasInstance.setState({ atlas: null });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 it('explains when Life, zoom or reduced motion prevents speech', () => {
   act(() => useLifeStore.setState({ enabled: false }));
@@ -90,8 +92,11 @@ const cue = (line = 0): SpeechInView => ({
   line,
   point: [400, 300],
 });
-it('keeps Bikol visible, switches translations immediately, follows replies and toggles speech', () => {
-  act(() => listener!([cue()]));
+it('keeps Bikol visible, switches translations immediately, follows replies and toggles speech', async () => {
+  await act(async () => {
+    listener!([cue()]);
+    await Promise.resolve();
+  });
   expect(container.querySelector('[lang="bcl"]')?.textContent).toBe('Kumusta ka?');
   expect(container.querySelector('[lang="en"]')).toBeNull();
   const select = container.querySelector('select')!;
@@ -106,7 +111,10 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   translate('fil');
   expect(container.querySelector('[lang="en"]')).toBeNull();
   expect(container.querySelector('[lang="fil"]')?.textContent).toBe('Kumusta ka?');
-  act(() => listener!([cue(1)]));
+  await act(async () => {
+    listener!([cue(1)]);
+    await Promise.resolve();
+  });
   expect(container.querySelector('[lang="bcl"]')?.textContent).toBe('Marhay man, salamat.');
   expect(container.querySelector('[lang="fil"]')?.textContent).toBe('Mabuti naman, salamat.');
   act(() => container.querySelector('button')!.click());
@@ -117,10 +125,11 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   act(() => listener!([]));
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(0);
 });
-it('uses renderer-selected bubbles and removes old listeners/nodes when the renderer is replaced', () => {
-  act(() =>
-    listener!([1, 2, 3, 4].map((id) => ({ ...cue(), id: String(id), point: [id * 180, 300] }))),
-  );
+it('uses renderer-selected bubbles and removes old listeners/nodes when the renderer is replaced', async () => {
+  await act(async () => {
+    listener!([1, 2, 3, 4].map((id) => ({ ...cue(), id: String(id), point: [id * 180, 300] })));
+    await Promise.resolve();
+  });
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(4);
   expect(container.textContent).toContain('Speech (simulated)');
   expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();

@@ -78,6 +78,8 @@ const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.h
 
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
+  /** Normal purchase outcomes, bounded and replaced on every accepted step. */
+  readonly purchaseCompletions: { mover: Mover; stall: Stall; key: object }[] = [];
   /** Bounded, frame-local entry notifications; observers cannot mutate service ownership. */
   readonly speechEvents: {
     kind: 'purchase' | 'wait' | 'shelter' | 'arrival';
@@ -422,6 +424,7 @@ export class LocalScenes {
     const rain = env.rain ?? 0;
     this.rain = rain;
     this.speechEvents.length = 0;
+    this.purchaseCompletions.length = 0;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
     const hoursChanged =
@@ -505,6 +508,13 @@ export class LocalScenes {
         visit.time = between(this.rng, INTERACTIONS.purchase);
         this.speechEvent('purchase', m, visit);
       } else if (visit.time <= 0 && visit.state !== 'shelter') {
+        if (
+          visit.state === 'purchase' &&
+          !visit.returnPending &&
+          visit.site.stall &&
+          this.purchaseCompletions.length < 8
+        )
+          this.purchaseCompletions.push({ mover: m, stall: visit.site.stall, key: {} });
         // Shelter lasts until the rain stops; everything else has its time.
         this.returning(m, visit);
       }

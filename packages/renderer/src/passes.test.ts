@@ -5,6 +5,7 @@ import {
   glyphPass,
   fixturePass,
   overlayPass,
+  labelObstacles,
   cellPass,
   crownPass,
   placeGrid,
@@ -408,7 +409,21 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
   expect(first).toHaveLength(1);
   const buffer = uploaded[0]!,
     snapshot = buffer.slice();
+  const raw = labelObstacles(targets, { shiftX: 0, shiftY: 0 }, { w: 1, h: 1 }, 1);
+  const converted = labelObstacles(targets, { shiftX: 2.5, shiftY: 7.25 }, { w: 10, h: 18 }, 1.5);
+  expect(converted).toEqual(
+    raw.map((b) => ({
+      left: (b.left * 10 - 2.5) / 1.5,
+      top: (b.top * 18 - 7.25) / 1.5,
+      width: (b.width * 10) / 1.5,
+      height: (b.height * 18) / 1.5,
+    })),
+  );
+  converted[0]!.left = -999;
+  expect(labelObstacles(targets, { shiftX: 0, shiftY: 0 }, { w: 1, h: 1 }, 1)).toEqual(raw);
+  expect(labelObstacles(null, placement.grid, view.labelDev, 1)).toEqual([]);
   overlayPass(gl, targets, resources, view, placement, [], programs);
+  expect(labelObstacles(targets, placement.grid, view.labelDev, 1)).toEqual([]);
   expect(uploaded[1]).toBe(buffer);
   expect(buffer.every((byte) => byte === 0)).toBe(true);
   expect(
