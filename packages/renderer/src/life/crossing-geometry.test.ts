@@ -172,6 +172,73 @@ it('makes middle attachments endpoints for ordinary and scene routes, without ch
   }
 });
 
+it('snaps exact and near-end joins to the original routing vertex without zero-length pieces', () => {
+  for (const t of [1, 1 - 5e-9]) {
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 20, y: 0 },
+      ],
+      LifeLine.path,
+      2,
+      1,
+    );
+    builder.joinWalking(new Map([[0, [{ segment: 0, t, point: { x: 10 * t, y: 0 } }]]]), []);
+    const geo = builder.finish();
+    expect(Array.from(geo.coords)).toEqual([0, 0, 10, 0, 10, 0, 20, 0]);
+    expect(Array.from(geo.starts)).toEqual([0, 2, 4]);
+    expect(geo.spawnGroups![0]).toBe(geo.spawnGroups![1]);
+    const graph = new WalkingGraph(geo, 1);
+    expect(graph.route({ x: 0, y: 0 }, { x: 20, y: 0 })).toBeDefined();
+  }
+});
+
+it('deduplicates joins in metres and connects both crossings to that exact shared point', () => {
+  for (const pm of [0.2, 7]) {
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 0, y: 0 },
+        { x: 100 * pm, y: 0 },
+      ],
+      LifeLine.path,
+      2 * pm,
+      1,
+    );
+    const anchors = [50, 50.005].map((x, i) => {
+      const c = { ...anchor(), id: `cross-${i}`, lineId: 42 + i };
+      builder.line(
+        [
+          { x: x * pm, y: (2 + i) * pm },
+          { x: x * pm, y: (20 + i) * pm },
+        ],
+        LifeLine.path,
+        2 * pm,
+        c.lineId,
+      );
+      return c;
+    });
+    const result = controlledCrossingConnectors(
+      anchors,
+      builder.walkingLinesView,
+      [],
+      [],
+      [],
+      pm,
+      hashString,
+    );
+    expect(result.joins.get(0)).toHaveLength(1);
+    expect(result.connectors).toHaveLength(2);
+    for (const connector of result.connectors)
+      expect(connector.points[1]).toBe(result.joins.get(0)![0]!.point);
+    builder.joinWalking(result.joins, result.connectors);
+    const graph = new WalkingGraph(builder.finish(), pm);
+    expect(graph.route({ x: 50 * pm, y: 2 * pm }, { x: 50.005 * pm, y: 3 * pm })).toBeDefined();
+  }
+});
+
 it('does not add a connector through another road, obstacle, or beyond the four-metre reach', () => {
   const { b, c, pm } = routes(false);
   finalizeControlledCrossings([c], b.roadPolygons, pm);

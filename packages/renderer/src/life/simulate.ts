@@ -957,9 +957,11 @@ export class TileLife {
       return false;
     }
     const preview = this.projectFrom(m, source, options);
+    const clock = options.crossingClock ?? source.crossingClock;
+    const minimum = options.crossingMinimum ?? source.crossingMinimum;
     if (
       !preview ||
-      !this.crossingWaits.permits(preview, undefined, this.crossingClock, this.crossingMinimum) ||
+      !this.crossingWaits.permits(preview, undefined, clock, minimum) ||
       (admit && !admit(preview))
     )
       return false;
@@ -986,7 +988,7 @@ export class TileLife {
     this.movers.push(m);
     if (source.crossingWaits.registry !== this.crossingWaits.registry && m.crossingWait?.waiting)
       source.crossingWaits.registry.release(m.crossingWait.waiting.owner);
-    this.crossingWaits.accept(m, undefined, this.crossingClock, this.crossingMinimum);
+    this.crossingWaits.accept(m, undefined, clock, minimum);
     this.effects.adopt(m);
     return true;
   }
@@ -4674,6 +4676,12 @@ export class TileLife {
   visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
     return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
   }
+  private readonly standaloneGround: GroundGuard = (owner, before) =>
+    !('kind' in owner) ||
+    (owner.kind !== 'cat' && owner.kind !== 'dog') ||
+    (this.scenes.walkable(before ?? owner, owner) &&
+      this.roadTerrain.access.allows(this.groundBodies(owner)));
+
   private stepFrame(
     dt: number,
     gustAt?: (x: number, y: number) => number,
@@ -4697,13 +4705,7 @@ export class TileLife {
     this.crossingWaits.beginStep();
     if (this.crossingWaits.records.length) {
       if (!guard || !pass?.crossingGuard) {
-        const physical =
-          guard ??
-          ((owner: GroundAgent, before?: GroundAgent) =>
-            !('kind' in owner) ||
-            (owner.kind !== 'cat' && owner.kind !== 'dog') ||
-            (this.scenes.walkable(before ?? owner, owner) &&
-              this.roadTerrain.access.allows(this.groundBodies(owner))));
+        const physical = guard ?? this.standaloneGround;
         guard = (owner, before, reject) => {
           const trial = this.crossingWaits.prepare(owner, before, minimum);
           if (!this.crossingWaits.permits(owner, before, clock, minimum, trial)) return false;
@@ -4986,20 +4988,13 @@ export class TileLife {
         delete m.momentFacing;
         // Drift back toward the middle of the path only while walking on.
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
-        m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
       let moved =
         distance === 0 && m.vehicle && m.v === 0
           ? 0
           : this.advance(m, distance, true, this.enteredExits);
       // Standalone animal callers still enforce terrain without a world guard.
-      const fitsGround: GroundGuard =
-        guard ??
-        ((next: GroundAgent, previous?: GroundAgent) =>
-          !('kind' in next) ||
-          (next.kind !== 'cat' && next.kind !== 'dog') ||
-          (this.scenes.walkable(previous ?? next, next) &&
-            this.roadTerrain.access.allows(this.groundBodies(next))));
+      const fitsGround = guard ?? this.standaloneGround;
       if (m.kind === 'vehicle' || walking) {
         terrainRejected = false;
         this.trialYaw(m, before, moved);
@@ -5030,7 +5025,6 @@ export class TileLife {
             Object.assign(m, before);
             if (walking) {
               m.avoid = Math.max(-limit, Math.min(limit, (before.avoid ?? 0) + side! * dt * 1.5));
-              m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             }
             moved = this.advance(m, distance * share!, true, this.enteredExits);
             this.trialYaw(m, before, moved);
@@ -6599,6 +6593,8 @@ export class LifeWorld {
           c.life,
           {
             replace,
+            crossingClock: this.clock,
+            crossingMinimum: this.crossingCellMeters,
             snapM: kind === 'train' ? TRAIN.handover : ADOPT.snap,
             reject: this.profiler && ((reason) => this.profiler!.countContinuity(reason)),
           },
@@ -7488,7 +7484,11 @@ export class LifeWorld {
         target.adoptFrom(
           m,
           source,
-          { nudgeM: clipped ? 0.001 : 0 },
+          {
+            nudgeM: clipped ? 0.001 : 0,
+            crossingClock: this.clock,
+            crossingMinimum: cellMeters,
+          },
           (preview) =>
             inTile(preview) &&
             this.owns(target, preview) &&

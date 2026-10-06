@@ -3,7 +3,7 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
-import { PED_STOP, PED_WALK } from '../life/pedestrian-glyphs';
+import { PED_STOP, PED_WALK, PEDESTRIAN_MASTERS } from '../life/pedestrian-glyphs';
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
 import { catOf, catPixels } from '../life/cats';
@@ -384,29 +384,17 @@ function drawSeasonal(slot: Slot, glyph: string) {
 }
 
 function drawPedestrian(slot: Slot, walking: boolean) {
-  const pixel = (x: number, y: number, w = 1, h = 1) =>
-    fill(
-      slot,
-      Math.floor((x * slot.w) / 7),
-      Math.floor((y * slot.h) / 11),
-      Math.ceil(((x + w) * slot.w) / 7),
-      Math.ceil(((y + h) * slot.h) / 11),
-    );
-  pixel(3, 1, 2, 2);
-  pixel(3, 3, 2, 4);
-  if (walking) {
-    pixel(1, 4, 2, 1);
-    pixel(5, 5, 1, 2);
-    pixel(2, 7, 1, 2);
-    pixel(1, 9, 1, 1);
-    pixel(4, 7, 1, 1);
-    pixel(5, 8, 1, 2);
-  } else {
-    pixel(2, 4, 1, 3);
-    pixel(5, 4, 1, 3);
-    pixel(3, 7, 1, 3);
-    pixel(5, 7, 1, 3);
-  }
+  const rows = PEDESTRIAN_MASTERS[walking ? 'walk' : 'stop'];
+  for (let y = 0; y < rows.length; y++)
+    for (let x = 0; x < rows[y]!.length; x++)
+      if (rows[y]![x] === '#')
+        fill(
+          slot,
+          Math.floor((x * slot.w) / 7),
+          Math.floor((y * slot.h) / 11),
+          Math.ceil(((x + 1) * slot.w) / 7),
+          Math.ceil(((y + 1) * slot.h) / 11),
+        );
 }
 
 /**

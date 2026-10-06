@@ -385,10 +385,9 @@ export function mergeTraffic(
             walk: midBlock || group === 'b' ? 'a' : 'b',
           }),
         );
-      const stopSetback = setback;
-      entry.setbacks.set(k, stopSetback);
+      entry.setbacks.set(k, setback);
       if (!entry.layout && inbound) {
-        const stop = signalStop(p, arm, stopSetback, vertices);
+        const stop = signalStop(p, arm, setback, vertices);
         if (stop)
           legacy.push({
             road_id: arm.road.properties.id,

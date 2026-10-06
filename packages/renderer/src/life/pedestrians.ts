@@ -407,12 +407,12 @@ export class PedestrianCrossings {
       yield;
       if (!prepared.lines.size) continue;
       const shared = this.derive(polygon, prepared.hx, prepared.hy);
+      const controlled = signals.controlsCrossing({
+        x: prepared.centre.x * this.pm,
+        y: prepared.centre.y * this.pm,
+      });
+      if (controlled) continue;
       for (const line of prepared.lines) {
-        const controlled = signals.controlsCrossing({
-          x: prepared.centre.x * this.pm,
-          y: prepared.centre.y * this.pm,
-        });
-        if (controlled) continue;
         const crossing = { ...shared, line, controlled };
         let associated = this.lines.get(line);
         if (!associated) this.lines.set(line, (associated = []));

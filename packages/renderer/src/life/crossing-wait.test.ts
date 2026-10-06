@@ -82,6 +82,34 @@ function fixture(id = 'cross', sample = bodies) {
   });
 }
 
+it('validates unknown wait payloads even when no crossing records exist', () => {
+  const owner = mover();
+  const source = fixture();
+  const before = { ...owner };
+  owner.y += source.limit(owner, { x: 0, y: 20 }, 30, phase('dont'));
+  source.accept(owner, before, phase('dont'), 0, 0);
+  expect(owner.crossingWait?.waiting).toBeDefined();
+  const empty = new CrossingWaits(new LifeBuilder().finish(), 1, bodies, new RoadAccess([], []));
+  expect(empty.prepare(owner, undefined)).not.toBeNull();
+  expect(empty.permits(owner, undefined, phase('dont'))).toBe(false);
+  expect(empty.prepare({ ...owner, crossingWait: undefined }, undefined)).toBeNull();
+});
+
+it('projects natural bodies only when a waiting cohort starts releasing', () => {
+  const sample = vi.fn(bodies),
+    waits = fixture('cross', sample),
+    m = mover(2);
+  const before = { ...m };
+  m.y += waits.limit(m, { x: 0, y: 20 }, 30, phase('dont'));
+  waits.accept(m, before, phase('dont'));
+  waits.registry.resolve();
+  sample.mockClear();
+  waits.tick(m, 0.1, phase('dont'), 0, () => true);
+  expect(sample).not.toHaveBeenCalled();
+  waits.tick(m, 0.1, phase('walk'), 0, () => true);
+  expect(sample).toHaveBeenCalledExactlyOnceWith(m, 0, true);
+});
+
 it('probes complete swept bounds before building bodies for distant or held walkers', () => {
   const sample = vi.fn(bodies),
     waits = fixture('cross', sample),

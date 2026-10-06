@@ -173,26 +173,37 @@ export function controlledCrossingConnectors(
               0,
               Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)),
             );
-            const point = { x: a.x + t * dx, y: a.y + t * dy },
+            const snapped = t <= 1e-8 ? 0 : t >= 1 - 1e-8 ? 1 : t;
+            const point = { x: a.x + snapped * dx, y: a.y + snapped * dy },
               distance = Math.hypot(point.x - p.x, point.y - p.y);
-            return { line: line.line, segment, t, point, distance };
+            return {
+              line: line.line,
+              segment: segment + Number(snapped === 1),
+              t: snapped === 1 ? 0 : snapped,
+              point,
+              distance,
+            };
           }),
         )
         .filter((candidate) => candidate.distance <= reach)
         .sort((a, b) => a.distance - b.distance || a.line - b.line || a.segment - b.segment);
       for (const candidate of candidates) {
-        const steps = Math.max(1, Math.ceil(candidate.distance / (0.25 * perMeter)));
-        const hx = candidate.distance
-          ? (candidate.point.x - p.x) / candidate.distance
-          : crossing.sides![side]!.inward.x;
-        const hy = candidate.distance
-          ? (candidate.point.y - p.y) / candidate.distance
-          : crossing.sides![side]!.inward.y;
+        const entries = joins.get(candidate.line) ?? [];
+        const joined = entries.find(
+          (entry) =>
+            Math.hypot(entry.point.x - candidate.point.x, entry.point.y - candidate.point.y) <
+            0.01 * perMeter,
+        );
+        const point = joined?.point ?? candidate.point;
+        const distance = Math.hypot(point.x - p.x, point.y - p.y);
+        const steps = Math.max(1, Math.ceil(distance / (0.25 * perMeter)));
+        const hx = distance ? (point.x - p.x) / distance : crossing.sides![side]!.inward.x;
+        const hy = distance ? (point.y - p.y) / distance : crossing.sides![side]!.inward.y;
         let clear = true;
         for (let i = 0; i <= steps; i++) {
           const body = {
-            x: p.x + ((candidate.point.x - p.x) * i) / steps,
-            y: p.y + ((candidate.point.y - p.y) * i) / steps,
+            x: p.x + ((point.x - p.x) * i) / steps,
+            y: p.y + ((point.y - p.y) * i) / steps,
             hx,
             hy,
             length: 0.9 * perMeter,
@@ -204,19 +215,11 @@ export function controlledCrossingConnectors(
           }
         }
         if (!clear) continue;
-        const entries = joins.get(candidate.line) ?? [];
-        if (
-          !entries.some(
-            (entry) =>
-              Math.hypot(entry.point.x - candidate.point.x, entry.point.y - candidate.point.y) <
-              0.01,
-          )
-        )
-          entries.push(candidate);
+        if (!joined) entries.push(candidate);
         joins.set(candidate.line, entries);
-        if (candidate.distance > 0.01 * perMeter)
+        if (distance > 0.01 * perMeter)
           connectors.push({
-            points: [p, candidate.point],
+            points: [p, point],
             id: identify(`${crossing.id}/connector/${side}`),
           });
         break;

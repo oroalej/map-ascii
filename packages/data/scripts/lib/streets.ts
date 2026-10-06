@@ -178,7 +178,7 @@ export function signalStop(
   p: Position,
   arm: RoadArm,
   setback: number,
-  vertices?: ReadonlyMap<string, RoadVertex>,
+  vertices: ReadonlyMap<string, RoadVertex>,
 ) {
   const direction = arm.forward ? -1 : 1;
   if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;

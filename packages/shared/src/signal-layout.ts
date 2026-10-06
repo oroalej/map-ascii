@@ -30,7 +30,8 @@ export const SignalArm = z
         ? arm.stop_direction === undefined && arm.stop_road_width === undefined
         : !!arm.stop && arm.stop_direction !== undefined && arm.stop_road_width !== undefined),
     {
-      message: 'stop position and width must describe an inbound arm',
+      message:
+        'inbound stops require position and width; optional local bearing and complete stop-road identity require a stop',
     },
   );
 export type SignalArm = z.infer<typeof SignalArm>;

@@ -3,7 +3,7 @@ import { LifeWorld, TileLife } from './simulate';
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import { pedestrianState } from './signals';
-import { bodyCorners, bodyInside, type Point } from './occupancy';
+import { bodyCorners, bodyInside, bodiesOverlap, type Point } from './occupancy';
 import { frameBetween } from './frames';
 import { walkingBefore } from './continuity';
 import type { TileId } from '../tiles';
@@ -50,6 +50,59 @@ function waitingPair() {
   expect(m.crossingWait?.waiting?.slots).toHaveLength(2);
   return { world, life, m };
 }
+
+for (const records of ['empty', 'unrelated'] as const)
+  it(`rejects waiting adoption into an ${records} crossing registry without changing source ownership`, () => {
+    const { world, life, m } = waitingPair();
+    const geo = structuredClone(life.geo);
+    if (records === 'empty') geo.controlledCrossings = [];
+    else geo.controlledCrossings![0]!.id = 'another-crossing';
+    const destination = new TileLife(life.tile, geo, 2);
+    destination.crossingWaits.registry = world.crossingReservations;
+    const payload = structuredClone(m);
+    const claims = structuredClone(world.crossingReservations.snapshot());
+    expect(destination.adoptFrom(m, life)).toBe(false);
+    expect(m).toEqual(payload);
+    expect(life.movers).toContain(m);
+    expect(destination.movers).not.toContain(m);
+    expect(world.crossingReservations.snapshot()).toEqual(claims);
+  });
+
+it('retains occupied adult and child slots when a fresh destination inherits guarded adoption context', () => {
+  const world = new LifeWorld();
+  world.sync([signalizedCrossingEntry()]);
+  const { life, m } = seedSignalizedCrossing(world);
+  (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
+  m.group!.push({ ...m.group![0]!, figure: 'child', lateral: 1.2 });
+  let transferred = false;
+  for (let i = 0; i < 2400; i++) {
+    world.step(0.02, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+    const wait = m.crossingWait?.waiting;
+    if (!wait?.releasing || !world.crossingReservations.claim(wait.owner)?.slots.length) continue;
+    const destination = new TileLife(life.tile, structuredClone(life.geo), 2);
+    destination.crossingWaits.registry = world.crossingReservations;
+    const preview = destination.projectFrom(m, life);
+    if (!preview) continue;
+    const side = destination.crossingWaits.records[0]!.sides[wait.side]!;
+    const vacated = (minimum: number) => {
+      const bodies = destination.groundBodies(preview, minimum);
+      return world.crossingReservations.claim(wait.owner)!.slots.filter((id) => {
+        const slot = side.slots[side.slotIds.indexOf(id)]!;
+        return bodies.every(
+          (body) =>
+            !bodiesOverlap(body, { ...body, ...slot, hx: side.inward.x, hy: side.inward.y }, 0),
+        );
+      });
+    };
+    if (vacated(0).length === vacated(0.9).length) continue;
+    const claims = structuredClone(world.crossingReservations.snapshot());
+    expect(destination.adoptFrom(m, life)).toBe(true);
+    expect(world.crossingReservations.snapshot()).toEqual(claims);
+    transferred = true;
+    break;
+  }
+  expect(transferred).toBe(true);
+});
 
 for (const tile of [
   { z: 17, x: controlledTile.x * 2, y: controlledTile.y * 2 },

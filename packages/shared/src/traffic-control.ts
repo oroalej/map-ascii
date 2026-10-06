@@ -65,6 +65,7 @@ export function canonicalSignalSeed(lng: number, lat: number, maxZoom: number): 
 }
 
 const crossingKeys = [
+  'crossing_signal_control',
   'crossing_signal',
   'crossing_signal_at',
   'crossing_signal_seed',

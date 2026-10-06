@@ -1,5 +1,5 @@
 import { PED_STOP, PED_WALK, PedestrianPart } from './pedestrian-glyphs';
-import { RoadAccess } from './terrain';
+import { RoadAccess, carriageways } from './terrain';
 import type { BuntingProjection } from './bunting-junctions';
 /** Static street hardware, independent of the life population and lighting texture. */
 import {
@@ -125,6 +125,11 @@ export const SIGNAL_LIGHT = {
 export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixture[] {
   const out: LegacyStreetFixture[] = [];
   const perMeter = 1 / metersPerUnit(tile);
+  const vehicleBases: { x: number; y: number }[] | undefined = geo.controlledCrossings?.some(
+    (c) => c.sides,
+  )
+    ? []
+    : undefined;
   const scale = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
   const body = (x: number, y: number, dx: number, dy: number, reach: number): FixtureBody => {
     const length = Math.hypot(dx, dy) || 1;
@@ -169,7 +174,8 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
     const x = signals[i]!,
       y = signals[i + 1]!,
       radius = signals[i + 2]!;
-    if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT) continue;
+    const owned = x >= 0 && y >= 0 && x < EXTENT && y < EXTENT;
+    if (!owned && !vehicleBases) continue;
     const seed =
       geo.signalSeeds?.[i / SIGNAL_STRIDE] ??
       placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale);
@@ -186,13 +192,15 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
         const lateral = arm.width / 2 + 0.5;
         const bx = junction.x + (hx * radius - hy * lateral) * perMeter;
         const by = junction.y + (hy * radius + hx * lateral) * perMeter;
-        out.push({
-          ...body(bx, by, hy, -hx, perMeter),
-          kind: 'signal',
-          group: arm.group,
-          midBlock,
-          seed,
-        });
+        vehicleBases?.push({ x: bx, y: by });
+        if (owned)
+          out.push({
+            ...body(bx, by, hy, -hx, perMeter),
+            kind: 'signal',
+            group: arm.group,
+            midBlock,
+            seed,
+          });
       }
       continue;
     }
@@ -206,25 +214,21 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
       for (const sign of [-1, 1]) {
         const bx = x + sign * (hx * radius - hy * (radius - 1.5)) * perMeter;
         const by = y + sign * (hy * radius + hx * (radius - 1.5)) * perMeter;
+        vehicleBases?.push({ x: bx, y: by });
         // A short bracket projects from the existing curb anchor toward the road.
-        out.push({
-          ...body(bx, by, sign * hy, -sign * hx, perMeter),
-          kind: 'signal',
-          group,
-          midBlock,
-          seed,
-        });
+        if (owned)
+          out.push({
+            ...body(bx, by, sign * hy, -sign * hx, perMeter),
+            kind: 'signal',
+            group,
+            midBlock,
+            seed,
+          });
       }
     }
   }
-  if (!geo.controlledCrossings?.some((crossing) => crossing.sides)) return out;
-  const access = RoadAccess.fromPrepared(
-    (geo.areas ?? []).filter((a) => a.kind === 'carriageway').map((a) => a.rings),
-    [],
-  );
-  const vehicleBases = out
-    .filter((f) => f.kind === 'signal')
-    .map((f) => lngLatToTile(tile, ...f.base));
+  if (!vehicleBases) return out;
+  const access = RoadAccess.fromPrepared(carriageways(geo, perMeter), []);
   for (const crossing of geo.controlledCrossings ?? []) {
     if (!crossing.sides) continue;
     const control = lngLatToTile(tile, ...crossing.controller.at);
@@ -310,7 +314,7 @@ export type PackedFixtures = {
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
-  pedestrians?: {
+  pedestrians: {
     seed: number;
     group: 'a' | 'b';
     midBlock: boolean;
@@ -406,8 +410,14 @@ function pedestrianTexelState(seed: number, clock: number, midBlock: boolean, gr
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
 export function updateFixtureSignals(packed: PackedFixtures, clock: number): number {
   let changed = 0;
-  for (const ped of packed.pedestrians ?? []) {
-    const state = pedestrianTexelState(ped.seed, clock, ped.midBlock, ped.group);
+  const phases = packed.pedestrians.length > 1 ? new Map<number, number>() : undefined;
+  for (const ped of packed.pedestrians) {
+    const key = ped.seed * 4 + Number(ped.midBlock) * 2 + Number(ped.group === 'b');
+    let state = phases?.get(key);
+    if (state === undefined) {
+      state = pedestrianTexelState(ped.seed, clock, ped.midBlock, ped.group);
+      phases?.set(key, state);
+    }
     if (state === ped.state) continue;
     ped.state = state;
     for (const at of ped.cells) packed.texels[at + 2] = state;
@@ -428,7 +438,7 @@ export function updatePedestrianVisibility(
   cols: number,
   visible?: (c: number, r: number) => boolean,
 ) {
-  const shown = (packed.pedestrians ?? []).some((p) =>
+  const shown = packed.pedestrians.some((p) =>
     p.cells.some(
       (at) =>
         packed.texels[at + 3]! > 0 &&
@@ -786,14 +796,14 @@ export function packFixtures(
     for (const { c, r, glyph, part } of chosen) {
       const at = (r * grid.cols + c) * 4,
         code = glyphIndex(glyph);
-      owners[r * grid.cols + c] = ordered.length + (packed.pedestrians?.length ?? 0);
+      owners[r * grid.cols + c] = ordered.length + packed.pedestrians.length;
       [out[at], out[at + 1]] = packGlyph(code, part);
       out[at + 2] = state;
       out[at + 3] = Math.round(bandVisibility({ min: 17 }, zoom) * 255);
       if (part === FixturePart.pedestrianStop || part === FixturePart.pedestrianWalk)
         ped.cells.push(at);
     }
-    packed.pedestrians!.push(ped);
+    packed.pedestrians.push(ped);
   }
   updatePedestrianVisibility(packed, grid.cols, grid.visible);
   const utilities = fixtures.filter(

@@ -168,8 +168,6 @@ const walker = (owner: GroundAgent): owner is Walker =>
   ('kind' in owner && (owner.kind === 'person' || owner.kind === 'dog' || owner.kind === 'cat'));
 const signed = (p: Point, side: CrossingSide) =>
   (p.x - side.centre.x) * side.inward.x + (p.y - side.centre.y) * side.inward.y;
-const front = (body: Body, side: CrossingSide) =>
-  Math.max(...bodyCorners(body).map((p) => signed(p, side)));
 
 /** Cached gate index, with permission independent of a scene walker's original route line. */
 export class CrossingWaits {
@@ -184,6 +182,7 @@ export class CrossingWaits {
     { x: 0, y: 0 },
   ];
   private readonly candidates = new Set<Record>();
+  private readonly corners: Point[] = [];
   registry = new CrossingReservations();
   shared = false;
   constructor(
@@ -231,6 +230,12 @@ export class CrossingWaits {
   beginStep() {
     this.blocked.clear();
   }
+  private front(body: Body, side: CrossingSide) {
+    let maximum = -Infinity;
+    for (const point of bodyCorners(body, this.corners))
+      maximum = Math.max(maximum, signed(point, side));
+    return maximum;
+  }
   private near(before: readonly Body[], after = before): ReadonlySet<Record> {
     const [lo, hi] = this.queryBounds as [Point, Point];
     lo.x = lo.y = Infinity;
@@ -252,7 +257,8 @@ export class CrossingWaits {
     return this.candidates;
   }
   prepare(owner: GroundAgent, previous: GroundAgent | undefined, minimum = 0): Trial | null {
-    if (!walker(owner) || !this.records.length) return null;
+    if (!walker(owner) || (!this.records.length && !owner.crossingWait && !this.blocked.has(owner)))
+      return null;
     const after = this.bodies(owner, minimum),
       before = previous ? this.bodies(previous, minimum) : after;
     const records = this.near(before, after);
@@ -269,17 +275,22 @@ export class CrossingWaits {
     return pedestrianState(c.seed, clock, c.midBlock, c.walk) === 'walk';
   }
   private entry(before: Body, after: Body, side: CrossingSide): boolean {
-    if (front(before, side) > 1e-6 || front(after, side) <= 1e-6) return false;
+    if (this.front(before, side) > 1e-6 || this.front(after, side) <= 1e-6) return false;
     const a = side.gate[0],
       b = side.gate[1],
       length = Math.hypot(b.x - a.x, b.y - a.y);
     if (!length) return false;
     const tx = (b.x - a.x) / length,
       ty = (b.y - a.y) / length;
-    const lateral = [...bodyCorners(before), ...bodyCorners(after)].map(
-      (p) => (p.x - a.x) * tx + (p.y - a.y) * ty,
-    );
-    return Math.min(...lateral) <= length && Math.max(...lateral) >= 0;
+    let minimum = Infinity,
+      maximum = -Infinity;
+    for (let pass = 0; pass < 2; pass++)
+      for (const p of bodyCorners(pass ? after : before, this.corners)) {
+        const lateral = (p.x - a.x) * tx + (p.y - a.y) * ty;
+        minimum = Math.min(minimum, lateral);
+        maximum = Math.max(maximum, lateral);
+      }
+    return minimum <= length && maximum >= 0;
   }
   permits(
     owner: GroundAgent,
@@ -394,7 +405,7 @@ export class CrossingWaits {
           const speed = mx * side.inward.x + my * side.inward.y;
           if (speed <= 0) continue;
           // Polygon edge tests have a parametric tolerance; leave a centimetre of dry curb.
-          const cap = Math.max(0, (-front(before[i]!, side) - 0.01) / speed);
+          const cap = Math.max(0, (-this.front(before[i]!, side) - 0.01) / speed);
           if (cap < allowed) {
             allowed = cap;
             this.blocked.set(owner, { record, side: sideIndex });
@@ -430,7 +441,8 @@ export class CrossingWaits {
     commitments = commitments.filter((commitment) => {
       const record = this.byId.get(commitment.id);
       return (
-        !!record && !record.sides.some((side) => after.every((body) => front(body, side) < -1e-5))
+        !!record &&
+        !record.sides.some((side) => after.every((body) => this.front(body, side) < -1e-5))
       );
     });
     let waiting = owner.crossingWait?.waiting;
@@ -508,9 +520,8 @@ export class CrossingWaits {
     const start = reset ? wait.poses : wait.start;
     const slots = wait.releasing ? wait.slots : (claim?.slots ?? wait.slots);
     if (slots.some((id) => !side.slotIds.includes(id))) return;
-    const natural = this.bodies(owner, minimum, true);
     const targets = releasing
-      ? natural.map((body) => ({
+      ? this.bodies(owner, minimum, true).map((body) => ({
           x: body.x - owner.x / this.perMeter,
           y: body.y - owner.y / this.perMeter,
           hx: body.hx,
@@ -559,9 +570,9 @@ export class CrossingWaits {
     if (!guard(owner, before)) owner.crossingWait = state;
     else if (releasing) this.registry.depart(wait.owner);
   }
-  release(owner: GroundAgent, final = true) {
+  release(owner: GroundAgent) {
     if (!walker(owner)) return;
     if (owner.crossingWait?.waiting) this.registry.release(owner.crossingWait.waiting.owner);
-    if (final) owner.crossingWait = undefined;
+    owner.crossingWait = undefined;
   }
 }

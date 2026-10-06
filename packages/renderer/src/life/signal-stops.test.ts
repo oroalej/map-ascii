@@ -139,7 +139,7 @@ it('stops actual layout and legacy vehicle fronts behind the selected bands, the
       expect(((stop.x - front.x) * hx + (stop.y - front.y) * hy) / pm).toBeGreaterThanOrEqual(
         -0.01,
       );
-      // The stop centre is 1.5 m behind the band's far edge along this containing segment.
+      // The vehicle rests with its front at the exact stop position.
       expect(m.v! / pm).toBeLessThan(0.1);
       const before = { x: m.x, y: m.y };
       for (let i = 0; i < 120; i++)

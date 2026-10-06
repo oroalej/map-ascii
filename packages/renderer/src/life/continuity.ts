@@ -7,6 +7,9 @@ import type { ContinuityRejection } from './diagnostics';
 import { copyVehicleEffects } from './vehicle-effects';
 
 export type AdoptionOptions = {
+  /** World context at activation; standalone transfers inherit the source's last step. */
+  crossingClock?: number;
+  crossingMinimum?: number;
   snapM?: number;
   bearingDeg?: number;
   replace?: Mover;

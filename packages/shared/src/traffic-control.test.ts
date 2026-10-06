@@ -35,6 +35,7 @@ it('round-trips scalar coordinates and exact uint32 seeds, rejecting partial or 
     expect(() => decodeCrossingController({ ...props, crossing_mid: 1 })).toThrow();
   }
   expect(decodeCrossingController({ crossing_bearing: 90 })).toBeUndefined();
+  expect(() => decodeCrossingController({ crossing_signal_control: '{}' })).toThrow();
   for (const seed of [-1, 0.1, 0x100000000, Infinity, NaN])
     expect(ControllerSeed.safeParse(seed).success).toBe(false);
 });

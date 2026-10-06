@@ -3,10 +3,9 @@ import { fixturePass, placeGrid, type View } from './passes';
 import type { CellTargets, GL } from './gpu';
 import type { ThemeResources } from './gpu-context';
 import type { StreetFixture } from './life/fixtures';
-import { signalState } from './life/signals';
+import { pedestrianState, signalState } from './life/signals';
 import * as utilities from './life/utilities';
 import { SeasonalPart } from './life/seasonal-glyphs';
-import { pedestrianState } from './life/signals';
 
 it('updates flashing pedestrian lenses without reprojection and reports their independent viewport visibility', () => {
   const upload = vi.fn(),

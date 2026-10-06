@@ -18,6 +18,8 @@ import { signalizedCrossingEntry } from './testing/signalized-crossing';
 import { legendEntries } from '../legend';
 import { lngLatToTile, tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { RoadAccess, stripRing } from './terrain';
+import { LifeBuilder } from './geometry';
+import { finalizeControlledCrossings } from './crossing-geometry';
 
 const signal: StreetFixture = {
   kind: 'signal',
@@ -72,7 +74,7 @@ it('retains complete vehicle plans while relocating both pedestrian lenses and t
             expect(both.texels.slice(at, at + 4)).toEqual(base.texels.slice(at, at + 4));
         expect(both.signals).toEqual(base.signals);
         expect(both.pedestrians).toHaveLength(1);
-        expect(both.pedestrians![0]!.cells).toHaveLength(2);
+        expect(both.pedestrians[0]!.cells).toHaveLength(2);
         const parts = Array.from(both.texels)
           .filter((_, i) => i % 4 === 1)
           .map((v) => v & 63);
@@ -89,10 +91,10 @@ it('draws detailed heads only, updates the shared phase at 2 Hz, freezes unchang
       (t) => pedestrianState(7, t, false, 'a') === 'flash',
     )!;
   expect(updateFixtureSignals(p, flash)).toBe(FixtureSignalChange.pedestrian);
-  expect(p.pedestrians![0]!.state).toBe(Math.floor(flash * 2) % 2 === 0 ? 2 : 3);
+  expect(p.pedestrians[0]!.state).toBe(Math.floor(flash * 2) % 2 === 0 ? 2 : 3);
   expect(updateFixtureSignals(p, flash)).toBe(0);
   updateFixtureSignals(p, flash + 0.5);
-  expect(p.pedestrians![0]!.state).toBe(Math.floor((flash + 0.5) * 2) % 2 === 0 ? 2 : 3);
+  expect(p.pedestrians[0]!.state).toBe(Math.floor((flash + 0.5) * 2) % 2 === 0 ? 2 : 3);
   for (let i = 0; i < before.length; i++) if (i % 4 !== 2) expect(p.texels[i]).toBe(before[i]);
   const rays = new Uint8Array(grid.cols * grid.rows * 4);
   packSignalLights(rays, p, { ...grid, dpr: 1 });
@@ -146,6 +148,59 @@ it('appends distinct procedural standing and walking symbols after candle slot 4
   });
   expect(bitmaps[0]).not.toEqual(bitmaps[1]);
 });
+it('keeps seam-owned pedestrian heads clear of vehicle heads emitted by the neighboring controller tile', () => {
+  const tile = signalizedCrossingEntry().tile;
+  const neighbor = { ...tile, x: tile.x - 1 };
+  const pm = 1 / metersPerUnit(tile);
+  const at = tileToLngLat(tile, { x: 0, y: 2000 });
+  const controller = tileToLngLat(tile, { x: -3.2 * pm, y: 2000 + 1.8 * pm });
+  const geometry = (address: typeof tile) => {
+    const origin = lngLatToTile(address, ...at);
+    const b = new LifeBuilder();
+    const road = [
+      stripRing(
+        { x: origin.x - 50 * pm, y: origin.y },
+        { x: origin.x + 50 * pm, y: origin.y },
+        5 * pm,
+      ),
+    ];
+    b.area('carriageway', road);
+    b.signal(lngLatToTile(address, ...controller), 6, 90, 0, true, undefined, { seed: 7 });
+    b.controlledCrossing({
+      id: 'cross',
+      anchor: origin,
+      width: 10,
+      bearing: 90,
+      lineId: 42,
+      controller: { id: 'signal', at: controller, seed: 7, midBlock: false, walk: 'a' },
+    });
+    const geo = b.finish();
+    finalizeControlledCrossings(geo.controlledCrossings!, [road], pm);
+    return geo;
+  };
+  const localGeo = geometry(tile),
+    neighborGeo = geometry(neighbor);
+  const local = tileFixtures(tile, localGeo),
+    remote = tileFixtures(neighbor, neighborGeo);
+  expect(local.filter((f) => f.kind === 'signal')).toHaveLength(0);
+  const vehicles = remote.filter((f) => f.kind === 'signal');
+  expect(vehicles).toHaveLength(4);
+  expect(vehicles).toEqual(
+    tileFixtures(neighbor, { ...neighborGeo, controlledCrossings: [] }).filter(
+      (f) => f.kind === 'signal',
+    ),
+  );
+  const heads = [...local, ...remote].filter((f) => f.kind === 'pedestrian-signal');
+  expect(heads).toHaveLength(2);
+  for (const head of heads) {
+    const p = lngLatToTile(tile, ...head.base);
+    for (const vehicle of vehicles) {
+      const q = lngLatToTile(tile, ...vehicle.base);
+      expect(Math.hypot(p.x - q.x, p.y - q.y) / pm).toBeGreaterThanOrEqual(1.5 - 1e-6);
+    }
+  }
+});
+
 it('owns two synchronized curb heads even when the controller point is outside this tile', () => {
   const entry = signalizedCrossingEntry(),
     fixtures = tileFixtures(entry.tile, entry.life);

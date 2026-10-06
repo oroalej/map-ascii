@@ -6,7 +6,9 @@ it('grants walk or clearance only while the crossed inbound group is red over 20
   let walk = 0,
     flash = 0,
     dont = 0;
-  for (let seed = 0; seed < 200; seed++)
+  for (let index = 0; index < 200; index++) {
+    // Two independently varied timing nibbles, with 200 distinct pairs.
+    const seed = (index % 16) | (((index * 7 + Math.floor(index / 16)) % 16) << 8);
     for (const midBlock of [false, true]) {
       const a = midBlock ? SIGNAL.midBlock.green : SIGNAL.greenA[0] + (seed % 16);
       const b = midBlock ? SIGNAL.midBlock.walk : SIGNAL.greenB[0] + ((seed >>> 8) % 16);
@@ -31,6 +33,7 @@ it('grants walk or clearance only while the crossed inbound group is red over 20
         }
       }
     }
+  }
   expect(walk).toBeGreaterThan(0);
   expect(flash).toBeGreaterThan(0);
   expect(dont).toBeGreaterThan(0);

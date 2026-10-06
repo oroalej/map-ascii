@@ -20,6 +20,7 @@ import { lifeTransferables } from '../life/geometry';
 import { TileLife } from '../life/simulate';
 import { tileFixtures } from '../life/fixtures';
 import { placeSeed } from '../life/lights';
+import { classId, Flags } from '../classes';
 
 it('keeps the renderer legacy hash aligned with pinned canonical controller seeds', () => {
   for (const [lng, lat, seed] of [
@@ -196,11 +197,64 @@ it('rejects partial, malformed and inconsistent controlled scalar records on rea
     { crossing_signal_control: JSON.stringify({ ...controller(1), seed: 2 }) },
   ];
   for (const extra of cases) expect(() => decode(1, false, tile, extra)).toThrow();
-  const feature = point(
-    1,
-    { id: 'cross', class: 'furniture', variant: 'crossing', crossing_signal: 'signal' },
-    crossingAt,
-  );
-  const parsed = new VectorTile(new PbfReader(encodeTile({ poi: { features: [feature] } })));
-  expect(() => buildTileGeometry(parsed.layers, createIdRegistry(), tile, 16)).toThrow();
+  const orphaned: TestFeature['properties'][] = [
+    { crossing_signal: 'signal' },
+    { crossing_signal_control: JSON.stringify(controller(1)) },
+  ];
+  for (const properties of orphaned) {
+    const feature = point(
+      1,
+      { id: 'cross', class: 'furniture', variant: 'crossing', ...properties },
+      crossingAt,
+    );
+    const parsed = new VectorTile(new PbfReader(encodeTile({ poi: { features: [feature] } })));
+    expect(() => buildTileGeometry(parsed.layers, createIdRegistry(), tile, 16)).toThrow();
+  }
+});
+
+it('paints owned corridor pads only in detailed source tiles while retaining coarse gates', () => {
+  for (const z of [14, 15, 16]) {
+    const address = { z, x: tile.x >>> (16 - z), y: tile.y >>> (16 - z) };
+    const project = (x: number, y: number): [number, number] => {
+      const p = lngLatToTile(address, ...tileToLngLat(tile, { x, y }));
+      return [Math.round(p.x), Math.round(p.y)];
+    };
+    const road: TestFeature = {
+      id: 1,
+      type: 2,
+      properties: { id: 'road', class: 'road_mid', width: 10 },
+      points: [project(2000 - 20 * pm, 2000), project(2000 + 20 * pm, 2000)],
+    };
+    const cross = point(
+      2,
+      {
+        id: 'cross',
+        class: 'furniture',
+        variant: 'crossing',
+        crossing_width: 10,
+        crossing_bearing: 90,
+        ...crossingControllerProperties({ id: 'signal', at, seed: 7, midBlock: false, walk: 'a' }),
+      },
+      at,
+      address,
+    );
+    const parsed = new VectorTile(
+      new PbfReader(encodeTile({ roads: { features: [road] }, poi: { features: [cross] } })),
+    );
+    const registry = createIdRegistry();
+    const geometry = buildTileGeometry(parsed.layers, registry, address, 16, false);
+    expect(geometry.life.controlledCrossings![0]!.sides!.flatMap((s) => s.pads)).toHaveLength(2);
+    const pads = Array.from(geometry.fills.ids.keys()).filter(
+      (i) => geometry.fills.meta[i * 4 + 2]! & Flags.sidewalk,
+    );
+    if (z < 15) expect(pads).toHaveLength(0);
+    else {
+      expect(pads).toHaveLength(8);
+      for (const i of pads) {
+        expect(geometry.fills.meta[i * 4]).toBe(classId('path'));
+        expect(geometry.fills.meta[i * 4 + 2]).toBe(Flags.corridor | Flags.sidewalk);
+        expect(geometry.fills.ids[i]).toBe(registry.index('cross'));
+      }
+    }
+  }
 });

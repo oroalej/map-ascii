@@ -165,6 +165,36 @@ it('resolves competing claims by distance with one owner and a fallback on the l
   expect(out.filter((f) => f.properties.crossing_signal === 'pack:signal:second')).toHaveLength(4);
 });
 
+it('inserts an interior mid-block controller vertex before resolving exact stops and its crossing', () => {
+  const out = mergeTraffic(
+    [
+      road('mid', [
+        [-100, 0],
+        [100, 0],
+      ]),
+      controller('mid-controller', 0, 0),
+      cross('mid-cross', 0, 0),
+    ],
+    { derive: false },
+  );
+  expect(out.find((f) => f.properties.id === 'mid')!.geometry).toEqual({
+    type: 'LineString',
+    coordinates: [coord(-100, 0), coord(0, 0), coord(100, 0)],
+  });
+  const signal = out.find((f) => f.properties.variant === 'signals')!;
+  const stops = SignalStops.parse(JSON.parse(signal.properties.signal_stops!));
+  expect(stops).toHaveLength(2);
+  expect(stops.map((s) => s.direction).sort()).toEqual([-1, 1]);
+  expect(stops.every((s) => s.group === 'a' && s.stop_bearing !== undefined)).toBe(true);
+  expect(
+    decodeCrossingController(out.find((f) => f.properties.id === 'mid-cross')!.properties),
+  ).toMatchObject({
+    id: signal.properties.id,
+    midBlock: true,
+    walk: 'a',
+  });
+});
+
 it('encodes every mid-block inbound stop as a, for both road axes and one-way rules', () => {
   for (const vertical of [false, true])
     for (const oneway of [undefined, -1, 1] as const) {

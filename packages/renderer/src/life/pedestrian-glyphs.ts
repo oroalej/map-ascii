@@ -3,3 +3,33 @@ export const PED_STOP = '\ue229';
 export const PED_WALK = '\ue22a';
 export const PEDESTRIAN_GLYPHS = [PED_STOP, PED_WALK] as const;
 export const PedestrianPart = { stop: 47, walk: 48 } as const;
+
+/** Shared 7 × 11 pixel figures for the atlas and legend. */
+export const PEDESTRIAN_MASTERS = {
+  stop: [
+    '.......',
+    '...##..',
+    '...##..',
+    '...##..',
+    '..####.',
+    '..####.',
+    '..####.',
+    '...#.#.',
+    '...#.#.',
+    '...#.#.',
+    '.......',
+  ],
+  walk: [
+    '.......',
+    '...##..',
+    '...##..',
+    '...##..',
+    '.####..',
+    '...###.',
+    '...###.',
+    '..#.#..',
+    '..#..#.',
+    '.#...#.',
+    '.......',
+  ],
+} as const;

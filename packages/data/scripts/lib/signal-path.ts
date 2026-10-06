@@ -6,37 +6,39 @@ export const armKey = (p: Position, arm: RoadArm) =>
   JSON.stringify([arm.road.properties.id, p, arm.forward ? 1 : -1]);
 
 /** The whole owned arm, stopping at the next shared junction, not the first bend. */
-export function armPath(p: Position, arm: RoadArm, vertices?: ReadonlyMap<string, RoadVertex>) {
+export function armPath(p: Position, arm: RoadArm, vertices: ReadonlyMap<string, RoadVertex>) {
   const points: Position[] = [p],
     segments: { road: RoadArm['road']; line: Position[]; forward: boolean }[] = [],
     visited = new Set<string>();
   let current = arm,
-    at = p,
-    firstLine: Position[] | undefined;
+    at = p;
   const flow = (a: RoadArm) => (a.road.properties.oneway ?? 0) * (a.forward ? 1 : -1);
   while (!visited.has(armKey(at, current))) {
     visited.add(armKey(at, current));
     const step = current.forward ? 1 : -1;
-    const line = lines(current.road).find((line) =>
-      line.some(
+    let line: Position[] | undefined,
+      start = -1;
+    for (const candidate of lines(current.road)) {
+      start = candidate.findIndex(
         (q, i) =>
-          key(q) === key(at) && line[i + step] && key(line[i + step]!) === key(current.toward),
-      ),
-    );
+          key(q) === key(at) &&
+          candidate[i + step] &&
+          key(candidate[i + step]!) === key(current.toward),
+      );
+      if (start >= 0) {
+        line = candidate;
+        break;
+      }
+    }
     if (!line) break;
-    firstLine ??= line;
-    const start = line.findIndex(
-      (q, i) =>
-        key(q) === key(at) && line[i + step] && key(line[i + step]!) === key(current.toward),
-    );
     for (let i = start + step; i >= 0 && i < line.length; i += step) {
       points.push(line[i]!);
       segments.push({ road: current.road, line, forward: current.forward });
-      if ((vertices?.get(key(line[i]!))?.arms.length ?? 0) >= 3) break;
+      if ((vertices.get(key(line[i]!))?.arms.length ?? 0) >= 3) break;
     }
     const end = points.at(-1)!,
       previous = points.at(-2)!;
-    const joint = vertices?.get(key(end));
+    const joint = vertices.get(key(end));
     if (joint?.arms.length !== 2) break;
     const next = joint.arms.find((a) => key(a.toward) !== key(previous));
     if (
@@ -48,9 +50,8 @@ export function armPath(p: Position, arm: RoadArm, vertices?: ReadonlyMap<string
     at = end;
     current = next;
   }
-  if (firstLine)
+  if (segments.length)
     return {
-      line: firstLine,
       points,
       segments,
       length: points.slice(1).reduce((d, q, i) => d + Math.hypot(...delta(points[i]!, q)), 0),

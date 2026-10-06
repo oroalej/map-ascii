@@ -1,5 +1,5 @@
 import type { TileId } from '../tiles';
-import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
+import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
 import { SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
@@ -73,7 +73,6 @@ type Signal = Point & {
   b: number;
   seed: number;
   approaches?: SignalApproach[];
-  members?: Point[];
   key?: string;
 };
 type Stop = { along: number; signal: Signal; group: 'a' | 'b'; dir?: 1 | -1; exact?: boolean };
@@ -117,7 +116,6 @@ export class SignalControl {
           (layout || exact) &&
           signalApproaches(tile, geo, layout ?? { members: [], arms: exact! }, along, true),
         key: layout && signalJunctionKey(layout),
-        members: layout?.members.map((p) => lngLatToTile(tile, ...p)),
       });
     }
     for (let line = 0; line < geo.kinds.length; line++) {

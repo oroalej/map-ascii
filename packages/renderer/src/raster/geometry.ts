@@ -1551,16 +1551,25 @@ export function buildTileGeometry(
       access,
     );
     life.joinWalking(routes.joins, routes.connectors);
-    for (const crossing of life.crossingAnchors)
-      for (const side of crossing.sides ?? [])
-        for (const pad of side.pads) {
-          const vertices = pad.slice(0, -1),
-            base = main.fills.count;
-          for (const p of vertices)
-            main.fills.vertex(p.x, p.y, classId('path'), 0, Flags.sidewalk, 0, 0);
-          for (const i of earcut(vertices.flatMap((p) => [p.x, p.y])))
-            main.fills.indices.push(base + i);
-        }
+    if (strips)
+      for (const crossing of life.crossingAnchors)
+        for (const side of crossing.sides ?? [])
+          for (const pad of side.pads) {
+            const vertices = pad.slice(0, -1),
+              base = main.fills.count;
+            for (const p of vertices)
+              main.fills.vertex(
+                p.x,
+                p.y,
+                classId('path'),
+                0,
+                Flags.corridor | Flags.sidewalk,
+                registry.index(crossing.id),
+                0,
+              );
+            for (const i of earcut(vertices.flatMap((p) => [p.x, p.y])))
+              main.fills.indices.push(base + i);
+          }
   }
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
   if (unitMeters && tile && tile.z >= LIFE_TILE_MIN_ZOOM)

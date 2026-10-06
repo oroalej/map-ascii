@@ -26,6 +26,7 @@ import {
 } from './classes';
 import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
+import { PEDESTRIAN_MASTERS } from './life/pedestrian-glyphs';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
 import type { FixtureVisibility } from './life/fixtures';
@@ -260,9 +261,11 @@ export function legendEntries(
     emoji?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
-    fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
+    fixtures?: Pick<
+      FixtureVisibility,
+      'streetlights' | 'trafficSignals' | 'pedestrianSignals' | 'seasonal'
+    > & {
       utilities?: boolean;
-      pedestrianSignals?: boolean;
     };
     season?: SeasonState | null;
   } = {},
@@ -405,36 +408,12 @@ export function legendEntries(
       color: css(theme.fixturePaints[5]!),
       icons: [
         {
-          pixels: [
-            '.......',
-            '...##..',
-            '...##..',
-            '...##..',
-            '..####.',
-            '..####.',
-            '..####.',
-            '...#.#.',
-            '...#.#.',
-            '...#.#.',
-            '.......',
-          ],
+          pixels: PEDESTRIAN_MASTERS.stop,
           paint: css(theme.fixturePaints[3]!),
           tone: css(theme.fixturePaints[3]!),
         },
         {
-          pixels: [
-            '.......',
-            '...##..',
-            '...##..',
-            '...##..',
-            '.####..',
-            '...###.',
-            '...###.',
-            '..#.#..',
-            '..#..#.',
-            '.#...#.',
-            '.......',
-          ],
+          pixels: PEDESTRIAN_MASTERS.walk,
           paint: css(theme.fixturePaints[5]!),
           tone: css(theme.fixturePaints[5]!),
         },

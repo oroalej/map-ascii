@@ -572,7 +572,14 @@ export class LifeBuilder {
     for (let line = 0; line < kinds.length; line++) {
       const lineJoins = joins.get(line);
       const ordered = lineJoins?.length
-        ? [...lineJoins].sort((a, b) => a.segment - b.segment || a.t - b.t)
+        ? lineJoins
+            .map((join) => {
+              if (join.t > 1e-8 && join.t < 1 - 1e-8) return join;
+              const segment = join.segment + Number(join.t >= 1 - 1e-8);
+              const v = starts[line]! + segment;
+              return { segment, t: 0, point: { x: coords[v * 2]!, y: coords[v * 2 + 1]! } };
+            })
+            .sort((a, b) => a.segment - b.segment || a.t - b.t)
         : undefined;
       let nextJoin = 0;
       let piece: TilePoint[] = [];
@@ -586,7 +593,8 @@ export class LifeBuilder {
             piece = [p];
             continue;
           }
-          piece.push(join.point);
+          if (piece.at(-1)!.x !== join.point.x || piece.at(-1)!.y !== join.point.y)
+            piece.push(join.point);
           addPiece(piece, line);
           piece = [join.point];
         }
