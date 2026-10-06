@@ -1000,7 +1000,7 @@ export class LocalScenes {
       return true;
     }
     const before = snapshotMover(m),
-      heading = m.momentFacing ?? m;
+      heading = m.momentFacing ?? { hx: m.hx, hy: m.hy };
     const point = {
       x: m.x - m.hy * (m.avoid ?? 0) * this.perMeter,
       y: m.y + m.hx * (m.avoid ?? 0) * this.perMeter,
@@ -1030,20 +1030,27 @@ export class LocalScenes {
       best = { from, d, x, y, hx, hy, offset };
     }
     if (!best) return false;
-    m.line = anchor.line;
-    m.dir = anchor.dir;
-    m.from = best.from;
-    m.d = best.d;
-    m.x = best.x;
-    m.y = best.y;
-    m.avoid = best.offset / this.perMeter;
-    faceGroup(m, best.hx, best.hy, heading);
-    if (
-      (!owns || owns(m)) &&
-      this.graph.allowsBodies(this.walkingBodies(m, m, m.avoid), true) &&
-      guard(m, before, false)
-    )
-      return true;
+    for (const retainFacing of [false, true]) {
+      restoreMover(m, before);
+      m.line = anchor.line;
+      m.dir = anchor.dir;
+      m.from = best.from;
+      m.d = best.d;
+      m.x = best.x;
+      m.y = best.y;
+      m.avoid = best.offset / this.perMeter;
+      if (retainFacing) {
+        m.hx = best.hx;
+        m.hy = best.hy;
+        m.momentFacing = { hx: heading.hx, hy: heading.hy };
+      } else faceGroup(m, best.hx, best.hy, heading);
+      if (
+        (!owns || owns(m)) &&
+        this.graph.allowsBodies(this.walkingBodies(m, m, m.avoid), true) &&
+        guard(m, before, false)
+      )
+        return true;
+    }
     restoreMover(m, before);
     return false;
   }

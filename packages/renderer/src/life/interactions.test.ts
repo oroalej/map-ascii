@@ -214,6 +214,58 @@ describe('local interaction scenes', () => {
     },
   );
 
+  it.each([false, true])(
+    'checks a retained-facing corner yield resume (admissible %s)',
+    (admissible) => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 30 },
+          { x: 40, y: 30 },
+          { x: 40, y: 80 },
+        ],
+        LifeLine.path,
+        4,
+      );
+      const scene = new LocalScenes(b.finish(), 1, 8, []);
+      const p: Mover = { ...person(39.8), group: [{ ...walker }, { ...walker, lateral: 1 }] };
+      const group = p.group;
+      let active = true;
+      let holdingY = 0;
+      const physical = (m: Mover) => ({
+        x: m.x - m.hy * (m.avoid ?? 0),
+        y: m.y + m.hx * (m.avoid ?? 0),
+        ...(m.momentFacing ?? { hx: m.hx, hy: m.hy }),
+      });
+      const guard = Object.assign(
+        (next: Mover) => {
+          if (active) return true;
+          const body = physical(next);
+          return admissible && body.y >= holdingY - 1e-8 && body.hx === 1 && body.hy === 0;
+        },
+        { yielding: () => (active ? person(42) : undefined), holding: () => true },
+      );
+      for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+      const holding = physical(p);
+      holdingY = holding.y;
+      active = false;
+      let resumed = false;
+      for (let frame = 0; frame < 300; frame++) {
+        if (!scene.yieldStep(p, 0.1, guard)) {
+          resumed = true;
+          break;
+        }
+      }
+      expect(resumed).toBe(admissible);
+      expect(physical(p)).toEqual(holding);
+      expect(p.group).toBe(group);
+      expect(p.hx).toBe(admissible ? 0 : 1);
+      expect(p.hy).toBe(admissible ? 1 : 0);
+      expect(p.momentFacing).toEqual(admissible ? { hx: 1, hy: 0 } : undefined);
+      expect(scene.transferable(p)).toBe(admissible);
+    },
+  );
+
   it('prevents visit admission and tile transfer while yielding owns movement', () => {
     const scene = setup(),
       p = { ...person(), group: [{ ...walker }] };
