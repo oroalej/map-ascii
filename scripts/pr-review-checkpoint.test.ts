@@ -1,11 +1,16 @@
 import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   beginOperation,
+  contained,
+  atomicJson,
   capture,
   finishOperation,
   loadState,
+  hash,
   parseState,
   recover,
   restoreOwned,
@@ -71,6 +76,43 @@ describe('review checkpoints', () => {
     expect(() => sourcePath(setup.directory, '../escape')).toThrow('Invalid source path');
   });
 
+  it.skipIf(process.platform !== 'win32')(
+    'accepts Windows drive and directory casing in bounded containment and resume checks',
+    async () => {
+      const { state } = await startReview(setup.options);
+      const module = pathToFileURL(join(process.cwd(), 'scripts/pr-review-checkpoint.ts')).href;
+      const child = spawnSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '-e',
+          `import { contained, loadState } from ${JSON.stringify(module)};
+       const [root, run] = process.argv.slice(1);
+       for (const path of [run, run.toLowerCase(), run.toUpperCase()]) {
+         contained(root, path);
+         contained(root, path + '/missing/final.json');
+         loadState(path);
+       }
+       console.log('accepted');`,
+          setup.directory,
+          state.run,
+        ],
+        { encoding: 'utf8', timeout: 2000 },
+      );
+      expect(child.error).toBeUndefined();
+      expect(child.status).toBe(0);
+      expect(child.stdout.trim()).toBe('accepted');
+      expect(selectState({ ...setup.options, resume: state.run.toLowerCase() })?.run).toBe(
+        state.run,
+      );
+      expect(() => contained(setup.directory, join(setup.directory, '..', 'outside'))).toThrow(
+        'Path outside',
+      );
+    },
+  );
+
   it('resumes completed review at validation and completed validation at fixes', async () => {
     const { state } = await startReview(setup.options);
     await updateState(state.run, (saved) => {
@@ -107,6 +149,37 @@ describe('review checkpoints', () => {
     );
     const recovered = await startReview(setup.options, loadState(state.run), () => false);
     expect(recovered.reusable).toEqual([]);
+  });
+
+  it('does not pair a replacement review with validation of a different artifact', async () => {
+    const { state } = await startReview(setup.options);
+    await updateState(state.run, (saved) => {
+      saved.phase = 'review';
+    });
+    const first = await artifact(state, 'review');
+    await artifact(state, 'validation');
+    writeFileSync(first.receipt.report, 'corrupt');
+    const body =
+      '**Verdict:** Changes requested\n**Checked, no issues:** checked\n**Not checked:** live processes';
+    const replacement = await artifact(state, 'review', { reportHash: hash(body) });
+    writeFileSync(replacement.receipt.report, body);
+    const resumed = recover(loadState(state.run), setup.options, () => false);
+    expect(resumed.phase).toBe('validation');
+    expect(resumed.reusable.map((r) => r.token)).toEqual([replacement.receipt.token]);
+    await artifact(state, 'validation');
+    expect(recover(loadState(state.run), setup.options, () => false).phase).toBe('fixes');
+  });
+
+  it('reruns validation when older receipts have no input-review proof', async () => {
+    const { state } = await startReview(setup.options);
+    await updateState(state.run, (saved) => {
+      saved.phase = 'validation';
+    });
+    await artifact(state, 'review');
+    const validation = await artifact(state, 'validation');
+    delete validation.receipt.inputReview;
+    atomicJson(validation.path, validation.receipt);
+    expect(recover(loadState(state.run), setup.options, () => false).phase).toBe('validation');
   });
 
   it('invalidates reports and CI when main moves or an external commit changes the head', async () => {
@@ -175,5 +248,11 @@ describe('review checkpoints', () => {
     expect(third.pushCompleted).toBe(true);
     expect(third.state.phase).toBe('review');
     expect(third.state.round).toBe(2);
+    expect(third.state.operations.find((op) => op.id === 'push')?.after).not.toBeNull();
+    await artifact(third.state, 'review');
+    const fourth = await startReview({ ...setup.options, remoteSha: head });
+    expect(fourth.state.round).toBe(2);
+    expect(fourth.state.phase).toBe('validation');
+    expect(fourth.pushCompleted).toBe(false);
   });
 });

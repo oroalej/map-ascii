@@ -1,8 +1,17 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git, gitRaw } from './git';
-import { atomicJson, hash, updateState } from './pr-review-checkpoint';
+import {
+  atomicJson,
+  hash,
+  loadState,
+  parseReceipt,
+  readJson,
+  receiptValid,
+  updateState,
+} from './pr-review-checkpoint';
 import type { Receipt, ReviewState, StartOptions } from './pr-review-checkpoint';
 
 export const reviewText =
@@ -34,14 +43,22 @@ export async function artifact(
   kind: 'review' | 'validation',
   changes: Partial<Receipt> = {},
 ): Promise<{ path: string; receipt: Receipt }> {
-  const output = join(state.run, `saved-${kind}.md`);
+  const token = randomUUID();
+  const output = join(state.run, `saved-${kind}-${token}.md`);
   writeFileSync(output, kind === 'review' ? reviewText : validationText);
+  const review = loadState(state.run)
+    .receipts.map((file) => parseReceipt(readJson(file)))
+    .reverse()
+    .find(
+      (r) =>
+        r.phase === 'review' && r.round === state.round && receiptValid(r, state, state.headSha),
+    );
   const receipt: Receipt = {
     version: 1,
     repository: state.repository,
     pr: state.pr,
     branch: state.branch,
-    token: 'test',
+    token,
     phase: kind,
     round: state.round,
     headSha: state.headSha,
@@ -59,12 +76,16 @@ export async function artifact(
     exitCode: 0,
     signal: null,
     reportHash: hash(readFileSync(output)),
+    inputReview:
+      kind === 'validation' && review
+        ? { token: review.token, reportHash: review.reportHash! }
+        : null,
     valid: true,
     quota: null,
     error: null,
     ...changes,
   };
-  const path = join(state.run, `saved-${kind}-receipt.json`);
+  const path = join(state.run, `saved-${kind}-${token}-receipt.json`);
   atomicJson(path, receipt);
   await updateState(state.run, (saved) => {
     saved.receipts.push(path);

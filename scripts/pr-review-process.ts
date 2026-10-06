@@ -10,6 +10,7 @@ import {
   parseReceipt,
   readJson,
   record,
+  receiptValid,
   updateState,
 } from './pr-review-checkpoint';
 import type { Json, Receipt } from './pr-review-checkpoint';
@@ -25,6 +26,7 @@ export type ProcessSpec = {
   args: string[];
   output: 'stdout' | 'file';
   resultFile?: string;
+  reviewReceipt?: string;
 };
 
 /** Preserve literal reset text; a clock time without a date is not an ISO timestamp. */
@@ -43,7 +45,7 @@ export function quotaFailure(text: string): Receipt['quota'] {
     }
     if (
       structured ||
-      /(?:you(?:'|’)?ve hit your (?:session|usage|weekly|monthly) limit|you have (?:hit|exceeded|reached) your usage limit|usage limit (?:reached|exceeded))\b/i.test(
+      /(?:you(?:'|’)?ve hit your (?:(?:(?:session|usage|weekly|monthly|opus|sonnet|haiku) )?limit|(?:(?:(?:org|channel)(?:'|’)s )?monthly|individual) (?:spend|usage) limit|team(?:'|’)s shared budget)|you have (?:hit|exceeded|reached) your usage limit|usage limit (?:reached|exceeded))\b/i.test(
         line,
       )
     ) {
@@ -163,6 +165,11 @@ export function parseProcessSpec(value: unknown): ProcessSpec {
   )
     throw new Error('Result file must be an absolute scratch path');
   if (!/^[a-f0-9]{40,64}$/.test(spec.headSha)) throw new Error('Invalid process input commit');
+  if (
+    spec.reviewReceipt !== undefined &&
+    (typeof spec.reviewReceipt !== 'string' || !isAbsolute(spec.reviewReceipt))
+  )
+    throw new Error('Review receipt must be an absolute path');
   return spec;
 }
 
@@ -171,6 +178,21 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
   const spec = parseProcessSpec(input),
     state = loadState(spec.run);
   if (spec.round !== state.round) throw new Error('Process round does not match checkpoint');
+  const readReview = (): Receipt | null => {
+    if (spec.phase !== 'validation') return null;
+    if (!spec.reviewReceipt) throw new Error('Validation requires its input review receipt');
+    const review = parseReceipt(
+      readJson(contained(join(mainCheckout(state.checkout), '.plans'), spec.reviewReceipt)),
+    );
+    if (
+      review.phase !== 'review' ||
+      review.round !== spec.round ||
+      !receiptValid(review, state, spec.headSha)
+    )
+      throw new Error('Validation input review could not be verified');
+    return review;
+  };
+  const review = readReview();
   const stepRoot = contained(spec.run, join(spec.run, `round${spec.round}`, spec.phase));
   mkdirSync(stepRoot, { recursive: true });
   const processLock = contained(
@@ -240,6 +262,7 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
       exitCode: null,
       signal: null,
       reportHash: null,
+      inputReview: review ? { token: review.token, reportHash: review.reportHash! } : null,
       valid: false,
       quota: null,
       error: null,
@@ -285,6 +308,15 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
       receipt.signal === null &&
       receipt.error === null &&
       reportComplete(spec.phase, body);
+    if (receipt.valid && review) {
+      try {
+        const currentReview = readReview();
+        receipt.valid =
+          currentReview?.token === review.token && currentReview?.reportHash === review.reportHash;
+      } catch {
+        receipt.valid = false;
+      }
+    }
     if (!receipt.valid)
       receipt.quota = quotaFailure(
         body +

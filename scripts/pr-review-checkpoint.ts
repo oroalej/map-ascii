@@ -113,6 +113,7 @@ export type Receipt = Identity & {
   exitCode: number | null;
   signal: string | null;
   reportHash: string | null;
+  inputReview?: { token: string; reportHash: string } | null;
   valid: boolean;
   quota: { reason: string; reset: string | null } | null;
   error: string | null;
@@ -242,6 +243,13 @@ export function parseReceipt(v: unknown): Receipt {
     ) ||
     !nullableString(v.signal) ||
     !nullableString(v.reportHash) ||
+    !(
+      v.inputReview === undefined ||
+      v.inputReview === null ||
+      (record(v.inputReview) &&
+        typeof v.inputReview.token === 'string' &&
+        typeof v.inputReview.reportHash === 'string')
+    ) ||
     typeof v.valid !== 'boolean' ||
     !nullableString(v.error) ||
     !(
@@ -272,8 +280,10 @@ export function contained(root: string, file: string): string {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    if (cursor === base) break;
-    cursor = dirname(cursor);
+    if (relative(base, cursor) === '') break;
+    const parent = dirname(cursor);
+    if (parent === cursor) throw new Error(`Path outside ${base}: ${file}`);
+    cursor = parent;
   }
   return target;
 }
@@ -379,7 +389,7 @@ export function loadState(run: string): ReviewState {
   for (const name of names) {
     try {
       const state = parseState(readJson(contained(run, join(folder, name))));
-      if (resolve(state.run) !== resolve(run)) continue;
+      if (relative(resolve(state.run), resolve(run)) !== '') continue;
       return state;
     } catch {
       /* Incomplete/corrupt snapshots never advance the recovered phase. */
@@ -546,9 +556,7 @@ export function recover(
   const expectedHead = recoveredCommit ?? state.headSha;
   const unchanged = now.headSha === expectedHead && options.remoteSha === expectedHead;
   const workingTreeMatches = now.treeHash === state.current.treeHash;
-  const reusable = receipts.filter(
-    (r) => r.round === state.round && receiptValid(r, state, expectedHead),
-  );
+  const verified = receipts.filter((r) => receiptValid(r, state, expectedHead));
   let next = state.phase,
     round = state.round,
     reason = 'Continue saved phase';
@@ -571,9 +579,21 @@ export function recover(
     reason = 'Reviewed commit changed; retain history and review the new commit';
   } else if (pushCompleted) {
     next = 'review';
-    round++;
+    round = Math.max(round, pending.round + 1);
     reason = 'Pending push already reached the remote; review the pushed fixes';
-  } else if (next === 'review' && reusable.some((r) => r.phase === 'review')) next = 'validation';
+  }
+  const review = [...verified].reverse().find((r) => r.round === round && r.phase === 'review');
+  const reusable = verified.filter(
+    (r) =>
+      r.round === round &&
+      (r.phase === 'review'
+        ? r === review
+        : r.phase !== 'validation' ||
+          (!!review &&
+            r.inputReview?.token === review.token &&
+            r.inputReview.reportHash === review.reportHash)),
+  );
+  if (next === 'review' && review) next = 'validation';
   if (
     next === 'validation' &&
     reusable.some((r) => r.phase === 'validation') &&
@@ -758,10 +778,14 @@ export async function startReview(
       .find((o) => o.phase === 'commit' && o.after === null);
     if (op) {
       op.commit = recovery.recoveredCommit;
-      op.after = current;
+      retireCommittedOwnership(state, op.before.headSha, recovery.recoveredCommit);
+      op.after = capture(options.checkout, Object.keys(state.owned));
     }
-    state.owned = {};
-    state.current = capture(options.checkout);
+    state.current = capture(options.checkout, Object.keys(state.owned));
+  }
+  if (recovery.pushCompleted) {
+    const op = [...state.operations].reverse().find((o) => o.phase === 'push' && o.after === null);
+    if (op) op.after = current;
   }
   const release = await acquire([contained(run, join(run, 'checkpoint.lock'))]);
   try {
@@ -787,6 +811,23 @@ export async function protectChanges(run: string): Promise<ReviewState> {
       ),
     };
   });
+}
+
+/** A commit may cover only one area; untouched fixes retain their original ownership proof. */
+function retireCommittedOwnership(state: ReviewState, parent: string, commit: string): void {
+  const committed = gitRaw(
+    state.checkout,
+    'diff',
+    '--no-renames',
+    '--name-only',
+    '-z',
+    parent,
+    commit,
+    '--',
+  )
+    .split('\0')
+    .filter(Boolean);
+  for (const name of committed) delete state.owned[name];
 }
 
 export async function beginOperation(
@@ -884,8 +925,8 @@ export async function finishOperation(
     op.data = data;
     if (op.phase === 'commit') {
       op.commit = op.after.headSha;
-      state.owned = {};
-      op.after = capture(state.checkout);
+      retireCommittedOwnership(state, op.before.headSha, op.commit);
+      op.after = capture(state.checkout, Object.keys(state.owned));
     }
     state.current = op.after;
     state.headSha = op.after.headSha;

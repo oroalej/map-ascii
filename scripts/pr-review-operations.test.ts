@@ -11,7 +11,7 @@ import {
   startReview,
   updateState,
 } from './pr-review-checkpoint';
-import { fixture } from './pr-review-fixture';
+import { commit, fixture } from './pr-review-fixture';
 import { git } from './git';
 
 let setup: ReturnType<typeof fixture>;
@@ -59,6 +59,40 @@ it('refuses committing unrelated staged changes', async () => {
   await expect(beginOperation(state.run, 'bad-commit', 'commit')).rejects.toThrow('unowned');
   expect(loadState(state.run).operations).toEqual([]);
 });
+
+it.each([false, true])(
+  'retains an unstaged owned area after commit (recovered: %s)',
+  async (interrupted) => {
+    const { state } = await startReview(setup.options);
+    await beginOperation(state.run, 'two-areas', 'fixes', ['file.txt', 'other.txt']);
+    writeFileSync(join(setup.directory, 'file.txt'), 'area A');
+    writeFileSync(join(setup.directory, 'other.txt'), 'area B');
+    const fixed = await finishOperation(state.run, 'two-areas', 'commit', 'Commit A');
+    const remaining = fixed.owned['other.txt'];
+    git(setup.directory, 'add', '--', 'file.txt');
+    await beginOperation(state.run, 'commit-A', 'commit');
+    const head = commit(setup.directory);
+    const saved = interrupted
+      ? (
+          await startReview(
+            { ...setup.options, remoteSha: head },
+            loadState(state.run),
+            () => false,
+          )
+        ).state
+      : await finishOperation(state.run, 'commit-A', 'commit', 'Commit B');
+    expect(saved.owned).toEqual({ 'other.txt': remaining });
+    expect(saved.baseline.files).not.toHaveProperty('other.txt');
+    git(setup.directory, 'add', '--', 'other.txt');
+    await expect(beginOperation(saved.run, 'commit-B', 'commit')).resolves.toMatchObject({
+      phase: 'commit',
+    });
+    git(setup.directory, 'commit', '-qm', 'commit second area');
+    const finished = await finishOperation(saved.run, 'commit-B', 'push', 'Push both areas');
+    expect(finished.owned).toEqual({});
+    expect(git(setup.directory, 'status', '--porcelain')).toBe('');
+  },
+);
 
 it('rechecks saved clean CI and reviews source fixes whose review is still pending', async () => {
   const { state } = await startReview(setup.options);

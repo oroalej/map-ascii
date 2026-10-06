@@ -12,7 +12,7 @@ import {
 } from './pr-review-checkpoint';
 import type { Json, Receipt, Recovery, StartOptions } from './pr-review-checkpoint';
 import { git, gitSucceeds, mainCheckout } from './git';
-import { reportComplete } from './pr-review-process';
+import { receiptActive, reportComplete } from './pr-review-process';
 import { readFileSync } from 'node:fs';
 
 function optional(file: string): Record<string, unknown> | null {
@@ -90,7 +90,7 @@ function attempts(folder: string): string[] {
 export async function importLegacy(options: StartOptions, source: string): Promise<Recovery> {
   if (legacySource({ ...options, resume: source }) !== source)
     throw new Error('Legacy invocation identity could not be verified');
-  const recovery = await startReview({ ...options, resume: undefined }, null);
+  const recovery = await startReview({ ...options, resume: undefined }, null, receiptActive);
   const result = optional(join(source, 'result.json'));
   const folders = readdirSync(source)
     .filter((name) => /^round\d+$/.test(name))
@@ -147,6 +147,14 @@ export async function importLegacy(options: StartOptions, source: string): Promi
         contained(source, output);
         const body = readFileSync(output, 'utf8').replace(/^\uFEFF/, '');
         if (!reportComplete(kind, body)) continue;
+        const review = recovery.reusable.find((r) => r.phase === 'review');
+        if (
+          kind === 'validation' &&
+          (!review ||
+            exit.reviewReport !== review.report ||
+            exit.reviewReportHash !== review.reportHash)
+        )
+          continue;
         const path = join(recovery.state.run, 'legacy', `${kind}-receipt.json`);
         const receipt: Receipt = {
           version: 1,
@@ -171,6 +179,10 @@ export async function importLegacy(options: StartOptions, source: string): Promi
           exitCode: 0,
           signal: null,
           reportHash: hash(readFileSync(output)),
+          inputReview:
+            kind === 'validation' && review
+              ? { token: review.token, reportHash: review.reportHash! }
+              : null,
           valid: true,
           quota: null,
           error: null,
