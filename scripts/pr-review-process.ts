@@ -1,0 +1,351 @@
+import { execFileSync, spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { isAbsolute, join, parse } from 'node:path';
+import {
+  atomicJson,
+  contained,
+  hash,
+  loadState,
+  parseReceipt,
+  readJson,
+  record,
+  updateState,
+} from './pr-review-checkpoint';
+import type { Json, Receipt } from './pr-review-checkpoint';
+import { acquire } from './file-lock';
+import { git, mainCheckout } from './git';
+
+export type ProcessSpec = {
+  run: string;
+  phase: Receipt['phase'];
+  round: number;
+  headSha: string;
+  executable: string;
+  args: string[];
+  output: 'stdout' | 'file';
+  resultFile?: string;
+};
+
+/** Preserve literal reset text; a clock time without a date is not an ISO timestamp. */
+export function quotaFailure(text: string): Receipt['quota'] {
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    let structured = false;
+    try {
+      const value = readError(JSON.parse(line) as unknown);
+      structured =
+        value === 'usage_limit_reached' ||
+        value === 'quota_exceeded' ||
+        value === 'insufficient_quota';
+    } catch {
+      /* Text mode CLIs do not emit JSON. */
+    }
+    if (
+      structured ||
+      /(?:you(?:'|’)?ve hit your (?:session|usage|weekly|monthly) limit|you have (?:hit|exceeded|reached) your usage limit|usage limit (?:reached|exceeded))\b/i.test(
+        line,
+      )
+    ) {
+      return { reason: line.trim(), reset: /\bresets?\b[^\r\n]*/i.exec(line)?.[0] ?? null };
+    }
+  }
+  return null;
+}
+
+function readError(value: unknown): string | null {
+  if (!record(value)) return null;
+  if (typeof value.code === 'string') return value.code;
+  if (
+    typeof value.type === 'string' &&
+    ['usage_limit_reached', 'quota_exceeded', 'insufficient_quota'].includes(value.type)
+  )
+    return value.type;
+  return record(value.error) ? readError(value.error) : null;
+}
+
+export function reportComplete(kind: Receipt['phase'], text: string): boolean {
+  if (kind === 'review')
+    return (
+      /^\*\*Verdict:\*\*\s*(?:Approve(?: with nits)?|Changes requested)\b/im.test(text) &&
+      /^\*\*Checked, no issues:\*\*/m.test(text) &&
+      /^\*\*Not checked:\*\*/m.test(text)
+    );
+  if (kind === 'validation')
+    return (
+      /^\*\*Claude's verdict:\*\*/m.test(text) &&
+      /^### Validation\s*$/m.test(text) &&
+      /^\|\s*#\s*\|/m.test(text) &&
+      /^### Fix steps\s*$/m.test(text) &&
+      /^### Noticed, not in Claude's review\s*$/m.test(text)
+    );
+  if (kind === 'coordinator') {
+    const result = /```review-pr-result\s*([\s\S]*?)```/.exec(text)?.[1];
+    if (!result) return false;
+    try {
+      const value: unknown = JSON.parse(result);
+      return record(value) && ['clean', 'error', 'interrupted'].includes(String(value.status));
+    } catch {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** PID plus OS start identity distinguishes a surviving process from a recycled PID. */
+export function processIdentity(pid: number): string | null {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+  try {
+    if (process.platform === 'win32')
+      return (
+        execFileSync(
+          'powershell.exe',
+          [
+            '-NoProfile',
+            '-NonInteractive',
+            '-Command',
+            `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+          ],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+        ).trim() || null
+      );
+    if (process.platform === 'linux') {
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null;
+    }
+    return (
+      execFileSync('ps', ['-p', String(pid), '-o', 'lstart='], { encoding: 'utf8' }).trim() || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function alive(pid: number | null, identity: string | null): boolean {
+  if (pid === null) return false;
+  try {
+    process.kill(pid, 0);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    return true; // Permission/inspection failures cannot prove that a process has exited.
+  }
+  const current = processIdentity(pid);
+  return !identity || !current || current === identity;
+}
+
+export function receiptActive(receipt: Receipt): boolean {
+  return (
+    receipt.status === 'running' &&
+    (alive(receipt.launcherPid, receipt.launcherIdentity) ||
+      alive(receipt.childPid, receipt.childIdentity))
+  );
+}
+
+export function parseProcessSpec(value: unknown): ProcessSpec {
+  if (
+    !record(value) ||
+    !['run', 'headSha', 'executable'].every((k) => typeof value[k] === 'string') ||
+    !['review', 'validation', 'coordinator', 'check'].includes(String(value.phase)) ||
+    typeof value.round !== 'number' ||
+    !Number.isSafeInteger(value.round) ||
+    value.round < 1 ||
+    !Array.isArray(value.args) ||
+    !value.args.every((v: unknown) => typeof v === 'string') ||
+    !['stdout', 'file'].includes(String(value.output))
+  )
+    throw new Error('Invalid process input');
+  const spec = value as ProcessSpec;
+  if (!isAbsolute(spec.executable))
+    throw new Error('Executable must be the resolved absolute native binary path');
+  if (
+    spec.resultFile !== undefined &&
+    (typeof spec.resultFile !== 'string' || !isAbsolute(spec.resultFile))
+  )
+    throw new Error('Result file must be an absolute scratch path');
+  if (!/^[a-f0-9]{40,64}$/.test(spec.headSha)) throw new Error('Invalid process input commit');
+  return spec;
+}
+
+/** Report paths are substituted as individual arguments; no command string or shell is used. */
+export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt; path: string }> {
+  const spec = parseProcessSpec(input),
+    state = loadState(spec.run);
+  if (spec.round !== state.round) throw new Error('Process round does not match checkpoint');
+  const stepRoot = contained(spec.run, join(spec.run, `round${spec.round}`, spec.phase));
+  mkdirSync(stepRoot, { recursive: true });
+  const processLock = contained(
+    join(mainCheckout(state.checkout), '.plans'),
+    join(
+      mainCheckout(state.checkout),
+      '.plans',
+      'active',
+      `pr${state.pr}-review-fixes`,
+      `native-${spec.phase}.lock`,
+    ),
+  );
+  const release = await acquire([processLock], {
+    timeoutMs: 100,
+    timeoutMessage: 'A matching process is still active; observe its receipt',
+  });
+  try {
+    // A restarted coordinator must inspect receipts first; this also rejects stale head input.
+    if (
+      state.headSha !== spec.headSha ||
+      git(state.checkout, 'rev-parse', 'HEAD') !== spec.headSha ||
+      (spec.phase !== 'coordinator' && spec.phase !== 'check' && state.remoteSha !== spec.headSha)
+    )
+      throw new Error('Synchronize local and remote commits before running a review process');
+    for (const file of state.receipts) {
+      try {
+        const receipt = parseReceipt(readJson(file));
+        if (receipt.round === spec.round && receipt.phase === spec.phase && receiptActive(receipt))
+          throw new Error(`Matching process active: ${file}`);
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Matching process active:'))
+          throw error;
+      }
+    }
+    const attempt = contained(spec.run, join(stepRoot, `attempt-${Date.now()}-${randomUUID()}`));
+    mkdirSync(attempt);
+    const report = join(attempt, 'report.md'),
+      receiptPath = join(attempt, 'receipt.json');
+    const args = spec.args.map((arg) => arg.replaceAll('{report}', report));
+    if (spec.output === 'file' && !spec.args.some((arg) => arg.includes('{report}')))
+      throw new Error('File output requires a {report} argument');
+    const receipt: Receipt = {
+      version: 1,
+      repository: state.repository,
+      pr: state.pr,
+      branch: state.branch,
+      token: randomUUID(),
+      phase: spec.phase,
+      round: spec.round,
+      headSha: spec.headSha,
+      executable: spec.executable,
+      args,
+      cwd: state.checkout,
+      report,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      launcherPid: process.pid,
+      launcherIdentity: processIdentity(process.pid),
+      childPid: null,
+      childIdentity: null,
+      status: 'running',
+      exitCode: null,
+      signal: null,
+      reportHash: null,
+      valid: false,
+      quota: null,
+      error: null,
+    };
+    atomicJson(receiptPath, receipt);
+    await updateState(spec.run, (saved) => {
+      saved.receipts.push(receiptPath);
+    });
+    const stdout = openSync(spec.output === 'stdout' ? report : join(attempt, 'stdout.log'), 'wx');
+    const stderr = openSync(join(attempt, 'stderr.log'), 'wx');
+    try {
+      const child = spawn(spec.executable, args, {
+        cwd: state.checkout,
+        stdio: ['ignore', stdout, stderr],
+        windowsHide: true,
+      });
+      child.once('spawn', () => {
+        receipt.childPid = child.pid ?? null;
+        receipt.childIdentity =
+          receipt.childPid === null ? null : processIdentity(receipt.childPid);
+        atomicJson(receiptPath, receipt);
+      });
+      await new Promise<void>((done) => {
+        child.once('error', (error) => {
+          receipt.error = error.message;
+        });
+        child.once('close', (code, signal) => {
+          receipt.exitCode = code;
+          receipt.signal = signal;
+          done();
+        });
+      });
+    } finally {
+      closeSync(stdout);
+      closeSync(stderr);
+    }
+    receipt.finishedAt = new Date().toISOString();
+    receipt.status = 'completed';
+    const body = existsSync(report) ? readFileSync(report, 'utf8').replace(/^\uFEFF/, '') : '';
+    receipt.reportHash = existsSync(report) ? hash(readFileSync(report)) : null;
+    receipt.valid =
+      receipt.exitCode === 0 &&
+      receipt.signal === null &&
+      receipt.error === null &&
+      reportComplete(spec.phase, body);
+    if (!receipt.valid)
+      receipt.quota = quotaFailure(
+        body +
+          '\n' +
+          readFileSync(join(attempt, 'stderr.log'), 'utf8') +
+          '\n' +
+          (spec.output === 'file' ? readFileSync(join(attempt, 'stdout.log'), 'utf8') : ''),
+      );
+    // The wrapper writes completion even when the coordinating agent no longer exists.
+    atomicJson(receiptPath, receipt);
+    if (receipt.quota) {
+      await updateState(spec.run, (saved) => {
+        saved.status = 'interrupted';
+        saved.interruption = receipt.quota;
+        saved.nextAction = `Resume ${spec.phase} in round ${spec.round} after usage resets`;
+      });
+      publishInterrupted(spec.run, spec.resultFile);
+    }
+    return { receipt, path: receiptPath };
+  } finally {
+    await release();
+  }
+}
+
+export function interruptedResult(run: string): Record<string, Json> {
+  const state = loadState(run);
+  return {
+    ...state.report,
+    status: 'interrupted',
+    pr: state.pr,
+    headSha: state.remoteSha,
+    fast: state.fast,
+    cli: state.report.cli ?? { codex: null, claude: null },
+    mainMerge: state.report.mainMerge ?? 'not-run',
+    workTree: state.report.workTree ?? null,
+    roundCount: state.round,
+    rounds: state.history,
+    noticed: state.report.noticed ?? [],
+    ci: {
+      reruns: 0,
+      attempts: 0,
+      fixCommits: [],
+      ...(record(state.ci.data) ? state.ci.data : {}),
+      status: state.ci.status,
+      headSha: state.ci.headSha,
+      needsReview: state.ci.needsReview,
+    },
+    stopReason: state.interruption?.reason ?? 'Coordinator ended before producing a final result',
+    resume: {
+      checkpoint: state.run,
+      phase: state.phase,
+      round: state.round,
+      reason: state.interruption?.reason ?? 'Coordinator interrupted',
+      reset: state.interruption?.reset ?? null,
+      command: `$review-pr ${state.pr} --resume ${JSON.stringify(state.run)}`,
+    },
+  };
+}
+
+export function publishInterrupted(run: string, copy?: string): Record<string, Json> {
+  const result = interruptedResult(run);
+  atomicJson(contained(run, join(run, 'result.json')), result);
+  if (copy) {
+    // The exact caller destination is authorized by Result file; reject linked paths.
+    if (!isAbsolute(copy)) throw new Error('Result file must be an absolute scratch path');
+    atomicJson(contained(parse(copy).root, copy), result);
+  }
+  return result;
+}

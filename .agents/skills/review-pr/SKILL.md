@@ -1,11 +1,13 @@
 ---
 name: review-pr
-description: Review a pull request (by PR number or branch, or the current branch's) until it's clean and CI is green, working in that PR's worktree (created if missing, or a detached work tree when it can't be used) whatever directory it was started from. First merges origin/main into the branch, resolving conflicts. Each round, Claude Code (Opus 5.5, high effort) reviews with the repo's review-pr skill, a separate Sol 6.1 max-effort run validates every finding, and this session fixes, commits and pushes the valid ones; rounds continue until one is clean. Then failing CI is fixed until green. Never pauses; never merges. Use when the user invokes $review-pr [--fast] [<PR number | branch>] or asks Codex to get a Claude review of this branch's PR and fix what holds up.
+description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews, Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
 # Claude review → Codex validation → fixes, until clean, then CI
 
-Treat invocation of `$review-pr` as authorization to run the whole flow: opening the branch's PR if it has none, creating the PR branch's worktree (or a detached work tree) if needed, merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish` when tiles conflict) and pushing, review rounds until one is clean (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate until CI is green (CI fixes, commits and pushes). Do not ask for confirmation between steps. Never pause: see "Ends" below. Never merge the PR.
+Treat invocation of `$review-pr` as authorization to run the whole flow: opening the branch's PR if it has none, creating the PR branch's worktree (or a detached work tree) if needed, merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish` when tiles conflict) and pushing, review rounds until one is clean (Claude's review, the validation run, the fixes, commits and pushes to the PR's branch), then the CI gate until CI is green (CI fixes, commits and pushes). Do not ask for confirmation between steps. Usage exhaustion ends with saved progress: see "Ends" below. Never merge the PR.
+
+Read [recovery.md](references/recovery.md) before initialization or launching a process. Its checkpoint protocol applies throughout this skill, including delegated coordinators and model relaunches. `<state-tool>` is `<repo>/scripts/pr-review-state.ts`; run it from the skill checkout so branches predating the helper still work.
 
 ## Models
 
@@ -29,12 +31,16 @@ Always pass these explicitly. Never change them or fall back to another model.
 
   `--fast` doesn't change Claude or this session.
 - `Result file: <path>`: a caller such as `$sync-review` passes this. Write the final result JSON there (step 7).
+- `--fresh`: start an independent review, retaining earlier invocations. Do not duplicate an active review process.
+- `--resume <run-path>`: select that checkpoint or verifiable legacy invocation. With no PR argument, resolve the PR from its saved identity; reject a mismatched explicit target. Reject combining `--fresh` and `--resume`.
+- `Worker checkpoint: <run-path>`: internal delegated invocation only. Attach to the caller's initialized checkpoint after verifying its repository, PR and branch. Do not initialize a second invocation or mistake the supervising coordinator receipt for another reviewer.
 
 ## Ends
 
 A run ends only when:
 
 - **the work is done:** `clean`;
+- **usage is exhausted:** `interrupted`, with checkpoint, phase, round, literal reset information and resume command. Save immediately rather than spending the Retry window on a known exhausted quota. Do not schedule a restart; a new invocation resumes it. A coordinator that ends abruptly may have no final result; its last checkpoint and process receipts still support recovery.
 - **there is nothing to do:** no open PR and no branch commits to open one from, or the PR is already merged or closed (`error`, with that reason);
 - **a tool is missing:** `cli:latest` can't resolve `codex` or `claude`, `gh` isn't authenticated, the repo lacks `.claude/skills/review-pr/SKILL.md`, a needed tool such as tippecanoe can't run natively or through Docker, or the network or a model stays unavailable through the whole Retry window (`error`).
 
@@ -42,11 +48,12 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
 
 ## Shared patterns
 
-- **Retry.** When a CLI process exits nonzero (including "model at capacity", rate limits and network errors), writes no report or a malformed one, or a `git fetch`, network `git push` or `gh` call fails, rerun the same command with the same model, effort and input, writing process output to a fresh `attempt-<n>/` subfolder. Back off 1, 2, 4, 8, 15, 15… minutes, up to 60 minutes in total, printing a progress line before each wait. A retry never counts as a round. Never switch models. Only when the window runs out does the failure count as a missing tool.
+- **Retry.** In this PR review and delegation into it, check the process receipt for explicit usage exhaustion first and propagate `interrupted`. Temporary capacity errors, generic rate limits, network errors, missing reports and malformed reports still use Retry. When a CLI process exits nonzero, or a `git fetch`, network `git push` or `gh` call fails, rerun the same command with the same model, effort and input, writing process output to a fresh `attempt-<n>/` subfolder. Back off 1, 2, 4, 8, 15, 15… minutes, up to 60 minutes in total, printing a progress line before each wait. A retry never counts as a round. Never switch models. Only when the window runs out does the failure count as a missing tool. Other skills' own handoff reviewer retry policies are unchanged.
 - **Detached work tree.** When the branch's worktree can't be used (its branch is checked out in `<main-checkout>`, its path is occupied by a folder of unknown origin, a merge would touch its uncommitted files, it is behind and dirty, or its local branch has diverged from `origin/<branch>`), leave it untouched. Create `<main-checkout>/worktrees/pr<N>` (a caller without a PR uses `<main-checkout>/worktrees/<short>-work`) with `git -C <main-checkout> worktree add --detach <path> origin/<branch>`, then run `pnpm install --frozen-lockfile --prefer-offline`, `pnpm data:fetch` and `pnpm.cmd exec tsx "<repo>/scripts/claude-worktree-settings.ts"` in it. Work there and push with `git push origin HEAD:<branch>`. If that path is already a detached tree, reuse it when it is clean and `git merge --ff-only origin/<branch>` succeeds; otherwise use the next free `-<k>` suffix. Report the path and the untouched worktree's state. `$merge-pr` removes it with `git worktree remove` once the PR merges.
 - **Decide, don't stall.** For two claims or fixes that contradict each other, a finding that recurs after it was fixed, or a fix that would revert an earlier one, read the evidence on both sides, choose or combine, and record the decision and its reason (in the commit body and the round's record). Add the losing claim to `rejected.md` (or the ledger) so it doesn't come back. Never stop for it.
 - **Carry, don't stop.** Something that still can't be made to work after real attempts, such as a fix whose test won't pass or a gate that won't meet its target, is committed as far as it works. List it in the PR body under "Open review entries", with what was tried, and continue.
 - **Relaunch on the wrong model.** A skill that requires a Sol 6.1 (`gpt-6.1-sol`) xhigh session may be started from a different model or effort. It then resolves `<codex>` (`pnpm.cmd -C <repo> --silent cli:latest codex`) and starts itself with `& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C '<same directory>' '<the same invocation and arguments>'`, relaying that run's report and result. It never asks the user to restart.
+  For a PR review relaunch, use the recovery reference's initialized coordinator wrapper and `Worker checkpoint` prompt, so usage exhaustion is recorded even without a final model report. Preserve the same public arguments. Other skills' own relaunch commands retain their existing behavior.
 
 ## Rules
 
@@ -55,25 +62,26 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
 - **Windows:** stdout is captured with `Out-File -Encoding utf8`, never a plain `>`, which writes UTF-16.
 - **Long commands:** if the shell tool can't hold a command for its timeout, start it in the background with output going to a log in `<scratch>`, and poll until it exits.
 - **On "end with `error`"**, skip straight to step 7 with that status and a `stopReason`. Only the cases under "Ends" do this.
+- **On `interrupted`**, use the recovery reference to publish the checkpoint result, then step 7 to update the index and report. Preserve scratch and working changes. A result or receipt from an earlier invocation is reusable only under the reference's provenance and commit checks.
 
 ## 1. Resolve the branch's PR
 
 1. `<skill-dir>` is the absolute folder holding this loaded `SKILL.md`; `<repo>` is its checkout (`<skill-dir>/../../..`). Confirm the repo has the Claude skill: `.claude/skills/review-pr/SKILL.md`. If it is missing, end with `error` (missing tool).
-2. Find the PR. The fields are `number,title,headRefName,headRefOid,baseRefName,url,state`.
+2. Find the PR. The fields are `number,title,headRefName,headRefOid,baseRefName,url,state`. Resolve `--resume` identity before choosing a PR; a saved PR never falls back to a different open PR.
    - **With a `<PR number | branch>` argument:** strip a leading `#` or `origin/`, then `gh pr view <arg> --json <fields>`. If its `state` is `MERGED` or `CLOSED`, end with `error` (`PR #<N> is <state>`: nothing to do). If a branch has no PR, open one (below).
    - **Without one:** run `git branch --show-current`, then `gh pr view --json <fields>`.
      - If the current branch isn't `main` and has no PR, open one (below). Never fall back to another PR: a caller running in a task worktree must get its own branch's PR.
      - If the current branch is `main` (the user started it from the main checkout), run `gh pr list --state open --json number,headRefName,title,updatedAt`. Use the most recently updated open PR whose head branch has a worktree in `git worktree list`, or the most recently updated open PR when none has one. Say which, and list the others as `$review-pr <N>  # <branch> — <title>` lines. With no open PR at all, end with `error` (nothing to do).
    - **Opening a PR:** the branch must have commits that `origin/main` lacks; if it has none, end with `error` (nothing to do). Push it (`git push -u origin <branch>`) if `origin/<branch>` is missing or behind. Write a body to a file in the OS temp folder and run `gh pr create --base main --head <branch> --title "<title>" --body-file <file>`. Title: a gitmoji + conventional header summarizing the branch's commits since `main`. Body: what the branch does, from its commits and its handoff (if `.plans/README.md` lists it), plus the checks its handoff names, without claiming tests that weren't run. Then read the new PR's fields.
-3. Go to the PR's worktree. `<main-checkout>` is the first entry of `git worktree list --porcelain`. `<pr-checkout>` is the entry whose branch is `headRefName`.
+3. Go to the PR's worktree. `<main-checkout>` is the first entry of `git worktree list --porcelain`. `<pr-checkout>` is the entry whose branch is `headRefName`. Inspect the saved checkpoint before fast-forwarding, pushing, selecting a detached tree, or replacing a baseline. Preserve verified owned WIP; unfamiliar edits retain the protections below. A pending commit or push is reconciled with Git before repeating it.
    - If `headRefName` is checked out in `<main-checkout>`, use a detached work tree (Shared patterns) as `<pr-checkout>`; the main checkout stays untouched.
    - If no worktree has it, create one as AGENTS.md's Git section says. `<short>` is `headRefName` without `codex/` and with `/` replaced by `-`. Run `git -C <main-checkout> fetch origin <headRefName>`. Then, if the local branch exists: `git -C <main-checkout> worktree add <main-checkout>/worktrees/<short> <headRefName>`. Otherwise: `git -C <main-checkout> worktree add --track -b <headRefName> <main-checkout>/worktrees/<short> origin/<headRefName>`. In the new worktree, run `pnpm install --frozen-lockfile --prefer-offline`, `pnpm data:fetch` and `pnpm.cmd exec tsx "<repo>/scripts/claude-worktree-settings.ts"`. Use the initializer from the skill checkout even when the PR branch predates it; keep the new worktree as the command's working directory. If the path is already occupied by a folder of unknown origin, don't reuse it: use a detached work tree instead.
    - For existing worktrees too, run `git -C <pr-checkout> fetch origin <headRefName>` (with Retry) before comparing `HEAD` with `origin/<headRefName>`.
    - If the local branch is behind the fetched remote (different heads, and `git -C <pr-checkout> merge-base --is-ancestor HEAD origin/<headRefName>` succeeds), fast-forward when `git -C <pr-checkout> status --porcelain` is empty: `git -C <pr-checkout> merge --ff-only origin/<headRefName>`. A behind, dirty worktree, or a fast-forward that fails, switches to a detached work tree at `origin/<headRefName>`. Leave the dirty files untouched and name them in the report.
    - If the local branch is ahead of the remote (unpushed commits on the PR's branch), push them first. If neither head is an ancestor of the other, use a detached work tree at `origin/<headRefName>`, leave the local branch alone, and report both SHAs.
    - Say which PR (#, branch) and `<pr-checkout>` this run uses, and whether it is a detached work tree, in the first lines of output. In a detached work tree, every `git push` in this skill is `git push origin HEAD:<headRefName>`.
-4. Create the review root `<main-checkout>/.plans/active/pr<N>-review-fixes/` if needed, then create a **new, unique invocation folder** beneath it (for example `run-<timestamp>-<uuid>/`). Set `<scratch>` to that fresh folder, refusing any already-existing invocation path. `.plans/` is gitignored. Put this invocation's baseline, rounds, rejected entries, logs and results there. Never reuse earlier round output or delete another invocation's files. Earlier runs remain available until `$merge-pr` cleans the review root.
-5. Save the baseline: `git -C <pr-checkout> status --porcelain` → `<scratch>/status-baseline.txt`. Other sessions may have uncommitted edits. Leave them alone.
+4. Fetch `origin/main` and refresh the PR head, then initialize with the recovery reference's `init` command (or attach to `Worker checkpoint`). Set `<scratch>` to the returned new invocation path. It automatically selects the latest valid checkpoint or imports verifiable legacy work; explicit `--fresh` starts independently. Earlier invocation files remain read-only. Report the recovered phase and source invocation. Carry the cumulative round numbers, history and rejected decisions.
+5. Save `<scratch>/status-baseline.txt` from the checkpoint's baseline status when resuming; on a fresh run use `git status --porcelain=v1 -z --untracked-files=all`. Use this same NUL-separated form for baseline comparisons. Verified owned WIP is tracked separately from baseline edits. Never adopt all current dirty files as the review's own changes.
 6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used. Then resolve the binaries (PowerShell; `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`). `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`):
 
    ```
@@ -83,7 +91,8 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
 
    Check `$LASTEXITCODE` immediately after each command. If either fails, end with `error` (missing tool). Set `<codex>` and `<claude>` to the absolute paths each prints on stdout, and retain them in session context, like `<scratch>` and `<speed>`. Each prints `<tool> <version> <path>` on stderr; note both versions for the report. Shell variables do not survive separate tool calls: replace these placeholders with the resolved paths in every later command, keeping the single quotes around them for paths containing spaces.
 7. **Merge origin/main.** Claude reviews the branch as it will merge, so bring in `main` first. Every flow merges `main` with this one procedure: `$implement-handoff` before implementing, `$sync-review` through this skill, and `$merge-pr` when `main` moves again before the merge. Work in `<pr-checkout>`.
-   1. `git -C <pr-checkout> fetch origin main`. If `git -C <pr-checkout> merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and go to section 2 (Round k).
+   Save a checkpoint before and after synchronization. Finish a pending merge only when its saved operation and `MERGE_HEAD` establish ownership. If synchronization changes HEAD, preserve historical records and review the new commit in a new round. Otherwise dispatch to the recovered phase; do not restart at round 1. A saved clean result requires local HEAD to equal the refreshed PR head, current main ancestry, and a fresh GitHub CI check before it can be reported clean.
+   1. `git -C <pr-checkout> fetch origin main`. Record the fetched main SHA. If `git -C <pr-checkout> merge-base --is-ancestor origin/main HEAD` succeeds, set `mainMerge` to `current`, skip the rest of step 1.7, and dispatch to the recovered phase (section 2 for a new review).
    2. If the merge would touch a file listed in the baseline, those are another session's uncommitted edits: never merge over them. Switch to a detached work tree (Shared patterns), make it `<pr-checkout>` for the rest of the run with an empty baseline, and merge there.
    3. `git -C <pr-checkout> merge origin/main --no-ff -m "🔀 merge(<scope>): sync <topic> with main"`.
       - `<scope>` is the most common scope among the branch's recent commits.
@@ -101,39 +110,40 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
       - Run `pnpm run test --changed`, plus `pnpm --filter @atlas/<pkg> typecheck` for every package with a resolved file. Fix every failure the resolution causes, and rerun until they pass. A failure that also happens on plain `origin/main` (check its CI with `gh run list --branch main`) isn't from the merge: note it for the report and continue.
       - Commit the merge with the message from 3, plus its `Conflict decisions:` body when there is one.
    6. A tool the resolution needs gets every fallback first: tippecanoe through Docker (`packages/data/README.md`), network steps through Retry. Abort only when it is still missing (no tippecanoe natively or in Docker, or no `gh` auth for `data:publish`): run `git merge --abort`, then end with `error` and stopReason `merge tool unavailable: <tool> — <files>`. Set `mainMerge` to `aborted`. A conflict alone is never a reason to abort.
-   7. `git push` (with Retry; if it is rejected because the remote moved, fetch, merge `origin/<headRefName>` and push again). Set `mainMerge` to `merged` (or `resolved <n> files` when there were conflicts).
+   7. `git push` (with Retry; if it is rejected because the remote moved, fetch, merge `origin/<headRefName>` and push again). Refresh and checkpoint `remoteSha` after the push. Set `mainMerge` to `merged` (or `resolved <n> files` when there were conflicts).
 
 ## 2. Round k: Claude reviews the PR
 
-Rounds start at k = 1. Each round has its own folder, `<scratch>/round<k>/`. Refresh `headRefOid` with `gh pr view` at the start of every round.
+Rounds start at k = 1 for a new review; recovery retains the saved k. Each round has its own folder, `<scratch>/round<k>/`. Refresh `headRefOid` with `gh pr view` at the start of every round. Launch through the recovery reference's `run` wrapper using the command arguments below; it creates a unique attempt folder, captures UTF-8 output and writes an independent receipt. A verified completed reviewer receipt at this head skips directly to validation.
 
 Run from `<pr-checkout>`, with a shell timeout of at least 20 minutes:
 
 ```
-& '<claude>' -p "/review-pr <N> --report-only" --model claude-opus-5-5 --effort high --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 <scratch>/round<k>/claude-review.md
+pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-input.json
 ```
 
-- Use exactly these flags. Never change the model or effort, or drop a flag.
-- From round 2 on, if `<scratch>/rejected.md` exists, add `--append-system-prompt (Get-Content -Raw <scratch>/rejected.md)` to the command (PowerShell).
-- `--report-only` keeps the Claude skill from editing. Afterwards, compare `git -C <pr-checkout> status --porcelain` with the baseline. If anything changed, record the difference in the round's record, never revert or stage it, and add it to the baseline.
-- Require a successful Claude exit status and this invocation's newly written `claude-review.md`. Capture the native command's exit code immediately after it finishes, before any other command. If it failed, or the new file has no `**Verdict:**` line, Retry. Never consume another run's output. Do not review the PR yourself instead.
+- Use the reference's exact Claude arguments. Never change the model or effort, or drop a flag. Combine the pinned head instruction and saved rejection text in one `--append-system-prompt` argument.
+- `--report-only` keeps the Claude skill from editing. Afterwards, compare `git -C <pr-checkout> status --porcelain=v1 -z --untracked-files=all` with the baseline. If anything changed, record the difference in the round's record, never revert or stage it, and protect the unfamiliar changes with the reference's `protect` command.
+- Require a successful native exit and a complete report with a verified receipt and unchanged PR head. A newly launched process uses its new report; a recovered receipt must pass the reference's checks. Quota receipt or wrapper exit 75 → `interrupted`; other failed or incomplete attempts → Retry. Use the receipt's report path as `<claude-report>` in validation. Do not review the PR yourself instead.
 
 ## 3. Round k: validate Claude's review (Codex #1: Sol 6.1, max, analysis only)
 
 Run from `<pr-checkout>`, with a shell timeout of at least 30 minutes. `<skill-dir>` is the absolute path of the folder holding this `SKILL.md` (`.agents/skills/review-pr/` in the checkout Codex loaded it from).
 
+Launch through `run` as in the recovery reference. Replace the `-o` output with `{report}` and pass `<claude-report>` as the input report. A recovered successful validator receipt skips to fixes.
+
 ```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="max"' <speed> -s danger-full-access -C <pr-checkout> -o <scratch>/round<k>/validation.md "Follow <skill-dir>/references/validate-prompt.md exactly. PR: #<N> (<url>), head <headRefOid>, base <baseRefName>. Claude's review: <scratch>/round<k>/claude-review.md."
+pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/validation-input.json
 ```
 
 - Never change the model, effort or speed flags, and never skip this run to validate in this session instead.
-- Afterwards, compare `git -C <pr-checkout> status --porcelain` with the baseline. Gitignored test caches don't show up. If anything changed, record it, never revert or stage it, and add it to the baseline.
-- Require a successful validator exit status and this invocation's newly written `validation.md`; capture the native command's exit code immediately, before any other command. If the command failed, the file is missing, or it has no validation table, Retry. An older valid table from another invocation cannot substitute for a failed run.
+- Afterwards, compare `git -C <pr-checkout> status --porcelain=v1 -z --untracked-files=all` with the baseline. Gitignored test caches don't show up. If anything changed, record it, never revert or stage it, and protect unfamiliar changes with `protect`.
+- Require a successful native exit and a complete validation report whose receipt matches the reviewed commit and unchanged PR head. Recover completed validation only under the reference's checks; a failed fresh process cannot be replaced by an unrelated older table. Quota receipt or wrapper exit 75 → `interrupted`; other failures → Retry. Use the receipt's report path as `<validation-report>` below.
 - Append this round's `invalid` entries to `<scratch>/rejected.md`, one per line: `path:line — claim`. When creating the file, start it with this line: "Entries below were already judged invalid in earlier review rounds. Don't report them again unless the cited code has changed since."
 
 ## 4. Round k: implement the valid entries
 
-Read `validation.md`. A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round, just as if Claude had reported it. Add it to this round's entries (`claudeSeverity: null`, `verdict: "valid"`, the validator's severity as `finalSeverity`) and fix it with the others; never stop for it. Then check these before editing anything:
+Read `<validation-report>`. A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round, just as if Claude had reported it. Add it to this round's entries (`claudeSeverity: null`, `verdict: "valid"`, the validator's severity as `finalSeverity`) and fix it with the others; never stop for it. Save `begin` and `finish` checkpoints for each fix, check, commit and push as the recovery reference describes. Continue verified completed fix steps; unfamiliar or uncheckpointed edits remain untouched. Then check these before editing anything:
 
 - **No valid blocker or should-fix** (including noticed ones): the round is **clean**. Fix any valid nits as below, then go to step 6.
 - **A fix step needs files outside the PR's diff:** that's allowed. Find out why the fix reaches them (a caller, a shared helper, a test fixture), keep the change scoped to the entry, and record the reason in the commit message and in the entry's `outOfDiff` field.
@@ -145,11 +155,12 @@ Otherwise, work in `<pr-checkout>` on the PR's head branch:
 1. Follow the fix steps in order: blockers, then should-fix, then nits. Scope each change to its entry. Follow `AGENTS.md` conventions.
 2. After each step, run that step's targeted test: the named Vitest file, or `pnpm run test --changed`. Fix a failure before moving on. If a fix can't be made to pass, try other approaches. If none passes, keep the part that passes (or revert only your own edit for that entry), mark the entry `open` with what was tried, and Carry, don't stop: add it to the PR body's "Open review entries" section (`gh pr edit <N> --body-file`). The round goes on.
 3. Once at the end of the round, run the checks from the `AGENTS.md` "Verifying changes" table that cover the touched files. Leave the full suite to CI.
-4. Before committing, run `git status` and `git branch`. Confirm the branch is still the PR's head branch. Stage only the files you changed, by explicit path. If a file you must stage also holds someone else's uncommitted edits from the baseline, don't commit it. Report it instead.
+4. Before committing, run `git status` and `git branch`. Confirm this is the PR's head branch or its initialized detached checkout. Stage only the files you changed, by explicit path. If a file you must stage also holds someone else's uncommitted edits from the baseline, don't commit it. Report it instead.
 5. Commit with a gitmoji + conventional message that matches `git log` (e.g. `🐛 fix(renderer): …`). Use one commit, or one per area if the fixes are unrelated.
-6. Push to the PR's branch with a plain `git push`. If the fixes change what the PR description says, update it with `gh pr edit <N> --body-file`.
+6. Push to the PR's branch with a plain `git push`, then refresh and checkpoint `remoteSha`. If the fixes change what the PR description says, update it with `gh pr edit <N> --body-file`.
 
 Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeVerdict, entries, noticed, commits}` (shape in step 7).
+Also record it in checkpoint `history`, with findings, noticed items, rejected decisions, commits and the next phase, before starting another round.
 
 ## 5. Review loop (until clean)
 
@@ -161,6 +172,8 @@ After each round:
 Nits are fixed when they come up. New nits alone never start another round, because a round whose only valid entries are nits is clean.
 
 ## 6. CI gate (until green)
+
+Checkpoint CI attempts, reruns and fixes. Record `pending` while waiting, the checked head, and `needsReview: true` after a non-test source fix. Save completed local check commands and the working-tree hash in operation data; reuse them only when that hash still matches. GitHub CI is always rechecked against the current remote head on recovery.
 
 1. Wait until the PR has checks for its current head SHA (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch`, with a shell timeout of at least 30 minutes. If everything passes:
    - If a CI fix in this run touched non-test source code and no review round has run since that fix, go to 3.
@@ -239,10 +252,12 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 - `workTree`: `null`, or the detached work tree's path and why the PR's worktree wasn't used.
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.
 - `noticed`: every round's "Noticed, not in Claude's review" items, with the validator's severity. Blockers and should-fix items among them also appear as that round's entries.
-- `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), or `not-run` (the run ended with `error` before step 6).
+- `ci.status`: `green` (passed with no fixes), `fixed` (passed after fix commits), `pending` (unfinished checks on an interrupted run), or `not-run` (the gate has not run for this head).
 - `status`:
   - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from entries carried as `open`) and CI passed (`ci.status` is `green` or `fixed`).
   - `error`: only a case under "Ends": nothing to do (no PR and nothing to open one from, or the PR is merged or closed), or a missing tool. `stopReason` names it.
+  - `interrupted`: usage exhaustion or an abruptly ended coordinator. `resume` is `{checkpoint, phase, round, reason, reset, command}`; `reset` is the literal reported reset string or null. Completed historical rounds remain in `rounds`; unfinished fixes are described in checkpoint operations. No clean result is implied for WIP. `resume` is null on normal final results.
+- Record final status, reporting metadata and CI state in the checkpoint before writing the final result. Interrupted publication uses the helper's `interrupt` command; the process wrapper also publishes a canonical interrupted result immediately on quota failure, even if the coordinator ends before reporting.
 - Always write the final JSON object to `<scratch>/result.json` at the invocation root, distinct from the per-round records. If a `Result file` was given, also write the identical object to that path. Write only the object, without the fence, to both files.
 
 Then, in `<main-checkout>/.plans/README.md`, set the **PR review** cell of every row whose Evidence names the PR's branch or `#<N>` (the original task row and this `pr<N>-review-fixes` row) to `<status> <roundCount> rounds · CI <ci.status> · <short headSha> · <YYYY-MM-DD>` (for example `clean 2 rounds · CI green · d0c7322 · 2026-10-05`), adding `· <n> open` when entries were carried. Existing rows change only that cell; the caller owns their Status and Next step. If the `pr<N>-review-fixes` row is missing, create it with these seven cells: Task `active/pr<N>-review-fixes/`, Status `PR review record`, Handoff review `not run`, PR review the final formatted value, Evidence `PR #<N> / <headRefName> / <pr-checkout> / <scratch>`, Keep `None`, and Next step `Retain review scratch until $merge-pr cleanup`. These defaults apply only when creating the row.

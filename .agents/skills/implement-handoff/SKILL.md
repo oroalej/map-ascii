@@ -1,6 +1,6 @@
 ---
 name: implement-handoff
-description: Take an ASCII Atlas handoff from two-round review to PR. Run $review-handoff --apply (Codex first, then Claude with Codex validation), implement the reviewed handoff, commit and push, open a PR to main, then run $review-pr for synchronization, review and CI. Never pauses; never merges the PR. Use when invoked as $implement-handoff [--fast] with a task name or handoff path.
+description: Take an ASCII Atlas handoff from two-round review to PR, implementation, synchronization, resumable PR review and CI. Retains progress when delegated PR review exhausts usage; never merges. Use for $implement-handoff [--fast] with a task name or handoff path.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
@@ -17,7 +17,7 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 - opening a PR to `main`
 - running `$review-pr`, which synchronizes `main` into the branch, commits and pushes fixes and CI fixes
 
-Don't ask for confirmation between steps. **Never pause.** The only ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no such handoff, or the work already landed on `main`) and a missing tool. Its Shared patterns (Retry, Detached work tree, Decide, don't stall, Carry, don't stop, Relaunch on the wrong model) apply here. The handoff's "Stop and report if" conditions are problems to solve, not stops. Never merge the PR.
+Don't ask for confirmation between steps. An interrupted delegated PR review ends this invocation with saved progress; the handoff review keeps its existing retry policy. Other ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no such handoff, or the work already landed on `main`) and a missing tool. Its Shared patterns (Retry, Detached work tree, Decide, don't stall, Carry, don't stop, Relaunch on the wrong model) apply here. The handoff's "Stop and report if" conditions are problems to solve, not stops. Never merge the PR.
 
 ## Models
 
@@ -138,16 +138,17 @@ For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SK
 
 ## 5. Run $review-pr
 
-Start it once, in a fresh Codex PR-review coordinator, with a shell timeout of at least 4 hours:
+Read `<skill-dir>/../review-pr/references/recovery.md` and follow its delegated coordinator protocol. Initialize the PR identity/current head (automatic recovery), then run the coordinator through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<scratch>/review.json"`. Use the exact model/effort/speed arguments below, substitute `{report}` for the output path, and add `Worker checkpoint: <review-scratch>` to the prompt. Allow at least 4 hours:
 
 ```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <scratch>/review.md 'Use the review-pr skill at <skill-dir>/../review-pr/SKILL.md, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <scratch>/review.json.'
+pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input.json
 ```
 
-Read `<scratch>/review.json`. If it's missing, use the `review-pr-result` block at the end of `review.md`. If neither exists (the process failed), Retry the run. `$review-pr` has already written the PR review cell of the task's row.
+Read `<scratch>/review.json`, or the canonical checkpoint result. If missing, inspect the process receipt and checkpoint before Retry. Await a live child; a dead coordinator retry initializes a continuation without repeating verified review/validation. A quota receipt or wrapper exit 75 is interrupted, including when no final model report exists. `$review-pr` writes the task's PR review cell when it can report.
 
 - `clean` (review clean and CI green): go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
 - `error` (a missing tool): the PR stays open. Set the row's Next step to its `stopReason`. The folder stays in `active/`.
+- `interrupted`: report the checkpoint, reset information and resume command; set the row's Next step accordingly. Leave the task active, preserve WIP and scratch, and end without marking implementation complete or retrying the exhausted process.
 
 ## 6. Report and clean up
 
@@ -166,4 +167,5 @@ Then, per `AGENTS.md`:
   - `clean` with every gate met and no open review entries: move `<task-dir>` to `.plans/done/`, and set its row to Complete, with the PR # and the final commit.
   - `clean` with an unmet gate or open review entries: leave the folder in `active/`. Set Status to `PR open; gate unmet` (or `PR open; <n> open review entries`) and Next step to the gate and its latest numbers, or the entries.
   - Ended early for a missing tool: leave the folder in `active/`, with the row's Next step naming the tool.
+  - Interrupted review: leave the folder in `active/`, with the row's Next step naming the checkpoint and continuation command. Existing unmet gates and open entries remain in effect on the next invocation.
 - **Scratch:** leave it in `<task-dir>`. `$merge-pr` deletes it with `pnpm plans:clean` when the PR merges, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands: Codex rejects recursive deletes as "blocked by policy".

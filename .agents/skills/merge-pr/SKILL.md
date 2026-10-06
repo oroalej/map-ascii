@@ -1,6 +1,6 @@
 ---
 name: merge-pr
-description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, merging origin/main into the branch first whenever main has moved and fixing CI when it fails, then clean up after it — delete its task scratch in .plans with pnpm plans:clean (keeping handoff.md and keep files), update the task's .plans row, and remove the local branch and its worktree folder with pnpm worktree:remove. The remote branch stays. Use when the user invokes $merge-pr [<branch>] [Head: <sha>], or when $sync-review reaches its merge step.
+description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, synchronizing main and fixing CI first. An interrupted delegated review retains progress before any merge. After merging, clean task scratch with pnpm plans:clean, update the task row, and remove its local branch and worktree with pnpm worktree:remove; the remote branch stays. Use for $merge-pr with an optional branch and Head SHA, or when $sync-review reaches its merge step.
 ---
 
 # Merge a PR, then clean up its scratch, branch and worktree
@@ -19,7 +19,7 @@ Invoking `$merge-pr` authorizes these actions, for that branch only:
 - deleting its task scratch in `.plans/` and its `pr<N>-review-fixes/` folder
 - deleting its local branch and its worktree folder
 
-Don't ask for confirmation between steps. Never pause. The only ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no PR, a closed PR, or `main` as the branch) or a missing tool. Retry, Detached work tree and the other cases there apply here too.
+Don't ask for confirmation between steps. An interrupted delegated PR review ends this invocation with its saved checkpoint, before merging or cleanup. Other ends are the ones in `<skill-dir>/../review-pr/SKILL.md` "Ends": nothing to do (no PR, a closed PR, or `main` as the branch) or a missing tool. Retry, Detached work tree and the other cases there apply here too.
 
 ## Rules
 
@@ -44,6 +44,7 @@ Don't ask for confirmation between steps. Never pause. The only ends are the one
 ## 2. Gate
 
 Each gate either passes or gets solved; none ends the run. `<skill-dir>` is the absolute folder of this `SKILL.md`.
+Exception: when gate 2 or gate 4 delegates into `review-pr`, use `<skill-dir>/../review-pr/references/recovery.md`'s initialized coordinator wrapper, preserving the exact review model/effort/speed settings. An `interrupted` result, quota receipt or wrapper exit 75 ends this merge invocation before the merge or cleanup. Return `merge-pr-result` with status `interrupted`, null mergeCommit, the review's `resume` object and stopReason. Preserve all task scratch/worktrees; the next invocation resumes the saved review. Inspect receipts before retrying an absent final result and await live children.
 
 1. **Pick `<work>`** (Rules). Uncommitted files in `<wt>` belong to the user or another session: they never block the merge, and a detached work tree keeps them untouched. Step 4's dry-run reports them for cleanup.
 2. **Pin the head.** Fetch `origin/<branch>` (with Retry). The PR's `headRefOid` is what gets merged; local-only commits in `<wt>` stay local, and cleanup reports them.
@@ -149,7 +150,7 @@ End with a fenced block tagged `merge-pr-result`, holding one JSON object:
 }
 ```
 
-- `status`: `merged` (the PR is merged, even if some cleanup failed), or `error` (only an "Ends" case: nothing to do, or a missing tool; nothing merged into `main`, though a main-sync merge may have been pushed to the branch).
+- `status`: `merged` (the PR is merged, even if some cleanup failed), `interrupted` (a delegated review exhausted usage or its coordinator ended; nothing merged or cleaned), or `error` (only an "Ends" case: nothing to do, or a missing tool). Interrupted results carry the review's `resume` object. A main-sync merge may already have been pushed to the branch.
 - `headSha`: the `<gated-sha>` that was merged.
 - `mainSyncs`: how many times gate 3 merged `origin/main` into the branch. The report lists each sync's `Conflict decisions:`, if any.
 - A cleanup entry that failed or was skipped says why, e.g. `"worktree": "partially deleted: in use by another process"` or `"plans": ["skipped: codex/x has local commits after the merge"]`.

@@ -1,6 +1,6 @@
 ---
 name: sync-review
-description: For each comma-separated branch, in order, commit and push its worktree, open a PR to main, delegate origin/main synchronization and review to $review-pr (Claude Opus 5.5 reviews, Codex Sol 6.1 validates and fixes), get CI green, and merge it with $merge-pr, which also deletes the task's scratch, local branch and worktree (the remote branch stays). Never pauses; a branch that ends with error only skips the branches stacked on it. Use when the user invokes $sync-review [--fast] <branches>.
+description: For each comma-separated branch, commit and push, open a PR, delegate synchronization and resumable review to $review-pr, get CI green, and merge with $merge-pr. Usage exhaustion retains progress and ends the loop. Other branch errors skip only branches stacked on them. Use for $sync-review with optional --fast and comma-separated branches.
 ---
 
 # Sync, review and merge branches
@@ -18,7 +18,7 @@ The user lists only branches that are safe to process. Invoking `$sync-review` a
 - merging the PRs into `main`, which deploys to production through Vercel
 - after each merge, deleting the task's `.plans` scratch, its local branch and its worktree folder (`$merge-pr`). Remote branches stay.
 
-Don't ask for confirmation between steps or branches. Never pause. The only ends are the ones in `<review-pr-skill>` "Ends": nothing to do or a missing tool. Retry, Detached work tree, Decide, don't stall, Carry, don't stop and Relaunch on the wrong model apply here too.
+Don't ask for confirmation between steps or branches. Propagate an interrupted delegated review immediately, retaining all task scratch and worktrees. Other ends are the ones in `<review-pr-skill>` "Ends": nothing to do or a missing tool. Retry, Detached work tree, Decide, don't stall, Carry, don't stop and Relaunch on the wrong model apply here too.
 
 ## Models
 
@@ -45,6 +45,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 ## Rules for every branch
 
 - **Keep going:** a branch ends unmerged only with an "Ends" `error` (nothing to do, or a missing tool). Then continue with the next branch, skipping only later branches whose PR base, or whose merge-base with `main`, is that branch's head (they're stacked on it): report them as `not processed: stacked on <branch>`. A missing tool that every branch needs (`gh` auth, `codex`) ends the loop, since no later branch could run either.
+- **Interrupted review:** `interrupted` ends the loop immediately. Report remaining branches as `not processed: review interrupted`, retain the original branch order in the report, and print the checkpoint and resume command. Do not merge, clean up, or repeatedly relaunch the exhausted coordinator.
 - **Git safety:** never check out, switch branches, stash, reset, rebase, force-push, use `git add -A`, `git add .` or `git commit -a`, or pass `--no-verify`. Run every command against the branch's worktree (`git -C <wt> …`, or with `<wt>` as the working directory).
 - **Windows:** prompts that contain `$` go in single quotes, and stdout is captured with `Out-File -Encoding utf8`, never a plain `>`.
 - **Long commands:** the `$review-pr` run can take several hours, and `gh pr checks --watch` 10+ minutes. If the shell tool can't hold a command that long, start it in the background with its output going to a log in `<run>`, and poll until it exits.
@@ -71,6 +72,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
    `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`). Use `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`. Check `$LASTEXITCODE` immediately; if non-zero, end with a missing tool. Set `<codex>` to the absolute path printed on stdout and retain it in session context, like `<run>` and `<speed>`. It prints `codex <version> <path>` on stderr; note the version for the report. Shell variables do not survive separate tool calls: replace `<codex>` with the resolved path in every later command, keeping its single quotes for paths containing spaces.
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
+For a branch whose existing PR has a saved incomplete review, inspect it with the review recovery reference before step 1. Skip steps 1 and 3 and continue at step 4: the review coordinator owns its unfinished fixes and verification. Do not commit that WIP through the generic commit step. A live saved coordinator is awaited.
 
 ## 1. Commit and push
 
@@ -94,17 +96,18 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 
 ## 4. Review until clean, with the CI gate ($review-pr)
 
-`$review-pr` runs the review loop (until a round is clean) and the CI gate (until green) itself. Start it once, in a fresh Codex #2:
+`$review-pr` runs the review loop and CI gate itself. Read `<skill-dir>/../review-pr/references/recovery.md`. Follow its delegated coordinator protocol: initialize with the PR identity and current head, then launch Codex #2 through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<run>/<slug>-review.json"`. Use the reference's exact model/effort/speed arguments and add `Worker checkpoint: <review-scratch>` to the prompt. Initialization automatically continues earlier verified work.
 
 ```
-& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C <wt> -o <run>/<slug>-review.md 'Use the review-pr skill at <review-pr-skill>, following it exactly, on this branch''s PR. Arguments: <--fast, or nothing>. Result file: <run>/<slug>-review.json.'
+pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-input.json
 ```
 
 - Shell timeout: at least 4 hours (review rounds plus CI). Background-and-poll as needed.
 - Read `<run>/<slug>-review.json`. If it's missing, use the `review-pr-result` block at the end of the `-o` file.
 - `status` is `clean` → go to step 5. Entries `$review-pr` carried as `open` are in the PR body and the report; they don't stop the branch.
 - `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going".
-- No result (the process failed or wrote nothing): Retry the run.
+- `interrupted`, quota receipt, or wrapper exit 75 → end the loop with saved progress; leave later branches unprocessed. Use the canonical checkpoint result if the requested copy is missing.
+- No result: inspect the checkpoint and receipt before Retry. Await a live child. A dead coordinator retry initializes a continuation; completed reviewer/validator work is preserved. Explicit quota exhaustion is never retried here.
 
 ## 5. Confirm CI
 
@@ -121,10 +124,11 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 3. Read its `merge-pr-result`.
    - `merged` → done. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
    - `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going". `$merge-pr` fixes CI and syncs `main` itself, so nothing else comes back.
+   - `interrupted` → propagate the saved review checkpoint and end the loop; do not run cleanup or later branches.
 
 ## 7. Note an unmerged branch in `.plans`
 
-Only when a branch ended with `error` before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and what needs a human. `$review-pr` has already set their PR review cell. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
+When a branch ended with `error` or `interrupted` before merging: in `<main-checkout>/.plans/README.md`, set the Next step of the rows that aren't in `done/` and whose Evidence names the branch to the stop reason and continuation command. `$review-pr` has already set their PR review cell when it could report. Don't move or clean anything. A merged branch's rows were already handled by `$merge-pr`.
 
 ## 8. Report
 
