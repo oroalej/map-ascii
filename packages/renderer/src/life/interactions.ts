@@ -584,12 +584,14 @@ export class LocalScenes {
       // A pedestrian can take a checked backward/sideways step when a heading
       // change has too little room. Keep the member frame and the exact route
       // progress; this is bounded by the same speed and swept physical guard.
+      const facing = before.momentFacing ?? before,
+        trialFacing = trial.momentFacing ?? trial;
       if (
         Math.hypot(trial.x - before.x, trial.y - before.y) > 1e-8 * this.perMeter &&
-        Math.hypot(trial.hx - before.hx, trial.hy - before.hy) > 1e-8
+        Math.hypot(trialFacing.hx - facing.hx, trialFacing.hy - facing.hy) > 1e-8
       ) {
         restoreMover(m, trial);
-        faceGroup(m, before.hx, before.hy);
+        faceGroup(m, facing.hx, facing.hy);
         if (guard(m, before)) {
           visit.next = trialNext;
           visit.trail.push(...addedTrail);
