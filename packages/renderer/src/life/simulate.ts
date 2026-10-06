@@ -826,7 +826,10 @@ export class TileLife {
     Mover,
     { x: number; y: number; hx: number; hy: number; ordinary?: boolean }
   >();
-  private readonly walkerRecoveryProgress = new WeakMap<Mover, number>();
+  private readonly walkerRecoveryProgress = new WeakMap<
+    Mover,
+    { travelled: number; blocked: number }
+  >();
   private readonly recoverySearchRetry = new WeakMap<Mover, number>();
   private readonly recoveryApproaches = new WeakMap<
     Mover,
@@ -5609,7 +5612,7 @@ export class TileLife {
           }
           if (recovered) {
             m.turnedAt = m.walked ?? 0;
-            this.walkerRecoveryProgress.set(m, 0);
+            this.walkerRecoveryProgress.set(m, { travelled: 0, blocked: 0 });
             const pose = this.pose(m);
             this.blockedProgress.set(m, { x: pose.x, y: pose.y, hx: m.hx, hy: m.hy });
             env?.diagnostics?.recovery(m, 'walker');
@@ -5640,10 +5643,19 @@ export class TileLife {
       }
       if (m.vehicle) m.v = Math.max(0, moved, curveForward) / dt;
       const walkingRecovery = isWalker(m.kind) ? this.walkerRecoveryProgress.get(m) : undefined;
-      if (walkingRecovery !== undefined && moved > 0) {
-        const travel = walkingRecovery + moved / this.perMeter;
-        if (travel >= 0.5) this.walkerRecoveryProgress.delete(m);
-        else this.walkerRecoveryProgress.set(m, travel);
+      if (walkingRecovery !== undefined) {
+        if (moved > 0) {
+          walkingRecovery.travelled += moved / this.perMeter;
+          walkingRecovery.blocked = 0;
+          if (walkingRecovery.travelled >= 0.5) this.walkerRecoveryProgress.delete(m);
+        } else if (!intentionalHold && distance > 1e-8 * this.perMeter) {
+          // An accepted reversal can have a blocked departure too. Allow
+          // another checked recovery after a full eligible wait, rather than
+          // requiring forward progress that the new obstacle makes impossible.
+          walkingRecovery.blocked += dt;
+          if (walkingRecovery.blocked >= WALK_RECOVERY.blockedTurnSeconds)
+            this.walkerRecoveryProgress.delete(m);
+        }
       }
       const recoveryProgress = m.kind === 'vehicle' ? this.recoveryProgress.get(m) : undefined;
       if (recoveryProgress !== undefined && moved > 0) {

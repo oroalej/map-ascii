@@ -1943,6 +1943,36 @@ it('keeps a two-person group moving after switching from minimum 1.45 to 2.9', (
   expect(m.walked).toBeGreaterThan(1.2);
 });
 
+it.each([0, 2.9])('retries a blocked reversed walker departure at minimum %s', (minimum) => {
+  const { world, life } = fixture(LifeLine.path, 1);
+  const walking = mover('person', 70, 1),
+    gap = (VEHICLES.car.length / 2 + 0.65) * pm,
+    front = { x: walking.x + gap, y: walking.y, hx: 1, hy: 0, vehicle: 'car' as const, paint: 0 },
+    rear = { ...front, x: walking.x - gap };
+  life.movers.push(walking);
+  life.parked.push(front, rear);
+  const group = walking.group,
+    member = group![0];
+  for (let frame = 0; frame < 450 && walking.dir === 1; frame++)
+    world.step(1 / 30, undefined, 18, undefined, undefined, undefined, minimum);
+  expect(walking.dir).toBe(-1);
+  const at = walking.x;
+  life.parked.splice(life.parked.indexOf(front), 1);
+  for (let frame = 0; frame < 900; frame++) {
+    const before = life.pose(walking);
+    world.step(1 / 30, undefined, 18, undefined, undefined, undefined, minimum);
+    const after = life.pose(walking);
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeLessThanOrEqual(
+      walking.speed / 30 + 1e-8,
+    );
+  }
+  expect(walking.x - at).toBeGreaterThan(pm);
+  expect(life.movers).toContain(walking);
+  expect(life.parked).toContain(rear);
+  expect(walking.group).toBe(group);
+  expect(walking.group![0]).toBe(member);
+});
+
 const guardFor = (world: LifeWorld, minimum: number) =>
   (
     world as unknown as {
