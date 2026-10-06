@@ -1,4 +1,4 @@
-import type { Procession } from '@atlas/shared';
+import { type Procession } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { featurePoint, routeProcessions } from './procession';
@@ -37,7 +37,8 @@ const features: F[] = [
   point('osm:node/13', [0.0029, 0.0017]),
 ];
 
-const procession = (route: Procession['route']): Procession => ({
+type Fluvial = Extract<Procession, { kind: 'fluvial' }>;
+const procession = (route: Fluvial['route']): Fluvial => ({
   id: 'procession/test',
   title: { en: 'Test' },
   story: { en: 'TODO(verify)' },
@@ -56,6 +57,54 @@ const procession = (route: Procession['route']): Procession => ({
 });
 
 describe('routeProcessions', () => {
+  it('resolves a following Mass first, retaining a nonzero offset and carrying midnight', () => {
+    const parent = {
+      ...procession({ to: 'osm:node/10', upstream_m: 200 }),
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: -8,
+        start: '23:30',
+        duration_min: 90,
+        timezone: 'Asia/Manila',
+      },
+    };
+    const mass: Procession = {
+      id: 'procession/mass',
+      title: { en: 'Mass' },
+      story: { en: 'Illustrative' },
+      status: 'draft',
+      kind: 'mass',
+      site: 'osm:node/10',
+      grounds: ['osm:way/20'],
+      radius_m: 100,
+      schedule: { follows: parent.id, duration_min: 60 },
+    };
+    const grounds: F = {
+      type: 'Feature',
+      properties: { id: 'osm:way/20', class: 'park' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0.0001, 0.0001],
+            [0.0007, 0.0001],
+            [0.0007, 0.0007],
+            [0.0001, 0.0007],
+            [0.0001, 0.0001],
+          ],
+        ],
+      },
+    };
+    const { routes, warnings } = routeProcessions([...features, grounds], [mass, parent]);
+    expect(warnings).toEqual([]);
+    expect(routes.find((route) => route.id === mass.id)?.schedule).toMatchObject({
+      offset_days: -7,
+      start: '01:00',
+      timezone: 'Asia/Manila',
+    });
+  });
   it('walks upstream along the same river, then runs downstream to the landing', () => {
     const { routes, warnings } = routeProcessions(features, [
       procession({ to: 'osm:node/10', upstream_m: 200 }),

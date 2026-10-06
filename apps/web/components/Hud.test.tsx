@@ -8,6 +8,8 @@ import { useLifeStore } from '@/state/life';
 import { useEmojiStore } from '@/state/emoji';
 import { useUiStore } from '@/state/ui';
 import { Hud } from './Hud';
+import { eventFixtures } from './procession-fixtures.test-utils';
+import { eventOccurrence, eventTime, type RuntimeSeasonConfig } from '@atlas/shared';
 
 function renderer() {
   const focus = vi.fn<(descriptor: LegendFocus | null) => void>();
@@ -59,10 +61,83 @@ beforeEach(() => {
   useAtlasStore.setState({ ...initialAtlasState(), camera: { lng: 0, lat: 0, zoom: 19 } });
   useLifeStore.setState({ enabled: false });
   useEmojiStore.setState({ enabled: true });
-  useUiStore.setState({ legendFocus: null, lifeHover: null });
+  useUiStore.setState({ legendFocus: null, lifeHover: null, processions: [], procession: null });
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+});
+it('keeps seasonal buttons in one row, preserves captions across seasons and restores the viewer clock', async () => {
+  const instance = renderer(),
+    stop = vi.fn(),
+    play = vi.fn(() => true);
+  Object.assign(instance.atlas, {
+    stopProcession: stop,
+    playProcession: play,
+    flyTo: vi.fn(),
+    getCamera: () => ({ zoom: 19 }),
+  });
+  const seasons: RuntimeSeasonConfig[] = [
+    {
+      id: 'feast',
+      title: { en: 'Feast' },
+      window: { from: { month: 9, day: 1 }, to: { month: 9, day: 30 } },
+    },
+    {
+      id: 'winter',
+      title: { en: 'Winter' },
+      window: { from: { month: 12, day: 1 }, to: { month: 12, day: 31 } },
+    },
+  ];
+  const legacy = {
+    ...eventFixtures[3]!,
+    id: 'legacy',
+    season: undefined,
+    label: undefined,
+    title: { en: 'Legacy river' },
+  };
+  useAtlasInstance.setState({ atlas: instance.atlas });
+  useLifeStore.setState({ enabled: true, time: 'night', season: 'feast' });
+  useUiStore.setState({ processions: [...eventFixtures, legacy] });
+  await act(async () => {
+    root.render(createElement(Hud, { city: 'test', subdivisionLabel: 'district', seasons }));
+    await Promise.resolve();
+  });
+  const buttons = () => [...container.querySelectorAll<HTMLButtonElement>('button')];
+  expect(buttons().filter((b) => b.textContent === '▶ Fluvial')).toHaveLength(1);
+  expect(buttons().some((b) => b.textContent === '▶ Legacy river')).toBe(true);
+  const timing = eventOccurrence(eventFixtures[0]!.schedule, new Date('2026-06-01'));
+  const run = (progress: number) => ({
+    id: 'street',
+    live: false,
+    progress,
+    time: eventTime(timing, progress),
+  });
+  act(() => useUiStore.setState({ procession: run(0) }));
+  expect(container.textContent).toContain('draft: route and schedule not yet verified');
+  expect(buttons().find((b) => b.textContent === '12:00 · event')?.disabled).toBe(true);
+  act(() => useUiStore.setState({ procession: run(0.25) }));
+  expect(buttons().find((b) => b.textContent === '13:00 · event')?.disabled).toBe(true);
+  act(() => useLifeStore.setState({ season: 'winter' }));
+  expect(buttons().some((b) => b.textContent === '▶ Procession')).toBe(false);
+  expect(
+    [...container.querySelectorAll('[role=status]')].some((s) =>
+      s.textContent?.includes('(simulated)'),
+    ),
+  ).toBe(true);
+  act(() =>
+    buttons()
+      .find((b) => b.textContent === 'Stop')!
+      .click(),
+  );
+  expect(stop).toHaveBeenCalledOnce();
+  for (const id of ['cathedral', 'basilica']) {
+    act(() => useUiStore.setState({ procession: { ...run(0), id } }));
+    expect(container.textContent).toContain('draft: gathering and schedule not yet verified');
+    expect(container.textContent).not.toContain('draft: route and schedule not yet verified');
+  }
+  act(() => useUiStore.setState({ procession: null }));
+  expect(buttons().find((b) => b.textContent === 'Time: 22:00')?.disabled).toBe(false);
+  expect(useLifeStore.getState().time).toBe('night');
 });
 
 afterEach(() => {

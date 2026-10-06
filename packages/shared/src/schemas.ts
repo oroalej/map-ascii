@@ -4,7 +4,7 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
-import { OsmId, OsmAreaId, MercatorPosition } from './schema-primitives';
+import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitives';
 export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
@@ -46,6 +46,12 @@ import {
   VEHICLE_TYPES,
   YEAR_RANGE,
   RoofShape,
+  PROCESSION_LIMITS,
+  TODO_VERIFY,
+  PROCESSION_DEFAULTS,
+  PROCESSION_VEHICLES,
+  CLOCK_TIME_PATTERN,
+  TIME_ZONE_PATTERN,
   type TrafficMix,
 } from './constants';
 
@@ -139,7 +145,7 @@ export const CameraState = z.strictObject({
 export type CameraState = z.infer<typeof CameraState>;
 
 /** Marks draft text that still has to be checked against sources (SPEC.md §6). */
-export const TODO_VERIFY = 'TODO(verify)';
+export { TODO_VERIFY } from './constants';
 
 /** The longest flight a tour step may ask for, in ms. */
 export const MAX_TOUR_FLY_MS = 15_000;
@@ -604,9 +610,7 @@ export type Cemetery = z.infer<typeof Cemetery>;
 
 /** When a procession runs (the `Procession` schema's `schedule`). */
 /** An IANA time zone, e.g. "Asia/Manila". */
-export const TimeZone = z
-  .string()
-  .regex(/^[A-Za-z_]+(\/[A-Za-z_+-]+)+$/, 'expected an IANA time zone');
+export const TimeZone = z.string().regex(TIME_ZONE_PATTERN, 'expected an IANA time zone');
 
 export const ProcessionSchedule = z.strictObject({
   month: z.int().min(1).max(12),
@@ -615,25 +619,79 @@ export const ProcessionSchedule = z.strictObject({
   /** Which one of that weekday in the month, 1–5. */
   nth: z.int().min(1).max(5),
   /** Days after that weekday; -1 is the day before. */
-  offset_days: z.int().min(-31).max(31),
+  offset_days: z
+    .int()
+    .min(PROCESSION_LIMITS.schedule.offset_days[0])
+    .max(PROCESSION_LIMITS.schedule.offset_days[1]),
   /** Local start time, HH:MM. */
-  start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM'),
+  start: z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM'),
   duration_min: z
     .int()
-    .positive()
-    .max(24 * 60),
+    .min(PROCESSION_LIMITS.schedule.duration_min[0])
+    .max(PROCESSION_LIMITS.schedule.duration_min[1]),
   /** IANA time zone the start time is in, e.g. "Asia/Manila". */
   timezone: TimeZone,
 });
 export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
 
 /** A procession's boats: paddle-boat columns and ranks ahead of the pagoda, and escorts. */
+const formationCount = (range: readonly [number, number]) => z.int().min(range[0]).max(range[1]);
 export const ProcessionFormation = z.strictObject({
-  columns: z.int().min(1).max(6).optional(),
-  ranks: z.int().min(1).max(20).optional(),
-  escorts: z.int().min(0).max(40).optional(),
+  columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
+  ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
+  escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
 });
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
+const ProcessionId = z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>');
+export const FollowingSchedule = z.strictObject({
+  follows: ProcessionId,
+  duration_min: z
+    .int()
+    .min(PROCESSION_LIMITS.schedule.duration_min[0])
+    .max(PROCESSION_LIMITS.schedule.duration_min[1]),
+});
+export const StreetFormation = z.strictObject({
+  bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
+    PROCESSION_DEFAULTS.procession.bearers,
+  ),
+  ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
+    PROCESSION_DEFAULTS.procession.ranks,
+  ),
+  marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
+    PROCESSION_DEFAULTS.procession.marshals,
+  ),
+});
+export const ParadeFormation = z.strictObject({
+  contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
+    PROCESSION_DEFAULTS.parade.contingents,
+  ),
+  ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
+  band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
+  color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
+    PROCESSION_DEFAULTS.parade.color_guard,
+  ),
+  vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
+});
+const EventPoint = LngLat;
+const EventRing = z
+  .array(EventPoint)
+  .min(4)
+  .refine(
+    (r) => !!r[0] && r[0][0] === r.at(-1)![0] && r[0][1] === r.at(-1)![1],
+    'expected closed ring',
+  );
+export const ProcessionSite = z.strictObject({
+  id: OsmId,
+  location: EventPoint,
+  anchor: EventPoint,
+  radius_m: z.number().positive().max(PROCESSION_LIMITS.radius),
+  grounds: z.array(EventRing).min(1),
+  blocked: z.array(EventRing),
+  approaches: z.array(z.array(EventPoint).min(2)).min(1),
+  roads: z.array(
+    z.strictObject({ line: z.array(EventPoint).min(2), width_m: z.number().positive() }),
+  ),
+});
 
 /**
  * Schemas for a city pack's content. Pass the city's declared `languages` to reject localized
@@ -833,51 +891,90 @@ export function contentSchemas(languages?: readonly string[]) {
     });
 
   /**
-   * A river procession the life layer stages (SPEC.md §4 "Processions"): a pagoda barge and
-   * columns of paddle boats along a river, crowds on its banks. The pipeline follows the river in
-   * OSM from `route.from` (or `upstream_m` upstream of `to`) down to `route.to` (DATA.md §2 step
-   * 07). It runs when a visitor plays it, and live on the day `schedule` names: `offset_days`
-   * after the `nth` `weekday` (0 = Sunday) of `month`, at `start` in `timezone`. Like a tour, it
-   * stays `draft` (and may hold `TODO(verify)`) until its route and schedule are sourced.
+   * Authored fluvial processions, street processions, parades and outdoor Masses (SPEC.md §4).
+   * Step 07 resolves routes or safe exterior gathering grounds from complete OSM geography.
+   * Events play on demand and run live on their annual schedule, or after a predecessor ends.
+   * They stay `draft` (and may hold `TODO(verify)`) until arrangements and timing are sourced.
    */
+  const eventBase = {
+    id: ProcessionId,
+    title: text,
+    story: text,
+    status: z.enum(['draft', 'verified']),
+    season: z.string().min(1).optional(),
+    label: text.optional(),
+    schedule: z.union([ProcessionSchedule, FollowingSchedule]),
+    sources: Sources.optional(),
+  };
+  const streetRoute = z.strictObject({
+    from: OsmId,
+    to: OsmId,
+    via: z.array(OsmWayId).min(1).optional(),
+  });
   const Procession = z
-    .object({
-      id: z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>'),
-      title: text,
-      story: text,
-      status: z.enum(['draft', 'verified']),
-      kind: z.literal('fluvial'),
-      route: z
-        .strictObject({
-          to: OsmId,
-          from: OsmId.optional(),
-          upstream_m: z.number().positive().max(20_000).optional(),
-        })
-        .refine((r) => (r.from === undefined) !== (r.upstream_m === undefined), {
-          message: 'give exactly one of from and upstream_m',
-        }),
-      schedule: ProcessionSchedule,
-      formation: ProcessionFormation.optional(),
-      sources: Sources.optional(),
-    })
+    .discriminatedUnion('kind', [
+      z.strictObject({
+        ...eventBase,
+        kind: z.literal('fluvial'),
+        route: z
+          .strictObject({
+            to: OsmId,
+            from: OsmId.optional(),
+            upstream_m: z.number().positive().max(20_000).optional(),
+          })
+          .refine((r) => (r.from === undefined) !== (r.upstream_m === undefined), {
+            message: 'give exactly one of from and upstream_m',
+          }),
+        formation: ProcessionFormation.optional(),
+      }),
+      z.strictObject({
+        ...eventBase,
+        kind: z.literal('procession'),
+        route: streetRoute,
+        formation: StreetFormation.optional(),
+      }),
+      z.strictObject({
+        ...eventBase,
+        kind: z.literal('parade'),
+        route: streetRoute,
+        formation: ParadeFormation.optional(),
+      }),
+      z.strictObject({
+        ...eventBase,
+        kind: z.literal('mass'),
+        site: OsmId,
+        grounds: z.array(OsmAreaId).min(1),
+        /** Authored exterior forecourt; the pipeline snaps only to safe connected cells. */
+        gathering_anchor: LngLat.optional(),
+        radius_m: z.number().positive().max(PROCESSION_LIMITS.radius),
+      }),
+    ])
     .superRefine((p, ctx) => {
+      if (p.season && !p.label?.en?.trim())
+        ctx.addIssue({
+          code: 'custom',
+          path: ['label'],
+          message: 'a seasonal procession needs an English label',
+        });
       if (p.status !== 'verified') return;
       if (
-        [...Object.values(p.title), ...Object.values(p.story)].some((t) => t.includes(TODO_VERIFY))
-      ) {
+        [
+          ...Object.values(p.title),
+          ...Object.values(p.story),
+          ...Object.values(p.label ?? {}),
+        ].some((t) => t.includes(TODO_VERIFY))
+      )
         ctx.addIssue({
           code: 'custom',
           path: ['story'],
           message: `a verified procession cannot contain ${TODO_VERIFY}`,
         });
-      }
-      if (!p.sources) {
+      if (!p.sources)
         ctx.addIssue({
           code: 'custom',
           path: ['sources'],
           message: 'a verified procession needs sources',
         });
-      }
     });
 
   return {
@@ -917,32 +1014,112 @@ export type TourStep = z.infer<typeof TourStep>;
 export type Tour = z.infer<typeof Tour>;
 
 /**
- * A city's generated `<slug>.processions.json` (DATA.md §2 step 07): each procession with its
- * route resolved along the river, from its start down to where it lands.
+ * A city's generated `<slug>.processions.json` (DATA.md §2 step 07): fluvial and street
+ * processions, parades and outdoor Masses with resolved geography and annual schedules.
  */
+const generatedEventBase = {
+  id: z.string().min(1),
+  title: LocalizedText,
+  status: z.enum(['draft', 'verified']),
+  season: z.string().min(1).optional(),
+  label: LocalizedText.optional(),
+  schedule: ProcessionSchedule,
+  sources: Sources.optional(),
+  follows: z.string().min(1).optional(),
+};
+const movingEventBase = { route: z.array(EventPoint).min(2), length_m: z.number().positive() };
+const streetEventBase = {
+  ...movingEventBase,
+  segments: z
+    .array(
+      z.strictObject({
+        id: OsmId,
+        width_m: z.number().positive(),
+        // Legacy symmetric allowance; new archives carry route-relative sides.
+        sidewalk_m: z.number().min(0),
+        sidewalks_m: z
+          .strictObject({ left: z.number().min(0), right: z.number().min(0) })
+          .optional(),
+      }),
+    )
+    .min(1),
+  blocked: z.array(EventRing),
+  water: z.array(EventRing).optional(),
+  bridges: z.array(EventRing).optional(),
+};
 export const CityProcessions = z.object({
   processions: z.array(
-    z.object({
-      id: z.string().min(1),
-      title: LocalizedText,
-      status: z.enum(['draft', 'verified']),
-      kind: z.literal('fluvial'),
-      /** [lng, lat] points from the start to the landing. */
-      route: z.array(z.tuple([z.number(), z.number()])).min(2),
-      length_m: z.number().positive(),
-      /**
-       * Per route point, how far the water reaches to its left and right (m, across the
-       * direction of travel); absent where the river is mapped only as a line.
-       */
-      banks: z.array(z.tuple([z.number(), z.number()])).optional(),
-      schedule: ProcessionSchedule,
-      formation: ProcessionFormation.optional(),
-      sources: Sources.optional(),
-    }),
+    z
+      .discriminatedUnion('kind', [
+        z.strictObject({
+          ...generatedEventBase,
+          ...movingEventBase,
+          kind: z.literal('fluvial'),
+          banks: z.array(z.tuple([z.number().min(0), z.number().min(0)])).optional(),
+          formation: ProcessionFormation.optional(),
+        }),
+        z.strictObject({
+          ...generatedEventBase,
+          ...streetEventBase,
+          kind: z.literal('procession'),
+          formation: StreetFormation.optional(),
+        }),
+        z.strictObject({
+          ...generatedEventBase,
+          ...streetEventBase,
+          kind: z.literal('parade'),
+          formation: ParadeFormation.optional(),
+        }),
+        z.strictObject({ ...generatedEventBase, kind: z.literal('mass'), site: ProcessionSite }),
+      ])
+      .superRefine((p, ctx) => {
+        if (p.season && !p.label?.en?.trim())
+          ctx.addIssue({
+            code: 'custom',
+            path: ['label'],
+            message: 'a seasonal procession needs an English label',
+          });
+        if (p.kind === 'fluvial' && p.banks && p.banks.length !== p.route.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['banks'],
+            message: 'one bank pair per route point',
+          });
+        if (
+          (p.kind === 'procession' || p.kind === 'parade') &&
+          p.segments.length !== p.route.length - 1
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['segments'],
+            message: 'one source segment per route edge',
+          });
+        if (p.status === 'verified') {
+          if (!p.sources)
+            ctx.addIssue({
+              code: 'custom',
+              path: ['sources'],
+              message: 'a verified procession needs sources',
+            });
+          if (
+            [...Object.values(p.title), ...Object.values(p.label ?? {})].some((t) =>
+              t.includes(TODO_VERIFY),
+            )
+          )
+            ctx.addIssue({
+              code: 'custom',
+              path: ['title'],
+              message: 'verified title or label contains TODO(verify)',
+            });
+        }
+      }),
   ),
 });
 export type CityProcessions = z.infer<typeof CityProcessions>;
 export type ProcessionRoute = CityProcessions['processions'][number];
+export type FluvialRoute = Extract<ProcessionRoute, { kind: 'fluvial' }>;
+export type StreetRoute = Extract<ProcessionRoute, { kind: 'procession' | 'parade' }>;
+export type MassRoute = Extract<ProcessionRoute, { kind: 'mass' }>;
 
 /** [west, south, east, north] in degrees. */
 export const BBox = z
@@ -1011,7 +1188,7 @@ const RhythmCurve = z
     message: 'hours must be ascending',
   });
 
-const ClockTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'expected HH:MM');
+const ClockTime = z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM');
 const Weekdays = z
   .array(z.int().min(0).max(6))
   .min(1)

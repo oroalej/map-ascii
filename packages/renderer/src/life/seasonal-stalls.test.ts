@@ -3,11 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   expandSeasons,
   runtimeSeason,
+  eventOccurrence,
+  type MassRoute,
   type SeasonConfig,
   type SeasonalDisplayRecord,
 } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LifeWorld } from './simulate';
+import { LifeWorld, type Mover } from './simulate';
+import { GroundProcessionScene } from './procession-street';
 import { MAX_TILE_AGENTS, activityLevels } from './config';
 import { worldTiles } from './testing/scenarios';
 import { stripRing } from './terrain';
@@ -53,6 +56,84 @@ function setup(road = false, places = true, blocked = false) {
   return { tiles, world, life: worldTiles(world).values().next().value! };
 }
 describe('seasonal stall lifecycle', () => {
+  it.each(['stop', 'completion', 'replacement', 'live end'] as const)(
+    'restores event-trimmed stalls and sites after %s without exceeding capacity',
+    (end) => {
+      const { world, life } = setup();
+      select(world);
+      const ordinary: Mover = {
+        kind: 'person',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 100,
+        x: 100,
+        y: 800,
+        hx: 1,
+        hy: 0,
+        speed: 0,
+        paint: 0,
+        lane: 0,
+        pause: 100,
+        rank: 0,
+        group: [
+          { figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 },
+        ],
+      };
+      while (life.population < MAX_TILE_AGENTS - 10)
+        life.movers.push({ ...ordinary, x: 100 + life.movers.length });
+      world.setSeasons(simulationSeasons([{ ...season }]));
+      select(world);
+      const before = [...life.seasonalStalls];
+      expect(before).toHaveLength(10);
+      const p = (x: number, y: number) => tileToLngLat(tile, { x, y });
+      const mass: MassRoute = {
+        id: 'procession/arrival',
+        kind: 'mass',
+        title: { en: 'Mass' },
+        status: 'draft',
+        schedule: {
+          month: 9,
+          weekday: 6,
+          nth: 3,
+          offset_days: 0,
+          start: '12:00',
+          duration_min: 90,
+          timezone: 'Asia/Manila',
+        },
+        site: {
+          id: 'osm:way/2',
+          location: p(2300, 2300),
+          anchor: p(2400, 2800),
+          radius_m: 150,
+          grounds: [[p(2100, 2400), p(3300, 2400), p(3300, 3600), p(2100, 3600), p(2100, 2400)]],
+          blocked: [],
+          approaches: [[p(2500, 3400), p(2400, 2800)]],
+          roads: [],
+        },
+      };
+      world.setProcessions([mass]);
+      const duration = new GroundProcessionScene(mass).playDuration;
+      if (end === 'live end') world.setLive(mass.id, 0.5, '2026');
+      else world.play(mass.id, eventOccurrence(mass.schedule, new Date('2026-06-01')));
+      world.step(end === 'live end' ? 0.01 : duration / 2, undefined, 21, undefined, undefined, {
+        rain: 0,
+        season: season.id,
+      });
+      expect(life.eventPopulation).toBe(10);
+      expect(life.seasonalStalls).toHaveLength(0);
+      expect(life.population).toBeLessThanOrEqual(MAX_TILE_AGENTS);
+      if (end === 'stop') world.stop();
+      else if (end === 'live end') world.setLive(undefined);
+      else if (end === 'replacement') world.setProcessions([]);
+      else
+        world.step(duration, undefined, 21, undefined, undefined, { rain: 0, season: season.id });
+      select(world);
+      expect(life.seasonalStalls).toEqual(before);
+      expect(before.every((s) => life.scenes.sites.some((site) => site.stall === s))).toBe(true);
+      expect(life.population + life.seasonalStalls.length).toBeLessThanOrEqual(MAX_TILE_AGENTS);
+    },
+  );
   it('admits cemetery edge stalls beyond the former center-only prefilter', () => {
     const { world, life, tiles } = setup(false, false);
     const cemetery = new LifeBuilder();

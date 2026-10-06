@@ -7,6 +7,9 @@ import {
   dialogueCatalog,
   type DialogueCatalog,
   TilesLock,
+  processionReferenceErrors,
+  resolveProcessionSchedules,
+  ProcessionScheduleError,
 } from '@atlas/shared';
 import type { z } from 'zod';
 
@@ -156,6 +159,7 @@ export async function loadCityPacks(
     };
     const seenIds = new Map<string, string>();
     const before = errors.length;
+    let invalidProcession = false;
 
     for (const [name, schemaName] of Object.entries(collections) as [
       keyof Collections,
@@ -164,7 +168,10 @@ export async function loadCityPacks(
       for (const path of await listJson(join(dir, name))) {
         const file = toFile(path);
         const record = await readValid(path, schemas[schemaName] as z.ZodType, file, errors);
-        if (record === undefined) continue;
+        if (record === undefined) {
+          if (name === 'processions') invalidProcession = true;
+          continue;
+        }
         const { id, osm_id } = record as { id?: string; osm_id?: string };
         const key = id ?? `${name}:${osm_id}`;
         const previous = seenIds.get(key);
@@ -174,6 +181,22 @@ export async function loadCityPacks(
         }
         seenIds.set(key, file);
         (content[name] as unknown[]).push(record);
+      }
+    }
+
+    // Schema failures already identify the bad event. Resolve references only after
+    // all records parse, so an existing invalid predecessor is not called missing.
+    const references = invalidProcession
+      ? []
+      : processionReferenceErrors(content.processions, city.life?.seasons ?? []);
+    for (const issue of references)
+      errors.push({ file: seenIds.get(issue.id) ?? configFile, message: issue.message });
+    if (!invalidProcession && references.length === 0) {
+      try {
+        resolveProcessionSchedules(content.processions);
+      } catch (error) {
+        if (!(error instanceof ProcessionScheduleError)) throw error;
+        errors.push({ file: seenIds.get(error.id) ?? configFile, message: error.message });
       }
     }
 

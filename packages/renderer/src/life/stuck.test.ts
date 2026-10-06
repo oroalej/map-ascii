@@ -1959,6 +1959,16 @@ const rectangle = (x0: number, y0: number, x1: number, y1: number) => [
   ],
 ];
 
+it('keeps inflated vehicle clearance from crossing a physical vehicle-only curb', () => {
+  const { world, life } = fixture(LifeLine.roadMinor, 8, false, (b) =>
+    b.area('vehicle-blocked', rectangle(1000 + 70 * pm, 2048, 1000 + 70.5 * pm, 2048 + 4 * pm)),
+  );
+  reactiveRoadRecovery(world);
+  const before = mover('vehicle', 66, 1),
+    after = { ...before, x: before.x + 7 * pm, d: before.d + 7 * pm };
+  expect(guardFor(world, 3)(life, after, before)).toBe(false);
+});
+
 it.each([false, true])(
   'lets an inflated body escape nearby terrain without crossing physical terrain (water %s)',
   (water) => {

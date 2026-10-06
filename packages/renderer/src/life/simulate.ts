@@ -18,6 +18,15 @@ import {
  * renderer projects the agents onto the cell grid (passes.ts `lifePass`).
  */
 import { makeCellGuard } from './cell-guard';
+import { GroundProcessionScene } from './procession-street';
+import { eventActor, identifyEventActor, eventBodySize } from './event-actors';
+import {
+  eventBridgeAllows,
+  eventGroundBounds,
+  groundsForRoutes,
+  routeRings,
+} from './ground-events';
+import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
 import {
@@ -246,7 +255,7 @@ type GroundGuard = ((
   reserve?: boolean,
   reject?: (reason: ContinuityRejection) => void,
 ) => boolean) &
-  YieldHooks;
+  YieldHooks & { eventDenied?: (owner: object) => boolean };
 type SuppressedActors<T extends object> = {
   hidden: T[];
   order: WeakMap<T, number>;
@@ -293,6 +302,7 @@ export type WorldGroundGuard = ((
   previousLife?: TileLife,
 ) => boolean) &
   Required<YieldHooks<[life: TileLife]>> & {
+    eventDenied(owner: object): boolean;
     remove(owner: object): void;
     reserveSeam(life: TileLife, preview: Mover, identity: Mover): void;
     clearSeam(
@@ -845,8 +855,11 @@ export class TileLife {
     stalls: SuppressedActors<Stall>;
     parked: SuppressedActors<Parked>;
   };
+  eventPopulation = 0;
   get population() {
-    return this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0);
+    return (
+      this.movers.length + (this.suppressedGround?.movers.hidden.length ?? 0) + this.eventPopulation
+    );
   }
   get hasSuppressedActors() {
     return (
@@ -5214,6 +5227,14 @@ export class TileLife {
           motionTrial,
         );
         const forwardTerrainRejected = terrainRejected;
+        if (!fits && m.kind === 'vehicle' && guard?.eventDenied?.(m)) {
+          // A live street closure is deliberate. Stop at its checked edge
+          // instead of creeping sideways or entering blocked-road recovery.
+          restoreMover(m, before);
+          m.v = 0;
+          env?.diagnostics?.tag(m, 'eventClosure');
+          continue;
+        }
         if (!fits && distance > 0 && guard?.contact) {
           const trial = snapshotMover(m);
           restoreMover(m, before);
@@ -6435,6 +6456,8 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 export type VisibleAgent = {
   /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
   mappedPersonMover?: boolean;
+  /** Serializable event membership for discarding a superseded formation on host commands. */
+  event?: true;
   emoji?: EmojiCue;
   /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
@@ -6444,7 +6467,8 @@ export type VisibleAgent = {
   candleSeed?: number;
   speech?: SpeechCue;
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
-  prop?: 'ball';
+  prop?: 'ball' | 'event';
+  eventGround?: string;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -6508,7 +6532,7 @@ export type LifeLineShape = {
 };
 
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
-export type ProcessionRun = { id: string; progress: number; live: boolean };
+export type ProcessionRun = { id: string; progress: number; live: boolean; time?: EventTime };
 
 type GroundTerrain = {
   key: string;
@@ -6549,6 +6573,7 @@ export class LifeWorld {
     this.seasonsDirty = true;
   }
   private seasonsDirty = false;
+  private readonly eventTrimmedStalls = new Set<TileLife>();
   /** Retired tiles retain their carts and reconcile the season when they return. */
   private readonly appliedSeasons = new WeakMap<TileLife, SimulationSeason | null>();
   private readonly stallAnchors = new WeakMap<TileLife, readonly SeasonAnchor[]>();
@@ -6619,7 +6644,10 @@ export class LifeWorld {
       s?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
     const hadPhysical = physical(this.seasonalConfig);
     const seasonalKey = this.physicalSeasonKey(this.tiles.values(), config);
-    if (seasonalKey !== this.seasonalTerrainKey) this.groundTerrain = undefined;
+    if (seasonalKey !== this.seasonalTerrainKey) {
+      this.groundTerrain = undefined;
+      this.eventTileDescriptors = undefined;
+    }
     this.seasonalTerrainKey = seasonalKey;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
@@ -6882,6 +6910,7 @@ export class LifeWorld {
       sources: TileLife[];
       seasonal: string;
       parking: string;
+      closure: PolygonIndex | undefined;
       reader: LaneTerrain;
     }
   >();
@@ -6894,6 +6923,10 @@ export class LifeWorld {
     routes: { life: TileLife; line: number; id: number; ends: string[] }[][];
   };
   private groundTerrain?: GroundTerrain;
+  private eventTileDescriptors?: {
+    terrain: GroundTerrain;
+    tiles: { life: TileLife; x: number; y: number; endX: number; endY: number; units: number }[];
+  };
   private preparedTerrain = new WeakMap<TileLife, GroundTerrain>();
   private preparedSettled = new WeakSet<TileLife>();
   private preparationTouched = new WeakSet<TileLife>();
@@ -6935,11 +6968,54 @@ export class LifeWorld {
   private covers = new Map<TileLife, readonly TileId[]>();
   private mixedZoom = false;
   private traffic: ResolvedTraffic;
-  private readonly scenes = new Map<string, ProcessionScene>();
+  private readonly scenes = new Map<string, ProcessionScene | GroundProcessionScene>();
   /** Seconds simulated, for played processions. */
   private clock = 0;
   private emojiClock = 0;
-  private played: { id: string; start: number } | undefined;
+  private played:
+    | {
+        id: string;
+        start: number;
+        elapsed: number;
+        timing?: EventTiming;
+        time?: { progress: number; value: EventTime };
+      }
+    | undefined;
+  private suspendedLiveOwners?: {
+    id: string;
+    occurrence?: string;
+    owners: Map<string, object>;
+    adoption?: {
+      scene: GroundProcessionScene;
+      state: ReturnType<GroundProcessionScene['saveAdoption']>;
+    };
+  };
+  private eventAgents: VisibleAgent[] = [];
+  private eventReservations?: {
+    terrain: GroundTerrain;
+    scope: string;
+    scene: GroundProcessionScene;
+    actors: { token: object; body: Body; owner: TileLife }[];
+    spans: { token: object; body: Body }[];
+  };
+  private eventOwners = new Map<string, object>();
+  private eventGrounds = groundsForRoutes([]);
+  private trafficClosureCache?: {
+    scene: GroundProcessionScene;
+    terrain: GroundTerrain;
+    index: PolygonIndex;
+  };
+  private readonly reconciledActors = new WeakMap<
+    TileLife,
+    {
+      terrain: GroundTerrain;
+      closure?: PolygonIndex;
+      movers: number;
+      parked: number;
+      stalls: number;
+      gatherers: number;
+    }
+  >();
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
@@ -6975,6 +7051,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.releaseEventActors(false, true);
     for (const tile of this.tiles.values()) tile.emoji.dispose();
     for (const { life } of this.retired.values()) life.emoji.dispose();
     this.emojiMemory.reset();
@@ -7006,6 +7083,7 @@ export class LifeWorld {
     this.junctions.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
+    this.eventTileDescriptors = undefined;
     this.groundBuffers = new WeakMap();
     this.roadCache = new WorldRoadCache();
     this.railTopology = undefined;
@@ -7099,6 +7177,7 @@ export class LifeWorld {
           if (saved)
             for (const m of fresh.movers)
               if (this.rejectedSeams.get(m)?.queued) this.queuedSeams.set(m, fresh);
+          this.reconciledActors.delete(fresh);
           if (!saved) {
             if (!this.preparedRegistered?.has(fresh))
               this.profiler?.registerPopulation(key, fresh.movers);
@@ -7124,9 +7203,11 @@ export class LifeWorld {
           changed = true;
         }
       if (changed) {
+        this.releaseEventActors(false, true);
         this.seasonsDirty = true;
         this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
         this.groundTerrain = undefined;
+        this.eventTileDescriptors = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
           if (terrain?.key === this.terrainKey([...this.tiles.keys()]))
@@ -7564,6 +7645,7 @@ export class LifeWorld {
       for (const life of fresh) this.preparedSettled.add(life);
     }
     // Serialization buffers are prepared privately too; the worker transfers them once.
+    yield* terrain.blocked.toFlatSteps();
     yield* terrain.roadAccess.roads.toFlatSteps();
     yield* terrain.roadAccess.forbidden.toFlatSteps();
     yield* terrain.trees.toFlatSteps();
@@ -7622,6 +7704,19 @@ export class LifeWorld {
     const terrain = this.groundTerrain!;
     const o = terrain.origins.get(life);
     if (!o) return;
+    const closure = this.trafficClosure();
+    const saved = this.reconciledActors.get(life);
+    if (
+      saved?.terrain === terrain &&
+      saved.closure === closure &&
+      saved.movers === life.movers.length &&
+      saved.parked === life.parked.length &&
+      saved.stalls === life.stalls.length &&
+      saved.gatherers === life.gatherers.length
+    )
+      return;
+    if (saved?.terrain !== terrain || saved.closure !== closure)
+      life.setLaneTerrain(this.laneTerrain(life));
     const transform = (body: Body) => {
       body.x = o.x + body.x * o.scale;
       body.y = o.y + body.y * o.scale;
@@ -7647,13 +7742,15 @@ export class LifeWorld {
     });
     life.reconcileSeasonalActors(
       (owner) => {
+        const vehicle = 'kind' in owner && owner.kind === 'vehicle';
+        if (!terrain.seasonal.polygons.length && (!closure || !vehicle)) return false;
         const bodies = life.groundBodies(owner, 0, this.groundSample);
         for (const body of bodies) transform(body);
-        return terrain.seasonal.hits(bodies);
+        return terrain.seasonal.hits(bodies) || (!!closure && vehicle && closure.hits(bodies));
       },
       (p) => {
         const spec = VEHICLES[p.vehicle];
-        return terrain.seasonal.hits([
+        const bodies = [
           transform({
             ...p,
             x: p.x / life.perMeter,
@@ -7661,10 +7758,48 @@ export class LifeWorld {
             length: spec.length,
             width: spec.width,
           }),
-        ]);
+        ];
+        return terrain.seasonal.hits(bodies) || !!closure?.hits(bodies);
       },
-      terrain.seasonal.polygons.length > 0,
+      terrain.seasonal.polygons.length > 0 || !!closure,
     );
+    this.reconciledActors.set(life, {
+      terrain,
+      closure,
+      movers: life.movers.length,
+      parked: life.parked.length,
+      stalls: life.stalls.length,
+      gatherers: life.gatherers.length,
+    });
+  }
+
+  /** Ordinary traffic yields the full carriageway for the active street event. */
+  private trafficClosure() {
+    const id =
+      this.played?.id ??
+      (this.live && this.live.progress >= 0 && this.live.progress < 1 ? this.live.id : undefined);
+    const scene = id && this.scenes.get(id);
+    const terrain = this.groundTerrain;
+    if (!(scene instanceof GroundProcessionScene) || scene.route.kind === 'mass' || !terrain?.ref) {
+      this.trafficClosureCache = undefined;
+      return undefined;
+    }
+    if (this.trafficClosureCache?.scene === scene && this.trafficClosureCache.terrain === terrain)
+      return this.trafficClosureCache.index;
+    const index = new PolygonIndex(),
+      ref = terrain.ref;
+    const metric = ([lng, lat]: [number, number]) => {
+      const q = lngLatToTile(ref.tile, lng, lat);
+      return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
+    };
+    for (const ring of routeRings(scene.route)) index.add([ring.map(metric)]);
+    this.trafficClosureCache = { scene, terrain, index };
+    return index;
+  }
+
+  private reconcileEventTraffic() {
+    if (this.groundTerrain)
+      for (const life of this.tiles.values()) this.reconcileSeasonalTerrain(life);
   }
 
   private groundGuard(
@@ -7673,9 +7808,23 @@ export class LifeWorld {
     bounds?: LngLatBounds,
     allBodies = false,
     region?: ReadonlySet<TileLife>,
+    admitEvents = false,
+    eventBounds?: LngLatBounds,
     shows?: (kind: Mover['kind']) => boolean,
   ) {
-    return complete(this.groundGuardSteps(minimum, fresh, bounds, allBodies, region, false, shows));
+    return complete(
+      this.groundGuardSteps(
+        minimum,
+        fresh,
+        bounds,
+        allBodies,
+        region,
+        false,
+        admitEvents,
+        eventBounds,
+        shows,
+      ),
+    );
   }
 
   /** The guard's fixed vehicle obstacles, seen from one tile in its metres (lane bends). */
@@ -7730,6 +7879,7 @@ export class LifeWorld {
       }
     }
     const parkingKey = JSON.stringify(parkingBodies);
+    const closure = this.trafficClosure();
     const previous = this.laneReaders.get(life);
     if (
       previous &&
@@ -7737,6 +7887,7 @@ export class LifeWorld {
       previous.origin === originKey &&
       previous.seasonal === seasonalKey &&
       previous.parking === parkingKey &&
+      previous.closure === closure &&
       previous.sources.length === sources.length &&
       previous.sources.every((source, i) => source === sources[i])
     )
@@ -7756,7 +7907,8 @@ export class LifeWorld {
         return (
           current.blocked.near(ax, ay, bx, by) ||
           current.vehicleBlocked.near(ax, ay, bx, by) ||
-          parking.near(ax, ay, bx, by)
+          parking.near(ax, ay, bx, by) ||
+          !!this.trafficClosure()?.near(ax, ay, bx, by)
         );
       },
       hits: (body) => {
@@ -7771,7 +7923,8 @@ export class LifeWorld {
         return (
           current.blocked.hits(sample) ||
           current.vehicleBlocked.hits(sample) ||
-          parking.hits(sample)
+          parking.hits(sample) ||
+          !!this.trafficClosure()?.hits(sample)
         );
       },
     };
@@ -7781,6 +7934,7 @@ export class LifeWorld {
       sources,
       seasonal: seasonalKey,
       parking: parkingKey,
+      closure,
       reader,
     });
     return reader;
@@ -7793,18 +7947,24 @@ export class LifeWorld {
     allBodies = false,
     region?: ReadonlySet<TileLife>,
     cooperative = true,
+    admitEvents = false,
+    eventBounds?: LngLatBounds,
     shows?: (kind: Mover['kind']) => boolean,
   ): Generator<void, WorldGroundGuard, void> {
     const buildStart = this.profiler?.time();
     const ref = this.tiles.values().next().value;
     const occupied = new Occupancy();
+    const admission = eventBounds ? new Occupancy() : occupied;
     const reservations = new Map<GroundAgent, readonly Body[]>();
     const physicalReservations = new Map<GroundAgent, readonly Body[]>();
+    const eventDenials = new WeakSet<object>();
     // Ordinary attendants are visible query bodies, but are not collision reservations.
     let queryOnly: Occupancy | undefined;
     const key = this.terrainKey([...this.tiles.keys()]);
     const rebuild = this.groundTerrain?.key !== key;
     if (rebuild) this.groundTerrain = yield* this.prepareGroundTerrain([...this.tiles], true);
+    if (this.eventReservations && this.eventReservations.terrain !== this.groundTerrain)
+      this.releaseEventActors(false, true);
     const { blocked, vehicleBlocked, water } = this.groundTerrain!;
     const origin = (life: TileLife) => {
       const found = this.groundTerrain!.origins.get(life);
@@ -7861,6 +8021,10 @@ export class LifeWorld {
       this.revalidateTerrain();
       for (const life of this.tiles.values()) life.setLaneTerrain(this.laneTerrain(life));
     }
+    const closure = this.trafficClosure();
+    if (!rebuild)
+      for (const life of this.tiles.values())
+        if (closure || life.hasSuppressedActors) this.reconcileSeasonalTerrain(life);
     const roadAccess = this.groundTerrain!.roadAccess;
     const diagnostics = this.profiler?.lifeDiagnostics;
     const diagnoseOccupancy =
@@ -7905,8 +8069,11 @@ export class LifeWorld {
       const o = origin(life);
       const near = bounds && viewIn(life.tile, bounds, 100 * life.perMeter);
       const inView = (p: { x: number; y: number }) => !near || near(p.x, p.y);
+      const admissionNear = eventBounds && viewIn(life.tile, eventBounds, 100 * life.perMeter);
+      const inAdmission = (p: { x: number; y: number }) =>
+        !!eventBounds && (!admissionNear || admissionNear(p.x, p.y));
       const standing = (p: Parked | Stall, vehicle: CraftType) => {
-        if (!inView(p) || !this.owns(life, p)) return;
+        if ((!inView(p) && !inAdmission(p)) || !this.owns(life, p)) return;
         const { length, width } = VEHICLES[vehicle];
         const { perMeter } = life;
         const out = buffer(p).live;
@@ -7920,7 +8087,8 @@ export class LifeWorld {
         b.kind = vehicle === 'cart' ? BODY_KIND.fixed : BODY_KIND.vehicle;
         out.length = 1;
         toRef(o, b);
-        occupied.set(p, out);
+        if (inView(p)) occupied.set(p, out);
+        if (inAdmission(p)) admission.set(p, out);
       };
       for (const p of life.parked) {
         standing(p, p.vehicle);
@@ -7929,20 +8097,29 @@ export class LifeWorld {
       // Closed carts and those above the vendor level aren't drawn (`visible`), so aren't there.
       for (const s of life.seasonalStalls.length ? life.allStalls() : life.stalls) {
         if (cooperative && ++visited % 32 === 0) yield;
-        if (
-          allBodies ||
-          ((!shows || shows('person')) &&
-            s.open !== false &&
-            (!this.lastLevels || s.rank < this.lastLevels.person))
-        ) {
-          if (allBodies || life.seasonalStalls.includes(s)) {
-            if (this.owns(life, s)) occupied.set(s, bodies(life, s, buffer(s).live));
-          } else {
-            standing(s, 'cart');
-            if (inView(s) && this.owns(life, s)) {
-              const attendant = life.groundBodies(s, minimum)[1]!;
-              (queryOnly ??= new Occupancy()).set(s, [toRef(o, attendant)]);
-            }
+        const moving =
+          inView(s) &&
+          (allBodies ||
+            ((!shows || shows('person')) &&
+              s.open !== false &&
+              (!this.lastLevels || s.rank < this.lastLevels.person)));
+        const admitting = inAdmission(s);
+        if ((!moving && !admitting) || !this.owns(life, s)) continue;
+        const out = bodies(life, s, buffer(s).live);
+        if (admitting) admission.set(s, out);
+        if (moving) {
+          if (allBodies || life.seasonalStalls.includes(s)) occupied.set(s, out);
+          else {
+            // Admission retains the complete inflated cart/attendant pair. Ordinary
+            // movement reserves the physical cart without mutating that shared pair.
+            occupied.set(s, [
+              {
+                ...out[0]!,
+                length: VEHICLES.cart.length * o.scale,
+                width: VEHICLES.cart.width * o.scale,
+              },
+            ]);
+            (queryOnly ??= new Occupancy()).set(s, [out[1]!]);
           }
         }
       }
@@ -7950,24 +8127,181 @@ export class LifeWorld {
       for (const m of life.movers) {
         if (cooperative && ++visited % 32 === 0) yield;
         if (
-          inView(m) &&
           this.owns(life, m) &&
           !life.scenes.hidden(m) &&
           (m.kind === 'vehicle' || isWalker(m.kind)) &&
-          (allBodies || !shows || shows(m.kind)) &&
-          (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
-        )
-          occupied.set(m, bodies(life, m, buffer(m).live));
+          ((inView(m) &&
+            (allBodies || !shows || shows(m.kind)) &&
+            (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])) ||
+            inAdmission(m))
+        ) {
+          const out = bodies(life, m, buffer(m).live);
+          if (
+            inView(m) &&
+            (allBodies || !shows || shows(m.kind)) &&
+            (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
+          )
+            occupied.set(m, out);
+          if (inAdmission(m)) admission.set(m, out);
+        }
       }
       for (const g of life.gatherers) {
         if (cooperative && ++visited % 32 === 0) yield;
         if (
-          inView(g) &&
           this.owns(life, g) &&
-          (allBodies || !shows || shows('person')) &&
-          (allBodies || g.rank < gathererShare(g, this.lastLevels))
-        )
-          occupied.set(g, bodies(life, g, buffer(g).live));
+          ((inView(g) &&
+            (allBodies || !shows || shows('person')) &&
+            (allBodies || g.rank < gathererShare(g, this.lastLevels))) ||
+            inAdmission(g))
+        ) {
+          const out = bodies(life, g, buffer(g).live);
+          if (
+            inView(g) &&
+            (allBodies || !shows || shows('person')) &&
+            (allBodies || g.rank < gathererShare(g, this.lastLevels))
+          )
+            occupied.set(g, out);
+          if (inAdmission(g)) admission.set(g, out);
+        }
+      }
+    }
+    const run = this.procession();
+    const scene = run && this.scenes.get(run.id);
+    if (admitEvents) {
+      for (const life of this.tiles.values()) life.eventPopulation = 0;
+      this.eventAgents = [];
+    }
+    if (ref && run && scene instanceof GroundProcessionScene) {
+      const scope = this.eventScope(run);
+      if (admitEvents) {
+        const cached = (this.eventReservations = {
+          terrain: this.groundTerrain!,
+          scope,
+          scene,
+          actors: [] as { token: object; body: Body; owner: TileLife }[],
+          spans: [] as { token: object; body: Body }[],
+        });
+        const candidates = scene.agents(run.progress, this.clock, {
+          scope,
+          inspection: this.inspection,
+          owner: (id) => {
+            let owner = this.eventOwners.get(id);
+            if (!owner) this.eventOwners.set(id, (owner = {}));
+            return owner;
+          },
+        });
+        const arrivals = scene.route.kind === 'mass' ? new Occupancy() : undefined;
+        const terrain = this.groundTerrain!;
+        if (this.eventTileDescriptors?.terrain !== terrain)
+          this.eventTileDescriptors = {
+            terrain,
+            tiles: [...this.tiles.values()]
+              .sort((a, b) => b.tile.z - a.tile.z)
+              .map((life) => {
+                const o = origin(life),
+                  units = life.perMeter / o.scale;
+                return {
+                  life,
+                  x: o.x,
+                  y: o.y,
+                  endX: o.x + EXTENT / units,
+                  endY: o.y + EXTENT / units,
+                  units,
+                };
+              }),
+          };
+        const tiles = this.eventTileDescriptors.tiles;
+        const at = { x: 0, y: 0 },
+          ahead = { x: 0, y: 0 },
+          local = { x: 0, y: 0 };
+        const toMetric = (q: [number, number], out: { x: number; y: number }) => {
+          const at = lngLatToTile(ref.tile, q[0], q[1]);
+          out.x = at.x / ref.perMeter;
+          out.y = at.y / ref.perMeter;
+          return out;
+        };
+        const bridgeAllows = (body: Body) => {
+          const points = bodyCorners(body).map((point) =>
+            tileToLngLat(ref.tile, {
+              x: point.x * ref.perMeter,
+              y: point.y * ref.perMeter,
+            }),
+          );
+          return eventBridgeAllows(scene.ground, points);
+        };
+        for (const agent of candidates) {
+          const projected = lngLatToTile(ref.tile, agent.lng, agent.lat);
+          at.x = projected.x / ref.perMeter;
+          at.y = projected.y / ref.perMeter;
+          let owner: TileLife | undefined;
+          for (const descriptor of tiles) {
+            if (
+              at.x < descriptor.x ||
+              at.x >= descriptor.endX ||
+              at.y < descriptor.y ||
+              at.y >= descriptor.endY
+            )
+              continue;
+            local.x = (at.x - descriptor.x) * descriptor.units;
+            local.y = (at.y - descriptor.y) * descriptor.units;
+            if (this.owns(descriptor.life, local)) {
+              owner = descriptor.life;
+              break;
+            }
+          }
+          if (!owner || owner.population >= MAX_TILE_AGENTS) continue;
+          toMetric(agent.ahead!, ahead);
+          const dx = ahead.x - at.x,
+            dy = ahead.y - at.y,
+            d = Math.hypot(dx, dy) || 1;
+          let token = this.eventOwners.get(eventActor(agent)!);
+          if (!token) this.eventOwners.set(eventActor(agent)!, (token = {}));
+          const dimensions = eventBodySize(agent);
+          const out = buffer(token).live;
+          const body = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
+          body.x = at.x;
+          body.y = at.y;
+          body.hx = dx / d;
+          body.hy = dy / d;
+          body.length = dimensions.length;
+          body.width = dimensions.width;
+          body.kind = agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human;
+          out.length = 1;
+          if (
+            admission.conflicts(token, out) > 0 ||
+            arrivals?.conflicts(token, out) ||
+            blocked.hits(out) ||
+            (water.hits(out) && !bridgeAllows(body))
+          )
+            continue;
+          cached.actors.push({ token, body, owner });
+          arrivals?.set(token, out);
+          owner.eventPopulation++;
+          this.eventAgents.push(agent);
+        }
+        for (const span of scene.spans(run.progress)) {
+          const a = toMetric(span.a, at),
+            b = toMetric(span.b, ahead),
+            dx = b.x - a.x,
+            dy = b.y - a.y,
+            length = Math.hypot(dx, dy);
+          if (length)
+            cached.spans.push({
+              token: span,
+              body: {
+                ...segmentBody(a, b),
+                width: span.width,
+                kind: BODY_KIND.human,
+              },
+            });
+        }
+      }
+      const cached = this.eventReservations;
+      if (cached?.scene === scene && cached.scope === scope) {
+        // Formations compare against ordinary bodies before reserving their authored spacing.
+        // Auxiliary guards replay these metric bodies without admission or owner projection.
+        for (const { token, body } of cached.actors) occupied.set(token, [body]);
+        for (const { token, body } of cached.spans) occupied.set(token, [body]);
       }
     }
     if (buildStart !== undefined)
@@ -8013,6 +8347,7 @@ export class LifeWorld {
       reject?: (reason: ContinuityRejection) => void,
       previousLife: TileLife = life,
     ) => {
+      eventDenials.delete(identity);
       if (!this.owns(life, owner)) return true;
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
@@ -8077,6 +8412,7 @@ export class LifeWorld {
       y1 += radius;
       const crossing = 'kind' in owner || 'walker' in owner;
       const blockedNear = blocked.near(x0, y0, x1, y1);
+      const closureNear = !onFoot && !!closure?.near(x0, y0, x1, y1);
       const curbNear =
         !onFoot && vehicleBlocked.polygons.length > 0 && vehicleBlocked.near(x0, y0, x1, y1);
       const waterNear = onFoot && water.near(x0, y0, x1, y1);
@@ -8111,6 +8447,7 @@ export class LifeWorld {
         }
         if (
           (blockedNear && blocked.hits(sample)) ||
+          (closureNear && closure!.hits(sample)) ||
           (curbNear && vehicleBlocked.hits(sample)) ||
           (waterNear && water.hits(sample)) ||
           (roadNear && !roadAccess.allows(sample, crossing))
@@ -8131,6 +8468,8 @@ export class LifeWorld {
                 }
                 return (
                   (!blockedNear || !blocked.hits(terrainPhysical)) &&
+                  (!closureNear || !closure!.hits(terrainPhysical)) &&
+                  (!curbNear || !vehicleBlocked.hits(terrainPhysical)) &&
                   (!waterNear || !water.hits(terrainPhysical)) &&
                   (!roadNear || roadAccess.allows(terrainPhysical, crossing))
                 );
@@ -8141,6 +8480,11 @@ export class LifeWorld {
           }
           const mayEscape = escape?.(sample);
           if (!mayEscape) {
+            if (
+              closureNear &&
+              closure!.hits((physical = physicalSample(life, owner, sample, physical)))
+            )
+              eventDenials.add(identity);
             if (diagnostics) {
               const reason =
                 blockedNear && blocked.hits(sample)
@@ -8525,6 +8869,7 @@ export class LifeWorld {
       if (decision) this.failedYield.set(decision.priority, this.clock);
     };
     const methods = {
+      eventDenied: (owner: object) => eventDenials.has(owner),
       remove,
       reserveSeam,
       clearSeam,
@@ -8559,6 +8904,8 @@ export class LifeWorld {
     if (!ref || !terrain) return undefined;
     return {
       version: terrain,
+      events: this.eventGrounds,
+      blocked: terrain.blocked,
       ref: { tile: ref.tile, perMeter: ref.perMeter },
       forbidden: terrain.roadAccess.forbidden,
       roads: terrain.roadAccess.roads,
@@ -8571,7 +8918,14 @@ export class LifeWorld {
     const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
-    return makeCellGuard(ref, terrain.roadAccess, terrain.trees, toCell);
+    return makeCellGuard(
+      ref,
+      terrain.roadAccess,
+      terrain.trees,
+      toCell,
+      this.eventGrounds,
+      terrain.blocked,
+    );
   }
 
   /**
@@ -8595,10 +8949,11 @@ export class LifeWorld {
     effectCellMeters = cellMeters,
   ) {
     this.syncSeason(weather?.season);
-    if (this.seasonalConfig)
-      for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
+    if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
+    // Timed playback follows accepted viewer time, while physical movement keeps its safe step.
+    // Otherwise a slow drawing frame stretches the scheduled event and its displayed clock.
+    if (this.played?.timing) this.played.elapsed += Math.max(0, dt);
     this.effectCellMeters = effectCellMeters;
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
@@ -8628,7 +8983,21 @@ export class LifeWorld {
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
     };
-    const guard = this.groundGuard(cellMeters, undefined, bounds, false, undefined, shows);
+    const event = this.procession();
+    const eventScene = event && this.scenes.get(event.id);
+    const groundEvent = eventScene instanceof GroundProcessionScene;
+    // Global event admission needs every body rank; ordinary movement retains its normal
+    // activity, view and query-only attendant rules while replaying those reservations.
+    const guard = this.groundGuard(
+      cellMeters,
+      undefined,
+      bounds,
+      false,
+      undefined,
+      true,
+      groundEvent ? eventGroundBounds(eventScene.ground) : undefined,
+      shows,
+    );
     const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
     const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
       owners.find((life) => {
@@ -8832,6 +9201,7 @@ export class LifeWorld {
             reject?: (reason: ContinuityRejection) => void,
           ) => guard(tile, owner, before, undefined, reserve, owner, reject),
           {
+            eventDenied: (owner: object) => guard.eventDenied(owner),
             pedestrians: guard.pedestrians(tile),
             contact: (mover: Mover, trial?: Mover) => guard.contact(tile, mover, trial),
             holding: (mover: Mover, changedOnly?: boolean) =>
@@ -8945,9 +9315,7 @@ export class LifeWorld {
     if (!shows || shows('train')) this.stepArrivals(clamped);
     this.retireStalled();
     this.admitBirths(clamped);
-    if (this.seasonalConfig)
-      for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
+    if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -9147,36 +9515,152 @@ export class LifeWorld {
     for (const key of this.arrivals.keys()) if (!keep.has(key)) this.arrivals.delete(key);
   }
 
+  /** Host commands use the current route to retain only compatible ordinary drawables. */
+  processionRoute(id: string | undefined) {
+    return id ? this.scenes.get(id)?.route : undefined;
+  }
   /** The city's processions (its `<slug>.processions.json`). */
   setProcessions(routes: readonly ProcessionRoute[]) {
+    this.played = undefined;
+    this.live = undefined;
+    this.suspendedLiveOwners = undefined;
+    this.releaseEventActors();
+    this.eventGrounds = groundsForRoutes(routes);
     this.scenes.clear();
-    for (const route of routes) this.scenes.set(route.id, new ProcessionScene(route));
-    if (this.played && !this.scenes.has(this.played.id)) this.played = undefined;
+    for (const route of routes)
+      this.scenes.set(
+        route.id,
+        route.kind === 'fluvial' ? new ProcessionScene(route) : new GroundProcessionScene(route),
+      );
+    this.reconcileEventTraffic();
   }
 
   /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
-  play(id: string): boolean {
+  play(id: string, timing?: EventTiming): boolean {
     if (!this.scenes.has(id)) return false;
-    this.played = { id, start: this.clock };
+    if (!this.played && this.live) {
+      const scene = this.scenes.get(this.live.id);
+      this.suspendedLiveOwners = {
+        ...this.live,
+        owners: new Map(this.eventOwners),
+        ...(scene instanceof GroundProcessionScene &&
+          scene.route.kind === 'mass' && {
+            adoption: { scene, state: scene.saveAdoption() },
+          }),
+      };
+    }
+    const adopted = this.handover(id);
+    this.played = { id, start: this.clock, elapsed: 0, timing };
+    this.releaseEventActors(false, adopted);
+    this.reconcileEventTraffic();
     return true;
   }
 
   stop() {
+    if (this.played) this.finishPlayback();
+  }
+
+  private finishPlayback() {
+    const scene = this.played && this.scenes.get(this.played.id);
+    if (this.played?.id !== this.live?.id && scene instanceof GroundProcessionScene) scene.reset();
     this.played = undefined;
+    this.releaseEventActors(false);
+    const saved = this.suspendedLiveOwners;
+    if (
+      saved &&
+      this.live &&
+      saved.id === this.live.id &&
+      saved.occurrence === this.live.occurrence
+    ) {
+      if (saved.adoption) saved.adoption.scene.restoreAdoption(saved.adoption.state);
+      for (const [id, owner] of saved.owners) this.eventOwners.set(id, owner);
+    }
+    this.suspendedLiveOwners = undefined;
+    this.reconcileEventTraffic();
+  }
+
+  private eventScope(run: ProcessionRun) {
+    return run.live ? `live/${this.live?.occurrence ?? run.id}` : `play/${this.played?.start}`;
+  }
+
+  private handover(id: string) {
+    const previous = this.procession();
+    const next = this.scenes.get(id);
+    if (
+      next instanceof GroundProcessionScene &&
+      next.route.kind === 'mass' &&
+      previous &&
+      next.route.follows === previous.id
+    ) {
+      const old = this.scenes.get(previous.id);
+      const scope = this.eventScope(previous);
+      next.adopt(
+        old instanceof ProcessionScene
+          ? old.arrivalCrowd(previous.progress, this.clock, scope, this.inspection)
+          : this.eventAgents,
+      );
+      if (old instanceof ProcessionScene)
+        for (const [id, owner] of old.arrivalOwners(scope)) this.eventOwners.set(id, owner);
+      return true;
+    } else if (next instanceof GroundProcessionScene) next.reset();
+    return false;
+  }
+
+  private trimSeasonalStalls(life: TileLife) {
+    const before = life.seasonalStalls.length;
+    life.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - life.population));
+    if (life.eventPopulation && life.seasonalStalls.length < before)
+      this.eventTrimmedStalls.add(life);
+  }
+
+  private releaseEventActors(reset = true, retainOwners = false) {
+    this.eventAgents = [];
+    this.eventReservations = undefined;
+    if (!retainOwners) this.eventOwners.clear();
+    for (const life of this.tiles.values()) life.eventPopulation = 0;
+    // Re-admit trimmed sites once capacity returns, even when season and quota agree
+    // with the inputs saved before the event. Keep the shared budget during playback.
+    for (const life of this.eventTrimmedStalls) this.stallInputs.delete(life);
+    if (this.eventTrimmedStalls.size) this.seasonsDirty = true;
+    this.eventTrimmedStalls.clear();
+    if (reset)
+      for (const scene of this.scenes.values())
+        if (scene instanceof GroundProcessionScene) scene.reset();
   }
 
   /** The procession under way by its schedule, and how far through it is; or none. */
   setLive(id: string | undefined, progress = 0, occurrence?: string) {
+    if (!(progress >= 0 && progress < 1)) id = undefined;
+    if (id !== this.live?.id || occurrence !== this.live?.occurrence) {
+      const adopted = !this.played && id ? this.handover(id) : false;
+      if (!this.played) this.releaseEventActors(false, adopted);
+      else {
+        const old = this.live && this.scenes.get(this.live.id);
+        if (this.live?.id !== this.played.id && old instanceof GroundProcessionScene) old.reset();
+      }
+      this.suspendedLiveOwners = undefined;
+    }
     this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
+    this.reconcileEventTraffic();
   }
 
   /** The procession to show: one being played, else a live one. */
   procession(): ProcessionRun | undefined {
     if (this.played) {
       const duration = this.scenes.get(this.played.id)!.playDuration;
-      const progress = (this.clock - this.played.start) / duration;
-      if (progress < 1) return { id: this.played.id, progress, live: false };
-      this.played = undefined;
+      const progress =
+        (this.played.timing ? this.played.elapsed : this.clock - this.played.start) / duration;
+      if (progress < 1) {
+        if (this.played.timing && this.played.time?.progress !== progress)
+          this.played.time = { progress, value: eventTime(this.played.timing, progress) };
+        return {
+          id: this.played.id,
+          progress,
+          live: false,
+          ...(this.played.time && { time: this.played.time.value }),
+        };
+      }
+      this.finishPlayback();
     }
     return this.live && { id: this.live.id, progress: this.live.progress, live: true };
   }
@@ -9280,25 +9764,45 @@ export class LifeWorld {
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
     const scene = run && this.scenes.get(run.id)!;
-    const staged = scene
-      ? scene.agents(run.progress, this.clock, {
-          boats: shows('boat'),
-          crowds: zoom >= PROCESSION.crowdZoom,
-          crews: zoom >= PROCESSION.crewZoom,
-          bounds,
-          inspection,
-          scope: run.live
-            ? `live/${this.live?.occurrence ?? run.id}`
-            : `play/${this.played?.start}`,
-        })
-      : [];
+    const staged =
+      scene instanceof GroundProcessionScene
+        ? this.eventAgents
+            .filter(
+              (a) =>
+                shows(a.kind) &&
+                (!bounds ||
+                  (a.lng >= bounds[0] &&
+                    a.lng <= bounds[2] &&
+                    a.lat >= bounds[1] &&
+                    a.lat <= bounds[3])),
+            )
+            .slice(0, maxAgents)
+            .map((a) =>
+              inspection
+                ? identifyEventActor(
+                    inspection.present(this.eventOwners.get(eventActor(a)!)!, a),
+                    eventActor(a)!,
+                  )
+                : a,
+            )
+        : scene
+          ? scene.agents(run.progress, this.clock, {
+              boats: shows('boat'),
+              crowds: zoom >= PROCESSION.crowdZoom,
+              crews: zoom >= PROCESSION.crewZoom,
+              bounds,
+              inspection,
+              scope: this.eventScope(run),
+            })
+          : [];
+    for (const agent of staged) agent.event = true;
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!this.owns(life, m)) continue;
         if (!shows(m.kind) || !life.visibleMover(m, levels, crowd)) continue;
-        if (scene && m.kind === 'boat') continue;
+        if (scene instanceof ProcessionScene && m.kind === 'boat') continue;
         if (m.x < 0 || m.x >= EXTENT || m.y < 0 || m.y >= EXTENT) continue;
         if (m.train) {
           if (this.viewContext && !outsideView(life, life.birthBodies(m), this.viewContext, 0))
@@ -9630,7 +10134,11 @@ export class LifeWorld {
       const kept = new Set(admitted);
       // The cap counts ordinary records. Procession prefix and trains are protected.
       let count = 0;
-      for (let i = staged.length; i < admitted.length; i++)
+      for (
+        let i = scene instanceof GroundProcessionScene ? 0 : staged.length;
+        i < admitted.length;
+        i++
+      )
         if (admitted[i]!.kind !== 'train') count++;
       let spare = Math.max(0, maxAgents - count);
       for (const ball of balls) {
@@ -9644,7 +10152,8 @@ export class LifeWorld {
       }
       return admitted;
     };
-    if (out.length <= maxAgents) {
+    const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
+    if (out.length + eventCount <= maxAgents) {
       const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
@@ -9666,7 +10175,7 @@ export class LifeWorld {
     const nearest = [...groups.values()].sort((a, b) => a.d - b.d);
     const kept = staged.slice();
     const selected: (typeof nearest)[number][] = [];
-    let count = 0;
+    let count = eventCount;
     for (const group of nearest) {
       if (group.agents[0]!.kind === 'train') {
         selected.push(group);

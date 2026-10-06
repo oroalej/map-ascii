@@ -1,12 +1,115 @@
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import * as fs from 'node:fs/promises';
+import { describe, expect, it, vi } from 'vitest';
 import { contentRoot, loadCityPacks } from './validate';
 
+const eventRoot = fileURLToPath(new URL('./__fixtures__/event-references', import.meta.url));
+import.meta.glob('./__fixtures__/event-references/**/*.json');
 const badRoot = fileURLToPath(new URL('./__fixtures__/bad', import.meta.url));
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on pack edits.
 import.meta.glob('../cities/**/*.json');
+vi.mock('node:fs/promises', async (load) => {
+  const actual = await load<typeof fs>();
+  return { ...actual, readFile: vi.fn(actual.readFile) };
+});
 
 describe('loadCityPacks', () => {
+  it('reports an invalid predecessor without a cascading missing-reference error', async () => {
+    const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+    vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      const text = await original(...args);
+      if (
+        typeof args[0] !== 'string' ||
+        !args[0].replaceAll('\\', '/').endsWith('/processions/street.json')
+      )
+        return text;
+      const value = JSON.parse(String(text)) as { schedule: Record<string, unknown> };
+      value.schedule = { ...value.schedule, start: '25:00' };
+      return JSON.stringify(value);
+    });
+    try {
+      const { packs, errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
+      expect(packs).toEqual([]);
+      expect(errors.some((error) => error.file.endsWith('/processions/street.json'))).toBe(true);
+      expect(errors.some((error) => /missing predecessor/.test(error.message))).toBe(false);
+    } finally {
+      vi.mocked(fs.readFile).mockImplementation(original);
+    }
+  });
+  it('reports inherited schedule overflow at the dependent event file', async () => {
+    const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+    vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      const text = await original(...args);
+      if (
+        typeof args[0] !== 'string' ||
+        !args[0].replaceAll('\\', '/').endsWith('/processions/street.json')
+      )
+        return text;
+      const value = JSON.parse(String(text)) as { schedule: Record<string, unknown> };
+      value.schedule = { ...value.schedule, offset_days: 31, start: '23:30', duration_min: 90 };
+      return JSON.stringify(value);
+    });
+    try {
+      const { packs, errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
+      expect(packs).toEqual([]);
+      expect(errors).toContainEqual({
+        file: 'cities/fixture/processions/arrival.json',
+        message: expect.stringContaining('resolved offset 32') as string,
+      });
+    } finally {
+      vi.mocked(fs.readFile).mockImplementation(original);
+    }
+  });
+  it.each(['season', 'missing', 'self', 'cycle'] as const)(
+    'reports an invalid %s reference at its procession file',
+    async (kind) => {
+      const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+      vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+        const text = await original(...args);
+        if (typeof args[0] !== 'string') return text;
+        const path = args[0].replaceAll('\\', '/');
+        if (
+          !path.endsWith('/processions/arrival.json') &&
+          !(kind === 'cycle' && path.endsWith('/processions/street.json'))
+        )
+          return text;
+        const value = JSON.parse(String(text)) as {
+          id: string;
+          season?: string;
+          schedule: unknown;
+        };
+        if (kind === 'season') value.season = 'missing-season';
+        else
+          value.schedule = {
+            follows:
+              kind === 'missing'
+                ? 'procession/missing'
+                : kind === 'self'
+                  ? value.id
+                  : value.id === 'procession/street'
+                    ? 'procession/arrival'
+                    : 'procession/street',
+            duration_min: 90,
+          };
+        return JSON.stringify(value);
+      });
+      try {
+        const { errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
+        expect(errors).toContainEqual({
+          file: 'cities/fixture/processions/arrival.json',
+          message: expect.stringMatching(
+            kind === 'season'
+              ? /unknown season/
+              : kind === 'missing'
+                ? /missing predecessor/
+                : /cyclic follows/,
+          ) as string,
+        });
+      } finally {
+        vi.mocked(fs.readFile).mockImplementation(original);
+      }
+    },
+  );
   it('passes on the repository city packs', async () => {
     const { packs, errors } = await loadCityPacks(contentRoot);
     expect(errors).toEqual([]);

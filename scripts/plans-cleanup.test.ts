@@ -236,9 +236,27 @@ describe('cleanTask', () => {
     expect(() => cleanTask(root, 'labels')).toThrow(/No task folder/);
     task('active', 'labels', ['handoff.md']);
     task('done', 'labels', ['handoff.md']);
-    expect(() => cleanTask(root, 'labels')).toThrow(/several statuses/);
+    expect(() => cleanTask(root, 'labels')).toThrow(/several locations/);
     task('todo', 'roads', ['handoff.md', 'log.txt']);
     expect(() => cleanTask(root, 'roads', ['typo.json'])).toThrow(/typo\.json/);
     expect(readdirSync(join(root, 'todo', 'roads')).sort()).toEqual(['handoff.md', 'log.txt']);
+  });
+
+  it('cleans a completed task nested under a group and reports the full path', () => {
+    const folder = task('done/life-simulation', 'nested-task', ['handoff.md', 'scratch.txt']);
+    expect(cleanTask(root, 'nested-task', [], true)).toMatchObject({
+      folder,
+      deleted: ['scratch.txt'],
+    });
+    expect(cleanTask(root, 'nested-task').folder).toBe(folder);
+    expect(readdirSync(folder)).toEqual(['handoff.md']);
+  });
+
+  it('retains legacy direct done paths and rejects duplicate grouped slugs with paths', () => {
+    const direct = task('done', 'legacy', ['handoff.md', 'scratch.txt']);
+    expect(cleanTask(root, 'legacy').folder).toBe(direct);
+    const first = task('done/life-simulation', 'duplicate', ['handoff.md']);
+    const second = task('done/map-rendering', 'duplicate', ['handoff.md']);
+    expect(() => cleanTask(root, 'duplicate')).toThrow(`${first}, ${second}`);
   });
 });

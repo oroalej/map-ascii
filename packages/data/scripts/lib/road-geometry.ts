@@ -16,6 +16,9 @@ export const lines = (f: AtlasFeature): Position[][] =>
       : [];
 export const width = (road: AtlasFeature) =>
   road.properties.width ?? defaultRoadWidths[road.properties.class] ?? 6;
+/** Event paths need a measured width; ordinary seasonal roads retain their fallback. */
+export const eventWidth = (road: AtlasFeature) =>
+  road.properties.class === 'path' ? Number(road.properties.event_path_width ?? 0) : width(road);
 
 export const point = (
   id: string,

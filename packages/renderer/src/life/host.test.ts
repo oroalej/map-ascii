@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProcessionRoute } from '@atlas/shared';
+import { eventOccurrence, eventTime, type ProcessionRoute } from '@atlas/shared';
 import { FrameProfiler } from '../profile';
-import { createWorkerHost } from './host';
+import { createInlineHost, createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
-import type { LifeTile } from './simulate';
+import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
@@ -18,6 +18,7 @@ const mock = vi.hoisted(() => ({
   play: vi.fn(),
   stop: vi.fn(),
   setLive: vi.fn(),
+  setProcessions: vi.fn(() => Promise.resolve()),
   release: vi.fn(),
   terminate: vi.fn(),
 }));
@@ -116,6 +117,106 @@ describe('pipelined Life host', () => {
     host.dispose();
   });
 
+  it.each(['worker', 'inline'] as const)(
+    'retains compatible ordinary agents across %s event commands and stale replies',
+    async (mode) => {
+      const s = fixture();
+      const street: ProcessionRoute = {
+        ...route,
+        kind: 'procession',
+        formation: undefined,
+        segments: [{ id: 'osm:way/1', width_m: 8, sidewalk_m: 0 }],
+        blocked: [],
+      };
+      const world = new LifeWorld();
+      world.setProcessions([street]);
+      const host = mode === 'inline' ? createInlineHost(world) : createWorkerHost({}, [street]);
+      const person: VisibleAgent = { kind: 'person', lng: 0.0005, lat: 0.0001, flap: 0 };
+      const car: VisibleAgent = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        lng: 0.0005,
+        lat: 0,
+        ahead: [0.00051, 0],
+        flap: 0,
+      };
+      const event: VisibleAgent = { ...person, event: true };
+      const agents = [person, car, event];
+      if (mode === 'inline') vi.spyOn(world, 'visible').mockReturnValue(agents);
+      else mock.frame.mockResolvedValueOnce({ ...result(1), agents });
+      host.sync(s.tiles);
+      await flush();
+      host.request(s.input);
+      await flush();
+      let resolve!: (reply: FrameResult) => void;
+      if (mode === 'worker') {
+        mock.frame.mockImplementationOnce(
+          () =>
+            new Promise((done) => {
+              resolve = done;
+            }),
+        );
+        host.request(s.input);
+      }
+      host.play(street.id);
+      expect(host.latest()?.agents).toEqual([person]);
+      if (mode === 'worker') {
+        resolve({ ...result(2), agents });
+        await flush();
+        expect(host.latest()?.agents).toEqual([person]);
+      }
+      host.stop();
+      expect(host.latest()?.agents).toEqual([person]);
+      host.setProcessions([]);
+      expect(host.latest()?.agents).toEqual([person]);
+      expect(host.latest()?.procession).toBeUndefined();
+      host.dispose();
+    },
+  );
+  it('installs late event routes in the inline fallback and replaces active playback', () => {
+    vi.stubGlobal(
+      'Worker',
+      class {
+        constructor() {
+          throw Error('Unavailable');
+        }
+      },
+    );
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    host.setProcessions([route]);
+    expect(host.play(route.id)).toBe(true);
+    expect(host.latest()?.procession?.id).toBe(route.id);
+    host.setProcessions([]);
+    expect(host.latest()?.procession).toBeUndefined();
+    expect(host.play(route.id)).toBe(false);
+    host.dispose();
+  });
+  it('installs late routes without resyncing tiles and discards an older event reply', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    expect(host.request(s.input)).toBe(true);
+    host.setProcessions([route]);
+    resolve({ ...result(1), procession: { id: 'old', progress: 0.5, live: false } });
+    await flush();
+    expect(host.latest()?.procession).toBeUndefined();
+    expect(mock.setProcessions).toHaveBeenCalledWith([route]);
+    expect(mock.sync).toHaveBeenCalledTimes(1);
+    expect(host.play(route.id)).toBe(true);
+    host.setProcessions([]);
+    expect(host.play(route.id)).toBe(false);
+    host.dispose();
+  });
   it('initializes the ordinary shop schedule once without sending city config in frame requests', async () => {
     const s = fixture(),
       shops = { open: '22:00', close: '06:00' };
@@ -473,5 +574,39 @@ describe('pipelined Life host', () => {
     await failOver(ended);
     expect(ended.latest()?.procession).toBeUndefined();
     ended.dispose();
+  });
+  it('invalidates event timing immediately on Stop and rejects late playback frames', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, [route]);
+    host.sync(s.tiles);
+    await flush();
+    const timing = eventOccurrence(route.schedule, new Date('2026-06-01'));
+    host.play(route.id, timing);
+    expect(host.latest()?.procession?.time).toEqual(eventTime(timing, 0));
+    let resolve!: (value: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.stop();
+    expect(host.latest()?.procession).toBeUndefined();
+    resolve({
+      ...result(1),
+      procession: { id: route.id, progress: 0.5, live: false, time: eventTime(timing, 0.5) },
+    });
+    await flush();
+    expect(host.latest()?.procession).toBeUndefined();
+    host.play(route.id, timing);
+    mock.frame.mockResolvedValueOnce({
+      ...result(2),
+      procession: { id: route.id, progress: 0.25, live: false, time: eventTime(timing, 0.25) },
+    });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.procession?.time?.minute).toBe(15 * 60 + 15);
+    host.dispose();
   });
 });

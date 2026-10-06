@@ -14,8 +14,8 @@ export default defineConfig({
   globalTimeout: process.env.CI ? 240_000 : 0,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  // CI shards already run in parallel. Leave CPU time for asynchronous GPU
-  // confirmations by running one software WebGL browser per CI runner.
+  // Shards run in parallel. Within a CI runner, concurrent software-WebGL desktop and
+  // Pixel-DPR contexts stall drawing and readbacks, so keep one browser active at a time.
   workers: process.env.CI ? 1 : 2,
   reporter: process.env.CI
     ? [['github'], ['json', { outputFile: 'test-results/shard-duration.json' }]]
