@@ -1,0 +1,207 @@
+import type { ControlledCrossingAnchor, CrossingSide } from './geometry';
+import {
+  bodyInside,
+  bodiesOverlap,
+  memberSize,
+  pointInside,
+  PolygonIndex,
+  type Body,
+  type Point,
+  type Polygon,
+} from './occupancy';
+import { RoadAccess, subtractCrossing } from './terrain';
+
+/** Built after every carriageway has arrived; all stored positions remain tile-local. */
+export function finalizeControlledCrossings(
+  anchors: readonly ControlledCrossingAnchor[],
+  roads: readonly Polygon[],
+  perMeter: number,
+): void {
+  const access = new RoadAccess(roads, []);
+  for (const crossing of anchors) {
+    const theta = (crossing.bearing * Math.PI) / 180;
+    const across = { x: Math.cos(theta), y: Math.sin(theta) };
+    const lateral = { x: Math.sin(theta), y: -Math.cos(theta) };
+    const at = (side: number, depth: number, offset: number): Point => ({
+      x: crossing.anchor.x + (across.x * side * depth + lateral.x * offset) * perMeter,
+      y: crossing.anchor.y + (across.y * side * depth + lateral.y * offset) * perMeter,
+    });
+    const sides = [-1, 1].map((side): CrossingSide => {
+      let depth = crossing.width / 2;
+      if (roads.some((road) => pointInside(crossing.anchor, road))) {
+        let inside = 0,
+          outside = 0.1;
+        while (
+          outside < crossing.width + 64 &&
+          roads.some((road) => pointInside(at(side, outside, 0), road))
+        ) {
+          inside = outside;
+          outside += 0.1;
+        }
+        for (let i = 0; i < 24; i++) {
+          const mid = (inside + outside) / 2;
+          if (roads.some((road) => pointInside(at(side, mid, 0), road))) inside = mid;
+          else outside = mid;
+        }
+        depth = outside;
+      }
+      const gate: [Point, Point] = [at(side, depth, -1.5), at(side, depth, 1.5)];
+      let pads = [
+        [
+          at(side, depth, -1.5),
+          at(side, depth + 2, -1.5),
+          at(side, depth + 2, 1.5),
+          at(side, depth, 1.5),
+          at(side, depth, -1.5),
+        ],
+      ];
+      for (const road of roads) pads = pads.flatMap((pad) => subtractCrossing(pad, road[0]!));
+      pads = pads.filter(
+        (pad) =>
+          Math.max(
+            ...pad.map(
+              (p) =>
+                (((p.x - crossing.anchor.x) * across.x + (p.y - crossing.anchor.y) * across.y) *
+                  side) /
+                  perMeter -
+                depth,
+            ),
+          ) >=
+          1 - 1e-6,
+      );
+      const inward = { x: -side * across.x, y: -side * across.y };
+      const size = memberSize('adult');
+      // A tiny numerical margin keeps rotated slots from losing capacity at exact contact.
+      const spacing = { depth: size.length + 0.1501, lateral: size.width + 0.1501 };
+      const accepted: Body[] = [],
+        slots: Point[] = [];
+      for (let row = 0; row < 2; row++)
+        for (let column = 0; column < 2; column++) {
+          const centre = at(
+            side,
+            depth + (2 - spacing.depth) / 2 + row * spacing.depth,
+            (column - 0.5) * spacing.lateral,
+          );
+          const body = {
+            ...centre,
+            hx: inward.x,
+            hy: inward.y,
+            length: size.length * perMeter,
+            width: size.width * perMeter,
+          };
+          if (
+            !pads.some((pad) => bodyInside(body, [pad])) ||
+            !access.allows([body], false) ||
+            accepted.some((other) => bodiesOverlap(body, other, 0.15 * perMeter))
+          )
+            continue;
+          accepted.push(body);
+          slots.push(centre);
+        }
+      return { gate, inward, centre: at(side, depth, 0), pads, slots };
+    }) as [CrossingSide, CrossingSide];
+    crossing.sides = sides;
+    crossing.quad = [
+      sides[0].gate[0],
+      sides[1].gate[0],
+      sides[1].gate[1],
+      sides[0].gate[1],
+      sides[0].gate[0],
+    ];
+  }
+}
+
+/** Attach original crossing ends, preserving their two-point reach and mapped populations. */
+export function controlledCrossingConnectors(
+  anchors: readonly ControlledCrossingAnchor[],
+  lines: readonly { line: number; id: number; navigationOnly: boolean; points: Point[] }[],
+  roads: readonly Polygon[],
+  cuts: readonly Polygon[],
+  obstacles: readonly Polygon[],
+  perMeter: number,
+  identify: (id: string) => number,
+) {
+  const access = new RoadAccess(roads, cuts),
+    blocked = new PolygonIndex();
+  for (const polygon of obstacles) blocked.add(polygon);
+  const joins = new Map<number, { segment: number; t: number; point: Point }[]>(),
+    connectors: { points: Point[]; id: number }[] = [];
+  const ids = new Set(anchors.map((c) => c.lineId));
+  for (const crossing of anchors) {
+    const crossingLine = lines.find((line) => line.id === crossing.lineId);
+    if (!crossingLine) continue;
+    for (const [side, p] of [crossingLine.points[0]!, crossingLine.points.at(-1)!].entries()) {
+      if (
+        lines.some(
+          (line) =>
+            line !== crossingLine &&
+            !line.navigationOnly &&
+            [line.points[0]!, line.points.at(-1)!].some(
+              (q) => Math.hypot(p.x - q.x, p.y - q.y) < 0.01 * perMeter,
+            ),
+        )
+      )
+        continue;
+      const candidates = lines
+        .filter((line) => !ids.has(line.id) && !line.navigationOnly)
+        .flatMap((line) =>
+          line.points.slice(1).map((b, segment) => {
+            const a = line.points[segment]!,
+              dx = b.x - a.x,
+              dy = b.y - a.y;
+            const t = Math.max(
+              0,
+              Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)),
+            );
+            const point = { x: a.x + t * dx, y: a.y + t * dy },
+              distance = Math.hypot(point.x - p.x, point.y - p.y);
+            return { line: line.line, segment, t, point, distance };
+          }),
+        )
+        .filter((candidate) => candidate.distance <= 4 * perMeter)
+        .sort((a, b) => a.distance - b.distance || a.line - b.line || a.segment - b.segment);
+      for (const candidate of candidates) {
+        const steps = Math.max(1, Math.ceil(candidate.distance / (0.25 * perMeter)));
+        const hx = candidate.distance
+          ? (candidate.point.x - p.x) / candidate.distance
+          : crossing.sides![side]!.inward.x;
+        const hy = candidate.distance
+          ? (candidate.point.y - p.y) / candidate.distance
+          : crossing.sides![side]!.inward.y;
+        let clear = true;
+        for (let i = 0; i <= steps; i++) {
+          const body = {
+            x: p.x + ((candidate.point.x - p.x) * i) / steps,
+            y: p.y + ((candidate.point.y - p.y) * i) / steps,
+            hx,
+            hy,
+            length: 0.9 * perMeter,
+            width: perMeter,
+          };
+          if (!access.allows([body]) || blocked.hits([body])) {
+            clear = false;
+            break;
+          }
+        }
+        if (!clear) continue;
+        const entries = joins.get(candidate.line) ?? [];
+        if (
+          !entries.some(
+            (entry) =>
+              Math.hypot(entry.point.x - candidate.point.x, entry.point.y - candidate.point.y) <
+              0.01,
+          )
+        )
+          entries.push(candidate);
+        joins.set(candidate.line, entries);
+        if (candidate.distance > 0.01 * perMeter)
+          connectors.push({
+            points: [p, candidate.point],
+            id: identify(`${crossing.id}/connector/${side}`),
+          });
+        break;
+      }
+    }
+  }
+  return { joins, connectors };
+}

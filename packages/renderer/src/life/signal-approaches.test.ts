@@ -49,7 +49,10 @@ function fixture(oneway = false, simplified = false) {
       width: 10,
       ...(inbound
         ? {
-            stop: tileToLngLat(tile, { x: at.x + hx * 7.5 * pm, y: at.y + hy * 7.5 * pm }),
+            stop: tileToLngLat(tile, {
+              x: at.x + (hx * 7.5 + hy * (oneway ? 0 : 2.5)) * pm,
+              y: at.y + (hy * 7.5 - hx * (oneway ? 0 : 2.5)) * pm,
+            }),
             stop_width: oneway ? 10 : 5,
           }
         : {}),

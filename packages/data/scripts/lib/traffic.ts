@@ -2,6 +2,8 @@ import {
   canonicalSignalSeed,
   crossingControllerProperties,
   SignalStops,
+  SignalController,
+  SignalLayout,
   type SignalArm,
   type City,
   type CityLifeConfig,
@@ -391,6 +393,24 @@ export function mergeTraffic(
         resolveSignalLayout(s, vertices, entry.linked, entry.setbacks),
       );
     else s.properties.signal_stops = JSON.stringify(SignalStops.parse(legacy));
+  }
+  for (const entry of resolved) {
+    const { s, p } = entry;
+    const controller = SignalController.parse({
+      id: s.properties.id,
+      at: p,
+      seed: s.properties.signal_seed,
+      radius: s.properties.signal_radius,
+      a: s.properties.signal_a,
+      b: s.properties.signal_b,
+      mapped: s.properties.life_signal === 'mapped',
+      ...(s.properties.signal_layout
+        ? { layout: SignalLayout.parse(JSON.parse(s.properties.signal_layout)) }
+        : { stops: SignalStops.parse(JSON.parse(s.properties.signal_stops!)) }),
+    });
+    for (const c of crossings.values())
+      if (c.properties.crossing_signal === s.properties.id)
+        c.properties.crossing_signal_control = JSON.stringify(controller);
   }
   const out = features.filter(
     (f) =>

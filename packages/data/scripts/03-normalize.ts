@@ -95,6 +95,7 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   crossing_signal_seed?: number;
   crossing_mid?: boolean;
   crossing_walk?: 'a' | 'b';
+  crossing_signal_control?: string;
   signal_seed?: number;
   signal_stops?: string;
   life_signal?: 'mapped' | 'derived';

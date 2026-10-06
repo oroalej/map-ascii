@@ -97,7 +97,7 @@ describe('signals', () => {
     expect(life.signals.controlsCrossing(1, stripe)).toBe(true);
     expect(life.signals.controlsCrossing(0, stripe)).toBe(false);
   });
-  it('uses legacy red and green gates when a layout has no matching local approach', () => {
+  it('does not substitute a radius stop when exact layout stops fail local road matching', () => {
     const geo = geography(true, false);
     geo.lineIds = Uint32Array.from([hashString('road/main'), hashString('road/side')]);
     const center = tileToLngLat(tile, { x: 2048, y: 2048 });
@@ -122,18 +122,15 @@ describe('signals', () => {
       },
     ];
     const life = new TileLife(tile, geo, 1);
-    const legacy = new TileLife(tile, { ...geo, signalLayouts: undefined }, 1);
     expect(life.signals.signals[0]!.approaches).toEqual([]);
     const m = { ...car(), d: 2048 - 15 * pm, x: 2048 - 15 * pm };
     for (const color of ['red', 'green'] as const) {
       const clock = Array.from({ length: 140 }, (_, t) => t).find(
         (t) => signalState(life.signals.signals[0]!.seed, t).a === color,
       )!;
-      expect(life.signals.allows(m, 2048, 2048, clock, 15 * pm)).toBe(color === 'green');
+      expect(life.signals.allows(m, 2048, 2048, clock, 15 * pm)).toBe(true);
       const speed = life.signals.vehicleSpeed(m, 0.1, clock);
-      expect(speed).toBe(legacy.signals.vehicleSpeed(m, 0.1, clock));
-      if (color === 'red') expect(speed).toBeLessThan(m.speed);
-      else expect(speed).toBe(m.speed);
+      expect(speed).toBe(m.speed);
     }
   });
   it('cycles both axes with amber and all-red gaps, with mid-block pedestrian clearance', () => {

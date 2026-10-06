@@ -1188,7 +1188,15 @@ export class TileLife {
       line = end;
     }
     // Dogs last, on their own stream: they don't change who else is out.
-    for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
+    for (let line = 0; line < lines;) {
+      const kind = geo.kinds[line];
+      const end =
+        kind === LifeLine.path || kind === LifeLine.plaza
+          ? this.populationRange(line).end
+          : line + 1;
+      yield* this.spawnOn(line, true, end);
+      line = end;
+    }
     yield* this.spawnStalls();
     yield* this.spawnGatherers();
     yield* this.spawnFlocks();
@@ -1290,10 +1298,14 @@ export class TileLife {
   private strandedWalk(line: number): boolean {
     const kind = this.geo.kinds[line]!;
     if (kind !== LifeLine.path && kind !== LifeLine.plaza) return false;
-    if (this.lineLength(line) / this.perMeter >= STRANDED_WALK_M && !this.crossingLine(line))
+    const range = this.populationRange(line);
+    if (
+      this.populationLength(range.first, range.end) / this.perMeter >= STRANDED_WALK_M &&
+      !this.crossingLine(range.first)
+    )
       return false;
     const joined = (atStart: boolean) => {
-      const v = atStart ? this.first(line) : this.last(line);
+      const v = atStart ? this.first(range.first) : this.last(range.end - 1);
       const x = this.geo.coords[v * 2]!,
         y = this.geo.coords[v * 2 + 1]!;
       // Cut at the tile's edge, it goes on in the next tile.
@@ -1303,7 +1315,8 @@ export class TileLife {
           .get(this.endKey(v))
           ?.some(
             (code) =>
-              code >> 1 !== line &&
+              (code >> 1 < range.first || code >> 1 >= range.end) &&
+              !this.geo.navigationOnly?.[code >> 1] &&
               (this.geo.kinds[code >> 1] === LifeLine.path ||
                 this.geo.kinds[code >> 1] === LifeLine.plaza),
           ) ?? false
@@ -1351,6 +1364,7 @@ export class TileLife {
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
   private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
+    if (this.geo.navigationOnly?.[line]) return;
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
@@ -2479,30 +2493,40 @@ export class TileLife {
     }
     for (const shoppers of [false, true]) {
       const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
-      for (let line = 0; line < this.geo.kinds.length; line++) {
+      for (let line = 0, end = 0; line < this.geo.kinds.length; line = end) {
+        end = this.populationRange(line).end;
+        if (this.geo.navigationOnly?.[line]) continue;
         yield;
         const kind = this.geo.kinds[line];
         if (kind !== LifeLine.path && kind !== LifeLine.plaza) continue;
-        const length = this.lineLength(line),
+        const length = this.populationLength(line, end),
           meters = length / this.perMeter;
         if (!length) continue;
         let shops = 0;
         for (let i = 0; i < commerce.length; i += 2) {
           const p = { x: commerce[i]!, y: commerce[i + 1]! };
-          for (let v = this.first(line); v < this.last(line); v++) {
-            if ((v & 63) === 0) yield;
-            const x = this.geo.coords[v * 2]!,
-              y = this.geo.coords[v * 2 + 1]!,
-              dx = this.geo.coords[(v + 1) * 2]! - x,
-              dy = this.geo.coords[(v + 1) * 2 + 1]! - y;
-            const t = Math.max(
-              0,
-              Math.min(1, ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy || 1)),
-            );
-            if (Math.hypot(p.x - x - dx * t, p.y - y - dy * t) <= COMMERCE.reach * this.perMeter) {
-              shops++;
-              break;
+          let matched = false;
+          for (let piece = line; piece < end; piece++) {
+            for (let v = this.first(piece); v < this.last(piece); v++) {
+              if ((v & 63) === 0) yield;
+              const x = this.geo.coords[v * 2]!,
+                y = this.geo.coords[v * 2 + 1]!,
+                dx = this.geo.coords[(v + 1) * 2]! - x,
+                dy = this.geo.coords[(v + 1) * 2 + 1]! - y;
+              const t = Math.max(
+                0,
+                Math.min(1, ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy || 1)),
+              );
+              if (
+                Math.hypot(p.x - x - dx * t, p.y - y - dy * t) <=
+                COMMERCE.reach * this.perMeter
+              ) {
+                shops++;
+                matched = true;
+                break;
+              }
             }
+            if (matched) break;
           }
         }
         const count = Math.min(
@@ -2533,7 +2557,10 @@ export class TileLife {
             hy: 0,
             walked: rng() * 2 * PEOPLE.stride,
           };
-          this.advance(m, rng() * length, false);
+          const position = this.populationPiece(line, end, rng() * length, dir);
+          m.line = position.line;
+          m.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+          this.advance(m, position.distance, false);
           if (!inTile(m)) continue;
           let close = false;
           for (let j = 0; j < commerce.length; j += 2)
@@ -2555,7 +2582,7 @@ export class TileLife {
                 step: rng() < 0.5 ? 0 : 1,
               },
             ];
-            if (!this.strandedWalk(line) && guard(m)) this.movers.push(m);
+            if (!this.strandedWalk(m.line) && guard(m)) this.movers.push(m);
           } else {
             let market = false;
             for (let j = 0; j < this.geo.markets.length; j += 2)
@@ -2590,12 +2617,22 @@ export class TileLife {
   private *spawnCats(): Generator<void, void, void> {
     const rng = this.catRng;
     let count = 0;
-    for (let line = 0; line < this.geo.kinds.length && count < CAT.maxPerTile; line++) {
+    for (
+      let line = 0, end = 0;
+      line < this.geo.kinds.length && count < CAT.maxPerTile;
+      line = end
+    ) {
+      const kind = this.geo.kinds[line];
+      end =
+        kind === LifeLine.path || kind === LifeLine.plaza
+          ? this.populationRange(line).end
+          : line + 1;
       yield;
+      if (this.geo.navigationOnly?.[line]) continue;
       if (!usableLines.cat.includes(this.geo.kinds[line]! as LifeLine)) continue;
       const rule = spawnRules[this.geo.kinds[line]! as LifeLine].find((r) => r.kind === 'cat');
       if (!rule) continue;
-      const length = this.lineLength(line);
+      const length = this.populationLength(line, end);
       const cats = Math.floor(length / this.perMeter / rule.spacing + rng());
       for (
         let i = 0;
@@ -2621,7 +2658,10 @@ export class TileLife {
           hy: 0,
           walked: 0,
         };
-        this.advance(m, rng() * length, false);
+        const position = this.populationPiece(line, end, rng() * length, dir);
+        m.line = position.line;
+        m.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+        this.advance(m, position.distance, false);
         if (
           !inTile(m) ||
           !this.scenes.walkable(m, m) ||
@@ -2741,6 +2781,7 @@ export class TileLife {
     const paints = VEHICLES.cart.paints;
     for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
       end = this.populationRange(line).end;
+      if (geo.navigationOnly?.[line]) continue;
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
       const length = this.populationLength(line, end);

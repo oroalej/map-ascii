@@ -92,14 +92,19 @@ export class SignalControl {
       const x = values[i]!,
         y = values[i + 1]!;
       const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
+      const exact = geo.signalStops?.[i / SIGNAL_STRIDE];
       this.signals.push({
         x,
         y,
         radius: values[i + 2]!,
         a: values[i + 3]!,
         b: values[i + 4]!,
-        seed: placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
-        approaches: layout && signalApproaches(tile, geo, layout, along),
+        seed:
+          geo.signalSeeds?.[i / SIGNAL_STRIDE] ??
+          placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
+        approaches:
+          (layout || exact) &&
+          signalApproaches(tile, geo, layout ?? { members: [], arms: exact! }, along, true),
         key: layout && signalJunctionKey(layout),
         members: layout?.members.map((p) => lngLatToTile(tile, ...p)),
       });
@@ -109,7 +114,7 @@ export class SignalControl {
       if (geo.kinds[line]! > LifeLine.path) continue;
       const stops: Stop[] = [];
       for (const s of this.signals) {
-        if (s.approaches?.length) {
+        if (s.approaches) {
           for (const a of s.approaches) {
             if (a.line === line && a.arm.inbound && a.stopAlong !== undefined)
               stops.push({
@@ -151,7 +156,7 @@ export class SignalControl {
   controlsCrossing(line: number, centre: Point): boolean {
     for (const s of this.signals) {
       const reach = (s.radius + SIGNAL.crossingMargin) * this.perMeter;
-      if (s.approaches?.length) {
+      if (s.approaches) {
         if (
           s.approaches.some(
             (a) => a.line === line && Math.hypot(a.x - centre.x, a.y - centre.y) <= reach,
@@ -188,7 +193,7 @@ export class SignalControl {
   }
   allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
     for (const s of this.signals) {
-      if (s.approaches?.length) {
+      if (s.approaches) {
         const entry = s.approaches.find(
           (a) =>
             a.arm.inbound &&

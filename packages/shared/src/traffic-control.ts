@@ -1,5 +1,5 @@
 import * as z from 'zod';
-import { SignalArm, SignalPosition } from './signal-layout';
+import { SignalArm, SignalLayout, SignalPosition } from './signal-layout';
 import { lngLatToTile, MERCATOR_METERS, TILE_EXTENT } from './tile-space';
 
 export const ControllerSeed = z.number().int().min(0).max(0xffffffff);
@@ -22,6 +22,38 @@ export const SignalStops = z.array(
   ),
 );
 export type SignalStops = z.infer<typeof SignalStops>;
+
+/** Crossing-carried copy keeps buffered vehicle stops controlled without the signal point. */
+export const SignalController = z.strictObject({
+  id: z.string().min(1),
+  at: SignalPosition,
+  seed: ControllerSeed,
+  radius: z.number().positive(),
+  a: z.number().min(-1).lt(180),
+  b: z.number().min(0).lt(180),
+  mapped: z.boolean(),
+  layout: SignalLayout.optional(),
+  stops: SignalStops.optional(),
+});
+export type SignalController = z.infer<typeof SignalController>;
+
+export function decodeCrossingSignal(
+  properties: Readonly<Record<string, unknown>>,
+  crossing: CrossingController,
+): SignalController | undefined {
+  if (properties.crossing_signal_control === undefined) return;
+  if (typeof properties.crossing_signal_control !== 'string')
+    throw new Error('crossing_signal_control must be scalar JSON');
+  const signal = SignalController.parse(JSON.parse(properties.crossing_signal_control));
+  if (
+    signal.id !== crossing.id ||
+    signal.seed !== crossing.seed ||
+    JSON.stringify(signal.at) !== JSON.stringify(crossing.at) ||
+    signal.a < 0 !== crossing.midBlock
+  )
+    throw new Error('inconsistent crossing controller');
+  return signal;
+}
 
 /** Match the existing placeSeed hash at the highest source zoom, before MVT quantization. */
 export function canonicalSignalSeed(lng: number, lat: number, maxZoom: number): number {

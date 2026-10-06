@@ -158,7 +158,9 @@ export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixtu
       y = signals[i + 1]!,
       radius = signals[i + 2]!;
     if (x < 0 || y < 0 || x >= EXTENT || y >= EXTENT) continue;
-    const seed = placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale);
+    const seed =
+      geo.signalSeeds?.[i / SIGNAL_STRIDE] ??
+      placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale);
     const midBlock = signals[i + 3]! < 0;
     const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
     if (layout) {

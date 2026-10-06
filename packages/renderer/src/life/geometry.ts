@@ -6,6 +6,8 @@
 import type {
   PlaceKind,
   SignalLayout,
+  SignalStops,
+  CrossingController,
   SeasonalDisplayRecord,
   SeasonalCarnivalRecord,
   SeasonalRecord,
@@ -160,6 +162,24 @@ export const roostClasses: ReadonlySet<string> = new Set([
   'water_area',
 ]);
 
+export type CrossingSide = {
+  gate: [TilePoint, TilePoint];
+  inward: TilePoint;
+  centre: TilePoint;
+  pads: TilePoint[][];
+  slots: TilePoint[];
+};
+export type ControlledCrossingAnchor = {
+  id: string;
+  controller: CrossingController;
+  anchor: TilePoint;
+  bearing: number;
+  width: number;
+  lineId: number;
+  quad?: TilePoint[];
+  sides?: [CrossingSide, CrossingSide];
+};
+
 export type LifeGeometry = {
   seasonalPayload?: SeasonalPayload;
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
@@ -171,10 +191,17 @@ export type LifeGeometry = {
   signals?: Float32Array;
   /** Geographic approach records, aligned with signal centers; absent for legacy archives. */
   signalLayouts?: (SignalLayout | undefined)[];
+  /** Exact scalar uint32 values; undefined distinguishes old archives from seed zero. */
+  signalSeeds?: (number | undefined)[];
+  signalStops?: (SignalStops | undefined)[];
+  signalIds?: (string | undefined)[];
+  controlledCrossings?: ControlledCrossingAnchor[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
   /** Original population line per routing piece; splitting must not reshuffle spawn streams. */
   spawnGroups?: Uint32Array;
+  /** Routing-only joins never contribute residents or consume population random streams. */
+  navigationOnly?: Uint8Array;
   /** Lot boundaries and solid ground obstacles, including polygon holes. */
   areas?: LifeArea[];
   /** Interaction sites: x, y, kind (0 stop, 1 terminal, 2 shelter), mode bits, covered. */
@@ -344,8 +371,13 @@ export class LifeBuilder {
   }
   private signals: number[] = [];
   private signalLayouts: (SignalLayout | undefined)[] = [];
+  private signalSeeds: (number | undefined)[] = [];
+  private signalStops: (SignalStops | undefined)[] = [];
+  private signalIds: (string | undefined)[] = [];
+  private controlledCrossings: ControlledCrossingAnchor[] = [];
   private signalMembers: TilePoint[][] = [];
   private spawnGroups?: number[];
+  private navigationOnly: number[] = [];
   signal(
     p: TilePoint,
     radius: number,
@@ -353,9 +385,37 @@ export class LifeBuilder {
     axisB: number,
     mapped: boolean,
     layout?: SignalLayout,
+    metadata?: { id?: string; seed?: number; stops?: SignalStops; fallback?: boolean },
   ) {
+    const previous = metadata?.id ? this.signalIds.indexOf(metadata.id) : -1;
+    if (previous >= 0) {
+      if (!metadata?.fallback)
+        this.signals.splice(
+          previous * SIGNAL_STRIDE,
+          SIGNAL_STRIDE,
+          p.x,
+          p.y,
+          radius,
+          axisA,
+          axisB,
+          mapped ? 1 : 0,
+        );
+      return;
+    }
     this.signals.push(p.x, p.y, radius, axisA, axisB, mapped ? 1 : 0);
     this.signalLayouts.push(layout);
+    this.signalSeeds.push(metadata?.seed);
+    this.signalStops.push(metadata?.stops);
+    this.signalIds.push(metadata?.id);
+  }
+  controlledCrossing(anchor: ControlledCrossingAnchor) {
+    this.controlledCrossings.push(anchor);
+  }
+  get crossingAnchors(): readonly ControlledCrossingAnchor[] {
+    return this.controlledCrossings;
+  }
+  get roadPolygons(): readonly (readonly (readonly TilePoint[])[])[] {
+    return this.areas.filter((area) => area.kind === 'carriageway').map((area) => area.rings);
   }
   private lineIds: number[] = [];
   private areas: LifeArea[] = [];
@@ -405,6 +465,7 @@ export class LifeBuilder {
     width = 0,
     id = this.starts.length + 1,
     oneway: -1 | 0 | 1 = 0,
+    navigationOnly = false,
   ) {
     if (points.length < 2) return;
     this.starts.push(this.coords.length / 2);
@@ -412,6 +473,7 @@ export class LifeBuilder {
     this.widths.push(width);
     this.oneways.push(oneway);
     this.lineIds.push(id);
+    this.navigationOnly.push(Number(navigationOnly));
     this.spawnGroups?.push(this.kinds.length - 1);
     for (const p of points) this.coords.push(p.x, p.y);
   }
@@ -425,6 +487,7 @@ export class LifeBuilder {
       ids: this.lineIds,
       flows: this.oneways,
       groups: this.spawnGroups,
+      navigationOnly: this.navigationOnly,
     };
     this.coords = [];
     this.starts = [];
@@ -432,6 +495,7 @@ export class LifeBuilder {
     this.widths = [];
     this.lineIds = [];
     this.oneways = [];
+    this.navigationOnly = [];
     this.spawnGroups = groupPieces || source.groups ? [] : undefined;
     const addPiece = (points: readonly TilePoint[], line: number) => {
       if (points.length < 2) return;
@@ -441,10 +505,91 @@ export class LifeBuilder {
         source.widths[line],
         source.ids[line],
         source.flows[line] as -1 | 0 | 1,
+        !!source.navigationOnly[line],
       );
       if (this.spawnGroups) this.spawnGroups[this.kinds.length - 1] = source.groups?.[line] ?? line;
     };
     return { ...source, addPiece };
+  }
+
+  get walkingLinesView() {
+    return this.kinds.flatMap((kind, line) =>
+      kind === LifeLine.path || kind === LifeLine.plaza
+        ? [
+            {
+              line,
+              kind,
+              id: this.lineIds[line]!,
+              navigationOnly: !!this.navigationOnly[line],
+              points: Array.from(
+                { length: (this.starts[line + 1] ?? this.coords.length / 2) - this.starts[line]! },
+                (_, i) => ({
+                  x: this.coords[(this.starts[line]! + i) * 2]!,
+                  y: this.coords[(this.starts[line]! + i) * 2 + 1]!,
+                }),
+              ),
+            },
+          ]
+        : [],
+    );
+  }
+  get crossingCuts() {
+    return this.areas.filter((a) => a.kind === 'crossing').map((a) => a.rings);
+  }
+  walkingObstacles(
+    perMeter: number,
+    strip: (a: TilePoint, b: TilePoint, halfWidth: number) => TilePoint[],
+  ) {
+    const polygons = this.areas.filter((a) => a.kind === 'blocked').map((a) => a.rings);
+    for (let line = 0; line < this.obstacleClosed.length; line++) {
+      const points = Array.from(
+        {
+          length:
+            (this.obstacleStarts[line + 1] ?? this.obstacles.length / 2) -
+            this.obstacleStarts[line]!,
+        },
+        (_, i) => ({
+          x: this.obstacles[(this.obstacleStarts[line]! + i) * 2]!,
+          y: this.obstacles[(this.obstacleStarts[line]! + i) * 2 + 1]!,
+        }),
+      );
+      if (this.obstacleClosed[line]) polygons.push([points]);
+      else
+        for (let i = 1; i < points.length; i++)
+          polygons.push([strip(points[i - 1]!, points[i]!, 0.15 * perMeter)]);
+    }
+    return polygons;
+  }
+
+  /** Retain contiguous source population groups while adding ordinary endpoint joins. */
+  joinWalking(
+    joins: ReadonlyMap<number, readonly { segment: number; t: number; point: TilePoint }[]>,
+    connectors: readonly { points: TilePoint[]; id: number }[],
+  ) {
+    if (!joins.size && !connectors.length) return;
+    const { coords, starts, kinds, addPiece } = this.takeLines(true);
+    for (let line = 0; line < kinds.length; line++) {
+      let piece: TilePoint[] = [];
+      for (let v = starts[line]!; v < starts[line + 1]!; v++) {
+        const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
+        if (!piece.length || piece.at(-1)!.x !== p.x || piece.at(-1)!.y !== p.y) piece.push(p);
+        for (const join of [...(joins.get(line) ?? [])]
+          .filter((j) => j.segment === v - starts[line]!)
+          .sort((a, b) => a.t - b.t)) {
+          if (join.t <= 1e-8) {
+            addPiece(piece, line);
+            piece = [p];
+            continue;
+          }
+          piece.push(join.point);
+          addPiece(piece, line);
+          piece = [join.point];
+        }
+      }
+      addPiece(piece, line);
+    }
+    for (const connector of connectors)
+      this.line(connector.points, LifeLine.path, 1, connector.id, 0, true);
   }
 
   /** Signal entrances must be routable endpoints, even when OSM keeps a way continuous. */
@@ -667,9 +812,14 @@ export class LifeBuilder {
     return {
       signals: Float32Array.from(this.signals),
       signalLayouts: this.signalLayouts,
+      signalSeeds: this.signalSeeds,
+      signalStops: this.signalStops,
+      signalIds: this.signalIds,
+      controlledCrossings: this.controlledCrossings,
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
       spawnGroups: this.spawnGroups && Uint32Array.from(this.spawnGroups),
+      navigationOnly: Uint8Array.from(this.navigationOnly),
       areas: this.areas,
       sites: Float32Array.from(this.sites),
       obstacles: Float32Array.from(this.obstacles),
@@ -720,6 +870,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
   ...(g.commerce ? [g.commerce.buffer as ArrayBuffer] : []),
   ...(g.lineIds ? [g.lineIds.buffer as ArrayBuffer] : []),
   ...(g.spawnGroups ? [g.spawnGroups.buffer as ArrayBuffer] : []),
+  ...(g.navigationOnly ? [g.navigationOnly.buffer as ArrayBuffer] : []),
   ...(g.oneway ? [g.oneway.buffer as ArrayBuffer] : []),
   g.sites.buffer as ArrayBuffer,
   g.obstacles.buffer as ArrayBuffer,
