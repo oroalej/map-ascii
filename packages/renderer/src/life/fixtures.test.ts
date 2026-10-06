@@ -141,7 +141,7 @@ describe('street fixtures', () => {
       utilities: false,
     });
     expect(pack([pole], 20.5, grid, 500).texels).toEqual(result.texels);
-    expect(updateFixtureSignals(result, 500)).toBe(false);
+    expect(updateFixtureSignals(result, 500)).toBe(0);
     expect(cells(pack([pole], 19).texels).length).toBeLessThan(marks.length);
     expect(cells(pack([pole], 21, { ...grid, cols: 2, rows: 2 }).texels)).toHaveLength(0);
     expect(glyphs).toContain('\u25aa');
@@ -294,7 +294,7 @@ describe('street fixtures', () => {
       ).toBe(true);
     }
     const frozen = packed.texels.slice();
-    expect(updateFixtureSignals(packed, world.signalClock)).toBe(false);
+    expect(updateFixtureSignals(packed, world.signalClock)).toBe(0);
     expect(packed.texels).toEqual(frozen);
     expect(cells(packed.texels).map(({ at, glyph, part }) => ({ at, glyph, part }))).toEqual(
       geometry,

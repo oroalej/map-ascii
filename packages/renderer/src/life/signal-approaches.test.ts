@@ -49,7 +49,10 @@ function fixture(oneway = false, simplified = false) {
       width: 10,
       ...(inbound
         ? {
-            stop: tileToLngLat(tile, { x: at.x + hx * 7.5 * pm, y: at.y + hy * 7.5 * pm }),
+            stop: tileToLngLat(tile, {
+              x: at.x + (hx * 7.5 + hy * (oneway ? 0 : 2.5)) * pm,
+              y: at.y + (hy * 7.5 - hx * (oneway ? 0 : 2.5)) * pm,
+            }),
             stop_width: oneway ? 10 : 5,
           }
         : {}),
@@ -330,15 +333,13 @@ describe('authoritative signal approaches', () => {
     expect(north.key).toBe(south.key);
     expect(compatible(north, south)).toBe(false);
   });
-  it('holds amber when it can brake and clears walkers already inside either member', () => {
-    const { life, car, p, q } = fixture();
+  it('holds amber when it can brake', () => {
+    const { life, car, q } = fixture();
     const m = car(3),
       amber = clockFor(life, 'b', 'amber');
     expect(life.signals.allows(m, q.x, q.y, amber, 10 * pm)).toBe(false);
     m.v = 30 * pm;
     expect(life.signals.allows(m, q.x, q.y, amber, pm)).toBe(true);
-    const red = clockFor(life, 'b', 'red');
-    expect(life.signals.walkDistance(p, q, 12 * pm, red)).toBe(12 * pm);
   });
   it('waits for room on the final exit beyond the linked junction', () => {
     const { life, car } = fixture();

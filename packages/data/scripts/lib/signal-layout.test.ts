@@ -63,9 +63,14 @@ describe('resolved signal approaches', () => {
       data.arms.find((a) => a.road_id === 'south')!.group,
     );
     expect(out.filter((f) => f.properties.variant === 'stop_line')).toHaveLength(4);
-    expect(
-      mergeTraffic(fixture(), add()).filter((f) => f.properties.variant === 'stop_line'),
-    ).toHaveLength(3);
+    let shortCrossingArms = 0;
+    const unlinked = mergeTraffic(fixture(), add(), undefined, (stats) => {
+      shortCrossingArms = stats.shortCrossingArms;
+    });
+    // Without the explicit link, the internal connector ends at another junction in 10.8 m.
+    // It cannot contain the new 11 m setback; the complete linked layout above can.
+    expect(unlinked.filter((f) => f.properties.variant === 'stop_line')).toHaveLength(2);
+    expect(shortCrossingArms).toBe(1);
   });
   it('rejects missing, duplicate, disconnected, and multiply owned members', () => {
     expect(() => mergeTraffic(fixture(), add([[124, 14]]))).toThrow('shared road vertex');

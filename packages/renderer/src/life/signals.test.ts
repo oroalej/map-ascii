@@ -58,46 +58,31 @@ const car = (): Mover => ({
   rank: 0,
 });
 describe('signals', () => {
-  it('associates derived stripes with legacy road stops within radius plus 3.5 metres', () => {
-    const life = new TileLife(tile, geography(), 1);
-    expect(life.signals.controlsCrossing(0, { x: 2048 + 10 * pm, y: 2048 })).toBe(true);
-    expect(life.signals.controlsCrossing(0, { x: 2048 + 12 * pm, y: 2048 })).toBe(false);
-    expect(life.signals.controlsCrossing(9, { x: 2048, y: 2048 })).toBe(false);
-  });
-  it('associates linked controllers with the corresponding road member only', () => {
-    const b = new LifeBuilder(),
-      members = [
-        { x: 2048, y: 2000 },
-        { x: 2048, y: 2200 },
-      ];
-    for (const p of members)
-      b.line([{ x: 0, y: p.y }, p, { x: 4096, y: p.y }], LifeLine.roadMajor, 14);
-    b.signal(members[0]!, 8, 90, 0, true);
-    const geo = b.finish();
-    geo.lineIds = Uint32Array.from([hashString('a'), hashString('b')]);
-    geo.signalLayouts = [
+  it('recognizes only explicitly tagged crossing anchors, including mapped crossings outside the old disk', () => {
+    const geo = geography();
+    const stripe = { x: 2048 + 15 * pm, y: 2048 };
+    geo.controlledCrossings = [
       {
-        members: members.map((p) => tileToLngLat(tile, p)),
-        arms: members.map((p, i) => ({
-          road_id: i ? 'b' : 'a',
-          junction: tileToLngLat(tile, p),
-          toward: tileToLngLat(tile, { x: 0, y: p.y }),
-          direction: 1 as const,
-          inbound: true,
-          outbound: true,
-          bearing: 90,
-          width: 14,
-          group: 'a' as const,
-        })),
+        id: 'mapped-cross',
+        anchor: stripe,
+        bearing: 90,
+        width: 3,
+        lineId: 42,
+        controller: {
+          id: 'signal',
+          at: tileToLngLat(tile, { x: 2048, y: 2048 }),
+          seed: 1,
+          midBlock: false,
+          walk: 'b',
+        },
       },
     ];
     const life = new TileLife(tile, geo, 1);
-    expect(life.signals.signals[0]!.approaches).toHaveLength(2);
-    const stripe = { x: 2048 + 10 * pm, y: 2200 };
-    expect(life.signals.controlsCrossing(1, stripe)).toBe(true);
-    expect(life.signals.controlsCrossing(0, stripe)).toBe(false);
+    expect(life.signals.controlsCrossing(stripe)).toBe(true);
+    expect(life.signals.controlsCrossing({ x: 2048, y: 2048 })).toBe(false);
+    expect(life.signals.controlsCrossing({ x: stripe.x + 8, y: stripe.y })).toBe(false);
   });
-  it('uses legacy red and green gates when a layout has no matching local approach', () => {
+  it('does not substitute a radius stop when exact layout stops fail local road matching', () => {
     const geo = geography(true, false);
     geo.lineIds = Uint32Array.from([hashString('road/main'), hashString('road/side')]);
     const center = tileToLngLat(tile, { x: 2048, y: 2048 });
@@ -122,18 +107,15 @@ describe('signals', () => {
       },
     ];
     const life = new TileLife(tile, geo, 1);
-    const legacy = new TileLife(tile, { ...geo, signalLayouts: undefined }, 1);
     expect(life.signals.signals[0]!.approaches).toEqual([]);
     const m = { ...car(), d: 2048 - 15 * pm, x: 2048 - 15 * pm };
     for (const color of ['red', 'green'] as const) {
       const clock = Array.from({ length: 140 }, (_, t) => t).find(
         (t) => signalState(life.signals.signals[0]!.seed, t).a === color,
       )!;
-      expect(life.signals.allows(m, 2048, 2048, clock, 15 * pm)).toBe(color === 'green');
+      expect(life.signals.allows(m, 2048, 2048, clock, 15 * pm)).toBe(true);
       const speed = life.signals.vehicleSpeed(m, 0.1, clock);
-      expect(speed).toBe(legacy.signals.vehicleSpeed(m, 0.1, clock));
-      if (color === 'red') expect(speed).toBeLessThan(m.speed);
-      else expect(speed).toBe(m.speed);
+      expect(speed).toBe(m.speed);
     }
   });
   it('cycles both axes with amber and all-red gaps, with mid-block pedestrian clearance', () => {
@@ -178,17 +160,6 @@ describe('signals', () => {
     for (let i = 0; i < 120; i++)
       life.step(1 / 60, undefined, undefined, undefined, { rain: 0, clock: green });
     expect(m.x).toBeGreaterThan(stopX + pm);
-  });
-  it('waits at the curb but lets walkers already crossing clear', () => {
-    const life = new TileLife(tile, geography(), 1),
-      s = life.signals.signals[0]!;
-    const red = Array.from({ length: 100 }, (_, t) => t).find(
-      (t) => !signalState(s.seed, t).walkA,
-    )!;
-    const from = { x: 2048 - 10 * pm, y: 2048 },
-      target = { x: 2048, y: 2048 };
-    expect(life.signals.walkDistance(from, target, 10 * pm, red) / pm).toBeCloseTo(1.5);
-    expect(life.signals.walkDistance(target, { x: 2100, y: 2048 }, pm, red)).toBe(pm);
   });
   // eslint-disable-next-line no-restricted-syntax -- slow before the time-limit ban; tracked by the CI file budget
   it('shares phases across buffered tiles and replays exactly independently at 30 and 60 Hz', () => {

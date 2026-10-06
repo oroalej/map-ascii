@@ -1,3 +1,4 @@
+import { tileToLngLat } from '../raster/geometry';
 import { describe, expect, it, vi } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import {
@@ -871,7 +872,23 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   // The mapped walking path is much longer than the stripe.
   builder.line([point(0, -40), point(0, 40)], LifeLine.path, 3);
   builder.area('crossing', [[point(-1.5, -7), point(1.5, -7), point(1.5, 7), point(-1.5, 7)]]);
-  if (signal) builder.signal(point(-10, 0), 8, 90, 0, true);
+  if (signal) {
+    builder.signal(point(-10, 0), 8, 90, 0, true);
+    builder.controlledCrossing({
+      id: 'crossing',
+      anchor: point(0, 0),
+      bearing: 90,
+      width: 14,
+      lineId: 42,
+      controller: {
+        id: 'signal',
+        at: tileToLngLat(tile, point(-10, 0)),
+        seed: 7,
+        midBlock: false,
+        walk: 'b',
+      },
+    });
+  }
   const geo = builder.finish(),
     life = new StandaloneLife(tile, geo, 1);
   const crossings = new PedestrianCrossings(tile, pm);

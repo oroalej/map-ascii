@@ -16,10 +16,24 @@ export const SignalArm = z
     width: z.number().positive(),
     stop: SignalPosition.optional(),
     stop_width: z.number().positive().optional(),
+    stop_bearing: z.number().min(0).lt(360).optional(),
+    stop_road_id: z.string().min(1).optional(),
+    stop_direction: z.union([z.literal(-1), z.literal(1)]).optional(),
+    stop_road_width: z.number().positive().optional(),
   })
-  .refine((arm) => !!arm.stop === (arm.stop_width !== undefined) && (!arm.stop || arm.inbound), {
-    message: 'stop position and width must describe an inbound arm',
-  });
+  .refine(
+    (arm) =>
+      !!arm.stop === (arm.stop_width !== undefined) &&
+      (!arm.stop || arm.inbound) &&
+      (arm.stop_bearing === undefined || !!arm.stop) &&
+      (arm.stop_road_id === undefined
+        ? arm.stop_direction === undefined && arm.stop_road_width === undefined
+        : !!arm.stop && arm.stop_direction !== undefined && arm.stop_road_width !== undefined),
+    {
+      message:
+        'inbound stops require position and width; optional local bearing and complete stop-road identity require a stop',
+    },
+  );
 export type SignalArm = z.infer<typeof SignalArm>;
 
 export const SignalLayout = z.strictObject({

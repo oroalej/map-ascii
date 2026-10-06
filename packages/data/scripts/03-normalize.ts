@@ -111,6 +111,14 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   crossing_bearing?: number;
   crossing_width?: number;
   crossing_road?: AtlasClass;
+  crossing_signal?: string;
+  crossing_signal_at?: string;
+  crossing_signal_seed?: number;
+  crossing_mid?: boolean;
+  crossing_walk?: 'a' | 'b';
+  crossing_signal_control?: string;
+  signal_seed?: number;
+  signal_stops?: string;
   life_signal?: 'mapped' | 'derived';
   signal_a?: number;
   signal_b?: number;

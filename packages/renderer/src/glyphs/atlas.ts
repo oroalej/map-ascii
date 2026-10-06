@@ -3,6 +3,7 @@
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { PED_STOP, PED_WALK, PEDESTRIAN_MASTERS } from '../life/pedestrian-glyphs';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from '../life/procession-glyphs';
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
@@ -383,6 +384,20 @@ function drawSeasonal(slot: Slot, glyph: string) {
     }
 }
 
+function drawPedestrian(slot: Slot, walking: boolean) {
+  const rows = PEDESTRIAN_MASTERS[walking ? 'walk' : 'stop'];
+  for (let y = 0; y < rows.length; y++)
+    for (let x = 0; x < rows[y]!.length; x++)
+      if (rows[y]![x] === '#')
+        fill(
+          slot,
+          Math.floor((x * slot.w) / 7),
+          Math.floor((y * slot.h) / 11),
+          Math.ceil(((x + 1) * slot.w) / 7),
+          Math.ceil(((y + 1) * slot.h) / 11),
+        );
+}
+
 /**
  * Draw a glyph as shapes into `slot` if it is a box-drawing or block character, a person's
  * figure, a bird, a dog, or a vendor's cart.
@@ -401,6 +416,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (birdOf(glyph)) drawBird(slot, birdOf(glyph)!);
   else if (dogOf(glyph)) drawPet(slot, (box) => dogPixels(dogOf(glyph)!, box));
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
+  else if (glyph === PED_STOP || glyph === PED_WALK) drawPedestrian(slot, glyph === PED_WALK);
   else if (glyph === STALL_GLYPH) drawStall(slot);
   else if (
     (SEASONAL_GLYPHS as readonly string[]).includes(glyph) ||

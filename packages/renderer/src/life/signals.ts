@@ -1,5 +1,5 @@
 import type { TileId } from '../tiles';
-import { EXTENT, MERCATOR_METERS, lngLatToTile } from '../raster/geometry';
+import { EXTENT, MERCATOR_METERS } from '../raster/geometry';
 import { signalApproaches, signalJunctionKey, type SignalApproach } from './signal-approaches';
 import { SIGNAL, kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
@@ -55,6 +55,17 @@ export function signalState(seed: number, clock: number, midBlock = false): Sign
   }
   throw new Error('invalid signal clock');
 }
+/** One permission/clearance clock shared by pedestrian heads and curb gates. */
+export function pedestrianState(
+  seed: number,
+  clock: number,
+  midBlock: boolean,
+  group: 'a' | 'b',
+): 'walk' | 'flash' | 'dont' {
+  const phase = signalState(seed, clock, midBlock);
+  if (!(group === 'a' ? phase.walkA : phase.walkB)) return 'dont';
+  return phase.left >= SIGNAL.walkMin ? 'walk' : 'flash';
+}
 type Point = { x: number; y: number };
 type Signal = Point & {
   radius: number;
@@ -62,7 +73,6 @@ type Signal = Point & {
   b: number;
   seed: number;
   approaches?: SignalApproach[];
-  members?: Point[];
   key?: string;
 };
 type Stop = { along: number; signal: Signal; group: 'a' | 'b'; dir?: 1 | -1; exact?: boolean };
@@ -76,7 +86,7 @@ export class SignalControl {
   private readonly stops = new Map<number, Stop[]>();
   constructor(
     tile: TileId,
-    geo: LifeGeometry,
+    private readonly geo: LifeGeometry,
     private readonly perMeter: number,
     private readonly along: Float64Array,
     deferred = false,
@@ -92,16 +102,20 @@ export class SignalControl {
       const x = values[i]!,
         y = values[i + 1]!;
       const layout = geo.signalLayouts?.[i / SIGNAL_STRIDE];
+      const exact = geo.signalStops?.[i / SIGNAL_STRIDE];
       this.signals.push({
         x,
         y,
         radius: values[i + 2]!,
         a: values[i + 3]!,
         b: values[i + 4]!,
-        seed: placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
-        approaches: layout && signalApproaches(tile, geo, layout, along),
+        seed:
+          geo.signalSeeds?.[i / SIGNAL_STRIDE] ??
+          placeSeed((tile.x * EXTENT + x) * scale, (tile.y * EXTENT + y) * scale),
+        approaches:
+          (layout || exact) &&
+          signalApproaches(tile, geo, layout ?? { members: [], arms: exact! }, along, true),
         key: layout && signalJunctionKey(layout),
-        members: layout?.members.map((p) => lngLatToTile(tile, ...p)),
       });
     }
     for (let line = 0; line < geo.kinds.length; line++) {
@@ -109,14 +123,14 @@ export class SignalControl {
       if (geo.kinds[line]! > LifeLine.path) continue;
       const stops: Stop[] = [];
       for (const s of this.signals) {
-        if (s.approaches?.length) {
+        if (s.approaches) {
           for (const a of s.approaches) {
             if (a.line === line && a.arm.inbound && a.stopAlong !== undefined)
               stops.push({
                 along: a.stopAlong,
                 signal: s,
                 group: a.arm.group,
-                dir: a.arm.direction,
+                dir: a.arm.stop_direction ?? a.arm.direction,
                 exact: true,
               });
           }
@@ -148,23 +162,12 @@ export class SignalControl {
     return Math.min(out.target, out.cap);
   }
   /** The extra entrance hold belongs only to crossings without an existing controller. */
-  controlsCrossing(line: number, centre: Point): boolean {
-    for (const s of this.signals) {
-      const reach = (s.radius + SIGNAL.crossingMargin) * this.perMeter;
-      if (s.approaches?.length) {
-        if (
-          s.approaches.some(
-            (a) => a.line === line && Math.hypot(a.x - centre.x, a.y - centre.y) <= reach,
-          )
-        )
-          return true;
-      } else if (
-        this.stops.get(line)?.some((stop) => stop.signal === s) &&
-        (s.members ?? [s]).some((p) => Math.hypot(p.x - centre.x, p.y - centre.y) <= reach)
-      )
-        return true;
-    }
-    return false;
+  controlsCrossing(centre: Point): boolean {
+    return (this.geo.controlledCrossings ?? []).some(
+      (crossing) =>
+        Math.hypot(crossing.anchor.x - centre.x, crossing.anchor.y - centre.y) <=
+        TILE_QUANTIZATION_TOLERANCE,
+    );
   }
   vehicleLimit(m: Mover, dt: number, clock: number, out: MotionLimit, clearing?: string): void {
     const progress = this.along[m.from]! + m.dir * m.d;
@@ -188,7 +191,7 @@ export class SignalControl {
   }
   allows(m: Mover, x: number, y: number, clock: number, ahead: number): boolean {
     for (const s of this.signals) {
-      if (s.approaches?.length) {
+      if (s.approaches) {
         const entry = s.approaches.find(
           (a) =>
             a.arm.inbound &&
@@ -210,37 +213,5 @@ export class SignalControl {
         return false;
     }
     return true;
-  }
-  /** Clamp new crossing entries; someone inside the crossing always clears it. */
-  walkDistance(from: Point, toward: Point, distance: number, clock: number): number {
-    const dx = toward.x - from.x,
-      dy = toward.y - from.y,
-      length = Math.hypot(dx, dy);
-    if (!length) return distance;
-    const hx = dx / length,
-      hy = dy / length;
-    for (const s of this.signals) {
-      const radius = (s.radius + 0.5) * this.perMeter;
-      const centers = s.members ?? [s];
-      if (
-        centers.some((p) => Math.hypot(p.x - from.x, p.y - from.y) < radius - 0.01 * this.perMeter)
-      )
-        continue;
-      for (const center of centers) {
-        const px = center.x - from.x,
-          py = center.y - from.y;
-        if (Math.hypot(px, py) < radius - 0.01 * this.perMeter) continue;
-        const projection = px * hx + py * hy,
-          lateral2 = px * px + py * py - projection * projection;
-        if (projection < 0 || lateral2 >= radius * radius) continue;
-        const entry = projection - Math.sqrt(Math.max(0, radius * radius - lateral2));
-        if (entry < -0.01 * this.perMeter || entry > distance) continue;
-        const state = signalState(s.seed, clock, s.a < 0),
-          walking = group(s, hx, hy) === 'a' ? state.walkA : state.walkB;
-        if (!walking || state.left < SIGNAL.walkMin)
-          distance = Math.min(distance, Math.max(0, entry));
-      }
-    }
-    return distance;
   }
 }
