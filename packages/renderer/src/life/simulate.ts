@@ -5817,6 +5817,38 @@ export class TileLife {
               break;
             }
           }
+          if (
+            !fits &&
+            guard &&
+            m.kind === 'vehicle' &&
+            m.vehicle &&
+            before.roadYaw &&
+            distance > 1e-8 * this.perMeter &&
+            !intentionalHold &&
+            this.scenes.transferable(m)
+          ) {
+            // A retained steering angle can pin the nose before there is room
+            // for the forward travel that normally straightens it. Rotate only
+            // through the same swept guard and the remaining physical budget.
+            restoreMover(m, before);
+            const origin = this.pose(before, undefined, m);
+            const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
+            const change = Math.min(Math.abs(before.roadYaw), (dt * steeringSpeed) / radius);
+            m.roadYaw = before.roadYaw - Math.sign(before.roadYaw) * change;
+            const pose = this.pose(m);
+            const travel =
+              Math.hypot(pose.x - origin.x, pose.y - origin.y) / this.perMeter +
+              radius * Math.hypot(pose.hx - origin.hx, pose.hy - origin.hy);
+            if (
+              travel > 1e-8 &&
+              travel <= (m.speed * dt) / this.perMeter + 1e-8 &&
+              this.bodyCentresOwned(m, pass?.owns) &&
+              fitsGround(m, before)
+            ) {
+              moved = 0;
+              fits = true;
+            }
+          }
         }
         if (!fits) {
           restoreMover(m, before);
