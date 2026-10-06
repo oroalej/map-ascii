@@ -56,6 +56,70 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('finds a checked holding corridor wide enough for two intact three-person formations', () => {
+    const scene = setup(),
+      p = {
+        ...person(),
+        group: [{ ...walker }, { ...walker, lateral: 1 }, { ...walker, lateral: -1 }],
+      },
+      priority = {
+        ...person(45),
+        group: [{ ...walker }, { ...walker, lateral: 1 }, { ...walker, lateral: -1 }],
+      };
+    const physical = (m: Mover): Body[] => {
+      const h = m.momentFacing ?? m;
+      return m.group!.map((w) => ({
+        x: m.x - h.hy * w.lateral - h.hx * w.back,
+        y: m.y + h.hx * w.lateral - h.hy * w.back,
+        hx: h.hx,
+        hy: h.hy,
+        ...memberSize(w.figure),
+      }));
+    };
+    const fixed = physical(priority),
+      group = p.group,
+      members = [...group];
+    let active = true;
+    const holding = (m: Mover) =>
+      physical(m).every((body) =>
+        fixed.every((other) => !sweptBodyOverlap(other, { x: other.x - 25, y: other.y }, body)),
+      );
+    const guard = Object.assign(
+      (next: Mover, before: Mover) => {
+        const previous = physical(before);
+        return physical(next).every((body, i) =>
+          fixed.every((other) => !sweptBodyOverlap(previous[i]!, body, other)),
+        );
+      },
+      {
+        yielding: () => (active ? priority : undefined),
+        holding,
+        cancelYield: () => {
+          active = false;
+        },
+      },
+    );
+    let cleared = false;
+    for (let frame = 0; frame < 80; frame++) {
+      const before = structuredClone(p);
+      if (!scene.yieldStep(p, 0.1, guard)) break;
+      expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+      expect(guard(p, before)).toBe(true);
+      if (holding(p)) {
+        cleared = true;
+        break;
+      }
+    }
+    expect(cleared).toBe(true);
+    expect(p.y - 30).toBeGreaterThan(RECOVERY.holdingOffsets.at(-1)!);
+    active = false;
+    for (let frame = 0; frame < 100 && scene.yieldStep(p, 0.1, guard); frame++);
+    expect(p.group).toBe(group);
+    group.forEach((member, i) => expect(member).toBe(members[i]));
+    expect([p.x, p.y]).toEqual([40, 30]);
+    expect(scene.transferable(p)).toBe(true);
+  });
+
   it('restores every live member and retained visit when a return clearance query throws', () => {
     const scene = setup(),
       p = { ...person(), group: [{ ...walker }, { ...walker, figure: 'child' as const, back: 1 }] };

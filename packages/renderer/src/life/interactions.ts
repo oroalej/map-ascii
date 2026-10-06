@@ -897,6 +897,10 @@ export class LocalScenes {
       const anchor = snapshotMover(m);
       const heading = this.travelHeading(m, true);
       const lane = this.visits.has(m) ? 0 : (m.avoid ?? 0);
+      const offsets =
+        (m.group?.length ?? 1) > 1 || (priority!.group?.length ?? 1) > 1
+          ? [...RECOVERY.holdingOffsets, ...RECOVERY.holdingFormationOffsets]
+          : RECOVERY.holdingOffsets;
       const admissible = (previous: Mover, target: WalkPoint) => {
         m.x = target.x;
         m.y = target.y;
@@ -925,7 +929,7 @@ export class LocalScenes {
           if (!direct && retreat !== 0 && !admissible(anchor, back)) continue;
           const previous = snapshotMover(m);
           for (const side of [1, -1]) {
-            for (const offset of RECOVERY.holdingOffsets) {
+            for (const offset of offsets) {
               restoreMover(m, previous);
               const holding = {
                 x: back.x - heading.hy * side * offset * this.perMeter,

@@ -149,6 +149,8 @@ export const RECOVERY = {
   walkerRetreats: [0, 0.05, 0.15, 0.3, 0.5],
   bypassOffsets: [1.2, 1, 0.8, 0.65],
   holdingOffsets: [0.65, 1, 1.2, 1.5],
+  /** Wider formations need more room than the ordinary one-person holding corridor. */
+  holdingFormationOffsets: [2, 2.5, 3, 3.5],
   bypassReachM: 1.5,
   bypassSpanM: 4,
   bypassRetreatMinM: 0.75,
