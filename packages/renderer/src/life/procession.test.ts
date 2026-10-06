@@ -1,3 +1,4 @@
+import { eventActor } from './event-actors';
 import type { ProcessionRoute } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { LifeLine, LifeBuilder } from './geometry';
@@ -8,6 +9,7 @@ import {
   ProcessionScene,
   profileAt,
   scheduledDay,
+  routePolyline,
 } from './procession';
 import { SHIRT_PAINTS } from './people';
 import { LifeWorld } from './simulate';
@@ -37,6 +39,36 @@ const route: ProcessionRoute = {
 };
 /** Meters east of the route's start. */
 const east = (lng: number) => lng * 111_320;
+it('samples endpoints and zero-length route edges with a defined heading', () => {
+  const route = routePolyline([
+    [0, 0],
+    [0, 0],
+    [0, 10],
+  ]);
+  expect(route.at(-1)).toMatchObject({ x: 0, y: 0, hx: 0, hy: 1 });
+  expect(route.at(5)).toMatchObject({ x: 0, y: 5, hx: 0, hy: 1 });
+  expect(route.at(20)).toMatchObject({ x: 0, y: 10, hx: 0, hy: 1 });
+  expect(
+    routePolyline([
+      [0, 0],
+      [0, 0],
+    ]).at(0),
+  ).toMatchObject({ x: 0, y: 0, hx: 1, hy: 0 });
+});
+it('keeps bank candle seeds stable and emits identities only for arrival handover', () => {
+  const scene = new ProcessionScene(route),
+    options = { boats: false, crowds: true, crews: false };
+  const first = scene.agents(0.5, 1, options),
+    next = scene.agents(0.5, 2, options);
+  expect(first.length).toBeGreaterThan(0);
+  expect(next.map((actor) => actor.candleSeed)).toEqual(first.map((actor) => actor.candleSeed));
+  expect(first.every((actor) => eventActor(actor) === undefined)).toBe(true);
+  const arrival = scene.arrivalCrowd(0.5, 1, 'play/1'),
+    owners = scene.arrivalOwners('play/1');
+  expect(arrival.map((actor) => actor.candleSeed)).toEqual(first.map((actor) => actor.candleSeed));
+  expect(arrival.every((actor) => owners.has(eventActor(actor)!))).toBe(true);
+  expect(new Set(arrival.map((actor) => eventActor(actor))).size).toBe(arrival.length);
+});
 
 it.each(['voyador', 'pagoda', 'crew'] as const)(
   'holds the connected towing formation through its %s',

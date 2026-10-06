@@ -49,6 +49,18 @@ import { files, type Step } from './step';
 
 /** The zoom range of the tiles (DATA.md §2 step 05). */
 export const TILE_ZOOMS = { min: 6, max: 16 } as const;
+/** Full-source event routing tags, excluded from display tiles after route baking. */
+export const EVENT_ACCESS_TAGS = [
+  'highway',
+  'foot',
+  'access',
+  'vehicle',
+  'motor_vehicle',
+  'motorcar',
+  'motorcycle',
+  'hgv',
+  'bridge',
+] as const satisfies readonly (keyof AtlasProperties)[];
 
 /** Properties of a normalized feature, as written into the tiles. */
 export type AtlasProperties = Partial<ShopAnchor> & {
@@ -56,6 +68,15 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   roof_plan?: string;
   /** Original road classification, independent of display tag precedence. */
   highway?: string;
+  foot?: string;
+  access?: string;
+  vehicle?: string;
+  motor_vehicle?: string;
+  motorcar?: string;
+  motorcycle?: string;
+  hgv?: string;
+  bridge?: string;
+  event_path_width?: number;
   detail_route?: boolean;
   detail_blocked?: boolean;
   /** Elevated structure cover: rendered normally, but excluded from ground obstacles. */
@@ -269,7 +290,9 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
-    if (cls.startsWith('road_') && tags.highway) properties.highway = tags.highway;
+    if (cls.startsWith('road_') || cls === 'path') {
+      for (const tag of EVENT_ACCESS_TAGS) if (tags[tag]) properties[tag] = tags[tag];
+    }
     if (cls.startsWith('building')) {
       const frontage = fromRegion.has(item)
         ? frontageOf(tags)
@@ -294,6 +317,10 @@ export function normalize(
     if (cls === 'tree') Object.assign(properties, treeSize(tags));
     const width = roadWidth(tags, cls);
     if (width !== undefined) properties.width = width;
+    if (cls === 'path') {
+      const pathWidth = Number.parseFloat(tags.width ?? '');
+      if (Number.isFinite(pathWidth) && pathWidth > 0) properties.event_path_width = pathWidth;
+    }
     if (cls.startsWith('road_')) {
       const sidewalk = sidewalkOf(tags);
       if (sidewalk)

@@ -20,7 +20,7 @@
  */
 import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
-import { BIRD_SHADOW, CellBit, LIFE_SHADOW } from '../life/config';
+import { BIRD_SHADOW, CellBit, EVENT_PERSON_BITS, LIFE_SHADOW } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
 import { CANDLE_BIT, PersonPart } from '../life/people';
@@ -547,7 +547,7 @@ bool lifeAllowedAt(vec4 life, int cls, int sampled, float coarseHeight, float sa
   bool sampleSurface = nonBird && cls != u_vehicleOccluders.x;
   int surface = sampleSurface ? sampled : cls;
   if (nonBird && (surface == u_vehicleOccluders.x || surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z)) return false;
-  bool grounds = bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0 &&
+  bool grounds = (bits == ${CellBit.person} || bits == ${EVENT_PERSON_BITS}) && (u_cellBits[surface] & ${CellBit.grounds}) != 0 &&
     (sampleSurface ? sampledHeight : coarseHeight) == 0.0;
   return (u_cellBits[surface] & bits) != 0 || grounds;
 }
@@ -558,7 +558,7 @@ bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
   bool sampleSurface = (int(life.g * 255.0 + 0.5) & 63) != u_bird && cls != u_vehicleOccluders.x;
   int surface = sampleSurface ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
   float height = 0.0;
-  if (bits == ${CellBit.person} && (u_cellBits[surface] & ${CellBit.grounds}) != 0)
+  if ((bits == ${CellBit.person} || bits == ${EVENT_PERSON_BITS}) && (u_cellBits[surface] & ${CellBit.grounds}) != 0)
     height = (sampleSurface ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r;
   return lifeAllowedAt(life, cls, surface, height, height);
 }

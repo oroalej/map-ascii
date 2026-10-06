@@ -16,7 +16,7 @@ export type UiState = {
   meta: CityMeta | null;
   /** The subdivision under the view's center (HUD). */
   subdivision: { name: string; approximate: boolean } | null;
-  /** The city's river processions (its generated `<slug>.processions.json`), once loaded. */
+  /** The city's procession and gathering events, once the generated bundle loads. */
   processions: readonly ProcessionRoute[];
   /** The procession under way, as the renderer reports it. */
   procession: ProcessionRun | null;

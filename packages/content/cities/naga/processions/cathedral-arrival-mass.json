@@ -1,0 +1,40 @@
+{
+  "id": "procession/cathedral-arrival-mass",
+  "title": {
+    "en": "Mass after the Traslación"
+  },
+  "story": {
+    "en": "TODO(verify): A Mass follows the image’s arrival at the Cathedral. The 16:00 start inherits the illustrative four-hour Traslación; the ninety-minute gathering, outdoor grounds and overflow are schematic. Attendees converge, face the church and disperse."
+  },
+  "status": "draft",
+  "kind": "mass",
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Mass at the Cathedral"
+  },
+  "site": "osm:way/23666715",
+  "grounds": ["osm:way/1203045057"],
+  "gathering_anchor": [123.18712, 13.627985],
+  "radius_m": 120,
+  "schedule": {
+    "follows": "procession/penafrancia-traslacion",
+    "duration_min": 90
+  },
+  "sources": [
+    {
+      "title": "Archdiocese of Caceres: Peñafrancia calendar",
+      "url": "https://www.archdioceseofcaceres.org/caceresevents",
+      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+    },
+    {
+      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
+      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+    },
+    {
+      "title": "OpenStreetMap: event anchors and grounds",
+      "url": "https://www.openstreetmap.org/way/23666715",
+      "note": "Mapped anchors: osm:way/23666715, osm:way/1203045057. The authored illustrative forecourt anchor and mapped grounds seed a connected exterior gathering within the radius, with approaches and exits excluding the standing church footprint; this event has no snapped route endpoints. Grounds, road overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+    }
+  ]
+}
