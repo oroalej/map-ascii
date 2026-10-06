@@ -15,6 +15,9 @@ import { complete } from './cooperate';
 import type { JunctionTraffic } from './junction-traffic';
 import { binKeys, bodyCorners, type Body, type Point } from './occupancy';
 
+const compareMovements = (a: Movement, b: Movement) =>
+  a.ahead - b.ahead || a.key.localeCompare(b.key);
+
 export type Arm = {
   line: number;
   along: number;
@@ -268,14 +271,15 @@ export class JunctionIndex {
       const route = cursor.line * 2 + Number(cursor.dir === 1);
       if (visited.has(route)) break;
       visited.add(route);
-      const code = next?.(cursor.line, cursor.dir);
-      if (cursor !== m) cursor.next = code;
-      this.lineMovements(cursor, reach - distance, distance, found);
-      if (!next) break;
       const end =
         cursor.dir === 1 ? this.geo.starts[cursor.line + 1]! - 1 : this.geo.starts[cursor.line]!;
-      distance += cursor.dir * (this.along[end]! - this.along[cursor.from]!) - cursor.d;
-      if (code === undefined || code < 0 || distance > reach) break;
+      const endDistance =
+        distance + cursor.dir * (this.along[end]! - this.along[cursor.from]!) - cursor.d;
+      const code = endDistance <= reach ? next?.(cursor.line, cursor.dir) : undefined;
+      if (cursor !== m) cursor.next = code;
+      this.lineMovements(cursor, reach - distance, distance, found);
+      if (!next || code === undefined || code < 0 || endDistance > reach) break;
+      distance = endDistance;
       const line = code >> 1,
         dir = code & 1 ? -1 : 1;
       cursor = this.routeCursor;
@@ -287,13 +291,19 @@ export class JunctionIndex {
       cursor.junctionRoute = m.junctionRoute;
       cursor.routing = undefined;
     }
-    found.sort((a, b) => a.ahead - b.ahead || a.key.localeCompare(b.key));
+    if (found.length > 1) found.sort(compareMovements);
     return found;
   }
   private lineMovements(m: RouteCursor, reach: number, routeDistance: number, found: Movement[]) {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const j of this.lines.get(m.line) ?? []) {
-      if (found.some((p) => p.key === j.key)) continue;
+      let duplicate = false;
+      for (let i = 0; i < found.length; i++)
+        if (found[i]!.key === j.key) {
+          duplicate = true;
+          break;
+        }
+      if (duplicate) continue;
       const incoming = j.arms.find(
         (a) => a.line === m.line && a.out === -m.dir && a.inbound !== false,
       );

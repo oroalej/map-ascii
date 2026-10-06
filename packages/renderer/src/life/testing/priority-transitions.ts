@@ -71,12 +71,12 @@ export function observePriorityTransitions(f: Fixture) {
           ) &&
           !f.life.junctionClear(p, view);
         // Live revocation follows walker motion; readiness is refreshed on the next request pass.
-        if (blocked && !r.inside && r.since === undefined) {
+        if (blocked && !r.inside && r.since === undefined && r.surrenderedAt === undefined) {
           state.closed = true;
           let keys = closedKeys.get(m);
           if (!keys) closedKeys.set(m, (keys = new Set()));
           keys.add(r.key);
-          state.revoked ||= previous.get(m)?.has(r.key) === true;
+          state.revoked ||= r.ready && previous.get(m)?.has(r.key) === true;
         }
         state.reopened ||=
           closedKeys.get(m)?.has(r.key) === true && !blocked && r.ready && r.since !== undefined;

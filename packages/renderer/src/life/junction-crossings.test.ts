@@ -288,6 +288,27 @@ it('denies occupied entry after the front passed the stripe while the rear still
   expect(table.snapshot().find((r) => r.key === p.key)!.inside).toBe(false);
 });
 
+it('reuses one curb predicate across repeated entry and exit clearance queries', () => {
+  const { life, car } = fixture(),
+    movement = life.junctionIndex.movement(car, 60 * pm)!,
+    predicates = new Set<NonNullable<Parameters<PedestrianView['walkersInArea']>[1]>>();
+  let queries = 0;
+  const view: PedestrianView = {
+    ...EMPTY_PEDESTRIANS,
+    empty: false,
+    walkersInArea: (_polygon, predicate) => {
+      if (predicate) {
+        queries++;
+        predicates.add(predicate);
+      }
+      return false;
+    },
+  };
+  for (let i = 0; i < 10; i++) expect(life.junctionClear(movement, view)).toBe(true);
+  expect(queries).toBeGreaterThan(1);
+  expect(predicates.size).toBe(1);
+});
+
 for (const arm of ['entry', 'exit'] as const)
   it(`revokes a provisional grant when the ${arm} crossing fills and holds the line`, () => {
     const f = fixture(),

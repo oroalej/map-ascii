@@ -212,8 +212,44 @@ it('reuses route lookup scratch, queries each hop once and keeps retained moveme
   expect(found.every((p, i) => p !== retained[i])).toBe(true);
   expect(retained).toEqual(values);
   expect(m).toEqual(original);
+  calls.length = 0;
   expect(life.junctionIndex.movements(m, 5 * pm, next)).toHaveLength(0);
+  expect(calls).toEqual([]);
+  expect(life.junctionIndex.movements(m, 45 * pm, next)).toHaveLength(2);
+  expect(calls).toEqual([0, 1]);
   expect(retained).toEqual(values);
+});
+
+it('discovers a reachable junction on a longer line without previewing its distant endpoint', () => {
+  const tile = { z: 16, x: 55192, y: 30266 },
+    pm = 1 / metersPerUnit(tile),
+    builder = new LifeBuilder(),
+    x = 1000 + 30 * pm;
+  builder.line(
+    [
+      { x: 1000, y: 2000 },
+      { x, y: 2000 },
+      { x: 1000 + 100 * pm, y: 2000 },
+    ],
+    0,
+    4,
+  );
+  builder.line(
+    [
+      { x, y: 1900 },
+      { x, y: 2000 },
+      { x, y: 2100 },
+    ],
+    0,
+    4,
+  );
+  const life = new TileLife(tile, builder.finish(), 1),
+    m = { ...car(), x: 1000, y: 2000 },
+    next = vi.fn(() => 2);
+  const before = structuredClone(m);
+  expect(life.junctionIndex.movements(m, 60 * pm, next)).toHaveLength(1);
+  expect(next).not.toHaveBeenCalled();
+  expect(m).toEqual(before);
 });
 
 it('does not reserve a downstream box or block its cross traffic behind a real red', () => {

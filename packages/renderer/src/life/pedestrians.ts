@@ -325,6 +325,14 @@ export class PedestrianCrossings {
   private readonly foundCrossings = new Map<PedestrianCrossing, number>();
   private readonly limitCandidates = new Map<string, PedestrianCrossing>();
   private readonly usedHolds = new Set<PedestrianHold>();
+  private curbX = 0;
+  private curbY = 0;
+  private towardX = 0;
+  private towardY = 0;
+  // Queries are synchronous; the predicate reads this entrance's metric coordinates.
+  private readonly inwardCurb = (b: Readonly<Body>) =>
+    Math.hypot(b.x - this.curbX, b.y - this.curbY) <= PEDESTRIAN.curbReach &&
+    b.hx * this.towardX + b.hy * this.towardY > 0;
   get empty() {
     return this.index.size === 0;
   }
@@ -588,16 +596,16 @@ export class PedestrianCrossings {
   }
   blocked(c: PedestrianCrossing, view: PedestrianView): boolean {
     if (view.walkersInArea(c.polygon)) return true;
-    const reach = PEDESTRIAN.curbReach;
-    return c.entrances.some((p, i) => {
-      const toward = c.entrances[1 - i]!;
-      return view.walkersInArea(
-        c.entranceAreas[i]!,
-        (b) =>
-          Math.hypot(b.x - p.x, b.y - p.y) <= reach &&
-          b.hx * (toward.x - p.x) + b.hy * (toward.y - p.y) > 0,
-      );
-    });
+    for (let i = 0; i < c.entrances.length; i++) {
+      const p = c.entrances[i]!,
+        toward = c.entrances[1 - i]!;
+      this.curbX = p.x;
+      this.curbY = p.y;
+      this.towardX = toward.x - p.x;
+      this.towardY = toward.y - p.y;
+      if (view.walkersInArea(c.entranceAreas[i]!, this.inwardCurb)) return true;
+    }
+    return false;
   }
   limit(
     view: PedestrianView,

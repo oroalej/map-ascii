@@ -1,12 +1,16 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { LifeWorld, type WorldGroundGuard } from './simulate';
 import { LifeBuilder } from './geometry';
-import type { Movement } from './junctions';
+import type { JunctionTable, Movement } from './junctions';
 import { EMPTY_PEDESTRIANS } from './pedestrians';
 import { JUNCTION } from './config';
 import { VEHICLES } from './vehicles';
 import { metersPerUnit } from '../raster/geometry';
 import { observePriority, priorityFixture } from './testing/intersection-priority';
+import {
+  observePriorityTransitions,
+  preparePriorityTransitions,
+} from './testing/priority-transitions';
 
 it.each([
   [1800, 0],
@@ -78,3 +82,44 @@ it.each([
     internal.groundGuard = original;
   }
 });
+
+it.each([false, true])(
+  'distinguishes live revocation from expiry and request denial (disabled=%s)',
+  (disabled) => {
+    const fixture = priorityFixture(LifeWorld, LifeBuilder, metersPerUnit);
+    preparePriorityTransitions(fixture, 28);
+    const table = (fixture.world as unknown as { junctions: JunctionTable }).junctions;
+    const revoke = disabled
+      ? vi.spyOn(table, 'revokeGrant').mockImplementation(() => {})
+      : undefined;
+    const observer = observePriorityTransitions(fixture);
+    try {
+      for (let frame = 0; frame < 52 * 30; frame++) {
+        observer.beforeStep();
+        if (frame === 46 * 30)
+          for (const m of fixture.life.movers)
+            if (m.kind === 'vehicle') m.speed = 8 * fixture.life.perMeter;
+        fixture.beforeStep();
+        fixture.world.step(
+          1 / 30,
+          undefined,
+          18,
+          undefined,
+          undefined,
+          { rain: 0, minutes: 720 },
+          0.9,
+        );
+        observer.afterStep();
+      }
+      expect(observer.state).toMatchObject({
+        expired: true,
+        closed: true,
+        revoked: !disabled,
+        reopened: true,
+      });
+    } finally {
+      observer.restore();
+      revoke?.mockRestore();
+    }
+  },
+);
