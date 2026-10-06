@@ -56,6 +56,53 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it.each([1, -1] as const)('finishes an oblique endpoint return in direction %s', (dir) => {
+    const b = new LifeBuilder(),
+      a = { x: 100, y: 100 },
+      z = { x: 130, y: 133 },
+      length = Math.hypot(z.x - a.x, z.y - a.y),
+      endpoint = dir === 1 ? z : a;
+    b.line([a, z], LifeLine.path, 4);
+    b.site({ x: 115, y: 116.5 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p: Mover = {
+        ...person(),
+        ...endpoint,
+        from: dir === 1 ? 0 : 1,
+        dir,
+        d: length,
+        hx: (dir * (z.x - a.x)) / length,
+        hy: (dir * (z.y - a.y)) / length,
+        group: [{ ...walker }],
+      };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    visit.state = 'return';
+    visit.path = [{ ...endpoint }];
+    visit.next = 1;
+    const group = p.group,
+      member = group![0];
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(scene.visits.has(p)).toBe(false);
+    expect(p.d).toBeCloseTo(length, 12);
+    expect(p.x).toBeCloseTo(endpoint.x, 12);
+    expect(p.y).toBeCloseTo(endpoint.y, 12);
+    expect(p.group).toBe(group);
+    expect(p.group![0]).toBe(member);
+    // A real anchor mismatch still cannot bypass the mapped route guard.
+    const other = new LocalScenes(b.finish(), 1, 8, []);
+    expect(other.reserve(p, 0)).toBe(true);
+    const invalid = other.visits.get(p)!;
+    invalid.state = 'return';
+    invalid.trail[0] = { x: p.x + p.hx * 0.01, y: p.y + p.hy * 0.01 };
+    invalid.path = [{ x: p.x, y: p.y }];
+    invalid.next = 1;
+    const before = structuredClone(p);
+    other.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(other.visits.get(p)).toBe(invalid);
+    expect(p).toEqual(before);
+  });
+
   it('hands a final return back with its checked facing and rolls back a refused handoff', () => {
     const scene = setup(),
       p = { ...person(), avoid: 0.4, group: [{ ...walker }, { ...walker, back: 1.2 }] };

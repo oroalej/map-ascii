@@ -1060,8 +1060,10 @@ export class LocalScenes {
     if (!length) return false;
     const hx = dx / length,
       hy = dy / length,
-      d = (anchor.x - ax) * hx + (anchor.y - ay) * hy;
-    if (d < 0 || d > length) return false;
+      projection = (anchor.x - ax) * hx + (anchor.y - ay) * hy,
+      epsilon = 1e-6 * this.perMeter;
+    if (projection < -epsilon || projection > length + epsilon) return false;
+    const d = Math.max(0, Math.min(length, projection));
     // Scene movement ignores the retained ordinary lane offset. The guard must
     // compare against that same physical pose while evaluating ordinary walking.
     physical.avoid = 0;
