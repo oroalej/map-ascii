@@ -571,13 +571,17 @@ export class LifeBuilder {
     if (!joins.size && !connectors.length) return;
     const { coords, starts, kinds, addPiece } = this.takeLines(true);
     for (let line = 0; line < kinds.length; line++) {
+      const lineJoins = joins.get(line);
+      const ordered = lineJoins?.length
+        ? [...lineJoins].sort((a, b) => a.segment - b.segment || a.t - b.t)
+        : undefined;
+      let nextJoin = 0;
       let piece: TilePoint[] = [];
       for (let v = starts[line]!; v < starts[line + 1]!; v++) {
         const p = { x: coords[v * 2]!, y: coords[v * 2 + 1]! };
         if (!piece.length || piece.at(-1)!.x !== p.x || piece.at(-1)!.y !== p.y) piece.push(p);
-        for (const join of [...(joins.get(line) ?? [])]
-          .filter((j) => j.segment === v - starts[line]!)
-          .sort((a, b) => a.t - b.t)) {
+        while (ordered?.[nextJoin]?.segment === v - starts[line]!) {
+          const join = ordered[nextJoin++]!;
           if (join.t <= 1e-8) {
             addPiece(piece, line);
             piece = [p];

@@ -26,6 +26,31 @@ const position = (f: AtlasFeature) => {
   return f.geometry.coordinates;
 };
 
+it('keeps input road axes and phase groups when road IDs sort in the opposite order', () => {
+  const out = mergeTraffic([
+    road('z-east-west', [
+      [-100, 0],
+      [0, 0],
+      [100, 0],
+    ]),
+    road('a-north-south', [
+      [0, -100],
+      [0, 0],
+      [0, 100],
+    ]),
+  ]);
+  const signal = out.find((f) => f.properties.variant === 'signals')!;
+  expect(signal.properties.signal_a).toBeCloseTo(90);
+  expect(signal.properties.signal_b).toBeCloseTo(0);
+  const layout = SignalLayout.parse(JSON.parse(signal.properties.signal_layout!));
+  expect(layout.arms.filter((a) => a.road_id === 'z-east-west').every((a) => a.group === 'a')).toBe(
+    true,
+  );
+  expect(
+    layout.arms.filter((a) => a.road_id === 'a-north-south').every((a) => a.group === 'b'),
+  ).toBe(true);
+});
+
 it('links only the owned arm, retains exact coordinates and sets its stop behind the mapped band', () => {
   const out = mergeTraffic([
     road('ew', [

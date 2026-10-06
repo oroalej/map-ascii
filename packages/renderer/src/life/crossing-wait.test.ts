@@ -1,5 +1,10 @@
 import { expect, it, vi } from 'vitest';
-import { CrossingReservations, CrossingWaits, type WaitingPose } from './crossing-wait';
+import {
+  CrossingReservations,
+  CrossingWaits,
+  type WaitingPose,
+  type CrossingCursor,
+} from './crossing-wait';
 import { finalizeControlledCrossings } from './crossing-geometry';
 import { LifeBuilder, type ControlledCrossingAnchor } from './geometry';
 import { RoadAccess, stripRing } from './terrain';
@@ -36,21 +41,26 @@ const mover = (count = 1): Mover => ({
     step: 0,
   })),
 });
-const bodies = (owner: GroundAgent, minimum = 0, natural = false): Body[] => {
+const bodies = (
+  owner: GroundAgent,
+  minimum = 0,
+  natural = false,
+  cursor: CrossingCursor = owner,
+): Body[] => {
   if (!('kind' in owner)) return [];
   return (owner.group ?? []).map((w, i) => {
     const p = natural ? undefined : owner.crossingWait?.waiting?.poses[i];
     return {
-      x: owner.x + (p?.x ?? -owner.hy * w.lateral - owner.hx * w.back),
-      y: owner.y + (p?.y ?? owner.hx * w.lateral - owner.hy * w.back),
-      hx: p?.hx ?? owner.hx,
-      hy: p?.hy ?? owner.hy,
+      x: cursor.x + (p?.x ?? -cursor.hy * w.lateral - cursor.hx * w.back),
+      y: cursor.y + (p?.y ?? cursor.hx * w.lateral - cursor.hy * w.back),
+      hx: p?.hx ?? cursor.hx,
+      hy: p?.hy ?? cursor.hy,
       length: Math.max(0.9, minimum),
       width: Math.max(1, minimum),
     };
   });
 };
-function fixture(id = 'cross') {
+function fixture(id = 'cross', sample = bodies) {
   const crossing: ControlledCrossingAnchor = {
     id,
     anchor: { x: 0, y: 0 },
@@ -63,8 +73,40 @@ function fixture(id = 'cross') {
   finalizeControlledCrossings([crossing], roads, 1);
   const geo = new LifeBuilder().finish();
   geo.controlledCrossings = [crossing];
-  return new CrossingWaits(geo, 1, bodies, new RoadAccess(roads, []));
+  return new CrossingWaits(geo, 1, sample, new RoadAccess(roads, []), (owner, minimum) => {
+    if (!('kind' in owner)) return 0;
+    return (
+      Math.max(0, ...(owner.group ?? []).map((w) => Math.hypot(w.lateral, w.back))) +
+      Math.hypot(Math.max(0.9, minimum), Math.max(1, minimum)) / 2
+    );
+  });
 }
+
+it('probes complete swept bounds before building bodies for distant or held walkers', () => {
+  const sample = vi.fn(bodies),
+    waits = fixture('cross', sample),
+    m = mover(4);
+  m.x = 200;
+  expect(waits.limit(m, { x: 200, y: 20 }, 30, phase('dont'), 3)).toBe(30);
+  expect(sample).not.toHaveBeenCalled();
+  m.x = 0;
+  m.y = -40;
+  const cap = waits.limit(m, { x: 0, y: 40 }, 80, phase('dont'), 3);
+  expect(cap).toBeLessThan(40);
+  expect(sample).toHaveBeenCalledTimes(1);
+  m.y += cap;
+  waits.accept(m, { ...m, y: -40 }, phase('dont'), 3);
+  sample.mockClear();
+  expect(waits.limit(m, { x: 0, y: 40 }, 30, phase('dont'), 3)).toBe(0);
+  expect(sample).not.toHaveBeenCalled();
+  const rotated = mover(4);
+  rotated.x = 20;
+  rotated.y = -7;
+  rotated.hx = 1;
+  rotated.hy = 0;
+  rotated.group![0]!.back = 20;
+  expect(waits.limit(rotated, { x: 20, y: 20 }, 30, phase('dont'), 3)).toBeLessThan(30);
+});
 it('clamps complete cohorts at the curb and gates unrelated scene routes without latching the expanded cut', () => {
   const waits = fixture(),
     m = mover(4),

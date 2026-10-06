@@ -1,4 +1,9 @@
-import { CrossingReservations, CrossingWaits, type CrossingWaitState } from './crossing-wait';
+import {
+  CrossingReservations,
+  CrossingWaits,
+  type CrossingWaitState,
+  type CrossingCursor,
+} from './crossing-wait';
 import type { SimulationSeason } from './seasonal-simulation';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
@@ -295,6 +300,8 @@ type SeamLimit = {
   boundary?: Pick<Mover, 'line' | 'dir'>;
 };
 export type StepPass = {
+  /** The supplied world guard already composes transactional crossing checks. */
+  crossingGuard?: boolean;
   pedestrians?: PedestrianView;
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
@@ -781,6 +788,8 @@ export class TileLife {
   crossingWaits!: CrossingWaits;
   private crossingClock = 0;
   private crossingMinimum = 0;
+  private readonly crossingCursor = { x: 0, y: 0, hx: 0, hy: 0 };
+  private readonly crossingTarget = { x: 0, y: 0 };
   scenes!: LocalScenes;
   private readonly catRng: () => number;
   private readonly runRng: () => number;
@@ -1219,12 +1228,15 @@ export class TileLife {
     this.crossingWaits = new CrossingWaits(
       geo,
       this.perMeter,
-      (owner, minimum, natural) =>
+      (owner, minimum, natural, cursor) =>
         this.groundBodies(
           natural && 'crossingWait' in owner ? { ...owner, crossingWait: undefined } : owner,
           minimum,
+          undefined,
+          cursor,
         ),
       this.roadTerrain.access,
+      (owner, minimum) => this.crossingRadius(owner, minimum),
     );
     const crossings = new PedestrianCrossings(tile, this.perMeter);
     this.pedestrianCrossings = crossings;
@@ -2397,7 +2409,7 @@ export class TileLife {
   }
 
   /** The same meters and group slots used by the life drawing pass. */
-  groundBodies(a: GroundAgent, minimum = 0, out: Body[] = []): Body[] {
+  groundBodies(a: GroundAgent, minimum = 0, out: Body[] = [], cursor: CrossingCursor = a): Body[] {
     if (!('kind' in a) && !('walker' in a)) {
       const cart = VEHICLES.cart;
       const put = (i: number, x: number, y: number, length: number, width: number) => {
@@ -2433,16 +2445,16 @@ export class TileLife {
       return out;
     }
     const lane = mover ? this.offsetOf(a) : 0;
-    const x = a.x / this.perMeter - a.hy * lane;
-    const y = a.y / this.perMeter + a.hx * lane;
+    const x = cursor.x / this.perMeter - cursor.hy * lane;
+    const y = cursor.y / this.perMeter + cursor.hx * lane;
     if (mover && (a.kind === 'dog' || a.kind === 'cat')) {
       const size = animalSize(a.kind);
       const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
       Object.assign(b, {
         x,
         y,
-        hx: a.hx,
-        hy: a.hy,
+        hx: cursor.hx,
+        hy: cursor.hy,
         length: Math.max(size.length, minimum),
         width: Math.max(size.width, minimum),
         kind: BODY_KIND.animal,
@@ -2450,8 +2462,8 @@ export class TileLife {
       const waiting = a.crossingWait?.waiting?.poses[0];
       if (waiting)
         Object.assign(b, waiting, {
-          x: a.x / this.perMeter + waiting.x,
-          y: a.y / this.perMeter + waiting.y,
+          x: cursor.x / this.perMeter + waiting.x,
+          y: cursor.y / this.perMeter + waiting.y,
         });
       out.length = 1;
       return out;
@@ -2469,7 +2481,7 @@ export class TileLife {
       return out;
     }
     const walkers = mover ? (a.group ?? []) : [a.walker];
-    const { hx, hy } = a.momentFacing ?? a;
+    const { hx, hy } = a.momentFacing ?? cursor;
     const spacing = Math.max(1, minimum);
     for (let i = 0; i < walkers.length; i++) {
       const w = walkers[i]!;
@@ -2484,12 +2496,39 @@ export class TileLife {
       const waiting = a.crossingWait?.waiting?.poses[i];
       if (waiting)
         Object.assign(b, waiting, {
-          x: a.x / this.perMeter + waiting.x,
-          y: a.y / this.perMeter + waiting.y,
+          x: cursor.x / this.perMeter + waiting.x,
+          y: cursor.y / this.perMeter + waiting.y,
         });
     }
     out.length = walkers.length;
     return out;
+  }
+
+  /** Conservative complete formation radius, without constructing individual bodies. */
+  private crossingRadius(a: GroundAgent, minimum: number): number {
+    const mover = 'kind' in a;
+    const lane = mover ? Math.abs(this.offsetOf(a)) : 0;
+    if (mover && (a.kind === 'dog' || a.kind === 'cat')) {
+      const size = animalSize(a.kind);
+      return lane + Math.hypot(Math.max(size.length, minimum), Math.max(size.width, minimum)) / 2;
+    }
+    if (!mover && !('walker' in a)) return 0;
+    const facing = a.momentFacing ?? a;
+    const scale = Math.max(1, minimum) * Math.hypot(facing.hx, facing.hy);
+    let radius = 0;
+    const count = mover ? (a.group?.length ?? 0) : 1;
+    for (let i = 0; i < count; i++) {
+      const w = mover ? a.group![i]! : a.walker;
+      const size = memberSize(w.figure);
+      const footprint =
+        Math.hypot(Math.max(size.length, minimum), Math.max(size.width, minimum)) / 2;
+      const pose = a.crossingWait?.waiting?.poses[i];
+      const extent = pose
+        ? Math.hypot(pose.x, pose.y) + footprint
+        : lane + Math.hypot(w.lateral, w.back) * scale + footprint;
+      radius = Math.max(radius, extent);
+    }
+    return radius;
   }
 
   /** World terrain supplies neighboring carriageways; standalone tiles use their own roads. */
@@ -3595,16 +3634,16 @@ export class TileLife {
       if (junctions && this.crossingWaits.records.length && isWalker(m.kind) && length > 0) {
         const hx = (coords[to * 2]! - coords[m.from * 2]!) / length;
         const hy = (coords[to * 2 + 1]! - coords[m.from * 2 + 1]!) / length;
-        const cursor = {
-          ...m,
-          x: coords[m.from * 2]! + hx * m.d,
-          y: coords[m.from * 2 + 1]! + hy * m.d,
-          hx,
-          hy,
-        };
+        const cursor = this.crossingCursor;
+        cursor.x = coords[m.from * 2]! + hx * m.d;
+        cursor.y = coords[m.from * 2 + 1]! + hy * m.d;
+        cursor.hx = hx;
+        cursor.hy = hy;
+        this.crossingTarget.x = coords[to * 2]!;
+        this.crossingTarget.y = coords[to * 2 + 1]!;
         const cap = this.crossingWaits.limit(
           m,
-          { x: coords[to * 2]!, y: coords[to * 2 + 1]! },
+          this.crossingTarget,
           Math.min(left, length - m.d),
           this.crossingClock,
           this.crossingMinimum,
@@ -4658,27 +4697,29 @@ export class TileLife {
     this.crossingMinimum = minimum;
     this.crossingWaits.beginStep();
     if (this.crossingWaits.records.length) {
-      const physical =
-        guard ??
-        ((owner: GroundAgent, before?: GroundAgent) =>
-          !('kind' in owner) ||
-          (owner.kind !== 'cat' && owner.kind !== 'dog') ||
-          (this.scenes.walkable(before ?? owner, owner) &&
-            this.roadTerrain.access.allows(this.groundBodies(owner))));
-      guard = (owner, before, reject) => {
-        const trial = this.crossingWaits.prepare(owner, before, minimum);
-        if (!this.crossingWaits.permits(owner, before, clock, minimum, trial)) return false;
-        if (!physical(owner, before, reject)) return false;
-        this.crossingWaits.accept(
-          owner,
-          before,
-          clock,
-          minimum,
-          () => this.movers.indexOf(owner as Mover),
-          trial,
-        );
-        return true;
-      };
+      if (!guard || !pass?.crossingGuard) {
+        const physical =
+          guard ??
+          ((owner: GroundAgent, before?: GroundAgent) =>
+            !('kind' in owner) ||
+            (owner.kind !== 'cat' && owner.kind !== 'dog') ||
+            (this.scenes.walkable(before ?? owner, owner) &&
+              this.roadTerrain.access.allows(this.groundBodies(owner))));
+        guard = (owner, before, reject) => {
+          const trial = this.crossingWaits.prepare(owner, before, minimum);
+          if (!this.crossingWaits.permits(owner, before, clock, minimum, trial)) return false;
+          if (!physical(owner, before, reject)) return false;
+          this.crossingWaits.accept(
+            owner,
+            before,
+            clock,
+            minimum,
+            () => this.movers.indexOf(owner as Mover),
+            trial,
+          );
+          return true;
+        };
+      }
       for (const owner of [...this.movers, ...this.gatherers]) {
         if (
           owner === this.inspected ||
@@ -7413,6 +7454,7 @@ export class LifeWorld {
         env,
         (owner, before, reject) => guard(tile, owner, before, undefined, true, owner, reject),
         {
+          crossingGuard: true,
           pedestrians: guard.pedestrians(tile),
           junctions: this.junctions,
           trains,

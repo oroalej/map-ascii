@@ -42,10 +42,25 @@ it('clamps an oversized ordinary step after its bend and restores a rejected ful
   expect(m.x).toBe(before.x);
   expect(m.y).toBe(before.y);
   expect(m.crossingWait).toBeUndefined();
-  life.step(20, undefined, undefined, undefined, { clock: red, rain: 0 });
+  const physical = vi.fn(() => true);
+  life.step(20, undefined, undefined, undefined, { clock: red, rain: 0 }, physical);
+  expect(physical).toHaveBeenCalled();
   expect(m.from).toBe(3);
   expect((m.y - 2000) / pm).toBeCloseTo(-5.46);
   expect(m.crossingWait?.waiting).toBeDefined();
+});
+
+it('runs one crossing trial for an accepted world movement', () => {
+  const world = new LifeWorld();
+  world.sync([signalizedCrossingEntry()]);
+  const { life } = seedSignalizedCrossing(world);
+  const prepare = vi.spyOn(life.crossingWaits, 'prepare');
+  const permits = vi.spyOn(life.crossingWaits, 'permits');
+  const accept = vi.spyOn(life.crossingWaits, 'accept');
+  world.step(1 / 60, undefined, 19, undefined, undefined, { rain: 0 }, 0.9);
+  expect(prepare).toHaveBeenCalledTimes(1);
+  expect(permits).toHaveBeenCalledTimes(1);
+  expect(accept).toHaveBeenCalledTimes(1);
 });
 
 it('avoids queue scans and crossing cursor trials in a world without controlled crossings', () => {

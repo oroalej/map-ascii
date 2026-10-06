@@ -1,4 +1,4 @@
-import { SignalLayout, SignalStops, type City } from '@atlas/shared';
+import { SignalLayout, SignalStops, type City, type SignalArm } from '@atlas/shared';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { delta, key, lines, point, SIGNAL_STOP_GAP_M, width } from './road-geometry';
@@ -189,8 +189,8 @@ export function signalStop(
   const tx = Math.sin((bearing * Math.PI) / 180),
     ty = Math.cos((bearing * Math.PI) / 180);
   const q = [...at.position];
-  const segment = path.segments[at.segment]!,
-    stopDirection = segment.forward ? -1 : 1;
+  const segment = path.segments[at.segment]!;
+  const stopDirection: -1 | 1 = segment.forward ? -1 : 1;
   const w = width(segment.road),
     offset = segment.road.properties.oneway ? 0 : w / 4;
   q[0]! += (ty * offset) / (111320 * Math.cos((q[1]! * Math.PI) / 180));
@@ -217,6 +217,23 @@ export function mergeStreetDetails(
   policy?: City['streets'],
 ): { features: AtlasFeature[]; stats: StreetStats } {
   const stops = new Map<string, AtlasFeature>();
+  const signalArms = new Map<AtlasFeature, SignalArm[]>();
+  const controlledStops = new Map<string, SignalArm>();
+  const stopIdentity = (roadId: string, junction: Position, toward: Position) =>
+    JSON.stringify([roadId, key(junction), key(toward)]);
+  for (const signal of signals) {
+    const arms = signal.properties.signal_layout
+      ? SignalLayout.parse(JSON.parse(signal.properties.signal_layout)).arms
+      : signal.properties.signal_stops
+        ? SignalStops.parse(JSON.parse(signal.properties.signal_stops))
+        : [];
+    signalArms.set(signal, arms);
+    for (const arm of arms) {
+      if (!arm.stop) continue;
+      const identity = stopIdentity(arm.road_id, arm.junction, arm.toward);
+      if (!controlledStops.has(identity)) controlledStops.set(identity, arm);
+    }
+  }
   let unresolvedStops = 0,
     undirectedMidblockStops = 0,
     shortApproaches = 0;
@@ -225,21 +242,7 @@ export function mergeStreetDetails(
     const direction = arm.forward ? -1 : 1;
     if (arm.road.properties.oneway && arm.road.properties.oneway !== direction) return;
     const controlled = mapped
-      ? signals
-          .flatMap((s) =>
-            s.properties.signal_layout
-              ? SignalLayout.parse(JSON.parse(s.properties.signal_layout)).arms
-              : s.properties.signal_stops
-                ? SignalStops.parse(JSON.parse(s.properties.signal_stops))
-                : [],
-          )
-          .find(
-            (a) =>
-              a.road_id === arm.road.properties.id &&
-              key(a.junction) === key(p) &&
-              key(a.toward) === key(arm.toward) &&
-              a.stop,
-          )
+      ? controlledStops.get(stopIdentity(arm.road.properties.id, p, arm.toward))
       : undefined;
     const resolved =
       controlled?.stop && controlled.stop_width
@@ -271,9 +274,7 @@ export function mergeStreetDetails(
   for (const signal of signals) {
     if (signal.geometry.type !== 'Point') continue;
     if (signal.properties.signal_layout || signal.properties.signal_stops) {
-      const arms = signal.properties.signal_layout
-        ? SignalLayout.parse(JSON.parse(signal.properties.signal_layout)).arms
-        : SignalStops.parse(JSON.parse(signal.properties.signal_stops!));
+      const arms = signalArms.get(signal)!;
       for (const arm of arms) {
         if (!arm.inbound) continue;
         if (!arm.stop || !arm.stop_width) {

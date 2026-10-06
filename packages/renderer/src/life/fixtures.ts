@@ -396,23 +396,28 @@ export function updateFixtureFlags(packed: PackedFixtures, motion: FixtureMotion
 }
 
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
-export function updateFixtureSignals(packed: PackedFixtures, clock: number): boolean {
-  let changed = false;
+export const FixtureSignalChange = { vehicle: 1, pedestrian: 2 } as const;
+
+function pedestrianTexelState(seed: number, clock: number, midBlock: boolean, group: 'a' | 'b') {
+  const phase = pedestrianState(seed, clock, midBlock, group);
+  return phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
+}
+
+export function updateFixtureSignals(packed: PackedFixtures, clock: number): number {
+  let changed = 0;
   for (const ped of packed.pedestrians ?? []) {
-    const phase = pedestrianState(ped.seed, clock, ped.midBlock, ped.group);
-    const state =
-      phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
+    const state = pedestrianTexelState(ped.seed, clock, ped.midBlock, ped.group);
     if (state === ped.state) continue;
     ped.state = state;
     for (const at of ped.cells) packed.texels[at + 2] = state;
-    changed = true;
+    changed |= FixtureSignalChange.pedestrian;
   }
   for (const signal of packed.signals) {
     const color = signalColor[signalState(signal.seed, clock, signal.midBlock)[signal.group]];
     if (color === signal.color) continue;
     signal.color = color;
     for (const at of signal.cells) packed.texels[at + 2] = color;
-    changed = true;
+    changed |= FixtureSignalChange.vehicle;
   }
   return changed;
 }
@@ -769,9 +774,7 @@ export function packFixtures(
       chosen.some((cell) => glyphIndex(cell.glyph) <= 0 || glyphIndex(cell.glyph) > MAX_GLYPHS)
     )
       continue;
-    const phase = pedestrianState(fixture.seed, clock, fixture.midBlock, fixture.group);
-    const state =
-      phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
+    const state = pedestrianTexelState(fixture.seed, clock, fixture.midBlock, fixture.group);
     const ped = {
       seed: fixture.seed,
       group: fixture.group,

@@ -4,6 +4,7 @@ import {
   packFixtures,
   tileFixtures,
   updateFixtureSignals,
+  FixtureSignalChange,
   updatePedestrianVisibility,
   packSignalLights,
   type StreetFixture,
@@ -85,9 +86,9 @@ it('draws detailed heads only, updates the shared phase at 2 Hz, freezes unchang
     flash = Array.from({ length: 1000 }, (_, i) => i / 10).find(
       (t) => pedestrianState(7, t, false, 'a') === 'flash',
     )!;
-  expect(updateFixtureSignals(p, flash)).toBe(true);
+  expect(updateFixtureSignals(p, flash)).toBe(FixtureSignalChange.pedestrian);
   expect(p.pedestrians![0]!.state).toBe(Math.floor(flash * 2) % 2 === 0 ? 2 : 3);
-  expect(updateFixtureSignals(p, flash)).toBe(false);
+  expect(updateFixtureSignals(p, flash)).toBe(0);
   updateFixtureSignals(p, flash + 0.5);
   expect(p.pedestrians![0]!.state).toBe(Math.floor((flash + 0.5) * 2) % 2 === 0 ? 2 : 3);
   for (let i = 0; i < before.length; i++) if (i % 4 !== 2) expect(p.texels[i]).toBe(before[i]);

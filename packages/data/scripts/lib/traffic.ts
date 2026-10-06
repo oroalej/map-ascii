@@ -65,9 +65,9 @@ export function mergeTraffic(
   report?: (stats: StreetStats) => void,
 ): AtlasFeature[] {
   features = applyRoadDirections(features, streets?.directions);
-  const roads = features
-    .filter((f) => !f.properties.region && f.properties.class.startsWith('road_'))
-    .sort((a, b) => a.properties.id.localeCompare(b.properties.id));
+  const roads = features.filter(
+    (f) => !f.properties.region && f.properties.class.startsWith('road_'),
+  );
   const junctions = roadJunctions(roads);
   const roadVertices = new Map<string, { road: AtlasFeature; bearing: number; line: Position[] }>();
   for (const road of roads)

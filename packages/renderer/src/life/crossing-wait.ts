@@ -159,6 +159,7 @@ export class CrossingReservations {
 
 type Record = ControlledCrossingAnchor & { quad: Point[]; sides: [CrossingSide, CrossingSide] };
 type Trial = { before: readonly Body[]; after: readonly Body[]; records: readonly Record[] };
+export type CrossingCursor = Readonly<Point & { hx: number; hy: number }>;
 const walker = (owner: GroundAgent): owner is Walker =>
   'walker' in owner ||
   ('kind' in owner && (owner.kind === 'person' || owner.kind === 'dog' || owner.kind === 'cat'));
@@ -185,8 +186,14 @@ export class CrossingWaits {
   constructor(
     geo: LifeGeometry,
     readonly perMeter: number,
-    private readonly bodies: (owner: GroundAgent, minimum: number, natural?: boolean) => Body[],
+    private readonly bodies: (
+      owner: GroundAgent,
+      minimum: number,
+      natural?: boolean,
+      cursor?: CrossingCursor,
+    ) => Body[],
     private readonly roads: RoadAccess,
+    private readonly radius?: (owner: GroundAgent, minimum: number) => number,
   ) {
     const metric = (p: Point) => ({ x: p.x / perMeter, y: p.y / perMeter });
     this.records = (geo.controlledCrossings ?? [])
@@ -341,17 +348,31 @@ export class CrossingWaits {
     distance: number,
     clock: number,
     minimum = 0,
-    cursor = owner,
+    cursor: CrossingCursor = owner,
   ): number {
     if (!walker(owner) || !this.records.length || distance <= 0) return distance;
     if (owner.crossingWait?.waiting && !owner.crossingWait.waiting.releasing) return 0;
-    const before = this.bodies(cursor, minimum),
-      dx = target.x - cursor.x,
+    const dx = target.x - cursor.x,
       dy = target.y - cursor.y,
       length = Math.hypot(dx, dy);
     if (!length) return distance;
     const mx = dx / length / this.perMeter,
       my = dy / length / this.perMeter;
+    if (this.radius && !owner.crossingWait && !this.blocked.has(owner)) {
+      const x = cursor.x / this.perMeter,
+        y = cursor.y / this.perMeter,
+        endX = x + mx * distance,
+        endY = y + my * distance;
+      const [lo, hi] = this.queryBounds as [Point, Point];
+      lo.x = Math.min(x, endX);
+      lo.y = Math.min(y, endY);
+      hi.x = Math.max(x, endX);
+      hi.y = Math.max(y, endY);
+      const radius = this.radius(owner, minimum);
+      if (!binKeys(this.queryBounds, radius, this.queryKeys).some((key) => this.bins.has(key)))
+        return distance;
+    }
+    const before = this.bodies(owner, minimum, false, cursor);
     const after = before.map((body) => ({
       ...body,
       x: body.x + mx * distance,
@@ -359,7 +380,9 @@ export class CrossingWaits {
     }));
     let allowed = distance;
     const local = 'kind' in owner ? (this.lines.get(owner.line) ?? []) : [];
-    for (const record of new Set([...local, ...this.near(before, after)])) {
+    this.near(before, after);
+    for (const record of local) this.candidates.add(record);
+    for (const record of this.candidates) {
       if (this.committed(owner, record) || this.walk(record, clock)) continue;
       for (const [sideIndex, side] of record.sides.entries())
         for (let i = 0; i < before.length; i++) {
@@ -474,7 +497,10 @@ export class CrossingWaits {
     const releasing = wait.releasing || (this.walk(record, clock) && this.registry.canDepart(wait));
     const reset =
       releasing !== wait.releasing ||
-      (!wait.releasing && !!claim && JSON.stringify(wait.slots) !== JSON.stringify(claim.slots));
+      (!wait.releasing &&
+        !!claim &&
+        (wait.slots.length !== claim.slots.length ||
+          wait.slots.some((id, i) => id !== claim.slots[i])));
     const start = reset ? wait.poses : wait.start;
     const slots = wait.releasing ? wait.slots : (claim?.slots ?? wait.slots);
     if (slots.some((id) => !side.slotIds.includes(id))) return;

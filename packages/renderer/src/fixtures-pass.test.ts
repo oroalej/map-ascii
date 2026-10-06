@@ -48,13 +48,12 @@ it('updates flashing pedestrian lenses without reprojection and reports their in
   project.mockClear();
   fixturePass(gl, targets, resources, view, placement, fixtures, flash + 0.5, false);
   expect(project).not.toHaveBeenCalled();
-  expect(upload).toHaveBeenCalledTimes(4);
+  expect(upload).toHaveBeenCalledTimes(3);
   const after = upload.mock.calls[2]!.at(-1) as Uint8Array;
   expect(after).not.toEqual(bytes);
   for (let i = 0; i < bytes.length; i++) if (i % 4 !== 2) expect(after[i]).toBe(bytes[i]);
-  expect((upload.mock.calls[3]!.at(-1) as Uint8Array).every((v) => v === 0)).toBe(true);
   fixturePass(gl, targets, resources, view, placement, fixtures, flash + 0.5, false);
-  expect(upload).toHaveBeenCalledTimes(4);
+  expect(upload).toHaveBeenCalledTimes(3);
   expect(
     fixturePass(
       gl,

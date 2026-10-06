@@ -140,6 +140,10 @@ export function controlledCrossingConnectors(
   const joins = new Map<number, { segment: number; t: number; point: Point }[]>(),
     connectors: { points: Point[]; id: number }[] = [];
   const ids = new Set(anchors.map((c) => c.lineId));
+  const walkingBounds = lines
+    .filter((line) => !ids.has(line.id) && !line.navigationOnly)
+    .map((line) => ({ line, bounds: boundsOf(line.points) }));
+  const reach = 4 * perMeter;
   for (const crossing of anchors) {
     const crossingLine = lines.find((line) => line.id === crossing.lineId);
     if (!crossingLine) continue;
@@ -155,9 +159,12 @@ export function controlledCrossingConnectors(
         )
       )
         continue;
-      const candidates = lines
-        .filter((line) => !ids.has(line.id) && !line.navigationOnly)
-        .flatMap((line) =>
+      const candidates = walkingBounds
+        .filter(
+          ({ bounds: [x0, y0, x1, y1] }) =>
+            x0 <= p.x + reach && x1 >= p.x - reach && y0 <= p.y + reach && y1 >= p.y - reach,
+        )
+        .flatMap(({ line }) =>
           line.points.slice(1).map((b, segment) => {
             const a = line.points[segment]!,
               dx = b.x - a.x,
@@ -171,7 +178,7 @@ export function controlledCrossingConnectors(
             return { line: line.line, segment, t, point, distance };
           }),
         )
-        .filter((candidate) => candidate.distance <= 4 * perMeter)
+        .filter((candidate) => candidate.distance <= reach)
         .sort((a, b) => a.distance - b.distance || a.line - b.line || a.segment - b.segment);
       for (const candidate of candidates) {
         const steps = Math.max(1, Math.ceil(candidate.distance / (0.25 * perMeter)));
