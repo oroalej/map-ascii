@@ -232,6 +232,9 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+const compareJunctionRequests = (a: JunctionRequest, b: JunctionRequest) =>
+  Number(b.inside) - Number(a.inside) ||
+  (a.movement.boxAhead ?? a.movement.ahead) - (b.movement.boxAhead ?? b.movement.ahead);
 const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
 const moverAttendance = (m: Mover, levels: Activity | undefined, crowd: number) =>
   !!m.train || !levels || m.rank < levels[m.kind] * crowd;
@@ -1106,6 +1109,7 @@ export class TileLife {
   /** Line ends by position: packed position → line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
   private readonly exitHeading = new Float64Array(4);
+  private readonly seamExitOptions: number[] = [];
   private readonly curvable: Uint8Array;
   /** Fixed obstacles lanes bend around (`setLaneTerrain`); none without a world guard. */
   private laneTerrain?: LaneTerrain;
@@ -3475,8 +3479,6 @@ export class TileLife {
   seamExit(m: Mover, line: number, dir: 1 | -1): number | undefined {
     const end = dir === 1 ? this.last(line) : this.first(line);
     const current = line === m.line && dir === m.dir;
-    const exits = this.ends.get(this.endKey(end));
-    const arrived = line * 2 + (dir === 1 ? 1 : 0);
     const route = m.junctionRoute?.exits;
     const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
     const routeIndex = current ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1;
@@ -3487,46 +3489,12 @@ export class TileLife {
         ? plan.exit
         : undefined;
     const remembered = current ? m.next : undefined;
-    const headings = this.exitHeading;
-    let useTurnable = false;
-    const turnLimit = Math.cos((FILLET.maxAngle * Math.PI) / 180);
-    if (m.kind === 'vehicle') {
-      this.writeEndHeading(arrived, headings);
-      for (const code of exits ?? []) {
-        if (!this.legalExit(m, code, arrived)) continue;
-        this.writeEndHeading(code, headings, 2);
-        if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! >= turnLimit) {
-          useTurnable = true;
-          break;
-        }
-      }
-    }
-    let only: number | undefined,
-      count = 0;
-    let hasReserved = false,
-      hasPlanned = false,
-      hasRemembered = false;
-    for (const code of exits ?? []) {
-      if (!this.legalExit(m, code, arrived)) continue;
-      if (useTurnable) {
-        this.writeEndHeading(code, headings, 2);
-        if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! < turnLimit) continue;
-      }
-      only = code;
-      count++;
-      hasReserved ||= code === reserved;
-      hasPlanned ||= code === planned;
-      hasRemembered ||= code === remembered;
-    }
-    return hasReserved
-      ? reserved
-      : hasPlanned
-        ? planned
-        : hasRemembered
-          ? remembered
-          : count === 1
-            ? only
-            : undefined;
+    const options = this.seamExitOptions;
+    this.writeExitOptions(m.kind, line, dir, end, options);
+    return (
+      this.committedExit(options, reserved, planned, remembered) ??
+      (options.length === 1 ? options[0] : undefined)
+    );
   }
 
   /** An accepted boundary belongs to its actual routing piece, rather than earlier junctions. */
@@ -3610,27 +3578,43 @@ export class TileLife {
   }
 
   private exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[] {
-    const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
-    const options = (this.ends.get(this.endKey(vertex)) ?? []).filter((code) =>
-      this.legalExit(m, code, arrived),
-    );
-    if (m.kind !== 'vehicle' || options.length < 2) return options;
+    const options: number[] = [];
+    this.writeExitOptions(m.kind, m.line, m.dir, vertex, options);
+    return options;
+  }
+  /** Owned routing arrays and scratch-only previews use the same future-cursor policy. */
+  private writeExitOptions(
+    kind: Mover['kind'],
+    line: number,
+    dir: 1 | -1,
+    vertex: number,
+    out: number[],
+  ): void {
+    out.length = 0;
+    const exits = this.ends.get(this.endKey(vertex));
+    if (!exits) return;
+    const arrived = line * 2 + (dir === 1 ? 1 : 0);
+    for (const code of exits) if (this.legalExit(kind, code, arrived)) out.push(code);
+    if (kind !== 'vehicle' || out.length < 2) return;
     // A vehicle doesn't double back sharper than a corner can curve (`FILLET.maxAngle`), which
     // would spin it on the spot, unless that is the only way on.
-    const [bx, by] = this.endHeading(arrived);
+    const headings = this.exitHeading;
+    this.writeEndHeading(arrived, headings);
     const limit = Math.cos((FILLET.maxAngle * Math.PI) / 180);
-    const turnable = options.filter((code) => {
-      const [ox, oy] = this.endHeading(code);
-      return -bx * ox - by * oy >= limit;
-    });
-    return turnable.length ? turnable : options;
+    let turnable = 0;
+    for (const code of out) {
+      this.writeEndHeading(code, headings, 2);
+      if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! >= limit)
+        out[turnable++] = code;
+    }
+    if (turnable) out.length = turnable;
   }
-  private legalExit(m: Pick<Mover, 'kind'>, code: number, arrived: number): boolean {
+  private legalExit(kind: Mover['kind'], code: number, arrived: number): boolean {
     return (
       code !== arrived &&
-      usableLines[m.kind].includes(this.geo.kinds[code >> 1]! as LifeLine) &&
+      usableLines[kind].includes(this.geo.kinds[code >> 1]! as LifeLine) &&
       !(
-        m.kind === 'vehicle' &&
+        kind === 'vehicle' &&
         this.geo.oneway?.[code >> 1] &&
         this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
       )
@@ -3639,7 +3623,7 @@ export class TileLife {
   private hasExit(m: Mover, vertex: number): boolean {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     for (const code of this.ends.get(this.endKey(vertex)) ?? [])
-      if (this.legalExit(m, code, arrived)) return true;
+      if (this.legalExit(m.kind, code, arrived)) return true;
     return false;
   }
 
@@ -4254,11 +4238,7 @@ export class TileLife {
           movement,
           movement.ahead < -JUNCTION.insideToleranceM * pm && movement.line === m.line,
         );
-      requests.sort(
-        (a, b) =>
-          Number(b.inside) - Number(a.inside) ||
-          (a.movement.boxAhead ?? a.movement.ahead) - (b.movement.boxAhead ?? b.movement.ahead),
-      );
+      if (requests.length > 1) requests.sort(compareJunctionRequests);
       for (let i = 0; i < requests.length; i++)
         requests[i]!.precedingKey = requests[i - 1]?.movement.key;
     }

@@ -199,6 +199,7 @@ export function observePriority(fixture: Fixture) {
     entries = 0,
     insideFreezeSeconds = 0,
     twoCarFreezes = 0;
+  const windowAt = () => Math.min(2, Math.floor((seconds + 1e-7) / 60));
   const distance = (m: Mover, movement: Movement) => {
     const j = movement.junction,
       pm = life.perMeter;
@@ -230,7 +231,7 @@ export function observePriority(fixture: Fixture) {
             exitArm = armFor(movement.outHx, movement.outHy),
             view = base.pedestrians(life);
           entries++;
-          const window = Math.min(2, Math.floor(seconds / 60));
+          const window = windowAt();
           entriesPer60[window]!++;
           if (entryArm >= 0) counts[window]![entryArm]!++;
           if (
@@ -253,7 +254,7 @@ export function observePriority(fixture: Fixture) {
       return guard?.pedestrians(life);
     },
     afterStep(dt: number) {
-      const window = Math.min(2, Math.floor((seconds + 1e-7) / 60));
+      const window = windowAt();
       for (let i = 0; i < walkers.length; i++) {
         const m = walkers[i]!,
           previous = walkerPositions[i]!;

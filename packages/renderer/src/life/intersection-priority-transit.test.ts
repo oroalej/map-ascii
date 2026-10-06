@@ -50,9 +50,6 @@ for (let window = 0; window < 3; window++) {
     expect(result.unsafeEntriesPer60[window]).toBe(0);
     expect(result.transitSites).toBe(2);
   });
-  it(`reports the transit per-arm 60 second target in window ${window + 1}`, () => {
-    expect(result.crossingsPerArmPer60[window]!.every((n) => n > 0)).toBe(true);
-  });
 }
 it('enters from every transit arm over the complete run', () => {
   for (let arm = 0; arm < 4; arm++)

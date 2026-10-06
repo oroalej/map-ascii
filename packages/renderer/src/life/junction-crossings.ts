@@ -215,11 +215,13 @@ export class JunctionCrossings {
   }
   clear(p: Movement, view: PedestrianView, controlled: boolean): boolean {
     if (view.empty) return true;
-    const blocked = (list: readonly PedestrianCrossing[]) =>
-      list.some((c) => this.life.pedestrianCrossings.blocked(c, view));
-    if (!controlled && blocked(this.forArm(p.junction, p.entry))) return false;
+    if (!controlled && this.blocked(this.forArm(p.junction, p.entry), view)) return false;
     const turning = p.inHx * p.outHx + p.inHy * p.outHy < COS30;
-    return !(!controlled || turning) || !blocked(this.forArm(p.junction, p.exit));
+    return !(!controlled || turning) || !this.blocked(this.forArm(p.junction, p.exit), view);
+  }
+  private blocked(list: readonly PedestrianCrossing[], view: PedestrianView): boolean {
+    for (const c of list) if (this.life.pedestrianCrossings.blocked(c, view)) return true;
+    return false;
   }
   /** A denied car must leave the entrance stripes usable by the people it is yielding to. */
   holdAhead(p: Movement, controlled: boolean): void {

@@ -358,6 +358,8 @@ export function fromRight(a: Movement, b: Movement): boolean {
 const leftTurn = (m: Movement) => m.inHx * m.outHy - m.inHy * m.outHx < -0.5;
 const stable = (a: JunctionRequest, b: JunctionRequest) =>
   a.tileKey.localeCompare(b.tileKey) || a.index - b.index;
+const rightPrecedes = (a: Hold, b: Hold) =>
+  !compatible(a.movement, b.movement) && fromRight(b.movement, a.movement);
 
 /** Reused adjacency/Tarjan buffers. SCCs break cycles without dropping external precedence. */
 class Precedence {
@@ -370,6 +372,28 @@ class Precedence {
   private degrees: number[] = [];
   private done: boolean[] = [];
   private output: Hold[] = [];
+  private visit = 0;
+  private count = 0;
+  private dfs(i: number, n: number): void {
+    this.visits[i] = this.lows[i] = this.visit++;
+    this.stack.push(i);
+    this.active[i] = true;
+    for (let j = 0; j < n; j++)
+      if (this.edges[i * n + j]) {
+        if (this.visits[j] === -1) {
+          this.dfs(j, n);
+          this.lows[i] = Math.min(this.lows[i], this.lows[j]!);
+        } else if (this.active[j]) this.lows[i] = Math.min(this.lows[i], this.visits[j]!);
+      }
+    if (this.lows[i] !== this.visits[i]) return;
+    let j: number;
+    do {
+      j = this.stack.pop()!;
+      this.active[j] = false;
+      this.components[j] = this.count;
+    } while (j !== i);
+    this.count++;
+  }
   order(rows: Hold[], precedes: (a: Hold, b: Hold) => boolean): Hold[] {
     const n = rows.length;
     if (this.edges.length < n * n) this.edges = new Uint8Array(n * n);
@@ -378,33 +402,12 @@ class Precedence {
     this.visits.fill(-1);
     this.active.fill(false);
     this.stack.length = 0;
-    let visit = 0,
-      count = 0;
+    this.visit = this.count = 0;
     for (let i = 0; i < n; i++)
       for (let j = 0; j < n; j++)
         if (i !== j && precedes(rows[i]!, rows[j]!)) this.edges[i * n + j] = 1;
-    const dfs = (i: number) => {
-      this.visits[i] = this.lows[i] = visit++;
-      this.stack.push(i);
-      this.active[i] = true;
-      for (let j = 0; j < n; j++)
-        if (this.edges[i * n + j]) {
-          if (this.visits[j] === -1) {
-            dfs(j);
-            this.lows[i] = Math.min(this.lows[i], this.lows[j]!);
-          } else if (this.active[j]) this.lows[i] = Math.min(this.lows[i], this.visits[j]!);
-        }
-      if (this.lows[i] !== this.visits[i]) return;
-      let j: number;
-      do {
-        j = this.stack.pop()!;
-        this.active[j] = false;
-        this.components[j] = count;
-      } while (j !== i);
-      count++;
-    };
-    for (let i = 0; i < n; i++) if (this.visits[i] === -1) dfs(i);
-    this.degrees.length = count;
+    for (let i = 0; i < n; i++) if (this.visits[i] === -1) this.dfs(i, n);
+    this.degrees.length = this.count;
     this.degrees.fill(0);
     this.done.length = n;
     this.done.fill(false);
@@ -414,15 +417,22 @@ class Precedence {
         if (this.edges[i * n + j] && this.components[i] !== this.components[j])
           this.degrees[this.components[j]!]!++;
     while (this.output.length < n) {
-      const first = rows.findIndex(
-        (_, i) => !this.done[i] && this.degrees[this.components[i]!] === 0,
-      );
+      let first = 0;
+      while (this.done[first] || this.degrees[this.components[first]!] !== 0) first++;
       const component = this.components[first]!;
       // Stable order inside a cycle; baseline order selects among unconstrained components.
       const members: number[] = this.stack;
       members.length = 0;
       for (let i = 0; i < n; i++) if (this.components[i] === component) members.push(i);
-      members.sort((a, b) => stable(rows[a]!, rows[b]!));
+      for (let i = 1; i < members.length; i++) {
+        const member = members[i]!;
+        let at = i;
+        while (at > 0 && stable(rows[members[at - 1]!]!, rows[member]!) > 0) {
+          members[at] = members[at - 1]!;
+          at--;
+        }
+        members[at] = member;
+      }
       for (const i of members) {
         this.output.push(rows[i]!);
         this.done[i] = true;
@@ -488,6 +498,12 @@ export class JunctionTable {
   private readonly blocking: Hold[] = [];
   private readonly yielded = new Set<Hold>();
   private readonly eligibleRows = new Set<Hold>();
+  private readonly compare = (a: Hold, b: Hold) =>
+    Number(this.over(b)) - Number(this.over(a)) ||
+    (a.arrival ?? Infinity) - (b.arrival ?? Infinity) ||
+    stable(a, b);
+  private readonly finalPrecedes = (a: Hold, b: Hold) =>
+    this.oncoming(b, a) || this.surrender(a, b);
   get empty(): boolean {
     return this.records.size === 0;
   }
@@ -690,6 +706,31 @@ export class JunctionTable {
   private over(r: Hold): boolean {
     return r.arrival !== undefined && this.clock - r.arrival >= JUNCTION.maxWait;
   }
+  private eligible(r: Hold): boolean {
+    return r.ready && this.eligibleRows.has(r);
+  }
+  private surrender(a: Hold, b: Hold): boolean {
+    return (
+      !this.yielded.has(a) &&
+      b.surrenderedAt !== undefined &&
+      !this.over(b) &&
+      a.surrenderedAt === undefined &&
+      a.arrival !== undefined &&
+      a.arrival <= b.surrenderedAt &&
+      a.atLine === true &&
+      this.eligible(a) &&
+      !compatible(a.movement, b.movement)
+    );
+  }
+  private clearOccupants(r: Hold, group: readonly Hold[]): boolean {
+    for (const b of group)
+      if (b.inside && b !== r && !compatible(r.movement, b.movement)) return false;
+    return true;
+  }
+  private hasOncoming(r: Hold, group: readonly Hold[]): boolean {
+    for (const b of group) if (this.oncoming(r, b)) return true;
+    return false;
+  }
   private oncoming(a: Hold, b: Hold): boolean {
     return (
       a !== b &&
@@ -768,24 +809,19 @@ export class JunctionTable {
         if (
           r.ready &&
           (r.room ?? Infinity) >= VEHICLES[r.m.vehicle!].length + JUNCTION.gap &&
-          group.every((b) => !b.inside || b === r || compatible(r.movement, b.movement))
+          this.clearOccupants(r, group)
         )
           this.eligibleRows.add(r);
     // Determine all upstream yields before any downstream group can arbitrate.
     for (const group of groups.values())
       for (const r of group)
-        if (!r.inside && group.some((b) => this.oncoming(r, b))) {
+        if (!r.inside && this.hasOncoming(r, group)) {
           this.revoke(r);
           this.yielded.add(r);
         }
     this.revalidateRoutes();
     for (const group of groups.values()) {
-      group.sort(
-        (a, b) =>
-          Number(this.over(b)) - Number(this.over(a)) ||
-          (a.arrival ?? Infinity) - (b.arrival ?? Infinity) ||
-          stable(a, b),
-      );
+      group.sort(this.compare);
       const ordered = this.ordered;
       ordered.length = 0;
       for (let i = 0; i < group.length;) {
@@ -807,28 +843,9 @@ export class JunctionTable {
         for (; i < end; i++)
           if (group[i]!.ready) batch.push(group[i]!);
           else ordered.push(group[i]!);
-        ordered.push(
-          ...this.precedence.order(
-            batch,
-            (a, b) => !compatible(a.movement, b.movement) && fromRight(b.movement, a.movement),
-          ),
-        );
+        ordered.push(...this.precedence.order(batch, rightPrecedes));
       }
-      const eligible = (r: Hold) => r.ready && this.eligibleRows.has(r);
-      const surrender = (a: Hold, b: Hold) =>
-        !this.yielded.has(a) &&
-        b.surrenderedAt !== undefined &&
-        !this.over(b) &&
-        a.surrenderedAt === undefined &&
-        a.arrival !== undefined &&
-        a.arrival <= b.surrenderedAt &&
-        a.atLine === true &&
-        eligible(a) &&
-        !compatible(a.movement, b.movement);
-      const final = this.precedence.order(
-        ordered,
-        (a, b) => this.oncoming(b, a) || surrender(a, b),
-      );
+      const final = this.precedence.order(ordered, this.finalPrecedes);
       const blocking = this.blocking;
       blocking.length = 0;
       for (const r of group) if (r.inside || r.since !== undefined) blocking.push(r);
