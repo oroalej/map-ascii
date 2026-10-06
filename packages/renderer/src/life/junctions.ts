@@ -467,9 +467,13 @@ function sameExit(a: Hold, b: Hold): boolean {
   const x = a.movement,
     y = b.movement;
   if (x.outHx * y.outHx + x.outHy * y.outHy <= COS20) return false;
-  const f = frameBetween(a.life.tile, b.life.tile);
-  const dx = f.x + (x.exit.x ?? x.junction.x) * f.scale - (y.exit.x ?? y.junction.x),
+  let dx = (x.exit.x ?? x.junction.x) - (y.exit.x ?? y.junction.x),
+    dy = (x.exit.y ?? x.junction.y) - (y.exit.y ?? y.junction.y);
+  if (a.life !== b.life) {
+    const f = frameBetween(a.life.tile, b.life.tile);
+    dx = f.x + (x.exit.x ?? x.junction.x) * f.scale - (y.exit.x ?? y.junction.x);
     dy = f.y + (x.exit.y ?? x.junction.y) * f.scale - (y.exit.y ?? y.junction.y);
+  }
   return Math.abs(dx * y.outHy - dy * y.outHx) < JUNCTION.exitHalfWidth * b.life.perMeter;
 }
 
@@ -637,12 +641,14 @@ export class JunctionTable {
     room: number,
     key?: string,
     traffic?: JunctionTraffic,
+    index?: number,
   ) {
     const r = this.record(m, key);
     if (!r?.carried) return;
     const p = r.movement,
       j = p.junction,
       pm = r.life.perMeter;
+    r.index = index ?? r.life.movers.indexOf(m);
     const length = VEHICLES[m.vehicle!].length * pm;
     const past = (m.x - (p.exit.x ?? j.x)) * p.outHx + (m.y - (p.exit.y ?? j.y)) * p.outHy;
     if (past > j.radius + length / 2) {
@@ -832,17 +838,15 @@ export class JunctionTable {
           continue;
         }
         if (r.since !== undefined || !r.ready) continue;
-        const reserved = blocking.reduce(
-          (sum, b) =>
-            sum +
-            (b !== r &&
+        let reserved = 0;
+        for (const b of blocking)
+          if (
+            b !== r &&
             b.since !== undefined &&
             sameExit(b, r) &&
             !r.traffic?.occupiesExit(b.m, r.movement, r.life)
-              ? VEHICLES[b.m.vehicle!].length + JUNCTION.gap
-              : 0),
-          0,
-        );
+          )
+            reserved += VEHICLES[b.m.vehicle!].length + JUNCTION.gap;
         if ((r.room ?? Infinity) - reserved < VEHICLES[r.m.vehicle!].length + JUNCTION.gap)
           continue;
         if (blocking.every((b) => b === r || compatible(r.movement, b.movement))) {

@@ -619,6 +619,78 @@ for (const blockedBy of ['red', 'room'])
     expect(table.granted(a)).toBe(false);
     expect(table.waited(a)).toBe(1);
   });
+it('refreshes compacted carried indices and keeps a four-way cycle stable across request permutations', () => {
+  const permutations = (xs: number[]): number[][] =>
+    xs.length
+      ? xs.flatMap((x, i) => permutations(xs.filter((_, j) => i !== j)).map((rest) => [x, ...rest]))
+      : [[]];
+  for (const order of permutations([0, 1, 2, 3])) {
+    const source = empty(),
+      target = empty(),
+      table = new JunctionTable(),
+      directions = [
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+      ],
+      paths = directions.map(([hx, hy]) => ({
+        ...movement('cycle'),
+        inHx: hx!,
+        inHy: hy!,
+        outHx: hx!,
+        outHy: hy!,
+        exit: { line: 0, along: 0, out: 1 as const, hx: hx!, hy: hy! },
+      })),
+      cars = paths.map((p) => ({
+        ...car(),
+        x: -p.inHx * (p.junction.radius + 5.7 * source.perMeter),
+        y: -p.inHy * (p.junction.radius + 5.7 * source.perMeter),
+      }));
+    target.movers.length = 0;
+    target.movers.push(car(), ...cars);
+    table.request({
+      m: cars[0]!,
+      life: source,
+      tileKey: 'source',
+      index: 0,
+      movement: paths[0]!,
+      ready: false,
+      inside: false,
+      atLine: true,
+    });
+    table.resolve(0);
+    table.rebind(cars[0]!, target, 'target', source);
+    expect(table.snapshot()[0]!.index).toBe(1);
+    target.movers.splice(0, 1);
+    table.begin(new Set([target]));
+    const traffic = new JunctionTraffic(),
+      atLine = vi.spyOn(traffic, 'atLine').mockReturnValue(true);
+    for (const i of order) {
+      if (i === 0) table.refreshCarried(cars[0]!, () => true, Infinity, 'cycle', traffic, 0);
+      else
+        table.request({
+          m: cars[i]!,
+          life: target,
+          tileKey: 'target',
+          index: i,
+          movement: paths[i]!,
+          ready: true,
+          inside: false,
+          atLine: true,
+        });
+    }
+    table.resolve(0);
+    const snapshot = table.snapshot();
+    expect(snapshot.map((r) => r.index).sort()).toEqual([0, 1, 2, 3]);
+    expect(snapshot.find((r) => r.index === 0)!.arrival).toBe(0);
+    expect(cars.map((m, i) => (table.granted(m, 'cycle') ? i : -1)).filter((i) => i >= 0)).toEqual([
+      0,
+    ]);
+    atLine.mockRestore();
+  }
+});
+
 it('keeps primary observation and keyed permissions consistent across three records and rebind', () => {
   const life = empty(),
     target = empty(),

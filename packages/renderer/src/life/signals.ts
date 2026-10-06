@@ -202,7 +202,7 @@ export class SignalControl {
     movement?: Movement,
   ): boolean {
     for (const s of this.signals) {
-      if (movement && s.key && s.key !== movement.key) continue;
+      if (movement && s.key && s.approaches?.length && s.key !== movement.key) continue;
       if (s.approaches?.length) {
         const entry = s.approaches.find(
           (a) =>

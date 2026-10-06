@@ -4234,6 +4234,7 @@ export class TileLife {
             availableRoom,
             previous.key,
             traffic,
+            this.junctionIndexInTile,
           );
           if (refreshed) requests.push(refreshed);
         } else if (r.inside) {
@@ -4300,14 +4301,7 @@ export class TileLife {
   }
 
   private junctionControlled(movement: Movement): boolean {
-    const j = movement.junction;
-    return (
-      j.controlled === true ||
-      this.signals.controlsCrossing(movement.entry?.line ?? movement.line, {
-        x: movement.entry?.x ?? j.x,
-        y: movement.entry?.y ?? j.y,
-      })
-    );
+    return this.junctionCrossings.controlled(movement);
   }
   junctionClear(movement: Movement, pedestrians: PedestrianView): boolean {
     return this.junctionCrossings.clear(movement, pedestrians, this.junctionControlled(movement));
@@ -7286,6 +7280,7 @@ export class LifeWorld {
         tile.junctionCrossings.prepare(
           sources.filter((source) => tile.junctionCrossings.relevant(source, bounds)),
           crossingGeometryChanged ? this.crossingGeometryVersion : undefined,
+          bounds,
         );
       }
       this.dirtyCrossingConsumers.clear();

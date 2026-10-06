@@ -13,9 +13,40 @@ export class JunctionCrossings {
   private sources: TileLife[] = [];
   private crossings: PedestrianCrossing[] = [];
   private associations = new WeakMap<Junction, Map<Arm, PedestrianCrossing[]>>();
+  private controllers = new WeakMap<Junction, Map<Arm, boolean>>();
   private revision?: number;
   private sourceBounds?: Bounds;
+  private preparedBounds?: Bounds;
   constructor(private readonly life: TileLife) {}
+  /** Controller geometry belongs to this tile; copied carried arms share its cached answer. */
+  controlled(p: Movement): boolean {
+    const j = p.junction;
+    if (j.controlled === true) return true;
+    const entry = p.entry;
+    if (!entry) return this.life.signals.controlsCrossing(p.line, { x: j.x, y: j.y });
+    const arm = j.arms.includes(entry)
+      ? entry
+      : (j.arms.find(
+          (a) =>
+            a.line === entry.line &&
+            a.out === entry.out &&
+            a.hx === entry.hx &&
+            a.hy === entry.hy &&
+            (a.x ?? j.x) === (entry.x ?? j.x) &&
+            (a.y ?? j.y) === (entry.y ?? j.y),
+        ) ?? entry);
+    let entries = this.controllers.get(j);
+    if (!entries) this.controllers.set(j, (entries = new Map<Arm, boolean>()));
+    let controlled = entries.get(arm);
+    if (controlled === undefined) {
+      controlled = this.life.signals.controlsCrossing(entry.line, {
+        x: entry.x ?? j.x,
+        y: entry.y ?? j.y,
+      });
+      entries.set(arm, controlled);
+    }
+    return controlled;
+  }
   /** Geometry-change broad phase only; buffered geometry may extend beyond its owner's footprint. */
   private extent(): Bounds {
     if (this.sourceBounds) return this.sourceBounds;
@@ -73,11 +104,24 @@ export class JunctionCrossings {
       y + other.y0 * scale <= bounds.y1
     );
   }
-  prepare(sources: readonly TileLife[], revision?: number) {
-    if (revision !== undefined && revision === this.revision) return;
+  prepare(sources: readonly TileLife[], revision?: number, bounds?: Bounds) {
+    const previous = this.preparedBounds;
+    const sameBounds = bounds
+      ? !!previous &&
+        bounds.x0 === previous.x0 &&
+        bounds.y0 === previous.y0 &&
+        bounds.x1 === previous.x1 &&
+        bounds.y1 === previous.y1
+      : !previous;
+    if (revision !== undefined && revision === this.revision && sameBounds) return;
     this.revision = revision;
-    if (sources.length === this.sources.length && sources.every((s, i) => s === this.sources[i]))
+    if (
+      sameBounds &&
+      sources.length === this.sources.length &&
+      sources.every((s, i) => s === this.sources[i])
+    )
       return;
+    this.preparedBounds = bounds && { ...bounds };
     this.sources = [...sources];
     this.associations = new WeakMap();
     const unique = new Map<string, PedestrianCrossing>();
@@ -90,6 +134,19 @@ export class JunctionCrossings {
         for (const list of lines.values())
           for (const c of list) {
             if (unique.has(c.identity.key)) continue;
+            if (bounds) {
+              const x = frame.x + c.body.x * frame.scale,
+                y = frame.y + c.body.y * frame.scale,
+                rx = reach(c.body, 1, 0) * frame.scale,
+                ry = reach(c.body, 0, 1) * frame.scale;
+              if (
+                x + rx < bounds.x0 ||
+                x - rx > bounds.x1 ||
+                y + ry < bounds.y0 ||
+                y - ry > bounds.y1
+              )
+                continue;
+            }
             unique.set(c.identity.key, transformCrossing(c, frame));
           }
     }

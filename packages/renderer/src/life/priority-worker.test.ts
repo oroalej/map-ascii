@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it } from 'vitest';
 import { LifeWorld } from './simulate';
 import { LifeBuilder } from './geometry';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
@@ -23,8 +23,16 @@ const table = (direct.world as unknown as { junctions: JunctionTable }).junction
 const transitions = observePriorityTransitions(direct);
 let multiple = false,
   released = false;
-for (let section = 0; section < 4; section++)
-  it(`matches priority worker/inline closure and close junction state through section ${section + 1}`, () => {
+const checkpoints: {
+  direct: ReturnType<typeof completeScenarioState>;
+  remote: ReturnType<typeof completeScenarioState>;
+  multiple: boolean;
+  released: boolean;
+  transitions: typeof transitions.state;
+}[] = [];
+afterAll(() => transitions.restore());
+for (let section = 0; section < 4; section++) {
+  beforeAll(() => {
     for (let frame = section * 12 * 30; frame < (section + 1) * 12 * 30; frame++) {
       transitions.beforeStep();
       if (frame === 30 * 30)
@@ -59,15 +67,28 @@ for (let section = 0; section < 4; section++)
       if (frame % 30 === 0)
         expect(completeScenarioState(remote.world)).toEqual(completeScenarioState(direct.world));
     }
+    checkpoints.push({
+      direct: completeScenarioState(direct.world),
+      remote: completeScenarioState(remote.world),
+      multiple,
+      released,
+      transitions: { ...transitions.state },
+    });
+  });
+  it(`matches priority worker/inline closure and close junction state through section ${section + 1}`, () => {
+    const checkpoint = checkpoints[section]!;
+    expect(checkpoint.remote).toEqual(checkpoint.direct);
     if (section === 3) {
-      expect({ multiple, released }).toEqual({ multiple: true, released: true });
-      expect(transitions.state).toMatchObject({
+      expect({ multiple: checkpoint.multiple, released: checkpoint.released }).toEqual({
+        multiple: true,
+        released: true,
+      });
+      expect(checkpoint.transitions).toMatchObject({
         overWait: true,
         closed: true,
         revoked: true,
         reopened: true,
       });
-      transitions.restore();
     }
-    expect(completeScenarioState(remote.world)).toEqual(completeScenarioState(direct.world));
   });
+}

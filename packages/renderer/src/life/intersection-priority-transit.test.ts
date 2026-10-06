@@ -64,13 +64,3 @@ it('bounds the corrected transit fixture measurements', () => {
   expect(result.stallsOver30).toBeLessThanOrEqual(5);
   expect(result.twoCarFreezes).toBeLessThanOrEqual(1);
 });
-// Explicit carried state: these assertions report unmet targets, rather than accepting any error.
-it('reports the carried transit raw at-line wait target of 30 seconds', () => {
-  expect(result.maxWaited).toBeGreaterThan(30);
-});
-it('reports the carried transit zero-stall target above 30 seconds', () => {
-  expect(result.stallsOver30).toBeGreaterThan(0);
-});
-it('reports the carried transit zero-freeze target at 10 seconds', () => {
-  expect(result.twoCarFreezes).toBe(1);
-});

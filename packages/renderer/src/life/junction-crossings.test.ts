@@ -5,7 +5,7 @@ import type { JunctionTable } from './junctions';
 import { type Junction, type Movement } from './junctions';
 import { worldTiles } from './testing/scenarios';
 import { metersPerUnit } from '../raster/geometry';
-import { EMPTY_PEDESTRIANS, type PedestrianView } from './pedestrians';
+import { EMPTY_PEDESTRIANS, type PedestrianCrossing, type PedestrianView } from './pedestrians';
 import { signalState } from './signals';
 import { kinematicsOf } from './config';
 import { reach } from './occupancy';
@@ -202,6 +202,38 @@ function fixture(signal = false, remoteCrossing?: number) {
   const table = (world as unknown as { junctions: JunctionTable }).junctions;
   return { world, life, car, human, table };
 }
+
+for (const controlled of [false, true])
+  it(`caches ${controlled ? 'controlled' : 'uncontrolled'} entry membership through requests and copied arms`, () => {
+    const { life, car, table } = fixture(controlled),
+      membership = vi.spyOn(life.signals, 'controlsCrossing');
+    life.prepareTraffic(() => true);
+    life.requestJunctions(table, () => true, 0);
+    table.resolve(0);
+    const p = table.movement(car)!;
+    expect(life.junctionCrossings.controlled(p)).toBe(controlled);
+    expect(membership).toHaveBeenCalledTimes(1);
+    life.junctionClear({ ...p, entry: { ...p.entry! } }, humanView(life));
+    expect(membership).toHaveBeenCalledTimes(1);
+    expect(life.junctionCrossings.controlled({ ...p, entry: p.exit })).toBe(controlled);
+    expect(membership).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 2; i++) life.junctionCrossings.controlled({ ...p, entry: undefined });
+    expect(membership).toHaveBeenCalledTimes(4);
+    membership.mockRestore();
+  });
+
+it('classifies replacement controller geometry without inheriting a cached negative answer', () => {
+  const f = fixture(),
+    before = f.life.junctionIndex.movement(f.car, 60 * pm)!;
+  expect(f.life.junctionCrossings.controlled(before)).toBe(false);
+  const replacement = fixture(true);
+  f.world.sync([{ key: 'replacement-controller', tile, life: replacement.life.geo }]);
+  f.world.step(0.01);
+  const life = f.world.active('replacement-controller')!,
+    p = life.junctionIndex.movement(f.car, 60 * pm)!;
+  expect(life).not.toBe(f.life);
+  expect(life.junctionCrossings.controlled(p)).toBe(true);
+});
 
 it('does not repeat live crossing queries for a denied and already capped hold', () => {
   const { life, car, human, table } = fixture();
@@ -432,6 +464,37 @@ it('reads a crossing available only in an adjacent tile in the owner metric fram
   };
   expect(owner.junctionClear(m, view)).toBe(false);
 });
+it('culls an irrelevant adjacent stripe and refreshes unchanged sources when consumer bounds expand', () => {
+  const { life, table } = fixture(),
+    builder = new LifeBuilder();
+  builder.line(
+    [
+      { x: 0, y: 2000 },
+      { x: 4096, y: 2000 },
+    ],
+    0,
+    12,
+  );
+  builder.area('crossing', [
+    [
+      { x: 2000 - 1.5 * pm, y: 2000 - 6.5 * pm },
+      { x: 2000 + 1.5 * pm, y: 2000 - 6.5 * pm },
+      { x: 2000 + 1.5 * pm, y: 2000 + 6.5 * pm },
+      { x: 2000 - 1.5 * pm, y: 2000 + 6.5 * pm },
+    ],
+  ]);
+  const source = new TileLife({ ...tile, x: tile.x + 1 }, builder.finish(), 1),
+    bounds = life.junctionCrossings.bounds(table),
+    prepared = life.junctionCrossings as unknown as { crossings: PedestrianCrossing[] };
+  expect(life.junctionCrossings.relevant(source, bounds)).toBe(true);
+  life.junctionCrossings.prepare([source], 7, bounds);
+  expect(prepared.crossings).toHaveLength(0);
+  life.junctionCrossings.prepare([source], 7, { ...bounds, x1: (4096 + 2020) / pm });
+  expect(prepared.crossings).toHaveLength(1);
+  life.junctionCrossings.prepare([source], 7, bounds);
+  expect(prepared.crossings).toHaveLength(0);
+});
+
 it('caches relevant crossing sources and invalidates on addition, replacement and removal', () => {
   const f = fixture(),
     owner = f.life,
