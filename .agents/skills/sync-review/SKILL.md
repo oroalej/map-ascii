@@ -78,7 +78,7 @@ No action: `$review-pr` merges `origin/main` first (its step 1.7), and `$merge-p
    - Title: a gitmoji + conventional header summarizing the branch's commits since `main`.
    - Body: what the branch does, taken from its commits and its handoff, plus a test plan listing the checks the handoff names. Don't invent claims about tests that weren't run.
 
-## 4. Review until clean, with the CI gate ($review-pr)
+## 4. Review (up to 3 rounds), with the CI gate ($review-pr)
 
 `$review-pr` runs the review loop and CI gate itself. Start Codex #2 with the delegated review call (shared.md), using `resultFile: "<run>/<slug>-review.json"`:
 
