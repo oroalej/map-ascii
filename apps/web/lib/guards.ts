@@ -5,6 +5,12 @@
  */
 import {
   CAMERA_RANGES,
+  PROCESSION_LIMITS,
+  PROCESSION_VEHICLES,
+  CLOCK_TIME_PATTERN,
+  TIME_ZONE_PATTERN,
+  OSM_ID_PATTERN,
+  TODO_VERIFY,
   type CameraState,
   type CityMeta,
   type CityProcessions,
@@ -16,9 +22,10 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
-const isNumbers = (v: unknown, length: number) =>
+const isNumbers = (v: unknown, length: number): v is number[] =>
   Array.isArray(v) && v.length === length && v.every(isNumber);
-const isLocalized = (v: unknown) => isRecord(v) && isText(v.en) && Object.values(v).every(isText);
+const isLocalized = (v: unknown): v is Record<string, string> & { en: string } =>
+  isRecord(v) && isText(v.en) && Object.values(v).every(isText);
 
 function isCamera(v: unknown): v is CameraState {
   if (!isRecord(v)) return false;
@@ -47,30 +54,182 @@ export function isCityMeta(v: unknown): v is CityMeta {
 }
 
 /** A city's `<slug>.processions.json` (step 07). */
+const integer = (v: unknown, lo: number, hi: number) =>
+  isNumber(v) && Number.isInteger(v) && v >= lo && v <= hi;
+const point = (v: unknown): v is [number, number] =>
+  isNumbers(v, 2) && Math.abs(v[0]!) <= 180 && Math.abs(v[1]!) <= 90;
+const line = (v: unknown) => Array.isArray(v) && v.length >= 2 && v.every(point);
+const ring = (v: unknown): v is [number, number][] =>
+  Array.isArray(v) &&
+  v.length >= 4 &&
+  v.every(point) &&
+  v[0]![0] === v.at(-1)![0] &&
+  v[0]![1] === v.at(-1)![1];
+const rings = (v: unknown) => Array.isArray(v) && v.every(ring);
+const only = (v: Record<string, unknown>, keys: string[]) =>
+  Object.keys(v).every((k) => keys.includes(k));
+function eventFormation(p: Record<string, unknown>): boolean {
+  if (p.formation === undefined) return true;
+  if (!isRecord(p.formation) || p.kind === 'mass') return false;
+  const limits: Readonly<Record<string, readonly [number, number]>> =
+    p.kind === 'fluvial'
+      ? PROCESSION_LIMITS.fluvial
+      : p.kind === 'procession'
+        ? PROCESSION_LIMITS.procession
+        : PROCESSION_LIMITS.parade;
+  return Object.entries(p.formation).every(([k, v]) =>
+    k === 'vehicles' && p.kind === 'parade'
+      ? Array.isArray(v) &&
+        v.length <= PROCESSION_LIMITS.vehicles &&
+        v.every((x: unknown) => PROCESSION_VEHICLES.some((vehicle) => vehicle === x))
+      : !!limits[k] && integer(v, ...limits[k]),
+  );
+}
 export function isCityProcessions(v: unknown): v is CityProcessions {
-  return (
-    isRecord(v) &&
-    Array.isArray(v.processions) &&
-    v.processions.every(
-      (p) =>
-        isRecord(p) &&
-        isText(p.id) &&
-        isLocalized(p.title) &&
-        (p.status === 'draft' || p.status === 'verified') &&
-        p.kind === 'fluvial' &&
-        Array.isArray(p.route) &&
-        p.route.length >= 2 &&
-        p.route.every((q) => isNumbers(q, 2)) &&
-        isNumber(p.length_m) &&
+  if (!isRecord(v) || !Array.isArray(v.processions)) return false;
+  return v.processions.every((p) => {
+    if (
+      !isRecord(p) ||
+      !isText(p.id) ||
+      !isLocalized(p.title) ||
+      !['draft', 'verified'].includes(String(p.status)) ||
+      !['fluvial', 'procession', 'parade', 'mass'].includes(String(p.kind)) ||
+      !eventFormation(p)
+    )
+      return false;
+    if (
+      p.season !== undefined &&
+      (!isText(p.season) || !isLocalized(p.label) || !p.label.en.trim())
+    )
+      return false;
+    if (p.label !== undefined && !isLocalized(p.label)) return false;
+    if (p.follows !== undefined && !isText(p.follows)) return false;
+    if (
+      p.sources !== undefined &&
+      (!Array.isArray(p.sources) ||
+        !p.sources.length ||
+        !p.sources.every((x) => isRecord(x) && isText(x.title)))
+    )
+      return false;
+    if (
+      p.status === 'verified' &&
+      (!p.sources ||
+        [
+          ...Object.values(p.title as Record<string, string>),
+          ...Object.values((p.label ?? {}) as Record<string, string>),
+        ].some((t) => t.includes(TODO_VERIFY)))
+    )
+      return false;
+    const s = p.schedule;
+    if (
+      !isRecord(s) ||
+      !only(s, ['month', 'weekday', 'nth', 'offset_days', 'start', 'duration_min', 'timezone']) ||
+      !integer(s.month, 1, 12) ||
+      !integer(s.weekday, 0, 6) ||
+      !integer(s.nth, 1, 5) ||
+      !integer(s.offset_days, ...PROCESSION_LIMITS.schedule.offset_days) ||
+      !integer(s.duration_min, ...PROCESSION_LIMITS.schedule.duration_min) ||
+      !isText(s.start) ||
+      !CLOCK_TIME_PATTERN.test(s.start) ||
+      !isText(s.timezone) ||
+      !TIME_ZONE_PATTERN.test(s.timezone)
+    )
+      return false;
+    const base = [
+      'id',
+      'title',
+      'status',
+      'kind',
+      'season',
+      'label',
+      'schedule',
+      'sources',
+      'follows',
+    ];
+    if (p.kind === 'mass') {
+      const site = p.site;
+      return (
+        only(p, [...base, 'site']) &&
+        isRecord(site) &&
+        only(site, [
+          'id',
+          'location',
+          'anchor',
+          'radius_m',
+          'grounds',
+          'blocked',
+          'approaches',
+          'roads',
+        ]) &&
+        isText(site.id) &&
+        OSM_ID_PATTERN.test(site.id) &&
+        point(site.location) &&
+        point(site.anchor) &&
+        isNumber(site.radius_m) &&
+        site.radius_m > 0 &&
+        site.radius_m <= PROCESSION_LIMITS.radius &&
+        rings(site.grounds) &&
+        (site.grounds as unknown[]).length > 0 &&
+        rings(site.blocked) &&
+        Array.isArray(site.approaches) &&
+        site.approaches.length > 0 &&
+        site.approaches.every(line) &&
+        Array.isArray(site.roads) &&
+        site.roads.every(
+          (r) =>
+            isRecord(r) &&
+            only(r, ['line', 'width_m']) &&
+            line(r.line) &&
+            isNumber(r.width_m) &&
+            r.width_m > 0,
+        )
+      );
+    }
+    if (!line(p.route) || !isNumber(p.length_m) || p.length_m <= 0) return false;
+    if (p.kind === 'fluvial')
+      return (
+        only(p, [...base, 'route', 'length_m', 'banks', 'formation']) &&
         (p.banks === undefined ||
           (Array.isArray(p.banks) &&
-            p.banks.length === p.route.length &&
-            p.banks.every((b) => isNumbers(b, 2)))) &&
-        isRecord(p.schedule) &&
-        isText(p.schedule.timezone) &&
-        isText(p.schedule.start),
-    )
-  );
+            p.banks.length === (p.route as unknown[]).length &&
+            p.banks.every((b: unknown) => isNumbers(b, 2) && b.every((x) => x >= 0))))
+      );
+    return (
+      only(p, [
+        ...base,
+        'route',
+        'length_m',
+        'segments',
+        'blocked',
+        'water',
+        'bridges',
+        'formation',
+      ]) &&
+      rings(p.blocked) &&
+      (p.water === undefined || rings(p.water)) &&
+      (p.bridges === undefined || rings(p.bridges)) &&
+      Array.isArray(p.segments) &&
+      p.segments.length === (p.route as unknown[]).length - 1 &&
+      p.segments.every(
+        (e) =>
+          isRecord(e) &&
+          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m']) &&
+          isText(e.id) &&
+          OSM_ID_PATTERN.test(e.id) &&
+          isNumber(e.width_m) &&
+          e.width_m > 0 &&
+          isNumber(e.sidewalk_m) &&
+          e.sidewalk_m >= 0 &&
+          (e.sidewalks_m === undefined ||
+            (isRecord(e.sidewalks_m) &&
+              only(e.sidewalks_m, ['left', 'right']) &&
+              isNumber(e.sidewalks_m.left) &&
+              e.sidewalks_m.left >= 0 &&
+              isNumber(e.sidewalks_m.right) &&
+              e.sidewalks_m.right >= 0)),
+      )
+    );
+  });
 }
 
 export function isSubdivisionAreas(v: unknown): v is SubdivisionArea[] {

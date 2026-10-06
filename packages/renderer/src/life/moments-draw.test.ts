@@ -14,6 +14,7 @@ import {
   type PersonLook,
 } from './people';
 import type { VisibleAgent } from './simulate';
+import { PROCESSION_GLYPHS } from './procession-glyphs';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './seasonal-glyphs';
 import { PEDESTRIAN_GLYPHS } from './pedestrian-glyphs';
 
@@ -202,7 +203,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       ACCESS_GLYPHS.length +
       14 +
       CANDLE_GLYPHS.length +
-      PEDESTRIAN_GLYPHS.length,
+      PEDESTRIAN_GLYPHS.length +
+      PROCESSION_GLYPHS.length,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
     385 +
@@ -210,11 +212,12 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       ACCESS_GLYPHS.length +
       14 +
       CANDLE_GLYPHS.length +
-      PEDESTRIAN_GLYPHS.length,
+      PEDESTRIAN_GLYPHS.length +
+      PROCESSION_GLYPHS.length,
   );
   for (const theme of Object.values(themes)) {
     const glyphs = mapGlyphs(theme);
-    expect(glyphs.slice(409)).toEqual(PEDESTRIAN_GLYPHS);
+    expect(glyphs.slice(409, 409 + PEDESTRIAN_GLYPHS.length)).toEqual(PEDESTRIAN_GLYPHS);
     expect(glyphs.slice(409 - CANDLE_GLYPHS.length, 409)).toEqual(CANDLE_GLYPHS);
   }
   for (const figure of ['adult', 'child'] as const)

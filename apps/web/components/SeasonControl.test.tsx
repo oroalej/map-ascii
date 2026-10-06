@@ -1,11 +1,13 @@
 import type { Atlas, SeasonState } from '@atlas/renderer';
 import type { SeasonConfig } from '@atlas/shared';
-import { act, createElement } from 'react';
+import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useAtlasInstance } from '@/state/store';
 import { useLifeStore } from '@/state/life';
-import { SeasonControl } from './SeasonControl';
+import { SeasonControl, SeasonEvents } from './SeasonControl';
+import { useUiStore } from '@/state/ui';
+import { eventFixtures } from './procession-fixtures.test-utils';
 const seasons: SeasonConfig[] = ['winter', 'feast'].map((id) => ({
   id,
   title: { en: id === 'winter' ? 'Winter' : 'Feast' },
@@ -16,6 +18,12 @@ const seasons: SeasonConfig[] = ['winter', 'feast'].map((id) => ({
 let container: HTMLDivElement, root: Root, snapshot: SeasonState | null, change: () => void;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  vi.stubGlobal('matchMedia', () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  useUiStore.setState({ processions: [], procession: null });
   snapshot = null;
   change = () => {};
   useAtlasInstance.setState({
@@ -31,6 +39,53 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+});
+it('shows the five events in occurrence order for picked and Today seasons, and plays only when available', () => {
+  const play = vi.fn(() => true),
+    fly = vi.fn();
+  Object.assign(useAtlasInstance.getState().atlas!, {
+    playProcession: play,
+    flyTo: fly,
+    getCamera: () => ({ zoom: 18 }),
+  });
+  useUiStore.setState({ processions: [...eventFixtures].reverse() });
+  const render = () =>
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        createElement(SeasonControl, { seasons }),
+        createElement(SeasonEvents, { seasons }),
+      ),
+    );
+  act(() => {
+    useLifeStore.setState({ season: 'feast', enabled: true });
+    render();
+  });
+  const buttons = () =>
+    [...container.querySelectorAll<HTMLButtonElement>('button')].filter((b) =>
+      b.textContent?.startsWith('▶'),
+    );
+  expect(buttons().map((b) => b.textContent)).toEqual(eventFixtures.map((p) => `▶ ${p.label!.en}`));
+  act(() => buttons()[0]!.click());
+  expect(play).toHaveBeenLastCalledWith('street');
+  expect(fly).toHaveBeenLastCalledWith({ lng: 1, lat: 2, zoom: 18 });
+  act(() => buttons()[1]!.click());
+  expect(fly).toHaveBeenLastCalledWith({ lng: 1.0001, lat: 2.0001, zoom: 18 });
+  play.mockReturnValue(false);
+  fly.mockClear();
+  act(() => buttons()[0]!.click());
+  expect(fly).not.toHaveBeenCalled();
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(buttons().every((b) => b.disabled)).toBe(true);
+  act(() => useLifeStore.setState({ season: 'winter' }));
+  expect(buttons()).toHaveLength(0);
+  act(() => {
+    useLifeStore.setState({ season: 'auto' });
+    snapshot = { id: 'feast', title: 'Feast', labels: {} };
+    change();
+  });
+  expect(buttons()).toHaveLength(5);
 });
 afterEach(() => {
   act(() => root.unmount());

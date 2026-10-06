@@ -10,12 +10,18 @@
  * boats setting off first and the pagoda and the flotilla following a moment later, and every
  * boat swaying a little on its own.
  */
-import { nthWeekdayDay, type ProcessionRoute, type ProcessionSchedule } from '@atlas/shared';
+import {
+  nthWeekdayDay,
+  PROCESSION_DEFAULTS,
+  type FluvialRoute,
+  type ProcessionSchedule,
+} from '@atlas/shared';
 import { localTime } from './clock';
 import type { LifeInspection } from './inspection';
 import { FIGURE_SIZE_M, SHIRT_PAINTS } from './people';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
+import { identifyEventActor } from './event-actors';
 import { Paint, PENNANT_GLYPH, VEHICLES, type CraftType } from './vehicles';
 
 export const PROCESSION = {
@@ -24,11 +30,31 @@ export const PROCESSION = {
    * taking at least `playSeconds`.
    */
   playSpeed: 10,
+  eventActors: 300,
+  eventSpectators: 90,
+  mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },
+  street: {
+    bearerStart: 1,
+    bearerGap: 1.2,
+    marshalLead: 8,
+    marshalGap: 3,
+    devoteeStart: 10,
+    rankGap: 2,
+    guardGap: 8,
+    bandGap: 5,
+    contingentGap: 6,
+    vehicleGap: 6,
+    tailPadding: 10,
+    headMargin: 15,
+    spectatorInset: 0.8,
+    spectatorMargin: 0.01,
+    spectatorSpacing: 5,
+  },
   playSeconds: 180,
-  columns: 3,
-  ranks: 8,
+  columns: PROCESSION_DEFAULTS.fluvial.columns,
+  ranks: PROCESSION_DEFAULTS.fluvial.ranks,
   /** Escorts ahead of the formation, and small boats following the pagoda. */
-  escorts: 6,
+  escorts: PROCESSION_DEFAULTS.fluvial.escorts,
   /** Tow ropes are this much longer than the gap they span at rest, m, so they sag at halts. */
   ropeSlack: 1.5,
   /** Poles along the pagoda's sides, leaning out: how many, and how long seen from above, m. */
@@ -71,6 +97,8 @@ export const PROCESSION = {
 type Point = [number, number];
 
 type Person = {
+  id: string;
+  candleSeed: number;
   s: number;
   side: number;
   back: number;
@@ -171,6 +199,43 @@ export function profileAt(table: Float64Array, u: number): number {
   return table[i]! + (table[i + 1]! - table[i]!) * (x - i);
 }
 
+/** Index of the first endpoint at or beyond a distance, clamped to a route segment. */
+export function segmentIndex(along: ArrayLike<number>, distance: number): number {
+  let lo = 1,
+    hi = along.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (along[mid]! < distance) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/** Shared metric-route sampling. Skip leading zero-length edges; an entirely flat route faces east. */
+export function routePolyline(points: readonly Point[]) {
+  const along = [0];
+  for (let i = 1; i < points.length; i++)
+    along.push(
+      along[i - 1]! +
+        Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]),
+    );
+  return {
+    along,
+    at(distance: number) {
+      const s = Math.max(0, Math.min(along.at(-1)!, distance));
+      let i = segmentIndex(along, s);
+      while (i < points.length - 1 && along[i] === along[i - 1]) i++;
+      const a = points[i - 1]!,
+        b = points[i]!,
+        length = along[i]! - along[i - 1]!,
+        t = length ? (s - along[i - 1]!) / length : 0,
+        hx = length ? (b[0] - a[0]) / length : 1,
+        hy = length ? (b[1] - a[1]) / length : 0;
+      return { x: a[0] + hx * t * length, y: a[1] + hy * t * length, hx, hy, index: i - 1, t };
+    },
+  };
+}
+
 /** One procession's boats and crowds along its route. */
 export class ProcessionScene {
   private liveOwners?: { scope: string; keys: WeakMap<object, object> };
@@ -191,6 +256,7 @@ export class ProcessionScene {
   /** The route in meters east and north of its start, and the distance to each point. */
   private readonly points: Point[];
   private readonly along: number[];
+  private readonly polyline: ReturnType<typeof routePolyline>;
   private readonly banks: readonly (readonly [number, number])[] | undefined;
   private readonly boats: Boat[] = [];
   private readonly poles: Pole[] = [];
@@ -200,18 +266,14 @@ export class ProcessionScene {
   /** The pagoda's lag behind the lead, as a share of the run. */
   private readonly pagodaLag: number;
 
-  constructor(readonly route: ProcessionRoute) {
+  constructor(readonly route: FluvialRoute) {
     const [lng0, lat0] = route.route[0]!;
     this.origin = [lng0, lat0];
     this.kx = 111_320 * Math.cos((lat0 * Math.PI) / 180);
     this.ky = 110_540;
     this.points = route.route.map(([lng, lat]) => [(lng - lng0) * this.kx, (lat - lat0) * this.ky]);
-    this.along = [0];
-    for (let i = 1; i < this.points.length; i++) {
-      const [ax, ay] = this.points[i - 1]!;
-      const [bx, by] = this.points[i]!;
-      this.along.push(this.along[i - 1]! + Math.hypot(bx - ax, by - ay));
-    }
+    this.polyline = routePolyline(this.points);
+    this.along = this.polyline.along;
     this.length = this.along.at(-1)!;
     this.banks = route.banks?.length === route.route.length ? route.banks : undefined;
 
@@ -311,7 +373,22 @@ export class ProcessionScene {
         const phase = rng() * 6.28;
         const { x, y, tx, ty, left, right } = this.at(s);
         const off = side > 0 ? right + back : -(left + back);
-        this.people.push({ s, side, back, rank, candle, phase, x, y, tx, ty, off });
+        const id = `${this.route.id}/crowd/${this.people.length}`;
+        this.people.push({
+          id,
+          candleSeed: hashString(id),
+          s,
+          side,
+          back,
+          rank,
+          candle,
+          phase,
+          x,
+          y,
+          tx,
+          ty,
+          off,
+        });
       }
     }
   }
@@ -337,21 +414,9 @@ export class ProcessionScene {
 
   /** The point `s` m along the route, its direction (a unit vector), and the banks there. */
   private at(s: number) {
-    const { points, along } = this;
-    // The first point at least `s` along (the last, past the end): `along` only grows.
-    let i = 1;
-    let hi = points.length - 1;
-    while (i < hi) {
-      const mid = (i + hi) >> 1;
-      if (along[mid]! < s) i = mid + 1;
-      else hi = mid;
-    }
-    const [ax, ay] = points[i - 1]!;
-    const [bx, by] = points[i]!;
-    const length = along[i]! - along[i - 1]! || 1;
-    const tx = (bx - ax) / length;
-    const ty = (by - ay) / length;
-    const t = Math.min(1, Math.max(0, (s - along[i - 1]!) / length));
+    const sample = this.polyline.at(s),
+      i = sample.index + 1,
+      t = sample.t;
     let left: number = PROCESSION.defaultBank;
     let right: number = PROCESSION.defaultBank;
     if (this.banks) {
@@ -360,7 +425,7 @@ export class ProcessionScene {
       left = la + (lb - la) * t;
       right = ra + (rb - ra) * t;
     }
-    return { x: ax + tx * t * length, y: ay + ty * t * length, tx, ty, left, right };
+    return { x: sample.x, y: sample.y, tx: sample.hx, ty: sample.hy, left, right };
   }
 
   private lngLat(x: number, y: number): [number, number] {
@@ -507,6 +572,26 @@ export class ProcessionScene {
     return this.lineAgent(points, [Paint.cream]);
   }
 
+  /** Crowd candidates for an arrival gathering, retaining their occurrence identity. */
+  arrivalCrowd(
+    progress: number,
+    time: number,
+    scope: string,
+    inspection?: LifeInspection,
+  ): VisibleAgent[] {
+    return this.agents(progress, time, {
+      boats: false,
+      crowds: true,
+      crews: false,
+      scope,
+      inspection,
+      handover: true,
+    }).filter((a) => a.kind === 'person' && !a.aboard);
+  }
+  arrivalOwners(scope: string) {
+    return new Map(this.people.map((p) => [`${scope}/${p.id}`, this.owner(scope, p)]));
+  }
+
   /**
    * What to draw `progress` (0–1) of the way through, `time` s into it (for sway and jitter):
    * the boats between the start and the landing (with `crews`, the voyadores' paddlers), and,
@@ -520,6 +605,7 @@ export class ProcessionScene {
       boats = true,
       crowds = true,
       crews = false,
+      handover = false,
       bounds,
       inspection,
       scope = 'live/default',
@@ -527,6 +613,7 @@ export class ProcessionScene {
       boats?: boolean;
       crowds?: boolean;
       crews?: boolean;
+      handover?: boolean;
       bounds?: LngLatBounds;
       inspection?: LifeInspection;
       scope?: string;
@@ -610,7 +697,7 @@ export class ProcessionScene {
         const agent: VisibleAgent = {
           kind: 'person',
           inspectionId: undefined,
-          candleSeed: undefined,
+          candleSeed: p.candleSeed,
           effectClock: undefined,
           lng,
           lat,
@@ -620,7 +707,8 @@ export class ProcessionScene {
           flap: 0,
           candle: p.candle,
         };
-        out.push(owner ? inspection.present(owner, agent) : agent);
+        const presented = owner ? inspection.present(owner, agent) : agent;
+        out.push(handover ? identifyEventActor(presented, `${scope}/${p.id}`) : presented);
       }
     }
     // Ropes under the boats, poles over the pagoda.

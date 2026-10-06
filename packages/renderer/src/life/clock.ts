@@ -4,7 +4,7 @@
  * the visitor's own time zone.
  */
 
-import { epochDay } from '@atlas/shared';
+import { epochDay, localDateParts } from '@atlas/shared';
 
 const DAY_MS = 86_400_000;
 
@@ -26,38 +26,18 @@ export type LocalTime = {
   minutes: number;
 };
 
-const formats = new Map<string, Intl.DateTimeFormat>();
-const formatFor = (timezone: string) => {
-  let format = formats.get(timezone);
-  if (!format) {
-    format = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      hourCycle: 'h23',
-    });
-    formats.set(timezone, format);
-  }
-  return format;
-};
-
 /** The local date and time of `date` in `timezone` (an IANA name). */
 export function localTime(date: Date, timezone: string): LocalTime {
-  const parts = formatFor(timezone).formatToParts(date);
-  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
-  const year = get('year');
-  const month = get('month');
-  const day = dayNumber(year, month, get('day'));
+  const parts = localDateParts(date, timezone);
+  const { year, month } = parts;
+  const day = dayNumber(year, month, parts.date);
   return {
     year,
     month,
     day,
     // 1970-01-01 was a Thursday (4).
     weekday: (((day + 4) % 7) + 7) % 7,
-    minutes: get('hour') * 60 + get('minute') + date.getSeconds() / 60,
+    minutes: parts.hour * 60 + parts.minute + date.getSeconds() / 60,
   };
 }
 

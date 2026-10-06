@@ -10,6 +10,7 @@ import {
   type WorldGroundGuard,
 } from './simulate';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
+import { remoteGroundEvent } from './testing/processions';
 import { FrameProfiler } from '../profile';
 import { frameBetween } from './frames';
 import type { PedestrianView } from './pedestrians';
@@ -258,53 +259,71 @@ describe('live pedestrian readers', () => {
         ahead(view, human.x / life!.perMeter - 10, human.y / life!.perMeter, 1, 0, 1, 30),
       ).toBeCloseTo(9.55);
   });
-  it('exposes an ordinary attendant to both readers without adding collision footprints', () => {
-    const { world, life, car, human } = pedestrianWorld(-9.5);
-    life.movers.splice(life.movers.indexOf(human), 1);
-    const stall: Stall = {
-      x: human.x + 1.3 * life.perMeter,
-      y: human.y,
-      hx: 0,
-      hy: 1,
-      side: 1,
-      rank: 0,
-      paint: 0,
-      shirt: 0,
-    };
-    life.stalls.push(stall);
-    expect(life.canIdle(stall)).toBe(true);
-    const g = guard(world),
-      view = g.pedestrians(life);
-    const local = (
-      life as unknown as { standalonePedestrians(): PedestrianView }
-    ).standalonePedestrians();
-    for (const reader of [view, local]) {
+  it.each([false, true])(
+    'exposes an ordinary attendant without collision footprints (remote event=%s)',
+    (remoteEvent) => {
+      const { world, life, car, human } = pedestrianWorld(-9.5);
+      if (remoteEvent) {
+        world.setProcessions([remoteGroundEvent]);
+        world.setLive(remoteGroundEvent.id, 0.6, 'remote');
+      }
+      life.movers.splice(life.movers.indexOf(human), 1);
+      const stall: Stall = {
+        x: human.x + 1.3 * life.perMeter,
+        y: human.y,
+        hx: 0,
+        hy: 1,
+        side: 1,
+        rank: 0,
+        paint: 0,
+        shirt: 0,
+      };
+      life.stalls.push(stall);
+      expect(life.canIdle(stall)).toBe(true);
+      const g = guard(world),
+        view = g.pedestrians(life);
+      const local = (
+        life as unknown as { standalonePedestrians(): PedestrianView }
+      ).standalonePedestrians();
+      for (const reader of [view, local]) {
+        expect(
+          ahead(reader, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 0.1, 30),
+        ).toBeCloseTo(9.5);
+        expect(
+          ahead(reader, stall.x / life.perMeter - 10, stall.y / life.perMeter - 1, 1, 0, 0.05, 30),
+        ).toBe(Infinity);
+      }
+      // The original movement guard reserves the cart alone, so this legal attendant overlap stays legal.
+      expect(g(life, human)).toBe(true);
+      g.remove(human);
+      const snapshot = structuredClone(stall);
+      world.step(0.1, undefined, 18);
+      expect(life.eventPopulation).toBe(0);
+      expect(car.pedestrianHolds).toHaveLength(1);
+      expect(car.v! / life.perMeter).toBeLessThan(8);
+      expect(stall).toEqual(snapshot);
+      g.remove(stall);
+      expect(ahead(view, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 1, 30)).toBe(
+        Infinity,
+      );
+      stall.open = false;
       expect(
-        ahead(reader, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 0.1, 30),
-      ).toBeCloseTo(9.5);
-      expect(
-        ahead(reader, stall.x / life.perMeter - 10, stall.y / life.perMeter - 1, 1, 0, 0.05, 30),
+        ahead(
+          guard(world).pedestrians(life),
+          human.x / life.perMeter - 10,
+          human.y / life.perMeter,
+          1,
+          0,
+          1,
+          30,
+        ),
       ).toBe(Infinity);
-    }
-    // The original movement guard reserves the cart alone, so this legal attendant overlap stays legal.
-    expect(g(life, human)).toBe(true);
-    g.remove(human);
-    const snapshot = structuredClone(stall);
-    world.step(0.1, undefined, 18);
-    expect(car.pedestrianHolds).toHaveLength(1);
-    expect(car.v! / life.perMeter).toBeLessThan(8);
-    expect(stall).toEqual(snapshot);
-    g.remove(stall);
-    expect(ahead(view, human.x / life.perMeter - 10, human.y / life.perMeter, 1, 0, 1, 30)).toBe(
-      Infinity,
-    );
-    stall.open = false;
-    expect(guard(world).pedestrians(life).empty).toBe(true);
-    expect(
-      (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians()
-        .empty,
-    ).toBe(true);
-  });
+      expect(
+        (life as unknown as { standalonePedestrians(): PedestrianView }).standalonePedestrians()
+          .empty,
+      ).toBe(true);
+    },
+  );
   it('reads a returning person when the world view starts empty', () => {
     const { world, life, car, human } = pedestrianWorld(3.5);
     let hidden = true;

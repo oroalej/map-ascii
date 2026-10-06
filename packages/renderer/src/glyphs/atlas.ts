@@ -4,6 +4,7 @@
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
 import { PED_STOP, PED_WALK, PEDESTRIAN_MASTERS } from '../life/pedestrian-glyphs';
+import { ProcessionGlyph, PROCESSION_GLYPHS } from '../life/procession-glyphs';
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
 import { catOf, catPixels } from '../life/cats';
@@ -42,8 +43,8 @@ type Slot = { data: Uint8Array; stride: number; x0: number; y0: number; w: numbe
 
 function fill(slot: Slot, x0: number, y0: number, x1: number, y1: number) {
   const { data, stride, w, h } = slot;
-  for (let y = Math.max(0, y0); y < Math.min(h, y1); y++) {
-    for (let x = Math.max(0, x0); x < Math.min(w, x1); x++) {
+  for (let y = Math.max(0, Math.floor(y0)); y < Math.min(h, y1); y++) {
+    for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, x1); x++) {
       data[(slot.y0 + y) * stride + slot.x0 + x] = 255;
     }
   }
@@ -422,7 +423,23 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
     (CANDLE_GLYPHS as readonly string[]).includes(glyph)
   )
     drawSeasonal(slot, glyph);
-  else return false;
+  else if ((PROCESSION_GLYPHS as readonly string[]).includes(glyph)) {
+    const { w, h } = slot;
+    if (glyph === ProcessionGlyph.andas) {
+      fill(slot, w * 0.2, h * 0.55, w * 0.8, h * 0.8);
+      fill(slot, w * 0.45, h * 0.15, w * 0.55, h * 0.6);
+      fill(slot, w * 0.3, h * 0.3, w * 0.7, h * 0.4);
+    } else if (glyph === ProcessionGlyph.flag) {
+      fill(slot, w * 0.2, h * 0.1, w * 0.3, h * 0.95);
+      fill(slot, w * 0.3, h * 0.1, w * 0.85, h * 0.5);
+    } else if (glyph === ProcessionGlyph.drum) {
+      fill(slot, w * 0.15, h * 0.3, w * 0.85, h * 0.75);
+      fill(slot, w * 0.05, h * 0.2, w * 0.95, h * 0.3);
+    } else if (glyph === ProcessionGlyph.bugle) {
+      fill(slot, w * 0.15, h * 0.4, w * 0.7, h * 0.55);
+      fill(slot, w * 0.7, h * 0.25, w * 0.9, h * 0.7);
+    }
+  } else return false;
   return true;
 }
 

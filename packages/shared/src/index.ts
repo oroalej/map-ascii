@@ -1,4 +1,5 @@
 export * from './climate';
+export * from './clock';
 export * from './emoji';
 export * from './attribution';
 export * from './dialogue';
@@ -28,3 +29,4 @@ export {
 export * from './tile-space';
 export * from './utilities';
 export * from './flat-geometry';
+export * from './processions';

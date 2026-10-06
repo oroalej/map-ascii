@@ -93,7 +93,7 @@ Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associate
 
 1. **Move:**
    - Never move or clean `todo/` or `paused/` tasks, even when they name this PR. Set their Next step to `branch merged (PR #N); check whether this task is finished`, retaining unresolved work, and list them in the report.
-   - Move an `active/` task to `.plans/done/` only when its row/handoff explicitly records completed work and met acceptance criteria for this PR. Set its Status to `Complete; merged (PR #N)` and add `merge <sha>` to its Evidence. If completion is unresolved or ambiguous, only note the merge in Next step; preserve its folder and scratch.
+   - Move an `active/` task under the appropriate `.plans/done/<group>/` only when its row/handoff explicitly records completed work and met acceptance criteria for this PR. Use the existing topic group for related work; create a group only when needed. Set its Status to `Complete; merged (PR #N)` and add `merge <sha>` to its Evidence. If completion is unresolved or ambiguous, only note the merge in Next step; preserve its folder and scratch.
    - No row: nothing to move.
 2. **Clean** associated, explicitly completed rows now in `done/`. For each, inventory its files without following symlinks/junctions, then reconcile its handoff's **keep** entries with the README's Keep column. Future handoffs list exact relative file or directory paths. For legacy prose (counts, patterns, “all prior evidence”), resolve it against the actual inventory; if the protected file identities cannot be established, skip cleanup for that task and report the ambiguity. Never use matching counts as proof of matching files.
 

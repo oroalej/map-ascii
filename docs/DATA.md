@@ -51,7 +51,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 5. **`05-tiles`**
    - Validate and consume step 04's layout snapshot before compiling tiles. Starting with `--from 05` requires unchanged city-pack inputs and merged bytes; if either differs or the snapshot is missing, rerun from step 04.
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
-   - Exclude pipeline-only `highway` properties from ordinary tiles. For cities opting into utilities, read retained lamp supports from that base archive, bake the network from the complete merged features, tile a separate max-zoom `utilities` layer, and merge/audit it before copying the final archive.
+   - Exclude pipeline-only `highway`, `foot`, `access`, `vehicle`, `motor_vehicle`, `motorcar`, `motorcycle`, `hgv`, `bridge` and `event_path_width` properties from ordinary tiles. Explicit path widths inform event routing without changing legacy walking-line widths; ordinary road widths remain in the archive. For cities opting into utilities, read retained lamp supports from that base archive, bake the network from the complete merged features, tile a separate max-zoom `utilities` layer, and merge/audit it before copying the final archive.
    - Zoom ranges: Region layers z6–z11; detail layers z12–z16 (overzoom to z19 in the client).
    - Output `<city>.pmtiles` (via `pmtiles convert` if needed) and copy it to `apps/web/public/tiles/`.
    - Write `<city>.meta.json` (see `ARCHITECTURE.md` §2): bounds derived from the boundary, the default camera (the `focus` feature, else the boundary centroid), the region bounds, the subdivision label, languages, the year range from dated features, and attribution.
@@ -59,8 +59,12 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 6. **`06-search-index`**
    - Build `<city>.search-index.json` from normalized features plus content, including alt names and name history.
 7. **`07-processions`**
-   - For each of the pack's `processions`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 300 m of a river; the route ends at the river point nearest each (an end may be a landmark a short walk from the river).
+   - For `fluvial`, follow the rivers (`water_river`, in the direction OSM draws them, which is the way they flow) from the start down to the landing: the shortest river path from `route.from`, or `route.upstream_m` meters upstream of `route.to`, keeping to the river of the same name at confluences. Both ends must lie within 300 m of a river; the route ends at the river point nearest each (an end may be a landmark a short walk from the river).
    - Resample the route to points at most 10 m apart and measure, at each, how far the water reaches to its left and right (`banks`, from the `water_area` polygons; left out where the river is mapped only as a line).
+   - For `procession` and `parade`, route along connected eligible roads and paths, optionally restricted to `via` way IDs. Snap endpoints within 200 m, exclude steps and prohibited access, and require enough explicit/conservative width for the selected formation and vehicles. Vehicle-bearing parades check generic and vehicle access independently of pedestrian exemptions. Paths have no additional sidewalk allowance. Emit samples at most 10 m apart with aligned source identities, widths and route-relative `sidewalks_m: { left, right }`; reverse the source sides when routing backwards. Unmapped or absent sides have zero width. Legacy symmetric `sidewalk_m` remains readable; new output sets it to the smaller side. Mass approach paths also need measured widths. Seasonal bunting shares this graph without changing its ordering.
+   - Validate complete formation clearance before routing. Unsafe portions reroute or fail; a connected endpoint snap may be at most 50 m farther from its anchor than the nearest safe road position, with an overall 200 m ceiling. Clip roof/barrier exclusions and water to the event corridor. Tagged bridge decks and at most 25 m of directly connected approaches authorize only their carriageway footprint over water; nearby roofs and off-bridge water remain excluded. Runtime permissions and exclusions use spatial indexes, and agents transport only their route ID. New ground-event coordinates are rounded to six decimals; legacy fluvial data and physical dimensions retain their precision. The generated processions gzip budget is 60 KB.
+   - For `mass`, resolve the church and authored grounds from complete merged geography. Bake connected outdoor gathering cells and approaches within the overflow radius, excluding roofs, water and barriers by full-cell polygon intersection. Optional pack `gathering_anchor` selects an exterior forecourt; fail if it cannot snap within one 2 m cell to safe connected ground. Without it, select a safe outdoor anchor. Clip obstacle and ground-hole exclusions to the site square, retaining water rejection inside it. The generated Mass has a `site`, without a route or length.
+   - Resolve `follows` dependencies by ID, independent of file order, carrying predecessor duration across midnight into the annual offset. Generated schedules are explicit and retain predecessor IDs for crowd handover. Missing references and cycles fail validation.
    - Write `<city>.processions.json` (the `CityProcessions` schema), published with the tiles. Cities without processions get no file.
 
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
@@ -222,15 +226,24 @@ Procession {                     // cities/<slug>/processions/*.json
   title: LocalizedText;
   story: LocalizedText;          // may hold "TODO(verify)" while draft
   status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources
-  kind: 'fluvial';
-  route: { to: string; from?: string; upstream_m?: number };  // OSM ids; exactly one of from / upstream_m
+  season?: string;               // city life season ID; requires label.en
+  label?: LocalizedText;         // short menu title
+  kind: 'fluvial' | 'procession' | 'parade' | 'mass';
+  // fluvial only: exactly one of from / upstream_m
+  route?: { to: string; from?: string; upstream_m?: number }
+        | { from: string; to: string; via?: string[] }; // street kinds, OSM way pins
+  site?: string; grounds?: string[]; radius_m?: number; // mass only, no route
+  gathering_anchor?: [number, number]; // mass: authored exterior point; snap to connected safe ground within 2 m
   schedule: {                    // offset_days after the nth weekday (0 = Sunday) of month
     month: number; weekday: number; nth: number; offset_days: number;
     start: string;               // "HH:MM", local
     duration_min: number;
     timezone: string;            // IANA, e.g. "Asia/Manila"
-  };
-  formation?: { columns?: number; ranks?: number; escorts?: number };
+  } | { follows: string; duration_min: number };
+  formation?: { columns?: number; ranks?: number; escorts?: number } // fluvial
+            | { bearers?: number; ranks?: number; marshals?: number } // procession
+            | { contingents?: number; ranks?: number; band?: number;
+                color_guard?: number; vehicles?: ('car' | 'truck' | 'motorcycle')[] }; // parade
   sources?: Source[];
 }
 

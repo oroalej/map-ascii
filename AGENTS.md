@@ -38,7 +38,7 @@ Read these before doing substantial work:
 - `pnpm worktree:remove <branch> [--head <sha>] [--dry-run]` — after its PR merges, delete a task's worktree folder and local branch (the remote branch stays). Run it from the main checkout; it refuses an unmerged branch, a different head when `--head` pins the merged PR, uncommitted changes, or protected ignored files. Move protected files such as `packages/data/raw/`, unpublished tiles, `.env*.local`, arbitrary logs and root performance reports to a safe location before worktree removal. Generated caches, pipeline build intermediates, coverage and blob reports are disposable. Completed-task scratch can still be cleaned when protected ignored files defer worktree removal. Rerun it to finish a removal that a busy file interrupted; `Could not relocate` (EBUSY) usually means a server or watcher started from the worktree is still running.
 - `pnpm worktree:stop <branch> [--dry-run]` — end processes started from a task's worktree (a leftover `serve`/`dev` server, a watcher) so `worktree:remove` can rename it. Run it from the main checkout; it never stops its own caller or Claude/Codex sessions. `$merge-pr` runs it before `worktree:remove`.
 - `pnpm --silent cli:latest <codex|claude>` — print the path of the newest installed `codex`/`claude` executable (several copies can be installed, and PATH may pick an old one). Agent skills that start a separate Codex or Claude run that path. From Windows PowerShell, call `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`.
-- `pnpm check:budgets` — after `pnpm build`, check initial JS and `<city>.pmtiles` against the budgets in `docs/ARCHITECTURE.md` §8
+- `pnpm check:budgets` — after `pnpm build`, check initial JS, `<city>.pmtiles` and the 60 KiB gzip cap for `<city>.processions.json` against the budgets in `docs/ARCHITECTURE.md` §8
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
 
@@ -101,12 +101,12 @@ If one fails, fix it and rerun only that check.
 
 Implementation plans live in the gitignored `.plans/` folder of the main checkout. `.plans/README.md` indexes them.
 
-- Each task has one folder, `.plans/<status>/<task>/`, where `<status>` is `todo`, `active`, `paused` or `done`. `handoff.md` is the plan.
+- Each task has one folder: `.plans/<status>/<task>/` for `todo`, `active` and `paused`, and `.plans/done/<group>/<task>/` for grouped completed tasks. `handoff.md` is the plan. Legacy direct `.plans/done/<task>/` folders remain supported.
 - In new handoffs, list **keep** entries as exact paths relative to that task folder (files or directories, including nested paths). Counts and prose alone do not identify protected files. Cleanup reconciles legacy keep prose with the README and inventory, verifies a dry-run by file identity and directory coverage, and preserves the whole task when the protected set is ambiguous.
 - Put every scratch file for the task in its folder: logs and patches. Never write to the `.plans/` root or another task's folder. In a separate worktree, still use the main checkout's `.plans/`.
 - A handoff for a follow-up names the task's existing worktree and branch (from its `.plans/README.md` row), not a new one.
 - Confirm each step with targeted tests only; the end-of-task checks run once (see "Verifying changes"). No screenshots or evidence sets.
-- When you start, move the folder from `todo/` to `active/`. When you finish, move it to `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
+- When you start, move the folder from `todo/` to `active/`. When you finish, move it under the relevant topic group in `done/`, or to `paused/` if you stopped partway. Update its row in `.plans/README.md` each time.
 - Don't delete scratch yourself. When the PR merges, `$merge-pr` runs `pnpm plans:clean`, keeping `handoff.md` and the files the handoff marks **keep**. Never delete scratch with shell commands (`Remove-Item -Recurse`, `rm -rf`): Codex rejects them as "blocked by policy".
 
 ## Don'ts
