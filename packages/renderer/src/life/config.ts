@@ -112,7 +112,7 @@ export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
  * Turn back after this many active seconds attempting a blocked walking route; from fixed
  * obstacles at once, once at least `terrainMinWalkM` has been walked since the last turn back.
  */
-export const WALK_RECOVERY = { seconds: 3, terrainMinWalkM: 1 } as const;
+export const WALK_RECOVERY = { blockedTurnSeconds: 4, terrainMinWalkM: 1 } as const;
 /**
  * People wait at the curb while a vehicle moving faster than `movingMs` (m/s) couldn't stop
  * `marginM` short of the crossing.
@@ -142,6 +142,17 @@ export const PEDESTRIAN = {
 export const RECOVERY = {
   yieldSeconds: 20,
   returnReplanSeconds: 16,
+  visitReturnSeconds: 8,
+  vehicleApproachSeconds: 8,
+  contactRetrySeconds: 0.5,
+  reciprocalSeconds: 0.25,
+  walkerRetreats: [0, 0.05, 0.15, 0.3, 0.5],
+  bypassOffsets: [1.2, 1, 0.8, 0.65],
+  holdingOffsets: [0.65, 1, 1.2, 1.5],
+  bypassReachM: 1.5,
+  bypassSpanM: 4,
+  bypassRetreatMinM: 0.75,
+  bypassRetreatMaxM: 2,
   retreats: [0, 0.5, 1, 2, 3, 4],
 } as const;
 
@@ -271,8 +282,6 @@ export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
 /** People stop for a while (chance per second, and how long in s), or turn back. */
 export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
-/** A commanded walker with no useful path progress may safely reverse after this many seconds. */
-export const WALK = { blockedTurnSeconds: 4 } as const;
 
 /**
  * Street dogs (askals): they stop to sniff often (chance per second, and how long in s), turn

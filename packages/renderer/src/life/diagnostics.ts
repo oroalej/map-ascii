@@ -97,6 +97,22 @@ export class LifeDiagnostics {
     if (options?.rawMotion) this.raw = new LifeDiagnostics();
   }
   readonly views = new Map<VisibleAgent, object>();
+  /** Detached read-only scalars for script examples; never assigns observer identities. */
+  packingExample(
+    agent: VisibleAgent,
+  ):
+    | Readonly<{ owner: object; id: number; previousDrawn: boolean; candidate: boolean }>
+    | undefined {
+    const owner = this.views.get(agent),
+      id = owner && this.identities.get(owner);
+    if (!owner || id === undefined) return;
+    return {
+      owner,
+      id,
+      previousDrawn: this.previousDrawn.has(id),
+      candidate: this.candidates.has(owner),
+    };
+  }
   private identities = new WeakMap<object, number>();
   private nextId = 1;
   private motion = new Map<object, MotionFrame>();

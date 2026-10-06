@@ -630,6 +630,89 @@ it('keeps one-way endpoint restrictions after a missing-owner timeout', () => {
   expect(mover.v).toBeLessThan(0.01);
 });
 
+it('starts a fresh seam episode after an intervening safe preflight', () => {
+  const {
+    world,
+    lives: [source, target],
+  } = fixture([continuityTile(left), continuityTile(right)]);
+  for (const life of [source!, target!])
+    life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  const m = continuityMover(source!, 4096 - 8 * source!.perMeter);
+  m.speed = m.v = 0;
+  source!.movers.push(m);
+  const state = world as unknown as {
+    rejectedSeams: WeakMap<Mover, { seconds: number; queued: boolean }>;
+  };
+  let denied = vi.spyOn(target!, 'projectFrom').mockReturnValue(undefined);
+  for (let i = 0; i < 10; i++) world.step(0.1);
+  expect(state.rejectedSeams.get(m)?.seconds).toBeCloseTo(1);
+  denied.mockRestore();
+  world.step(0.1);
+  expect(state.rejectedSeams.has(m)).toBe(false);
+  denied = vi.spyOn(target!, 'projectFrom').mockReturnValue(undefined);
+  world.step(0.1);
+  expect(state.rejectedSeams.get(m)?.seconds).toBeCloseTo(0.1);
+  expect(state.rejectedSeams.get(m)?.queued).toBe(false);
+  denied.mockRestore();
+});
+
+it.each([false, true])(
+  'preserves a red-light seam queue, including retained recovery %s',
+  (queued) => {
+    const pm = 1 / metersPerUnit(left),
+      b = new LifeBuilder();
+    b.line(
+      [
+        { x: -100, y: 2000 },
+        { x: 4196, y: 2000 },
+      ],
+      LifeLine.roadMajor,
+      6,
+      77,
+    );
+    b.signal({ x: (1 + 8 + SIGNAL.gap + 2.2) * pm, y: 2000 }, 8, 90, 0, true);
+    const {
+      world,
+      lives: [source, target],
+    } = fixture([continuityTile(left), { key: 'red', tile: right, life: b.finish() }]);
+    for (const life of [source!, target!]) {
+      life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+    }
+    const follower = continuityMover(source!, 4096 - 10 * pm),
+      leader = continuityMover(target!, pm);
+    follower.v = leader.v = 0;
+    source!.movers.push(follower);
+    target!.movers.push(leader);
+    const signal = target!.signals.signals[0]!;
+    const seed = Array.from({ length: 512 }, (_, i) => i).find((seed) =>
+      Array.from({ length: 13 }, (_, i) => i).every(
+        (i) => signalState(seed, i, signal.a < 0).a === 'red',
+      ),
+    );
+    expect(seed).toBeDefined();
+    signal.seed = seed!;
+    if (queued) {
+      const state = world as unknown as {
+        rejectedSeams: WeakMap<
+          Mover,
+          { key: string; seconds: number; at: number; queued: boolean }
+        >;
+        queuedSeams: Map<Mover, TileLife>;
+      };
+      state.rejectedSeams.set(follower, { key: 'pending', seconds: 8, at: 0, queued: true });
+      state.queuedSeams.set(follower, source!);
+    }
+    const start = leader.x,
+      recover = vi.spyOn(source!, 'recoverVehicle');
+    for (let i = 0; i < 12 * 30; i++) world.step(1 / 30, undefined, 18);
+    expect(leader.x).toBeCloseTo(start);
+    expect(follower.dir).toBe(1);
+    expect(source!.movers).toContain(follower);
+    expect(recover).not.toHaveBeenCalled();
+  },
+);
+
 it.each(['quota', 'projection', 'final'] as const)(
   'recovers a two-way vehicle after repeated %s rejection without transferring ownership',
   (reason) => {

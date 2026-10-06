@@ -42,6 +42,7 @@ import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
   placeCoarseGroup,
   placeCoarseLone,
+  placeFirstRingGroup,
   type GroupPlacement,
   type LonePlacement,
 } from './group-placement';
@@ -460,41 +461,15 @@ export function packLife(
             // Search only on rejection; every member stays within one cell of its anchor.
             const members = journal.members;
             const offsets = [[0, 0], ...adjacentCells] as const;
-            const candidates = members.map((member) =>
-              offsets.filter(
-                ([dx, dy]) =>
-                  member.cells.length === member.expected &&
-                  member.cells.every(({ col, row }) => {
-                    const c = col + dx,
-                      r = row + dy;
-                    return (
-                      c >= 0 &&
-                      r >= 0 &&
-                      c < grid.cols &&
-                      r < grid.rows &&
-                      !groundCells[r * grid.cols + c] &&
-                      (!grid.allowsGroundCell || grid.allowsGroundCell(agent, c, r))
-                    );
-                  }),
-              ),
+            const selected = placeFirstRingGroup(
+              members,
+              grid,
+              offsets,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
             );
-            const selected: (readonly [number, number])[] = [];
-            const occupied = new Set<number>();
-            const assign = (i: number): boolean => {
-              if (i === members.length) return true;
-              for (const offset of candidates[i]!) {
-                const cells = members[i]!.cells.map(
-                  ({ col, row }) => (row + offset[1]) * grid.cols + col + offset[0],
-                );
-                if (cells.some((cell) => occupied.has(cell))) continue;
-                for (const cell of cells) occupied.add(cell);
-                selected[i] = offset;
-                if (assign(i + 1)) return true;
-                for (const cell of cells) occupied.delete(cell);
-              }
-              return false;
-            };
-            if (assign(0)) {
+            if (selected) {
               commitMembers(out, grid.cols, members, selected);
               if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
               drawn += members.length;

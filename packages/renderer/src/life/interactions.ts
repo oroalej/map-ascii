@@ -64,7 +64,14 @@ export type Visit = {
   sheltering: boolean;
   blocked: number;
   retryAt?: number;
-  progress?: { x: number; y: number; hx: number; hy: number };
+  progress?: {
+    x: number;
+    y: number;
+    hx: number;
+    hy: number;
+    target?: WalkPoint;
+    intent?: { hx: number; hy: number };
+  };
   /** Preferred side for checked detours; independent of the ordinary route's avoidance. */
   sidestep?: 1 | -1;
   /** Keep an accepted bypass waypoint until reached, instead of aiming back at the blocker. */
@@ -131,6 +138,9 @@ export class LocalScenes {
       next: number;
       returning: boolean;
       seconds: number;
+      returnBlocked: number;
+      returnDistance?: number;
+      returnRetry?: number;
     }
   >();
   private readonly yieldHeld = new WeakSet<Mover>();
@@ -231,7 +241,8 @@ export class LocalScenes {
 
   /** Service/passenger relationships cannot be separated by a tile transfer. */
   transferable(m: Mover): boolean {
-    if (this.busy?.(m) || this.services.has(m) || this.visits.has(m)) return false;
+    if (this.busy?.(m) || this.services.has(m) || this.visits.has(m) || this.yielding.has(m))
+      return false;
     for (const service of this.services.values()) if (service.passenger === m) return false;
     return true;
   }
@@ -291,7 +302,13 @@ export class LocalScenes {
   /** Explicit entry point also used by deterministic scene tests. */
   reserve(m: Mover, index: number): boolean {
     const site = this.sites[index];
-    if (!site || this.visits.has(m) || this.busy?.(m) || (isWalker(m.kind) && !this.canIdle(m)))
+    if (
+      !site ||
+      this.visits.has(m) ||
+      this.yielding.has(m) ||
+      this.busy?.(m) ||
+      (isWalker(m.kind) && !this.canIdle(m))
+    )
       return false;
     const size = m.group?.length ?? 1;
     const occupied = new Set(
@@ -340,7 +357,13 @@ export class LocalScenes {
       const target = visit.path[1]!,
         d = dist(m, target);
       if (d > 1e-8 * this.perMeter)
-        visit.progress = { x: m.x, y: m.y, hx: (target.x - m.x) / d, hy: (target.y - m.y) / d };
+        visit.progress = {
+          x: m.x,
+          y: m.y,
+          hx: (target.x - m.x) / d,
+          hy: (target.y - m.y) / d,
+          target,
+        };
     }
     visit.returnPending = false;
     delete visit.bypass;
@@ -433,6 +456,8 @@ export class LocalScenes {
     }
     const before = guard && isWalker(m.kind) ? snapshotMover(m) : undefined;
     const next = visit.next;
+    const bypassBefore = visit.bypass;
+    let progressCorner: WalkPoint | undefined;
     const trailLength = visit.trail.length;
     let left = this.pace(m, visit) * dt;
     let held = false;
@@ -442,6 +467,7 @@ export class LocalScenes {
       // Duplicate route attachments and round-off at the return anchor need no
       // footprint movement or heading change. Substantive moves remain guarded.
       if (d <= 1e-8 * this.perMeter) {
+        if (visit.progress?.target === target) progressCorner = target;
         if (visit.bypass?.target === target) delete visit.bypass;
         visit.next++;
         continue;
@@ -462,6 +488,7 @@ export class LocalScenes {
       m.walked = (m.walked ?? 0) + step / this.perMeter;
       left -= step;
       if (step >= d) {
+        if (visit.progress?.target === target) progressCorner = target;
         m.x = target.x;
         m.y = target.y;
         if (visit.state !== 'return') visit.trail.push({ ...target });
@@ -481,14 +508,17 @@ export class LocalScenes {
             y: before.y,
             hx: (target.x - before.x) / length,
             hy: (target.y - before.y) / length,
+            target,
           };
       }
       const trial = snapshotMover(m);
       const trialNext = visit.next;
+      const trialBypass = visit.bypass;
       const addedTrail = visit.trail.slice(trailLength);
       restoreMover(m, before);
       visit.next = next;
       visit.trail.length = trailLength;
+      visit.bypass = bypassBefore;
       if (dist(before, trial) > 1e-8 * this.perMeter) guard.contact?.(m, trial);
       // A pedestrian can take a checked backward/sideways step when a heading
       // change has too little room. Keep the member frame and the exact route
@@ -502,6 +532,8 @@ export class LocalScenes {
         if (guard(m, before)) {
           visit.next = trialNext;
           visit.trail.push(...addedTrail);
+          visit.bypass = trialBypass;
+          this.acceptedProgress(m, visit, before, progressCorner);
           this.blockedProgress(m, visit, dt);
           return visit.next >= visit.path.length;
         }
@@ -541,15 +573,19 @@ export class LocalScenes {
           const t = length
             ? Math.max(0, Math.min(1, ((m.x - a.x) * vx + (m.y - a.y) * vy) / length))
             : 0;
-          if (Math.hypot(m.x - a.x - t * vx, m.y - a.y - t * vy) > 1.5 * this.perMeter) continue;
+          if (
+            Math.hypot(m.x - a.x - t * vx, m.y - a.y - t * vy) >
+            RECOVERY.bypassReachM * this.perMeter
+          )
+            continue;
           m.walked = (before.walked ?? 0) + dist(before, m) / this.perMeter;
           if (this.graph.clear(before, m) && guard(m, before)) {
             visit.sidestep = side as 1 | -1;
-            const span = Math.min(dist(before, b), 4 * this.perMeter);
+            const span = Math.min(dist(before, b), RECOVERY.bypassSpanM * this.perMeter);
             const retreatDistance = Math.min(
-              2,
+              RECOVERY.bypassRetreatMaxM,
               Math.max(
-                0.75,
+                RECOVERY.bypassRetreatMinM,
                 ...(m.group ?? []).map(
                   (w) => Math.abs(w.back) + memberSize(w.figure).length / 2 + 0.15,
                 ),
@@ -562,7 +598,7 @@ export class LocalScenes {
                     y: before.y - trial.hy * retreatDistance * this.perMeter,
                   }
                 : undefined;
-            for (const offset of [1.2, 1, 0.8, 0.65]) {
+            for (const offset of RECOVERY.bypassOffsets) {
               const base = retreat ?? { x: before.x + dx * share, y: before.y + dy * share };
               const sidePoint = {
                 x: base.x - trial.hy * side * offset * this.perMeter,
@@ -626,6 +662,7 @@ export class LocalScenes {
       return false;
     }
     if (held && !changed) return false;
+    if (before) this.acceptedProgress(m, visit, before, progressCorner);
     const bypass = visit.bypass;
     if (bypass) {
       const progress = (m.x - bypass.start.x) * bypass.hx + (m.y - bypass.start.y) * bypass.hy;
@@ -661,8 +698,32 @@ export class LocalScenes {
     }
   }
 
+  /** Rebase only after accepted mapped travel, preserving the episode and retry cadence. */
+  private acceptedProgress(m: Mover, visit: Visit, before: Mover, corner?: WalkPoint) {
+    const p = visit.progress;
+    if (!p || visit.bypass || dist(m, before) <= 1e-8 * this.perMeter) return;
+    const target = visit.path[visit.next];
+    if (corner && target) {
+      const d = dist(corner, target);
+      if (d > 1e-8 * this.perMeter) {
+        p.x = corner.x;
+        p.y = corner.y;
+        p.hx = (target.x - corner.x) / d;
+        p.hy = (target.y - corner.y) / d;
+        p.target = target;
+        delete p.intent;
+      }
+    } else if (p.intent && (m.x - before.x) * p.intent.hx + (m.y - before.y) * p.intent.hy > 0) {
+      p.x = before.x;
+      p.y = before.y;
+      p.hx = p.intent.hx;
+      p.hy = p.intent.hy;
+      delete p.intent;
+    }
+  }
+
   private blockedTimeout(m: Mover, visit: Visit) {
-    if (visit.blocked >= 8 && visit.state !== 'return') {
+    if (visit.blocked >= RECOVERY.visitReturnSeconds && visit.state !== 'return') {
       if (!visit.returnPending) this.requestReturn(m, visit);
     } else if (
       visit.blocked >= (visit.retryAt ?? RECOVERY.returnReplanSeconds) &&
@@ -670,6 +731,18 @@ export class LocalScenes {
     ) {
       const path = this.route(m, visit.trail[0]!);
       if (path?.every(inTile)) {
+        const target = path[1],
+          oldTarget = visit.path[visit.next],
+          p = visit.progress;
+        if (target && p) {
+          const d = dist(m, target);
+          if (
+            d > 1e-8 * this.perMeter &&
+            (!oldTarget || dist(target, oldTarget) > 1e-8 * this.perMeter)
+          )
+            p.intent = { hx: (target.x - m.x) / d, hy: (target.y - m.y) / d };
+          p.target = target;
+        }
         visit.path = path;
         visit.next = 1;
         delete visit.bypass;
@@ -773,7 +846,7 @@ export class LocalScenes {
       for (const direct of [false, true]) {
         for (const retreat of RECOVERY.retreats) {
           for (const side of [1, -1]) {
-            for (const offset of [0.65, 1, 1.2, 1.5]) {
+            for (const offset of RECOVERY.holdingOffsets) {
               restoreMover(m, anchor);
               const back = {
                 x: anchor.x - heading.hx * retreat * this.perMeter,
@@ -797,6 +870,7 @@ export class LocalScenes {
                 next: 0,
                 returning: false,
                 seconds: 0,
+                returnBlocked: 0,
               };
               break;
             }
@@ -827,6 +901,7 @@ export class LocalScenes {
       ];
       state.next = 0;
       state.returning = true;
+      state.returnDistance = dist(m, state.anchor);
     }
     if (state.next >= state.path.length) {
       if (state.returning) {
@@ -862,10 +937,99 @@ export class LocalScenes {
       !guard(m, previous)
     ) {
       restoreMover(m, previous);
+      if (state.returning && !this.yieldHeld.has(m)) {
+        state.returnBlocked += dt;
+        if (state.returnBlocked >= (state.returnRetry ?? RECOVERY.returnReplanSeconds)) {
+          state.returnRetry = state.returnBlocked + RECOVERY.returnReplanSeconds;
+          if (this.resumeYield(m, state.anchor, guard, owns)) {
+            this.yielding.delete(m);
+            guard.cancelYield?.(m);
+            return false;
+          }
+        }
+      }
       return true;
+    }
+    if (
+      state.returning &&
+      (state.returnDistance ?? Infinity) - dist(m, state.anchor) >= 0.5 * this.perMeter
+    ) {
+      state.returnBlocked = 0;
+      state.returnDistance = dist(m, state.anchor);
+      delete state.returnRetry;
     }
     if (step >= d) state.next++;
     return true;
+  }
+
+  /** Hand movement back from a blocked temporary return without changing its physical pose. */
+  private resumeYield(m: Mover, anchor: Mover, guard: MoveGuard, owns?: (p: WalkPoint) => boolean) {
+    const visit = this.visits.get(m);
+    if (visit) {
+      const destination = visit.path.at(-1);
+      const path = destination && this.route(m, destination);
+      if (!path || !path.every((p) => inTile(p) && (!owns || owns(p)))) return false;
+      // The original trail and site reservation remain owned by the existing visit.
+      visit.path = path;
+      visit.next = 1;
+      delete visit.bypass;
+      if (visit.progress) {
+        const target = path[1],
+          d = target && dist(m, target);
+        if (target && d && d > 1e-8 * this.perMeter) {
+          visit.progress.target = target;
+          visit.progress.intent = { hx: (target.x - m.x) / d, hy: (target.y - m.y) / d };
+        }
+      }
+      return true;
+    }
+    const before = snapshotMover(m),
+      heading = m.momentFacing ?? m;
+    const point = {
+      x: m.x - m.hy * (m.avoid ?? 0) * this.perMeter,
+      y: m.y + m.hx * (m.avoid ?? 0) * this.perMeter,
+    };
+    let best:
+      | { from: number; d: number; x: number; y: number; hx: number; hy: number; offset: number }
+      | undefined;
+    let nearest = Infinity;
+    for (let v = this.geo.starts[anchor.line]!; v < this.geo.starts[anchor.line + 1]! - 1; v++) {
+      const from = anchor.dir === 1 ? v : v + 1,
+        to = from + anchor.dir,
+        ax = this.geo.coords[from * 2]!,
+        ay = this.geo.coords[from * 2 + 1]!,
+        dx = this.geo.coords[to * 2]! - ax,
+        dy = this.geo.coords[to * 2 + 1]! - ay,
+        length = Math.hypot(dx, dy);
+      if (!length) continue;
+      const d = ((point.x - ax) * dx + (point.y - ay) * dy) / length;
+      if (d < 0 || d > length) continue;
+      const hx = dx / length,
+        hy = dy / length,
+        x = ax + hx * d,
+        y = ay + hy * d,
+        offset = -(point.x - x) * hy + (point.y - y) * hx;
+      if (Math.abs(offset) >= nearest) continue;
+      nearest = Math.abs(offset);
+      best = { from, d, x, y, hx, hy, offset };
+    }
+    if (!best) return false;
+    m.line = anchor.line;
+    m.dir = anchor.dir;
+    m.from = best.from;
+    m.d = best.d;
+    m.x = best.x;
+    m.y = best.y;
+    m.avoid = best.offset / this.perMeter;
+    faceGroup(m, best.hx, best.hy, heading);
+    if (
+      (!owns || owns(m)) &&
+      this.graph.allowsBodies(this.walkingBodies(m, m, m.avoid), true) &&
+      guard(m, before, false)
+    )
+      return true;
+    restoreMover(m, before);
+    return false;
   }
 
   step(

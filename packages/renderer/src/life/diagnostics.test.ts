@@ -50,6 +50,31 @@ it('requires ten continuous eligible seconds and resets at intentional holds', (
   expect(sink.report().motion.person.ratio).toBeNull();
 });
 
+it('reads packing examples without changing identities or observer counters and drops stale views', () => {
+  const sink = new LifeDiagnostics(),
+    owner = {};
+  sink.beginFrame(1, bounds, 17, 1, true);
+  sink.eligible(owner, 'vehicle');
+  sink.position(owner, 0, 0);
+  sink.beginVisible();
+  const first = view();
+  sink.view(owner, first);
+  sink.admitted([first]);
+  sink.finishFrame([first], Uint8Array.of(PackingOutcome.drawn));
+  const id = sink.packingExample(first)!.id;
+  sink.beginFrame(1, bounds, 17, 1, true);
+  sink.beginVisible();
+  const next = view();
+  sink.view(owner, next);
+  sink.admitted([next]);
+  const before = sink.report();
+  expect(sink.packingExample(first)).toBeUndefined();
+  expect(sink.packingExample(next)).toEqual({ owner, id, previousDrawn: true, candidate: true });
+  expect(sink.report()).toEqual(before);
+  sink.finishFrame([next], Uint8Array.of(PackingOutcome.collision));
+  expect(sink.report().packing.collisionDisappearances).toBe(1);
+});
+
 it('retains pre-step rejection tags and counts simultaneous packing denials separately', () => {
   const sink = new LifeDiagnostics(),
     owner = {};

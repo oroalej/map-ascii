@@ -615,7 +615,7 @@ describe('crossroads traffic', () => {
       const table = (world as unknown as { junctions: JunctionTable }).junctions;
       const crossed = new Set<number>();
       let maxWait = 0;
-      const seconds = minimum === 0 ? 180 : 60;
+      const seconds = 60;
       for (let frame = 0; frame < seconds * 30; frame++) {
         const before = life.movers.map((m) => ({
           line: m.line,

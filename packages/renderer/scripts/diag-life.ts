@@ -21,7 +21,7 @@ import * as workingConfig from '../src/life/config';
 import * as workingDiagnostics from '../src/life/diagnostics';
 import * as workingDraw from '../src/life/draw';
 import * as workingSimulate from '../src/life/simulate';
-import type { LifeTile, TileLife, Mover, VisibleAgent } from '../src/life/simulate';
+import type { LifeTile, TileLife, Mover } from '../src/life/simulate';
 import { PackingOutcome } from '../src/life/diagnostics';
 import type { Body, PolygonIndex } from '../src/life/occupancy';
 import type { RoadAccess } from '../src/life/terrain';
@@ -37,6 +37,8 @@ import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
 import { simulationSeasons } from '../src/life/seasonal-simulation';
 import { configureLifeWorld } from '../src/life/worker-api';
 import { liveProgress } from '../src/life/procession';
+import { diagnosticCompletion } from './diag-status';
+import { summary } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const output = process.argv.find((arg) => arg.startsWith('--output='))?.slice(9);
@@ -215,8 +217,13 @@ async function save(complete: boolean) {
     sourceHash,
     sourceSnapshot: snapshotDestination,
     dirty,
-    complete: complete && cases.length === expectedCases.length,
-    selectionComplete: complete && cases.length === selectedCases.length,
+    ...diagnosticCompletion(
+      complete,
+      cases.length,
+      expectedCases.length,
+      selectedCases.length,
+      !!probe,
+    ),
     expectedCases,
     selectedCases,
     measurementVersion: MEASUREMENT_VERSION,
@@ -565,28 +572,23 @@ try {
             if (frame >= warmup / dt && flickerSamples.length < 100) {
               // Read-only examples supplement the common observer's counters. They
               // never call movement guards or change the PRE/POST definitions.
-              const state = diagnostics as unknown as {
-                views: Map<VisibleAgent, object>;
-                candidates: Map<object, VisibleAgent>;
-                previousDrawn: Set<number>;
-                identities: WeakMap<object, number>;
-              };
               const drawn = new Set<object>();
               agents.forEach((agent, i) => {
-                const owner = state.views.get(agent);
+                const owner = diagnostics.views.get(agent);
                 if (owner && outcomes[i] === PackingOutcome.drawn) drawn.add(owner);
               });
               const seen = new Set<object>();
               for (const [i, agent] of agents.entries()) {
-                const owner = state.views.get(agent);
-                const id = owner && state.identities.get(owner);
+                const example = diagnostics.packingExample(agent);
+                const owner = example?.owner;
+                const id = example?.id;
                 if (
                   !owner ||
                   id === undefined ||
                   seen.has(owner) ||
                   drawn.has(owner) ||
-                  !state.previousDrawn.has(id) ||
-                  !state.candidates.has(owner) ||
+                  !example?.previousDrawn ||
+                  !example.candidate ||
                   (outcomes[i] !== PackingOutcome.collision &&
                     outcomes[i] !== PackingOutcome.cellGuard)
                 )
@@ -626,7 +628,9 @@ try {
                 `${key}: ${(frame + 1) / 30}s simulated, ${((performance.now() - caseStart) / 1000).toFixed(1)}s elapsed`,
               );
           }
-          packingTimes.sort((a, b) => a - b);
+          const packingSummary = packingTimes.length
+            ? summary(packingTimes)
+            : { median: 0, p95: 0 };
           cases.push({
             key,
             zoom,
@@ -640,8 +644,8 @@ try {
             sun,
             runtimeSeconds: (performance.now() - caseStart) / 1000,
             packingCpu: {
-              medianMs: packingTimes[Math.floor(packingTimes.length * 0.5)] ?? 0,
-              p95Ms: packingTimes[Math.floor(packingTimes.length * 0.95)] ?? 0,
+              medianMs: packingSummary.median,
+              p95Ms: packingSummary.p95,
               samples: packingTimes.length,
               ...packingWork,
             },

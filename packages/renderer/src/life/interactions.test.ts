@@ -5,6 +5,7 @@ import { LocalScenes } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 import type { WalkingGraph } from './navigation';
+import { Occupancy } from './occupancy';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -55,6 +56,136 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it.each([false, true])(
+    'releases a permanently blocked yield return while preserving checked ownership (visit %s)',
+    (visiting) => {
+      const scene = setup(),
+        p = { ...person(), avoid: visiting ? 0 : 0.4, group: [{ ...walker }] };
+      if (visiting) expect(scene.reserve(p, 0)).toBe(true);
+      const visit = scene.visits.get(p),
+        trail = visit && structuredClone(visit.trail),
+        group = p.group;
+      const body = (m: Mover) => ({
+        x: m.x - m.hy * (visiting ? 0 : (m.avoid ?? 0)),
+        y: m.y + m.hx * (visiting ? 0 : (m.avoid ?? 0)),
+        hx: m.hx,
+        hy: m.hy,
+        length: 0.5,
+        width: 0.45,
+      });
+      const anchor = body(p),
+        occupied = new Occupancy();
+      let active = true;
+      const guard = Object.assign(
+        (next: Mover, _before: Mover, reserve = true) => {
+          if (occupied.conflicts(p, [body(next)]) > 0) return false;
+          if (reserve) occupied.set(p, [body(next)]);
+          return true;
+        },
+        {
+          yielding: () => (active ? person(45) : undefined),
+          holding: () => true,
+          cancelYield: () => {
+            active = false;
+          },
+        },
+      );
+      for (let i = 0; i < 10; i++) scene.yieldStep(p, 0.1, guard);
+      occupied.set({}, [anchor]);
+      let released = false;
+      for (let i = 0; i < 500; i++) {
+        const before = body(p);
+        if (!scene.yieldStep(p, 0.1, guard)) {
+          expect(body(p)).toEqual(before);
+          released = true;
+          break;
+        }
+      }
+      expect(released).toBe(true);
+      expect(p.group).toBe(group);
+      expect(scene.yieldStep(p, 0, guard)).toBe(false);
+      if (visit) {
+        expect(scene.visits.get(p)).toBe(visit);
+        expect(visit.trail).toEqual(trail);
+        expect(scene.sites[0]!.queue).toContain(p);
+        const start = p.x;
+        for (let i = 0; i < 40; i++) scene.step(0.1, [p], {}, undefined, undefined, guard);
+        expect(p.x).toBeGreaterThan(start + 0.5);
+      } else {
+        expect(p.y).toBe(30);
+        expect(p.d).toBeCloseTo(p.x);
+        expect(scene.transferable(p)).toBe(true);
+      }
+    },
+  );
+
+  it('prevents visit admission and tile transfer while yielding owns movement', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] };
+    const guard = Object.assign(() => true, { yielding: () => person(45), holding: () => true });
+    for (let i = 0; i < 10; i++) scene.yieldStep(p, 0.1, guard);
+    expect(scene.transferable(p)).toBe(false);
+    expect(scene.reserve(p, 0)).toBe(false);
+    expect(scene.visits.has(p)).toBe(false);
+  });
+
+  it('counts accepted mapped-corner progress after a transient refusal', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+        { x: 40, y: 90 },
+      ],
+      LifeLine.path,
+      1,
+    );
+    b.site({ x: 40, y: 80 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = { ...person(10), speed: 1, d: 0 };
+    expect(scene.reserve(p, 0)).toBe(true);
+    for (let i = 0; i < 298; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    const visit = scene.visits.get(p)!;
+    expect(visit.progress).toBeDefined();
+    for (let i = 0; i < 90; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(visit.state).toBe('approach');
+    expect(visit.blocked).toBe(0);
+    expect(p.y).toBeGreaterThan(38);
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
+  it('retains blockage and retry cadence through rejected corners and futile replans', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+        { x: 40, y: 90 },
+      ],
+      LifeLine.path,
+      1,
+    );
+    b.site({ x: 40, y: 80 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = { ...person(10), speed: 1, d: 0 };
+    expect(scene.reserve(p, 0)).toBe(true);
+    for (let i = 0; i < 298; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    const visit = scene.visits.get(p)!,
+      before = structuredClone(p),
+      goal = visit.path.at(-1)!;
+    visit.state = 'return';
+    visit.trail = [{ ...goal }];
+    visit.blocked = RECOVERY.returnReplanSeconds - 0.1;
+    visit.retryAt = RECOVERY.returnReplanSeconds;
+    visit.progress = { x: p.x, y: p.y, hx: 1, hy: 0, target: visit.path[visit.next] };
+    for (let i = 0; i < 180; i++) scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(p).toEqual(before);
+    expect(visit.blocked).toBeGreaterThan(32);
+    expect(visit.retryAt).toBeGreaterThan(visit.blocked);
+    expect(visit.progress).toMatchObject({ x: before.x, y: before.y, hx: 1, hy: 0 });
+  });
+
   it('expires active yielding through a checked return while preserving its reservation', () => {
     const scene = setup(),
       p = { ...person(), group: [{ ...walker }] },

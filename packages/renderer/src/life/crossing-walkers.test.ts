@@ -336,6 +336,6 @@ describe('people at crossings', () => {
       longest = Math.max(longest, stood);
     }
     expect(walker.dir).toBe(-1);
-    expect(longest).toBeLessThan(WALK_RECOVERY.seconds / 2);
+    expect(longest).toBeLessThan(WALK_RECOVERY.blockedTurnSeconds / 2);
   });
 });

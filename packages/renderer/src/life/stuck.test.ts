@@ -6,7 +6,7 @@ import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 import { JunctionTable } from './junctions';
 import { packLife } from './draw';
 import { themes } from '../theme';
-import { FOLLOW, WALK, ROAD_AVOID, PEDESTRIAN, RECOVERY, activityLevels } from './config';
+import { FOLLOW, WALK_RECOVERY, ROAD_AVOID, PEDESTRIAN, RECOVERY, activityLevels } from './config';
 import { VEHICLES } from './vehicles';
 import { snapshotMover } from './mover-pose';
 import { bodiesOverlap, PolygonIndex } from './occupancy';
@@ -777,9 +777,14 @@ it('clears a committed turning jeepney past a curbside group with retained physi
   expect(person.walked).toBeGreaterThan(0.5);
 });
 
-it.each([-8, -6])(
-  'steers away from a curb obstruction with an inherited saturated lane shift (%s m)',
-  (shift) => {
+it.each([
+  [-8, false],
+  [-8, true],
+  [-6, false],
+  [-6, true],
+] as const)(
+  'steers away from a curb obstruction with an inherited saturated lane shift (%s m, reactive %s)',
+  (shift, reactive) => {
     const { world, life } = fixture(
       LifeLine.roadMajor,
       6,
@@ -793,7 +798,7 @@ it.each([-8, -6])(
     );
     const m = mover('vehicle', 70, 1);
     // -8 m can be retained after a wide one-way road enters this narrow piece.
-    reactiveRoadRecovery(world);
+    if (reactive) reactiveRoadRecovery(world);
     // Both stored values have exactly the same valid physical starting lane.
     m.lane = 1;
     m.roadShift = shift;
@@ -878,33 +883,54 @@ it('retains both tangent offsets while a saturated shift is still on an active c
   expect(life.pose(m)).toEqual(before);
 });
 
-it('retains a safe steering direction after crossing the original offset sign', () => {
-  const { world, life } = fixture(LifeLine.roadMajor, 8, false, (b) =>
-    b.area('blocked', rectangle(1000 + 75 * pm, 2048 - 5 * pm, 1000 + 80 * pm, 2048 + 1.5 * pm)),
-  );
-  const m = mover('vehicle', 70, 1);
-  reactiveRoadRecovery(world);
-  m.roadShift = -0.4;
-  const blocked = new PolygonIndex();
-  blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm + 1.5));
+it('uses only the ordinary guard on accepted lane-restoration steps', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8),
+    m = mover('vehicle', 70, 1);
+  m.roadShift = 0.5;
   life.movers.push(m);
-  // Measure the accepted detour before main restores the original seeded lane.
-  let farthestShift = -Infinity;
-  for (let frame = 0; frame < 300; frame++) {
-    const before = life.pose(m);
-    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-    const after = life.pose(m);
-    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
-      5 / 30 + 1e-8,
-    );
-    expect(blocked.hits(life.groundBodies(m))).toBe(false);
-    expect(m.dir).toBe(1);
-    expect(life.offsetOf(m)).toBeGreaterThanOrEqual(0.975);
-    farthestShift = Math.max(farthestShift, m.roadShift ?? 0);
-  }
-  expect((m.x - 1000) / pm).toBeGreaterThan(85);
-  expect(farthestShift).toBeGreaterThan(0.4);
+  let probes = 0,
+    accepted = 0;
+  const guard = (_owner: unknown, _before: unknown, reserve = true) => {
+    if (reserve) accepted++;
+    else probes++;
+    return true;
+  };
+  for (let i = 0; i < 10; i++) life.step(1 / 30, undefined, undefined, undefined, undefined, guard);
+  expect(probes).toBe(0);
+  expect(accepted).toBe(10);
+  expect(m.roadShift).toBeLessThan(0.5);
 });
+
+it.each([false, true])(
+  'retains a safe steering direction after crossing the original offset sign (reactive %s)',
+  (reactive) => {
+    const { world, life } = fixture(LifeLine.roadMajor, 8, false, (b) =>
+      b.area('blocked', rectangle(1000 + 75 * pm, 2048 - 5 * pm, 1000 + 80 * pm, 2048 + 1.5 * pm)),
+    );
+    const m = mover('vehicle', 70, 1);
+    if (reactive) reactiveRoadRecovery(world);
+    m.roadShift = -0.4;
+    const blocked = new PolygonIndex();
+    blocked.add(rectangle(1000 / pm + 75, 2048 / pm - 5, 1000 / pm + 80, 2048 / pm + 1.5));
+    life.movers.push(m);
+    // Measure the accepted detour before main restores the original seeded lane.
+    let farthestShift = -Infinity;
+    for (let frame = 0; frame < 300; frame++) {
+      const before = life.pose(m);
+      world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+      const after = life.pose(m);
+      expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
+        5 / 30 + 1e-8,
+      );
+      expect(blocked.hits(life.groundBodies(m))).toBe(false);
+      expect(m.dir).toBe(1);
+      expect(life.offsetOf(m)).toBeGreaterThanOrEqual(0.975);
+      farthestShift = Math.max(farthestShift, m.roadShift ?? 0);
+    }
+    expect((m.x - 1000) / pm).toBeGreaterThan(85);
+    if (reactive) expect(farthestShift).toBeGreaterThan(0.4);
+  },
+);
 
 it.each([
   [false, 2],
@@ -1018,22 +1044,60 @@ it('rejects a predicted seam reservation with an inherited future collision', ()
   expect(life.movers).toEqual(before);
 });
 
-it('backs away before reversing beside a physical wall, while retaining the swept guard', () => {
-  const { world, life } = fixture(LifeLine.path, 3, false, (b) => {
-    b.area('blocked', rectangle(1000 + 70.46 * pm, 2048 - 5 * pm, 1000 + 73 * pm, 2048 + 5 * pm));
-  });
-  const m = mover('person', 70, 1);
-  m.waiting = 4;
-  life.movers.push(m);
-  world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-  expect(m.hx).toBe(-1);
-  expect((m.x - 1000) / pm).toBeLessThan(70);
-  expect(m.waiting).toBeGreaterThanOrEqual(WALK.blockedTurnSeconds);
-  for (let frame = 0; frame < 150; frame++)
-    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-  expect(m.waiting).toBe(0);
-  expect((m.x - 1000) / pm).toBeLessThan(65);
-});
+it.each([30, 60])(
+  'backs away before reversing beside a physical wall with bounded steps at %s Hz',
+  (rate) => {
+    const { world, life } = fixture(LifeLine.path, 3, false, (b) => {
+      b.area('blocked', rectangle(1000 + 70.46 * pm, 2048 - 5 * pm, 1000 + 73 * pm, 2048 + 5 * pm));
+    });
+    const m = mover('person', 70, 1);
+    m.waiting = 4;
+    (
+      life as unknown as {
+        blockedProgress: WeakMap<Mover, { x: number; y: number; hx: number; hy: number }>;
+      }
+    ).blockedProgress.set(m, { x: m.x, y: m.y, hx: m.hx, hy: m.hy });
+    life.movers.push(m);
+    const before = life.groundBodies(m);
+    world.step(1 / rate, undefined, 17, undefined, undefined, undefined, 2.9);
+    expect(m.hx).toBe(-1);
+    expect((m.x - 1000) / pm).toBeLessThan(70);
+    expect(m.waiting).toBeGreaterThanOrEqual(WALK_RECOVERY.blockedTurnSeconds);
+    const after = life.groundBodies(m);
+    for (let i = 0; i < before.length; i++)
+      expect(
+        Math.hypot(after[i]!.x - before[i]!.x, after[i]!.y - before[i]!.y),
+      ).toBeLessThanOrEqual(m.speed / pm / rate + 1e-8);
+    for (let frame = 0; frame < 5 * rate; frame++)
+      world.step(1 / rate, undefined, 17, undefined, undefined, undefined, 2.9);
+    expect(m.waiting).toBe(0);
+    expect((m.x - 1000) / pm).toBeLessThan(65);
+  },
+);
+
+it.each([0, WALK_RECOVERY.blockedTurnSeconds - 0.1])(
+  'retains blockage until checked progress after an ordinary reversal at waiting %s',
+  (waiting) => {
+    const { life } = fixture(LifeLine.path, 4),
+      p = mover('person', 70, 1);
+    p.speed = pm;
+    p.waiting = waiting;
+    life.movers.push(p);
+    life.step(1 / 30, undefined, undefined, undefined, undefined, () => false);
+    const age = p.waiting;
+    let calls = 0;
+    (life as unknown as { walkerRng: () => number }).walkerRng = () => (++calls === 2 ? 0 : 1);
+    life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+    expect(p.dir).toBe(-1);
+    expect(p.waiting).toBeGreaterThan(age);
+    for (let i = 0; i < 200; i++) {
+      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+      expect(p.dir).toBe(-1);
+    }
+    expect(p.waiting).toBe(0);
+    expect((p.x - 1000) / pm).toBeLessThan(69.5);
+  },
+);
 
 it('lets a car clear a zoom-hidden crossing walker within 15 seconds at minimum 7', () => {
   const { world, life } = fixture(LifeLine.roadMajor, 8);
@@ -1100,48 +1164,53 @@ it('lets both head-on cars accept forward travel after recovery within 35 second
   expect(resumed.size).toBe(2);
 });
 
-it('backs away from an oblique curb obstruction before steering, keeping its route and facing', () => {
-  const { world, life } = fixture(
-    LifeLine.roadMajor,
-    8,
-    false,
-    (b) =>
-      b.area('blocked', [
-        [
-          { x: 1000 + 75 * pm, y: 2048 },
-          { x: 1000 + 76 * pm, y: 2048 + 5 * pm },
-          { x: 1000 + 80 * pm, y: 2048 + 5 * pm },
-          { x: 1000 + 80 * pm, y: 2048 },
-          { x: 1000 + 75 * pm, y: 2048 },
-        ],
-      ]),
-    1,
-  );
-  const m = mover('vehicle', 70, 1);
-  reactiveRoadRecovery(world);
-  life.movers.push(m);
-  let backward = false;
-  let closestShift = Infinity;
-  // Checked nose alignment adds a short approach while keeping the same physical pace.
-  for (let frame = 0; frame < 18 * 30; frame++) {
-    const before = life.pose(m),
-      x = m.x;
-    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-    const after = life.pose(m);
-    backward ||= m.x < x - 1e-8;
-    closestShift = Math.min(closestShift, m.roadShift ?? 0);
-    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
-      5 / 30 + 1e-8,
+it.each([false, true])(
+  'backs away from an oblique curb obstruction before steering, keeping its route and facing (reactive %s)',
+  (reactive) => {
+    const { world, life } = fixture(
+      LifeLine.roadMajor,
+      8,
+      false,
+      (b) =>
+        b.area('blocked', [
+          [
+            { x: 1000 + 75 * pm, y: 2048 },
+            { x: 1000 + 76 * pm, y: 2048 + 5 * pm },
+            { x: 1000 + 80 * pm, y: 2048 + 5 * pm },
+            { x: 1000 + 80 * pm, y: 2048 },
+            { x: 1000 + 75 * pm, y: 2048 },
+          ],
+        ]),
+      1,
     );
-    expect(m.dir).toBe(1);
-    expect(m.line).toBe(0);
-    expect(m.hx).toBe(1);
-    expect(m.v).toBeGreaterThanOrEqual(0);
-  }
-  expect(backward).toBe(true);
-  expect(closestShift).toBeLessThan(-2.8);
-  expect((m.x - 1000) / pm).toBeGreaterThan(85);
-});
+    const m = mover('vehicle', 70, 1);
+    if (reactive) reactiveRoadRecovery(world);
+    life.movers.push(m);
+    let backward = false;
+    let closestShift = Infinity;
+    // Checked nose alignment adds a short approach while keeping the same physical pace.
+    for (let frame = 0; frame < 18 * 30; frame++) {
+      const before = life.pose(m),
+        x = m.x;
+      world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+      const after = life.pose(m);
+      backward ||= m.x < x - 1e-8;
+      closestShift = Math.min(closestShift, m.roadShift ?? 0);
+      expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(
+        5 / 30 + 1e-8,
+      );
+      expect(m.dir).toBe(1);
+      expect(m.line).toBe(0);
+      expect(m.hx).toBe(1);
+      expect(m.v).toBeGreaterThanOrEqual(0);
+    }
+    if (reactive) {
+      expect(backward).toBe(true);
+      expect(closestShift).toBeLessThan(-2.8);
+    }
+    expect((m.x - 1000) / pm).toBeGreaterThan(85);
+  },
+);
 
 it('clears mixed-width head-on traffic on an oblique road without physical overlap', () => {
   const b = new LifeBuilder();
@@ -1448,68 +1517,76 @@ it('expires a selected retreat invalidated by a stationary follower and releases
   expect(m.x).toBeGreaterThan(start);
 });
 
-it('retreats far enough to clear the complete rotation beside a narrowing building edge', () => {
-  const b = new LifeBuilder();
-  b.line(
-    [
-      { x: 2230, y: 2356 },
-      { x: 2398, y: 2099 },
-      { x: 2550, y: 1854 },
-    ],
-    LifeLine.roadMinor,
-    5,
-  );
-  b.area('blocked', [
-    [
-      { x: 2147, y: 2232 },
-      { x: 2257, y: 2291 },
-      { x: 2221, y: 2358 },
-      { x: 2111, y: 2298 },
-      { x: 2147, y: 2232 },
-    ],
-  ]);
-  const world = new LifeWorld(undefined, undefined, { enabled: false });
-  world.sync([{ key: 'narrow', tile, life: b.finish() }]);
-  reactiveRoadRecovery(world);
-  const life = worldTiles(world).get('narrow')!;
-  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
-  life.scenes.sites.length = 0;
-  const length = Math.hypot(168, 257),
-    m = mover('vehicle', 0, -1);
-  Object.assign(m, {
-    line: 0,
-    from: 1,
-    d: length - 0.002,
-    x: 2230 + (168 / length) * 0.002,
-    y: 2356 - (257 / length) * 0.002,
-    hx: -168 / length,
-    hy: 257 / length,
-    speed: 4 * pm,
-    v: 0,
-    vehicle: 'motorcycle',
-    lane: 0.37211,
-    roadShift: -0.78,
-    waiting: 30,
-    routing: { seed: 1415479920, turns: 0 },
-  });
-  life.movers.push(m);
-  const start = life.pose(m);
-  const blocked = new PolygonIndex();
-  blocked.add(b.finish().areas![0]!.rings.map((r) => r.map((p) => ({ x: p.x / pm, y: p.y / pm }))));
-  let reversed = false;
-  for (let frame = 0; frame < 18 * 30; frame++) {
-    const previous = { x: m.x, y: m.y };
-    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-    expect(blocked.hits(life.groundBodies(m))).toBe(false);
-    // Translation stays speed-bounded; the direction change itself is a full
-    // swept rotation into the opposite lane, as in the other recovery controls.
-    expect(Math.hypot(m.x - previous.x, m.y - previous.y) / pm).toBeLessThanOrEqual(4 / 30 + 1e-8);
-    reversed ||= m.dir === 1;
-  }
-  expect(reversed).toBe(true);
-  expect(Math.hypot(life.pose(m).x - start.x, life.pose(m).y - start.y) / pm).toBeGreaterThan(10);
-  expect(m.routing?.turns).toBe(0);
-});
+it.each([false, true])(
+  'retreats far enough to clear the complete rotation beside a narrowing building edge (reactive %s)',
+  (reactive) => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 2230, y: 2356 },
+        { x: 2398, y: 2099 },
+        { x: 2550, y: 1854 },
+      ],
+      LifeLine.roadMinor,
+      5,
+    );
+    b.area('blocked', [
+      [
+        { x: 2147, y: 2232 },
+        { x: 2257, y: 2291 },
+        { x: 2221, y: 2358 },
+        { x: 2111, y: 2298 },
+        { x: 2147, y: 2232 },
+      ],
+    ]);
+    const world = new LifeWorld(undefined, undefined, { enabled: false });
+    world.sync([{ key: 'narrow', tile, life: b.finish() }]);
+    if (reactive) reactiveRoadRecovery(world);
+    const life = worldTiles(world).get('narrow')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const length = Math.hypot(168, 257),
+      m = mover('vehicle', 0, -1);
+    Object.assign(m, {
+      line: 0,
+      from: 1,
+      d: length - 0.002,
+      x: 2230 + (168 / length) * 0.002,
+      y: 2356 - (257 / length) * 0.002,
+      hx: -168 / length,
+      hy: 257 / length,
+      speed: 4 * pm,
+      v: 0,
+      vehicle: 'motorcycle',
+      lane: 0.37211,
+      roadShift: -0.78,
+      waiting: 30,
+      routing: { seed: 1415479920, turns: 0 },
+    });
+    life.movers.push(m);
+    const start = life.pose(m);
+    const blocked = new PolygonIndex();
+    blocked.add(
+      b.finish().areas![0]!.rings.map((r) => r.map((p) => ({ x: p.x / pm, y: p.y / pm }))),
+    );
+    let reversed = false;
+    for (let frame = 0; frame < 18 * 30; frame++) {
+      const previous = { x: m.x, y: m.y };
+      world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
+      expect(blocked.hits(life.groundBodies(m))).toBe(false);
+      // Translation stays speed-bounded; the direction change itself is a full
+      // swept rotation into the opposite lane, as in the other recovery controls.
+      expect(Math.hypot(m.x - previous.x, m.y - previous.y) / pm).toBeLessThanOrEqual(
+        4 / 30 + 1e-8,
+      );
+      reversed ||= m.dir === 1;
+    }
+    if (reactive) expect(reversed).toBe(true);
+    expect(Math.hypot(life.pose(m).x - start.x, life.pose(m).y - start.y) / pm).toBeGreaterThan(10);
+    expect(m.routing?.seed).toBe(1415479920);
+    if (reactive) expect(m.routing?.turns).toBe(0);
+  },
+);
 
 it('rejects recovery departure corridors that would enter an unreserved junction', () => {
   const b = new LifeBuilder(),

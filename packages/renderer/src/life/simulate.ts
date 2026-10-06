@@ -84,7 +84,6 @@ import {
   PEOPLE,
   PERSON_PAUSE,
   PERSON_TURN_CHANCE,
-  WALK,
   WALK_RECOVERY,
   PLACES,
   SEASON_CROWD,
@@ -196,6 +195,7 @@ import {
   memberSize,
   boundsOf,
   animalSize,
+  reach,
   type Body,
   type Point,
   type Polygon,
@@ -288,6 +288,7 @@ export type WorldGroundGuard = ((
       identity: Mover,
       reject?: (reason: ContinuityRejection) => void,
     ): boolean;
+    roadQueue(life: TileLife, preview: Mover, identity: Mover): boolean;
     pedestrians(life: TileLife): PedestrianView;
   };
 type SeamLimit = {
@@ -780,10 +781,14 @@ export class TileLife {
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
   private readonly recoveryProgress = new WeakMap<Mover, number>();
+  private readonly blockedRestoration = new WeakMap<
+    Mover,
+    { line: number; dir: 1 | -1; x: number; y: number; hx: number; hy: number }
+  >();
   private readonly recoveryLeaders = new Map<number, Mover>();
   private readonly blockedProgress = new WeakMap<
     Mover,
-    { x: number; y: number; hx: number; hy: number }
+    { x: number; y: number; hx: number; hy: number; ordinary?: boolean }
   >();
   private readonly walkerRecoveryProgress = new WeakMap<Mover, number>();
   private readonly recoveryApproaches = new WeakMap<
@@ -994,6 +999,7 @@ export class TileLife {
     this.localJunctions.release(m);
     this.recoveryApproaches.delete(m);
     this.blockedProgress.delete(m);
+    this.blockedRestoration.delete(m);
     this.walkerRecoveryProgress.delete(m);
     this.recoveryProgress.delete(m);
     if (this.recoveryLeaders.get(m.line) === m) this.recoveryLeaders.delete(m.line);
@@ -4962,14 +4968,24 @@ export class TileLife {
         continue;
       }
       const before = walking && m.momentFacing ? snapshotMover(m) : { ...m };
+      const restoreBlock = m.kind === 'vehicle' ? this.blockedRestoration.get(m) : undefined;
+      if (
+        restoreBlock &&
+        (m.roadShift === undefined ||
+          m.line !== restoreBlock.line ||
+          m.dir !== restoreBlock.dir ||
+          (m.x - restoreBlock.x) * restoreBlock.hx + (m.y - restoreBlock.y) * restoreBlock.hy >=
+            ((m.vehicle ? VEHICLES[m.vehicle].length : 0) + FOLLOW.minGap) * this.perMeter)
+      )
+        this.blockedRestoration.delete(m);
       if (
         m.kind === 'vehicle' &&
         m.speed > 0 &&
         m.roadShift !== undefined &&
         m.roadSteering === undefined &&
+        !this.blockedRestoration.has(m) &&
         !this.cornerWithin(m, m.from, m.d) &&
-        !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d) &&
-        (!guard || guard({ ...m, roadShift: undefined }, before, false))
+        !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d)
       ) {
         const change = Math.min(
           Math.abs(m.roadShift),
@@ -5075,6 +5091,18 @@ export class TileLife {
                 m,
               )));
         if (!fits || correctingCurve) {
+          if (!fits && m.kind === 'vehicle') {
+            // Keep the checked bypass until its complete footprint has departed
+            // this rejection. Recentering then uses the ordinary swept guard.
+            this.blockedRestoration.set(m, {
+              line: before.line,
+              dir: before.dir,
+              x: before.x,
+              y: before.y,
+              hx: before.hx,
+              hy: before.hy,
+            });
+          }
           const ordinary = fits ? { ...m } : undefined,
             ordinaryMoved = moved;
           fits = false;
@@ -5259,6 +5287,7 @@ export class TileLife {
           m.guardWait = refused ? (before.guardWait ?? 0) + dt : undefined;
         }
         const commanded = distance;
+        let ordinaryForward = false;
         if (!guard) {
           m.waiting =
             !intentionalHold &&
@@ -5268,6 +5297,32 @@ export class TileLife {
               : 0;
         } else if (!intentionalHold && commanded > 1e-8 * this.perMeter) {
           let progress = this.blockedProgress.get(m);
+          const afterPose = walking && fits ? this.pose(m) : undefined;
+          const previousPose = afterPose && this.pose(before, undefined, m);
+          const forward =
+            afterPose && previousPose
+              ? (afterPose.x - previousPose.x) * m.hx + (afterPose.y - previousPose.y) * m.hy
+              : 0;
+          if (
+            progress &&
+            walking &&
+            !progress.ordinary &&
+            !this.walkerRecoveryProgress.has(m) &&
+            m.hx * progress.hx + m.hy * progress.hy < 0 &&
+            forward >= commanded * 0.25
+          ) {
+            // An accepted ordinary reversal changes route intent. Keep the
+            // blockage age until half a metre of checked new forward travel.
+            progress.x = previousPose!.x;
+            progress.y = previousPose!.y;
+            progress.hx = m.hx;
+            progress.hy = m.hy;
+            progress.ordinary = true;
+          }
+          ordinaryForward =
+            !!progress?.ordinary &&
+            m.hx * progress.hx + m.hy * progress.hy > 0.95 &&
+            forward >= commanded * 0.25;
           if (
             !progress &&
             (m.roadSteering !== undefined || Math.max(moved, curveForward) < commanded * 0.25)
@@ -5296,17 +5351,30 @@ export class TileLife {
             (m.walked ?? 0) - m.turnedAt >= WALK_RECOVERY.terrainMinWalkM);
         if (
           (m.kind === 'person' || m.kind === 'dog') &&
-          (m.waiting >= WALK.blockedTurnSeconds ||
+          (m.waiting >= WALK_RECOVERY.blockedTurnSeconds ||
             (m.kind === 'person' && walledIn && !m.momentFacing)) &&
-          !this.walkerRecoveryProgress.has(m)
+          !this.walkerRecoveryProgress.has(m) &&
+          !ordinaryForward
         ) {
-          const snapshot = snapshotMover(m);
+          const accepted = snapshotMover(m);
+          // Replace an unpublished sideways-only trial rather than adding a
+          // retreat to a frame whose translation budget it already consumed.
+          const snapshot = moved <= 1e-8 * this.perMeter ? snapshotMover(before) : accepted;
+          snapshot.waiting = accepted.waiting;
+          restoreMover(m, snapshot);
           const guardBefore = snapshot;
+          const at = this.pose(snapshot, undefined, m),
+            start = this.pose(before, undefined, m);
+          const remaining = Math.max(
+            0,
+            speeds[i]! * dt - Math.hypot(at.x - start.x, at.y - start.y),
+          );
           let recovered = false;
-          for (const retreat of [0, 0.05, 0.15, 0.3, 0.5]) {
+          for (const metres of RECOVERY.walkerRetreats) {
+            const retreat = Math.min(metres * this.perMeter, remaining);
             restoreMover(m, snapshot);
-            if (retreat * this.perMeter > m.d) continue;
-            m.d -= retreat * this.perMeter;
+            if (retreat > m.d) continue;
+            m.d -= retreat;
             this.advance(m, 0, false);
             if (retreat && !fitsGround(m, guardBefore, false)) continue;
             const retreated = snapshotMover(m);
@@ -5317,7 +5385,7 @@ export class TileLife {
             this.advance(m, 0, false);
             faceGroup(m, m.hx, m.hy, heading);
             if (fitsGround(m, retreated)) {
-              m.walked = (snapshot.walked ?? 0) + retreat;
+              m.walked = (snapshot.walked ?? 0) + retreat / this.perMeter;
               recovered = true;
               break;
             }
@@ -5327,11 +5395,23 @@ export class TileLife {
             // then take the guarded rotation once there is enough room for it.
             restoreMover(m, snapshot);
             const heading = m.momentFacing ?? { hx: m.hx, hy: m.hy };
+            const retreat = Math.min(remaining, m.d);
+            if (retreat > 0) {
+              m.d -= retreat;
+              this.advance(m, 0, false);
+              if (!fitsGround(m, guardBefore, false)) restoreMover(m, snapshot);
+            }
             this.turnBack(m);
             m.avoid = -(m.avoid ?? 0);
             this.advance(m, 0, false);
             m.momentFacing = { ...heading };
             recovered = fitsGround(m, guardBefore);
+            if (recovered) {
+              const at = this.pose(m),
+                start = this.pose(snapshot, undefined, m);
+              m.walked =
+                (snapshot.walked ?? 0) + Math.hypot(at.x - start.x, at.y - start.y) / this.perMeter;
+            }
           }
           if (recovered) {
             m.turnedAt = m.walked ?? 0;
@@ -5340,7 +5420,7 @@ export class TileLife {
             this.blockedProgress.set(m, { x: pose.x, y: pose.y, hx: m.hx, hy: m.hy });
             env?.diagnostics?.recovery(m, 'walker');
           } else {
-            restoreMover(m, snapshot);
+            restoreMover(m, accepted);
           }
         }
         if (!fits && m.kind === 'cat') {
@@ -5474,6 +5554,19 @@ export class TileLife {
     return pedestrianView(occupied, 0);
   }
 
+  /** Any physical member footprint reaches a junction's protected area. */
+  junctionFootprint(m: Mover): boolean {
+    return this.groundBodies(m).some((body) => {
+      const dx = reach(body, 1, 0) * this.perMeter;
+      const dy = reach(body, 0, 1) * this.perMeter;
+      return this.junctionIndex.junctions.some(
+        (junction) =>
+          Math.abs(body.x * this.perMeter - junction.x) <= junction.radius + dx &&
+          Math.abs(body.y * this.perMeter - junction.y) <= junction.radius + dy,
+      );
+    });
+  }
+
   /** A recovery reverses a two-way road vehicle only through checked, source-owned space. */
   recoverVehicle(
     m: Mover,
@@ -5492,18 +5585,7 @@ export class TileLife {
       this.recoveryProgress.has(m)
     )
       return false;
-    if (
-      this.groundBodies(m).some((b) => {
-        const dx = ((Math.abs(b.hx) * b.length + Math.abs(b.hy) * b.width) * this.perMeter) / 2;
-        const dy = ((Math.abs(b.hy) * b.length + Math.abs(b.hx) * b.width) * this.perMeter) / 2;
-        return this.junctionIndex.junctions.some(
-          (j) =>
-            Math.abs(b.x * this.perMeter - j.x) <= j.radius + dx &&
-            Math.abs(b.y * this.perMeter - j.y) <= j.radius + dy,
-        );
-      })
-    )
-      return false;
+    if (this.junctionFootprint(m)) return false;
     const before = { ...m };
     const sourceOwned = (previous = m) =>
       inTile(m) &&
@@ -5583,7 +5665,7 @@ export class TileLife {
     lines.add(m.line);
     const rejected = () => {
       candidate.blocked = (candidate.blocked ?? 0) + dt;
-      if (candidate.blocked >= SEAMS.rejectedSeconds - 1e-9) {
+      if (candidate.blocked >= RECOVERY.vehicleApproachSeconds - 1e-9) {
         this.recoveryApproaches.delete(m);
         if (this.recoveryLeaders.get(candidate.line) === m)
           this.recoveryLeaders.delete(candidate.line);
@@ -6612,7 +6694,7 @@ export class LifeWorld {
   private seamWait = new WeakMap<Mover, { key: string; at: number }>();
   private rejectedSeams = new WeakMap<
     Mover,
-    { key: string; seconds: number; at: number; queued: boolean }
+    { key: string; seconds: number; at: number; queued: boolean; final?: boolean }
   >();
   private readonly queuedSeams = new Map<Mover, TileLife>();
   private clearSeamRecovery(m: Mover) {
@@ -7909,15 +7991,50 @@ export class LifeWorld {
       }
       return true;
     };
+    const roadQueue = (life: TileLife, preview: Mover, identity: Mover) => {
+      if (identity.kind !== 'vehicle') return false;
+      const road = life.geo.lineIds?.[preview.line];
+      if (
+        road === undefined ||
+        !usableLines.vehicle.includes(life.geo.kinds[preview.line]! as LifeLine)
+      )
+        return false;
+      const physical = life.groundBodies(preview).map((b) => toRef(origin(life), b));
+      const blocker = occupied.firstConflict(identity, physical, undefined, physicalShape);
+      if (!blocker || !('kind' in blocker) || !('speed' in blocker)) return false;
+      const other = blocker as Mover,
+        otherLife = owners.get(other),
+        source = owners.get(identity);
+      if (
+        !source ||
+        !otherLife ||
+        other.kind !== 'vehicle' ||
+        !other.vehicle ||
+        otherLife.geo.lineIds?.[other.line] !== road
+      )
+        return false;
+      const heading = life.pose(preview),
+        ahead = otherLife.pose(other);
+      if (heading.hx * ahead.hx + heading.hy * ahead.hy < 0.95) return false;
+      const at = source.pose(identity),
+        frame = frameBetween(source.tile, otherLife.tile);
+      return (
+        (ahead.x - frame.x - at.x * frame.scale) * heading.hx +
+          (ahead.y - frame.y - at.y * frame.scale) * heading.hy >
+        0
+      );
+    };
     const contact = (life: TileLife, m: Mover, trial = m) => {
       if (this.inspection?.owner === m || m.speed <= 0) return;
-      if (this.clock - (this.failedYield.get(m) ?? -Infinity) < 0.5) return;
+      if (this.clock - (this.failedYield.get(m) ?? -Infinity) < RECOVERY.contactRetrySeconds)
+        return;
       const physical = life.groundBodies(trial, 0, [], m).map((b) => toRef(origin(life), b));
       const blocker = occupied.firstConflict(m, physical, undefined, physicalShape);
       if (!blocker || !('kind' in blocker) || !('speed' in blocker)) return;
       const other = blocker as Mover,
         otherLife = owners.get(other);
-      if (this.clock - (this.failedYield.get(other) ?? -Infinity) < 0.5) return;
+      if (this.clock - (this.failedYield.get(other) ?? -Infinity) < RECOVERY.contactRetrySeconds)
+        return;
       if (!otherLife || this.inspection?.owner === other || other.speed <= 0 || other.pause > 0)
         return;
       const visiting = otherLife.scenes.visits.get(other);
@@ -7929,7 +8046,7 @@ export class LifeWorld {
       const reciprocal = this.reciprocalBlockers.get(other);
       if (
         reciprocal?.other !== m ||
-        this.clock - reciprocal.at > 0.25 ||
+        this.clock - reciprocal.at > RECOVERY.reciprocalSeconds ||
         this.yieldingActors.has(m) ||
         this.yieldingActors.has(other)
       )
@@ -8144,6 +8261,7 @@ export class LifeWorld {
       remove,
       reserveSeam,
       clearSeam,
+      roadQueue,
       contact,
       yielding,
       holding,
@@ -8240,16 +8358,39 @@ export class LifeWorld {
       cityLife: this.cityLife,
     };
     const guard = this.groundGuard(cellMeters, undefined, bounds, false, undefined, shows);
+    const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
+    const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
+      owners.find((life) => {
+        const f = frameBetween(source.tile, life.tile);
+        const q = { x: f.x + p.x * f.scale, y: f.y + p.y * f.scale };
+        return inTile(q) && this.owns(life, q);
+      });
+    const seamQueue = (source: TileLife, m: Mover) => {
+      if (m.kind !== 'vehicle') return false;
+      const seam = seamAhead(source, m, this.covers.get(source) ?? [], 12 * source.perMeter);
+      const target = seam && ownerAt(source, seam.preview);
+      if (!seam || !target || target === source) return false;
+      const preview = target.projectFrom(seam.preview, source, { insideTile: true });
+      return !!preview && guard.roadQueue(target, preview, m);
+    };
     this.junctions.begin(new Set(this.tiles.values()));
     const eligibility = new Map<TileLife, (m: Mover) => boolean>();
     const recoveries = new Map<TileLife, Set<number>>();
     const recoveryAttempts = new Set<Mover>();
     let recoveredNow: Set<Mover> | undefined;
-    const heldForRecovery = (life: TileLife, m: Mover) =>
-      !life.scenes.transferable(m) ||
-      (m.kind === 'vehicle' &&
-        (life.signals.vehicleLimit(m, clamped, this.clock, { target: m.speed, cap: Infinity }) ||
-          life.courtesyHeld(m, guard.pedestrians(life), clamped)));
+    const heldForRecovery = (life: TileLife, m: Mover) => {
+      if (
+        !life.scenes.transferable(m) ||
+        (m.kind === 'vehicle' &&
+          (life.signals.vehicleLimit(m, clamped, this.clock, { target: m.speed, cap: Infinity }) ||
+            life.courtesyHeld(m, guard.pedestrians(life), clamped)))
+      )
+        return true;
+      if (!seamQueue(life, m)) return false;
+      // A mapped leader owns this queue. Its ordinary recovery remains eligible.
+      this.clearSeamRecovery(m);
+      return true;
+    };
     for (const tile of this.tiles.values()) {
       const near = viewIn(tile.tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
@@ -8307,11 +8448,11 @@ export class LifeWorld {
       boundary: Mover;
     }[] = [];
     const inbound = new Map<TileLife, number>();
-    const rejected = (life: TileLife, m: Mover, key: string) => {
+    const rejected = (life: TileLife, m: Mover, key: string, final = false) => {
       if (heldForRecovery(life, m)) return;
       let history = this.rejectedSeams.get(m);
-      if (history?.key !== key) {
-        history = { key, seconds: 0, at: -1, queued: false };
+      if (history?.key !== key || !!history.final !== final) {
+        history = { key, seconds: 0, at: -1, queued: false, final };
         this.rejectedSeams.set(m, history);
       }
       if (history.at !== this.clock) {
@@ -8321,13 +8462,6 @@ export class LifeWorld {
       history.queued = history.seconds >= SEAMS.rejectedSeconds;
       if (history.queued) this.queuedSeams.set(m, life);
     };
-    const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
-    const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
-      owners.find((life) => {
-        const f = frameBetween(source.tile, life.tile);
-        const q = { x: f.x + p.x * f.scale, y: f.y + p.y * f.scale };
-        return inTile(q) && this.owns(life, q);
-      });
     for (const source of this.tiles.values())
       for (const m of source.movers) {
         if (
@@ -8392,10 +8526,9 @@ export class LifeWorld {
             : guard.clearSeam(target, preview, m, reject) &&
               guard(target, preview, seam.preview, undefined, false, m, reject, source));
         if (safe && target && preview) {
-          if (history?.queued) {
-            history.queued = false;
-            this.queuedSeams.delete(m);
-          }
+          // A successful preflight ends preflight refusals. Final handover
+          // refusals end only when adoption succeeds, not at its next preview.
+          if (history && !history.final) this.clearSeamRecovery(m);
           guard.reserveSeam(target, preview, m);
           inbound.set(target, (inbound.get(target) ?? 0) + 1);
           intents.push({ source, target, m, before: { ...m }, boundary: seam.preview });
@@ -8502,6 +8635,7 @@ export class LifeWorld {
           source,
           m,
           `${source.tile.z}/${source.tile.x}/${source.tile.y}/${before.line}/${before.dir}/${target.tile.z}/${target.tile.x}/${target.tile.y}`,
+          true,
         );
         // Keep the original owner at its last safe pose instead of hiding it beyond the seam.
         restoreMover(m, before);
@@ -8561,26 +8695,7 @@ export class LifeWorld {
           const [lng, lat] = tileToLngLat(life.tile, life.pose(m));
           if (diagnostics?.position(m, lng, lat, key)) {
             if (this.seamWait.has(m)) diagnostics.tag(m, 'rejectedSeam');
-            if (
-              life.groundBodies(m).some((body) => {
-                const dx =
-                  ((Math.abs(body.hx) * body.length + Math.abs(body.hy) * body.width) *
-                    life.perMeter) /
-                  2;
-                const dy =
-                  ((Math.abs(body.hy) * body.length + Math.abs(body.hx) * body.width) *
-                    life.perMeter) /
-                  2;
-                const x = body.x * life.perMeter,
-                  y = body.y * life.perMeter;
-                return life.junctionIndex.junctions.some(
-                  (junction) =>
-                    Math.abs(x - junction.x) <= junction.radius + dx &&
-                    Math.abs(y - junction.y) <= junction.radius + dy,
-                );
-              })
-            )
-              diagnostics.tag(m, 'junctionFootprint');
+            if (life.junctionFootprint(m)) diagnostics.tag(m, 'junctionFootprint');
           }
           this.profiler.traceTraveler(m, { at: this.clock, tile: key, event: 'step', lng, lat });
         }

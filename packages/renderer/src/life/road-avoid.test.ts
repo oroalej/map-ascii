@@ -864,11 +864,9 @@ describe('blocked walking routes', () => {
       if (human.dir === -1) {
         const after = life.groundBodies(human);
         for (let i = 0; i < before.length; i++)
-          // Checked recovery can retreat up to 0.5 m before reversing; the
-          // ordinary 0.1-second walk adds at most another 0.1 m.
           expect(
             Math.hypot(after[i]!.x - before[i]!.x, after[i]!.y - before[i]!.y),
-          ).toBeLessThanOrEqual(0.6);
+          ).toBeLessThanOrEqual(0.2);
         turned = true;
         break;
       }
