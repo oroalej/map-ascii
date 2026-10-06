@@ -49,23 +49,23 @@ Save the full diff to the session scratchpad directory (or the OS temp dir), nev
 Work economically: every tool call re-reads the whole conversation so far. Batch independent reads into one message, and read line ranges around the changed hunks (`git diff -U20`, `sed -n`) rather than whole files. Some files run to thousands of lines.
 
 **Delta mode (`--since <sha>`):** review `git diff <sha> <head>` yourself, with no subagents. In step 2, read only what the delta needs: the PR title, the handoff's invariants and the touched docs.
-- Check every fix against the ledger entry it addresses. An entry that is still unresolved gets reported again under its ledger ID (`r1.2 — still …`).
+- Check every fix against the ledger entry it addresses. An entry that is still unresolved gets reported again under its ledger ID (`r1.2 — still …`). Don't report an entry the ledger marks `open`: it's already carried in the PR body.
 - Find the callers and tests of every changed function, type or constant (`git grep`), and report regressions beyond the changed lines.
 - Read beyond the delta whenever the evidence needs it, but don't re-audit untouched code. Earlier rounds reviewed it.
 - The report keeps the step 5 shape. "Checked, no issues" names what the delta covered.
 
-**Full review:** count the changed lines and files (`git diff --shortstat`).
+**Full review:** this is the only pass over the whole PR. Later rounds review only the fixes, so a defect left out now ships or costs another round. Report every one you can prove. Count the changed lines and files (`git diff --shortstat`).
 
 - **Small diff** (under ~300 changed lines and at most 8 files): review it yourself, going through all four checklist areas.
-- **Larger diff:** split the review by files, not by area. Use `n = min(4, max(2, ceil(changed lines / 1500)))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
+- **Larger diff:** split the review by files, not by area. Use `n = min(6, max(2, ceil(changed lines / 1000)))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
 
   Give each one:
   - its file list, and a diff of only those files saved to the scratchpad (`git diff <base>...<head> -- <files>`), plus the head ref (so it can `git show <ref>:<path>`)
   - a 3–5 line summary of the PR's intent and any handoff invariants, and the ledger path if there is one
   - the instruction to read `.claude/skills/review-pr/checklist.md` and apply all four areas (A correctness, B performance and cost, C quality and reuse, D project rules, tests and docs) to its files. It may read callers and code outside its group to judge them.
-  - the economy rules above: batch reads, read hunks with context instead of whole files, and aim to finish within about 25 tool calls
+  - the economy rules above: batch reads, and read hunks with context instead of whole files
   - the rules: read-only, no checkout, and no findings CI already catches (ESLint, typecheck, `no-hardcoding.test.ts`, `check:budgets`)
-  - the finding format below; it returns at most 8 findings
+  - the severity definitions below and the finding format; it returns every finding it can prove, with no count limit
 
   Finding format:
 
@@ -91,6 +91,11 @@ For each candidate finding, yours or a subagent's:
 - A performance finding must name its hot path: per frame, per agent step, per tile, worker message, initial JS, renderer chunk, pmtiles, or CI time. Without one, downgrade it to a nit or drop it.
 - A reuse finding must cite the existing helper by `path:line`, and you must have read that helper.
 - Merge duplicates found by different areas.
+- Set each finding's severity:
+  - **blocker:** wrong behavior a user or CI would hit, with a concrete failing scenario. That covers a crash, wrong output, a failing or broken test, data loss, a broken `AGENTS.md` rule (attribution, a hardcoded city, Google imagery, a backend), or a budget breach.
+  - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
+  - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness.
+  - If it's unclear whether something is a should-fix or a nit, it's a nit. `$review-pr` runs another round only for blockers and should-fix items.
 
 ## 5. Report
 
@@ -112,7 +117,7 @@ Write the report in chat, in this shape:
 **Not checked:** e.g. physical-device FPS, browser visuals, the data pipeline run
 ```
 
-- Report at most ~15 findings, with at most 5 nits. Order them by severity, then by impact.
+- Report every verified finding, with no count limit. Blockers come first, then should-fix, then nits, each section ordered by impact.
 - Omit empty severity sections.
 - Use `path:line` so the references are clickable.
 - If CI is failing or pending, say so above the verdict.
