@@ -22,14 +22,32 @@ type Street = Extract<Procession, { kind: 'procession' | 'parade' }>;
 type Mass = Extract<Procession, { kind: 'mass' }>;
 const BRIDGE_APPROACH_M = 25,
   BARRIER_HALF_WIDTH_M = 0.5,
-  MASS_CORRIDOR_INSET_M = 0.7;
+  MASS_CORRIDOR_INSET_M = 0.7,
+  SIDEWALK_FALLBACK_M = 2,
+  ROUTE_BOUNDS_MARGIN_DEG = 0.001,
+  MASS_PROXIMITY_MARGIN_M = 20;
+const isExclusion = (f: F) =>
+  isStandingBuilding(f as AtlasFeature) ||
+  String(f.properties.class).startsWith('water') ||
+  f.properties.class === 'barrier' ||
+  !!f.properties.detail_blocked;
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
+const walkable = (tags: Record<string, unknown>) => !blockedAccess(tags.foot ?? tags.access);
+const vehicleAllowed = (tags: Record<string, unknown>, vehicle: 'truck' | 'car' | 'motorcycle') =>
+  !blockedAccess(
+    tags[vehicle === 'truck' ? 'hgv' : vehicle === 'car' ? 'motorcar' : 'motorcycle'] ??
+      tags.motor_vehicle ??
+      tags.vehicle ??
+      tags.access,
+  );
 function sidewalks(road: AtlasFeature, reversed = false) {
   const tags = road.properties;
   const present = (side: 'left' | 'right') =>
-    tags.class !== 'path' && (tags.sidewalk === 'both' || tags.sidewalk === side);
+    tags.class !== 'path' &&
+    tags.sidewalk_src !== 'derived' &&
+    (tags.sidewalk === 'both' || tags.sidewalk === side);
   const measured = (value: number | undefined) =>
-    value !== undefined && Number.isFinite(value) && value >= 0 ? value : 2;
+    value !== undefined && Number.isFinite(value) && value >= 0 ? value : SIDEWALK_FALLBACK_M;
   const left = present('left') ? measured(tags.sidewalk_left_width ?? tags.sidewalk_width) : 0;
   const right = present('right') ? measured(tags.sidewalk_right_width ?? tags.sidewalk_width) : 0;
   return reversed ? { left: right, right: left } : { left, right };
@@ -60,8 +78,9 @@ function nearbyFeatures(features: readonly F[], bounds: [number, number, number,
   if (!index) {
     index = { bins: new Map(), large: [] };
     for (const f of features) {
-      const box = featureBox(f),
-        x0 = Math.floor(box[0] * 1000),
+      const box = featureBox(f);
+      if (!box.every(Number.isFinite) || box[0] > box[2] || box[1] > box[3]) continue;
+      const x0 = Math.floor(box[0] * 1000),
         y0 = Math.floor(box[1] * 1000),
         x1 = Math.floor(box[2] * 1000),
         y1 = Math.floor(box[3] * 1000);
@@ -105,12 +124,7 @@ function obstacles(
     if (e < bounds[0] || w > bounds[2] || n < bounds[1] || s > bounds[3]) continue;
     const cls = String(f.properties.class);
     if (ignoreWater && cls.startsWith('water')) continue;
-    if (
-      isStandingBuilding(f as AtlasFeature) ||
-      cls.startsWith('water') ||
-      cls === 'barrier' ||
-      f.properties.detail_blocked
-    ) {
+    if (isExclusion(f)) {
       const target = cls.startsWith('water') && water ? water : out;
       const save = (poly: Point[][]) => {
         if (clip) for (const part of intersection(poly, clip)) target.push(asPoints(part[0]!));
@@ -151,25 +165,13 @@ export function routeStreet(features: readonly F[], p: Street) {
     )
       return false;
     if (p.route.via && !p.route.via.includes(String(tags.id))) return false;
-    if (
-      ['steps', 'motorway', 'motorway_link'].includes(String(tags.highway)) ||
-      blockedAccess(tags.foot) ||
-      (blockedAccess(tags.access) && tags.foot !== 'yes')
-    )
+    if (['steps', 'motorway', 'motorway_link'].includes(String(tags.highway)) || !walkable(tags))
       return false;
     const effective = eventWidth(f as AtlasFeature);
     if (!Number.isFinite(effective) || effective < needed) return false;
     if (p.kind === 'parade' && p.formation?.vehicles.length) {
-      if (
-        tags.class === 'path' ||
-        blockedAccess(tags.access) ||
-        blockedAccess(tags.vehicle) ||
-        blockedAccess(tags.motor_vehicle)
-      )
-        return false;
-      for (const v of p.formation.vehicles)
-        if (blockedAccess(tags[v === 'truck' ? 'hgv' : v === 'car' ? 'motorcar' : 'motorcycle']))
-          return false;
+      if (tags.class === 'path') return false;
+      for (const v of p.formation.vehicles) if (!vehicleAllowed(tags, v)) return false;
     }
     return true;
   }) as AtlasFeature[];
@@ -177,13 +179,7 @@ export function routeStreet(features: readonly F[], p: Street) {
   const byId = new Map(features.map((f) => [String(f.properties.id), f as AtlasFeature]));
   // Reject unsafe graph edges before shortest-path selection, so a roof conflict reroutes
   // rather than silently making the moving formation disappear midway through its path.
-  const exclusions = features.filter(
-    (f) =>
-      isStandingBuilding(f as AtlasFeature) ||
-      String(f.properties.class).startsWith('water') ||
-      f.properties.class === 'barrier' ||
-      f.properties.detail_blocked,
-  );
+  const exclusions = features.filter(isExclusion);
   const bridgeEnds = roads
     .filter((r) => r.properties.bridge && r.properties.bridge !== 'no')
     .flatMap((r) => lines(r).flatMap((line) => [line[0]!, line.at(-1)!]));
@@ -252,10 +248,10 @@ export function routeStreet(features: readonly F[], p: Street) {
   if (!length_m) throw new Error(`${p.id}: empty street route`);
   const frame = { toMeters: project, toLngLat: unproject };
   const bounds: [number, number, number, number] = [
-    Math.min(...route.map((q) => q[0])) - 0.001,
-    Math.min(...route.map((q) => q[1])) - 0.001,
-    Math.max(...route.map((q) => q[0])) + 0.001,
-    Math.max(...route.map((q) => q[1])) + 0.001,
+    Math.min(...route.map((q) => q[0])) - ROUTE_BOUNDS_MARGIN_DEG,
+    Math.min(...route.map((q) => q[1])) - ROUTE_BOUNDS_MARGIN_DEG,
+    Math.max(...route.map((q) => q[0])) + ROUTE_BOUNDS_MARGIN_DEG,
+    Math.max(...route.map((q) => q[1])) + ROUTE_BOUNDS_MARGIN_DEG,
   ];
   const corridors = ordered.map((e) => {
     const sides = sidewalks(byId.get(e.road)!);
@@ -318,21 +314,21 @@ export function bakeMassSite(
     for (const hole of poly.slice(1))
       for (const part of intersection([hole], square)) blocked.push(asPoints(part[0]!));
   const nearby = (line: Position[]) =>
-    line.some((q) => Math.hypot(...frame.toMeters(q)) <= p.radius_m + 20);
+    line.some((q) => Math.hypot(...frame.toMeters(q)) <= p.radius_m + MASS_PROXIMITY_MARGIN_M);
   const roads = features
-    .filter((f) => !f.properties.region && String(f.properties.class).startsWith('road_'))
+    .filter(
+      (f) =>
+        !f.properties.region &&
+        String(f.properties.class).startsWith('road_') &&
+        walkable(f.properties),
+    )
     .flatMap((f) =>
       lines(f as AtlasFeature)
         .filter(nearby)
         .map((line) => ({ line: asPoints(line), width_m: width(f as AtlasFeature) })),
     );
   const paths = features
-    .filter(
-      (f) =>
-        f.properties.class === 'path' &&
-        !blockedAccess(f.properties.foot) &&
-        !blockedAccess(f.properties.access),
-    )
+    .filter((f) => f.properties.class === 'path' && walkable(f.properties))
     .flatMap((f) =>
       lines(f as AtlasFeature)
         .filter(nearby)

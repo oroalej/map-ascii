@@ -95,7 +95,7 @@ atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a stree
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
 atlas.setLife(partial: Partial<LifeSettings>);        // includes season selection
 atlas.setProcessions(routes: readonly ProcessionRoute[]): void; // optional routes arriving after startup
-atlas.playProcession(id: string): boolean;            // play an event; false for an unknown id
+atlas.playProcession(id: string): boolean;            // play an event; false for an unknown id or inactive Life
 atlas.stopProcession(): void;                         // stop playback; live events may resume
 atlas.getSeason(): SeasonState | null;               // immutable resolved calendar snapshot
 atlas.getStats(): AtlasStats;                         // fps, frame and cell-pass ms, tiles, decode ms

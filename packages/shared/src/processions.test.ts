@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Procession } from './schemas';
+import { Procession, type ProcessionSchedule } from './schemas';
 import {
   eventOccurrence,
   eventTime,
@@ -7,6 +7,15 @@ import {
   resolveProcessionSchedules,
 } from './processions';
 
+const annualSchedule: ProcessionSchedule = {
+  month: 9,
+  nth: 3,
+  weekday: 6,
+  offset_days: -8,
+  start: '23:30',
+  duration_min: 90,
+  timezone: 'Asia/Manila',
+};
 const moving = Procession.parse({
   id: 'procession/start',
   title: { en: 'Start' },
@@ -14,15 +23,7 @@ const moving = Procession.parse({
   status: 'draft',
   kind: 'procession',
   route: { from: 'osm:way/1', to: 'osm:way/2' },
-  schedule: {
-    month: 9,
-    nth: 3,
-    weekday: 6,
-    offset_days: -8,
-    start: '23:30',
-    duration_min: 90,
-    timezone: 'Asia/Manila',
-  },
+  schedule: annualSchedule,
 });
 const mass = Procession.parse({
   id: 'procession/mass',
@@ -72,14 +73,7 @@ describe('event occurrence and dependency resolution', () => {
     expect(processionReferenceErrors([start, mass], [])).toHaveLength(2);
   });
   it('maps authoritative progress through local midnight, including a different IANA offset', () => {
-    const timing = eventOccurrence(
-      'follows' in moving.schedule
-        ? (() => {
-            throw Error();
-          })()
-        : moving.schedule,
-      new Date('2026-01-01'),
-    );
+    const timing = eventOccurrence(annualSchedule, new Date('2026-01-01'));
     expect(eventTime(timing, 0)).toMatchObject({ date: '2026-09-11', time: '23:30' });
     expect(eventTime(timing, 1)).toMatchObject({ date: '2026-09-12', time: '01:00' });
     const schedule = {

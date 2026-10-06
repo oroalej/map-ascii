@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react';
 import { useAtlasInstance } from '@/state/store';
 import { useLifeStore } from '@/state/life';
 import { useUiStore } from '@/state/ui';
-import { useProcessionPlayback } from './useProcessionPlayback';
+import { ProcessionPlayButton } from './ProcessionPlayButton';
 import styles from './Hud.module.css';
 
 export function useSeasonState() {
@@ -60,7 +60,6 @@ export function SeasonEvents({
 }) {
   const { shown } = useShownSeason(seasons);
   const processions = useUiStore((s) => s.processions);
-  const { available, play } = useProcessionPlayback();
   if (!shown) return null;
   const now = new Date();
   const events = processions
@@ -72,16 +71,7 @@ export function SeasonEvents({
   return (
     <div className={styles.row}>
       {events.map((p) => (
-        <button
-          key={p.id}
-          type="button"
-          className={styles.button}
-          disabled={!available}
-          title={available ? 'Play it as a time-lapse' : 'Turn Life on to see it'}
-          onClick={() => play(p.id)}
-        >
-          ▶ {p.label!.en}
-        </button>
+        <ProcessionPlayButton key={p.id} id={p.id} label={p.label!.en} />
       ))}
     </div>
   );

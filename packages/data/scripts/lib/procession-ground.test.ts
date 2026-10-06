@@ -6,6 +6,8 @@ import { requiredFormationWidth } from './procession-ground';
 import { localFrame } from './geo';
 import { intersection } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
+import { deriveSidewalks } from './streets';
+import type { AtlasFeature } from '../03-normalize';
 
 type F = Feature<Geometry, Record<string, unknown>>;
 const point = (id: string, at: number[]): F => ({
@@ -71,6 +73,29 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it.each(['road_major', 'road_mid'])('excludes default-derived sidewalk bands on %s', (cls) => {
+    const source = [
+      features[0]!,
+      features[1]!,
+      road(
+        'osm:way/3',
+        [
+          [0, 0],
+          [0.002, 0],
+        ],
+        { class: cls },
+      ),
+    ];
+    const derived = deriveSidewalks(source as AtlasFeature[]);
+    expect(derived[2]!.properties.sidewalk_src).toBe('derived');
+    const route = routeProcessions(derived, [Procession.parse(base)]).routes[0]!;
+    if (route.kind !== 'procession') throw Error();
+    expect(
+      route.segments.every(
+        (segment) => segment.sidewalks_m?.left === 0 && segment.sidewalks_m.right === 0,
+      ),
+    ).toBe(true);
+  });
   it.each([undefined, 0, 2])(
     'uses measured Mass path width %s without inventing connecting ground',
     (width) => {
@@ -91,6 +116,8 @@ describe('street event routing', () => {
         class: 'path',
         highway: 'footway',
         event_path_width: width,
+        access: 'private',
+        foot: 'yes',
       });
       const event = Procession.parse({
         id: base.id,
@@ -113,6 +140,10 @@ describe('street event routing', () => {
   );
   it.each([
     [{}, { left: 0, right: 0 }],
+    [
+      { sidewalk: 'both', sidewalk_width: 2, sidewalk_src: 'derived' },
+      { left: 0, right: 0 },
+    ],
     [
       { sidewalk: 'none', sidewalk_width: 2 },
       { left: 0, right: 0 },
@@ -416,6 +447,28 @@ describe('street event routing', () => {
       ).toThrow('admissible');
     },
   );
+  it.each([
+    [{ access: 'private', vehicle: 'yes' }, true],
+    [{ vehicle: 'no', motor_vehicle: 'yes' }, true],
+    [{ motor_vehicle: 'no', motorcar: 'yes' }, true],
+    [{ vehicle: 'yes', motorcar: 'no' }, false],
+  ] as const)('uses the most specific selected vehicle access: %j', (tags, allowed) => {
+    const source = [
+      features[0]!,
+      features[1]!,
+      road(
+        'osm:way/3',
+        [
+          [0, 0],
+          [0.002, 0],
+        ],
+        { foot: 'yes', ...tags },
+      ),
+    ];
+    const event = Procession.parse({ ...base, kind: 'parade', formation: { vehicles: ['car'] } });
+    if (allowed) expect(routeProcessions(source, [event]).routes).toHaveLength(1);
+    else expect(() => routeProcessions(source, [event])).toThrow('admissible');
+  });
   it('bakes connected outdoor Mass permissions without a building in the gathering', () => {
     const rect = (id: string, cls: string, w: number, s: number, e: number, n: number): F => ({
       type: 'Feature',
@@ -448,12 +501,32 @@ describe('street event routing', () => {
     const grounds = rect('osm:way/11', 'building_religious', -0.0004, -0.0004, 0.0004, 0.0004);
     delete grounds.properties.height; // Religious grounds use a building class without a standing roof.
     const water = rect('osm:way/12', 'water_area', -0.01, -0.01, -0.00025, 0.01);
+    const prohibited = road(
+      'osm:way/13',
+      [
+        [-0.0004, 0.0002],
+        [0.0004, 0.0002],
+      ],
+      {
+        access: 'private',
+        foot: 'no',
+      },
+    );
     const bundle = routeProcessions(
-      [...features, church, grounds, water],
+      [...features, church, grounds, water, prohibited],
       [mass, Procession.parse(base)],
     );
     const r = bundle.routes[0]!;
     if (r.kind !== 'mass') throw Error();
+    expect(
+      r.site.roads.some(
+        (road) =>
+          JSON.stringify(road.line) ===
+          JSON.stringify(
+            prohibited.geometry.type === 'LineString' ? prohibited.geometry.coordinates : [],
+          ),
+      ),
+    ).toBe(false);
     expect(r.schedule.start).toBe('16:00');
     expect(r.site.anchor).not.toEqual(r.site.location);
     expect(r.site.approaches.length).toBeGreaterThan(0);

@@ -24,7 +24,8 @@ const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.is
 const isText = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 const isNumbers = (v: unknown, length: number): v is number[] =>
   Array.isArray(v) && v.length === length && v.every(isNumber);
-const isLocalized = (v: unknown) => isRecord(v) && isText(v.en) && Object.values(v).every(isText);
+const isLocalized = (v: unknown): v is Record<string, string> & { en: string } =>
+  isRecord(v) && isText(v.en) && Object.values(v).every(isText);
 
 function isCamera(v: unknown): v is CameraState {
   if (!isRecord(v)) return false;
@@ -96,7 +97,11 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       !eventFormation(p)
     )
       return false;
-    if (p.season !== undefined && (!isText(p.season) || !isLocalized(p.label))) return false;
+    if (
+      p.season !== undefined &&
+      (!isText(p.season) || !isLocalized(p.label) || !p.label.en.trim())
+    )
+      return false;
     if (p.label !== undefined && !isLocalized(p.label)) return false;
     if (p.follows !== undefined && !isText(p.follows)) return false;
     if (
@@ -109,7 +114,10 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
     if (
       p.status === 'verified' &&
       (!p.sources ||
-        Object.values(p.title as Record<string, string>).some((t) => t.includes(TODO_VERIFY)))
+        [
+          ...Object.values(p.title as Record<string, string>),
+          ...Object.values((p.label ?? {}) as Record<string, string>),
+        ].some((t) => t.includes(TODO_VERIFY)))
     )
       return false;
     const s = p.schedule;

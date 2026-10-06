@@ -1,4 +1,4 @@
-import { resolveProcessionSchedules, type Procession } from '@atlas/shared';
+import { type Procession } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { featurePoint, routeProcessions } from './procession';
@@ -76,12 +76,30 @@ describe('routeProcessions', () => {
       story: { en: 'Illustrative' },
       status: 'draft',
       kind: 'mass',
-      site: 'osm:way/2',
-      grounds: ['osm:way/3'],
+      site: 'osm:node/10',
+      grounds: ['osm:way/20'],
       radius_m: 100,
       schedule: { follows: parent.id, duration_min: 60 },
     };
-    expect(resolveProcessionSchedules([mass, parent]).get(mass.id)).toMatchObject({
+    const grounds: F = {
+      type: 'Feature',
+      properties: { id: 'osm:way/20', class: 'park' },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0.0001, 0.0001],
+            [0.0007, 0.0001],
+            [0.0007, 0.0007],
+            [0.0001, 0.0007],
+            [0.0001, 0.0001],
+          ],
+        ],
+      },
+    };
+    const { routes, warnings } = routeProcessions([...features, grounds], [mass, parent]);
+    expect(warnings).toEqual([]);
+    expect(routes.find((route) => route.id === mass.id)?.schedule).toMatchObject({
       offset_days: -7,
       start: '01:00',
       timezone: 'Asia/Manila',

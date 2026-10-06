@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventOccurrence, eventTime, type ProcessionRoute } from '@atlas/shared';
 import { FrameProfiler } from '../profile';
-import { createWorkerHost } from './host';
+import { createInlineHost, createWorkerHost } from './host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
-import type { LifeTile } from './simulate';
+import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
@@ -80,6 +80,62 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it.each(['worker', 'inline'] as const)(
+    'retains compatible ordinary agents across %s event commands and stale replies',
+    async (mode) => {
+      const s = fixture();
+      const street: ProcessionRoute = {
+        ...route,
+        kind: 'procession',
+        formation: undefined,
+        segments: [{ id: 'osm:way/1', width_m: 8, sidewalk_m: 0 }],
+        blocked: [],
+      };
+      const world = new LifeWorld();
+      world.setProcessions([street]);
+      const host = mode === 'inline' ? createInlineHost(world) : createWorkerHost({}, [street]);
+      const person: VisibleAgent = { kind: 'person', lng: 0.0005, lat: 0.0001, flap: 0 };
+      const car: VisibleAgent = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        lng: 0.0005,
+        lat: 0,
+        ahead: [0.00051, 0],
+        flap: 0,
+      };
+      const event: VisibleAgent = { ...person, event: true };
+      const agents = [person, car, event];
+      if (mode === 'inline') vi.spyOn(world, 'visible').mockReturnValue(agents);
+      else mock.frame.mockResolvedValueOnce({ ...result(1), agents });
+      host.sync(s.tiles);
+      await flush();
+      host.request(s.input);
+      await flush();
+      let resolve!: (reply: FrameResult) => void;
+      if (mode === 'worker') {
+        mock.frame.mockImplementationOnce(
+          () =>
+            new Promise((done) => {
+              resolve = done;
+            }),
+        );
+        host.request(s.input);
+      }
+      host.play(street.id);
+      expect(host.latest()?.agents).toEqual([person]);
+      if (mode === 'worker') {
+        resolve({ ...result(2), agents });
+        await flush();
+        expect(host.latest()?.agents).toEqual([person]);
+      }
+      host.stop();
+      expect(host.latest()?.agents).toEqual([person]);
+      host.setProcessions([]);
+      expect(host.latest()?.agents).toEqual([person]);
+      expect(host.latest()?.procession).toBeUndefined();
+      host.dispose();
+    },
+  );
   it('installs late event routes in the inline fallback and replaces active playback', () => {
     vi.stubGlobal(
       'Worker',

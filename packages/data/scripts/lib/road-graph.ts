@@ -7,6 +7,7 @@ import { localFrame } from './geo';
 type Node = { key: string; at: SeasonalPoint; xy: SeasonalPoint; edges: Edge[] };
 type Edge = { id: string; road: string; width: number; a: Node; b: Node; length: number };
 const pointKey = (p: SeasonalPoint) => `${p[0].toFixed(7)}/${p[1].toFixed(7)}`;
+const EVENT_EDGE_STEP_M = 5;
 
 export function roadGraph(
   byId: ReadonlyMap<string, AtlasFeature>,
@@ -49,7 +50,9 @@ export function roadGraph(
         const xyA = project(a),
           xyB = project(b);
         const clear = allows?.(f, a, b) ?? true;
-        const count = !clear ? Math.ceil(Math.hypot(xyB[0] - xyA[0], xyB[1] - xyA[1]) / 5) : 1;
+        const count = !clear
+          ? Math.ceil(Math.hypot(xyB[0] - xyA[0], xyB[1] - xyA[1]) / EVENT_EDGE_STEP_M)
+          : 1;
         for (let k = 0; k < count; k++) {
           const at = (t: number): SeasonalPoint =>
             t === 0 ? a : t === 1 ? b : [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];

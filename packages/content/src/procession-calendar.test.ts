@@ -14,6 +14,7 @@ it('keeps all five fiesta events in actual calendar order across early and late 
   for (const [year, dates] of [
     [2024, [13, 20, 21]],
     [2026, [11, 18, 19]],
+    [2029, [7, 14, 15]],
     [2030, [13, 20, 21]],
   ] as const) {
     const now = new Date(`${year}-06-01T00:00:00Z`);
@@ -28,7 +29,9 @@ it('keeps all five fiesta events in actual calendar order across early and late 
       'Mass at the Basilica',
     ]);
     expect(times.map((x) => x.time.date)).toEqual(
-      [dates[0], dates[0], dates[1], dates[2], dates[2]].map((day) => `${year}-09-${day}`),
+      [dates[0], dates[0], dates[1], dates[2], dates[2]].map(
+        (day) => `${year}-09-${String(day).padStart(2, '0')}`,
+      ),
     );
     expect(times.map((x) => x.time.time)).toEqual(['12:00', '16:00', '07:00', '15:00', '18:30']);
     for (const { p, time } of times)

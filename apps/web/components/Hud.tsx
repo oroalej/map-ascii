@@ -35,7 +35,8 @@ import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
 import { SeasonControl, SeasonEvents, useSeasonState } from './SeasonControl';
-import { useLifeShown, useProcessionPlayback } from './useProcessionPlayback';
+import { useLifeShown } from './useProcessionPlayback';
+import { ProcessionPlayButton } from './ProcessionPlayButton';
 import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { SpeechControls } from './SpeechControls';
 import { EmojiControls } from './EmojiControls';
@@ -409,7 +410,6 @@ function ProcessionControls() {
   const processions = useUiStore((s) => s.processions);
   const run = useUiStore((s) => s.procession);
   const atlas = useAtlasInstance((s) => s.atlas);
-  const { available: life, play } = useProcessionPlayback();
   if (processions.length === 0) return null;
   const current = run && processions.find((p) => p.id === run.id);
   return (
@@ -418,15 +418,7 @@ function ProcessionControls() {
         .filter((p) => !p.season)
         .map((p) => (
           <div className={styles.row} key={p.id}>
-            <button
-              type="button"
-              className={styles.button}
-              disabled={!life}
-              title={life ? 'Play it as a time-lapse' : 'Turn Life on to see it'}
-              onClick={() => play(p.id)}
-            >
-              ▶ {p.title.en}
-            </button>
+            <ProcessionPlayButton id={p.id} label={p.title.en} />
           </div>
         ))}
       {current && (

@@ -642,8 +642,9 @@ export const ProcessionFormation = z.strictObject({
   escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
 });
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
+const ProcessionId = z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>');
 export const FollowingSchedule = z.strictObject({
-  follows: z.string().regex(/^procession\/[a-z0-9-]+$/),
+  follows: ProcessionId,
   duration_min: z
     .int()
     .min(PROCESSION_LIMITS.schedule.duration_min[0])
@@ -890,15 +891,13 @@ export function contentSchemas(languages?: readonly string[]) {
     });
 
   /**
-   * A river procession the life layer stages (SPEC.md §4 "Processions"): a pagoda barge and
-   * columns of paddle boats along a river, crowds on its banks. The pipeline follows the river in
-   * OSM from `route.from` (or `upstream_m` upstream of `to`) down to `route.to` (DATA.md §2 step
-   * 07). It runs when a visitor plays it, and live on the day `schedule` names: `offset_days`
-   * after the `nth` `weekday` (0 = Sunday) of `month`, at `start` in `timezone`. Like a tour, it
-   * stays `draft` (and may hold `TODO(verify)`) until its route and schedule are sourced.
+   * Authored fluvial processions, street processions, parades and outdoor Masses (SPEC.md §4).
+   * Step 07 resolves routes or safe exterior gathering grounds from complete OSM geography.
+   * Events play on demand and run live on their annual schedule, or after a predecessor ends.
+   * They stay `draft` (and may hold `TODO(verify)`) until arrangements and timing are sourced.
    */
   const eventBase = {
-    id: z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>'),
+    id: ProcessionId,
     title: text,
     story: text,
     status: z.enum(['draft', 'verified']),
@@ -959,7 +958,11 @@ export function contentSchemas(languages?: readonly string[]) {
         });
       if (p.status !== 'verified') return;
       if (
-        [...Object.values(p.title), ...Object.values(p.story)].some((t) => t.includes(TODO_VERIFY))
+        [
+          ...Object.values(p.title),
+          ...Object.values(p.story),
+          ...Object.values(p.label ?? {}),
+        ].some((t) => t.includes(TODO_VERIFY))
       )
         ctx.addIssue({
           code: 'custom',
@@ -1011,8 +1014,8 @@ export type TourStep = z.infer<typeof TourStep>;
 export type Tour = z.infer<typeof Tour>;
 
 /**
- * A city's generated `<slug>.processions.json` (DATA.md §2 step 07): each procession with its
- * route resolved along the river, from its start down to where it lands.
+ * A city's generated `<slug>.processions.json` (DATA.md §2 step 07): fluvial and street
+ * processions, parades and outdoor Masses with resolved geography and annual schedules.
  */
 const generatedEventBase = {
   id: z.string().min(1),
@@ -1098,11 +1101,15 @@ export const CityProcessions = z.object({
               path: ['sources'],
               message: 'a verified procession needs sources',
             });
-          if (Object.values(p.title).some((t) => t.includes(TODO_VERIFY)))
+          if (
+            [...Object.values(p.title), ...Object.values(p.label ?? {})].some((t) =>
+              t.includes(TODO_VERIFY),
+            )
+          )
             ctx.addIssue({
               code: 'custom',
               path: ['title'],
-              message: 'verified title contains TODO(verify)',
+              message: 'verified title or label contains TODO(verify)',
             });
         }
       }),

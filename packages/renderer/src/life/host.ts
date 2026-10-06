@@ -2,6 +2,7 @@ import * as Comlink from 'comlink';
 import { simulationSeasons } from './seasonal-simulation';
 import {
   eventTime,
+  localMetricProjection,
   type EventTiming,
   type RuntimeCityLife,
   type ProcessionRoute,
@@ -21,8 +22,55 @@ import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import { EMPTY_PUFFS } from './exhaust';
-import { groundsForRoutes } from './ground-events';
+import { groundsForRoutes, routeRings } from './ground-events';
+import { PolygonIndex } from './occupancy';
+import { eventBodySize } from './event-actors';
 let nextGeneration = 0;
+
+/** Commands retain the previous ordinary snapshot while a fresh event frame is produced. */
+function retainOrdinary(
+  view: FrameView | undefined,
+  route?: ProcessionRoute,
+): FrameView | undefined {
+  if (!view) return;
+  const street = route?.kind === 'procession' || route?.kind === 'parade' ? route : undefined;
+  const projection = street && localMetricProjection(street.route[0]!);
+  const closure = projection && new PolygonIndex();
+  if (closure && street && projection)
+    for (const ring of routeRings(street))
+      closure.add([
+        ring.map((point) => {
+          const [x, y] = projection.to(point);
+          return { x, y };
+        }),
+      ]);
+  return {
+    ...view,
+    puffs: EMPTY_PUFFS,
+    procession: undefined,
+    agents: view.agents.filter((agent) => {
+      if (agent.event || agent.eventGround || agent.prop === 'event') return false;
+      if (route?.kind === 'fluvial' && (agent.kind === 'boat' || agent.aboard)) return false;
+      if (!agent.vehicle || !closure || !projection) return true;
+      const [x, y] = projection.to([agent.lng, agent.lat]);
+      const [ax, ay] = projection.to(agent.ahead ?? [agent.lng, agent.lat]);
+      const dx = ax - x,
+        dy = ay - y,
+        distance = Math.hypot(dx, dy) || 1;
+      const { length, width } = eventBodySize(agent);
+      return !closure.hits([
+        {
+          x,
+          y,
+          hx: distance === 1 && !dx && !dy ? 1 : dx / distance,
+          hy: dy / distance,
+          length,
+          width,
+        },
+      ]);
+    }),
+  };
+}
 
 export type FrameView = {
   generation?: number;
@@ -117,12 +165,19 @@ export function createInlineHost(
     setProcessions(routes) {
       if (disposed) return;
       world.setProcessions(routes);
-      view = undefined;
+      view = retainOrdinary(view);
       acceptedPost = undefined;
     },
     setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
-    play: (id, timing) => world.play(id, timing),
-    stop: () => world.stop(),
+    play: (id, timing) => {
+      if (!world.play(id, timing)) return false;
+      view = retainOrdinary(view, world.processionRoute(id));
+      return true;
+    },
+    stop: () => {
+      world.stop();
+      view = retainOrdinary(view, world.processionRoute(world.procession()?.id));
+    },
     dispose: () => {
       disposed = true;
       world.clearTiles();
@@ -291,7 +346,7 @@ export function createWorkerHost(
             const cellTerrain = terrain;
             if (view || result.terrain !== undefined)
               view = {
-                agents: [],
+                agents: view?.agents ?? [],
                 puffs: EMPTY_PUFFS,
                 generation,
                 procession: view?.procession,
@@ -356,7 +411,7 @@ export function createWorkerHost(
       playedTiming = undefined;
       live = { id: undefined };
       acceptedPost = undefined;
-      view = undefined;
+      view = retainOrdinary(view);
       if (fallback) fallback.setProcessions(routes);
       else void remote.setProcessions(routes).catch(fail);
     },
@@ -378,12 +433,17 @@ export function createWorkerHost(
         live: false,
         ...(timing && { time: eventTime(timing, 0) }),
       };
+      const retained = retainOrdinary(
+        view,
+        processions.find((route) => route.id === id),
+      );
       view = {
+        ...retained,
         generation,
-        agents: [],
+        agents: retained?.agents ?? [],
         puffs: EMPTY_PUFFS,
         signalClock: view?.signalClock ?? 0,
-        cellGuard: () => undefined,
+        cellGuard: retained?.cellGuard ?? (() => undefined),
         procession,
       };
       if (fallback) return fallback.play(id, timing);
@@ -395,7 +455,10 @@ export function createWorkerHost(
       agentEpoch++;
       played = undefined;
       playedTiming = undefined;
-      if (view) view = { ...view, procession: undefined, agents: [], puffs: EMPTY_PUFFS };
+      view = retainOrdinary(
+        view,
+        processions.find((route) => route.id === live.id),
+      );
       if (fallback) fallback.stop();
       else void remote.stop().catch(fail);
     },

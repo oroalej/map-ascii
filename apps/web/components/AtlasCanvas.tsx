@@ -142,7 +142,7 @@ export function AtlasCanvas({
   const [contextLost, setContextLost] = useState(false);
 
   useEffect(() => {
-    useUiStore.setState({ meta, processions: processions ?? [] });
+    useUiStore.setState({ meta, processions });
   }, [meta, processions]);
   useEffect(() => {
     atlasInstance?.setProcessions(processions);

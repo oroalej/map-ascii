@@ -267,6 +267,7 @@ describe('Procession', () => {
     expect(ok(street)).toBe(true);
     expect(ok({ ...street, formation: { columns: 3 } })).toBe(false);
     expect(ok({ ...street, label: undefined })).toBe(false);
+    expect(ok({ ...street, label: { en: '   ' } })).toBe(false);
     const { route: _route, ...base } = street;
     const mass = {
       ...base,
@@ -289,6 +290,15 @@ describe('Procession', () => {
     expect(
       ok({ ...verified, story: { en: 'The image returns by river.' }, sources: [source] }),
     ).toBe(true);
+    const sourced = {
+      ...verified,
+      story: { en: 'The image returns by river.' },
+      sources: [source],
+    };
+    for (const label of [{ en: 'TODO(verify)' }, { en: 'Procession', fil: 'TODO(verify)' }]) {
+      expect(ok({ ...sourced, label })).toBe(false);
+      expect(ok({ ...sourced, status: 'draft', label })).toBe(true);
+    }
   });
 });
 

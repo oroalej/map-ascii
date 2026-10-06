@@ -1,9 +1,9 @@
-import { ProcessionGlyph, PROCESSION_GLYPHS } from '../life/procession-glyphs';
 /**
  * The glyph atlas: every glyph a theme uses, rasterized once at the device-pixel cell size into
  * a single-channel coverage texture. Box-drawing and block characters are drawn as shapes so
  * lines join exactly across cells whatever the font's metrics; everything else uses the font.
  */
+import { ProcessionGlyph, PROCESSION_GLYPHS } from '../life/procession-glyphs';
 import { birdOf, birdPixels, type BirdGlyph } from '../life/birds';
 import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
 import { catOf, catPixels } from '../life/cats';
@@ -419,7 +419,7 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
     } else if (glyph === ProcessionGlyph.drum) {
       fill(slot, w * 0.15, h * 0.3, w * 0.85, h * 0.75);
       fill(slot, w * 0.05, h * 0.2, w * 0.95, h * 0.3);
-    } else {
+    } else if (glyph === ProcessionGlyph.bugle) {
       fill(slot, w * 0.15, h * 0.4, w * 0.7, h * 0.55);
       fill(slot, w * 0.7, h * 0.25, w * 0.9, h * 0.7);
     }

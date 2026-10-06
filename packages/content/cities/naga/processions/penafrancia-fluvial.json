@@ -21,6 +21,10 @@
     "duration_min": 210,
     "timezone": "Asia/Manila"
   },
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Fluvial"
+  },
   "sources": [
     {
       "title": "Naga City Tourism: 2026 civic and religious events schedule",
@@ -47,9 +51,5 @@
       "url": "https://www.openstreetmap.org/node/6791580317",
       "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. River endpoints are snapped within 300 m to mapped waterways. The river route, bank crowds, formation and density are illustrative TODO(verify), not surveyed festival arrangements."
     }
-  ],
-  "season": "penafrancia-fiesta",
-  "label": {
-    "en": "Fluvial"
-  }
+  ]
 }

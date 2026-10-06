@@ -15,7 +15,7 @@ export type EventGround = {
   bridges?: Point[][];
 };
 type RingBounds = { ring: Point[]; w: number; s: number; e: number; n: number };
-type RingIndex = { bins: Map<number, RingBounds[]>; large: RingBounds[] };
+type RingIndex = { bins: Map<number, RingBounds[]>; large: RingBounds[]; scratch: Set<RingBounds> };
 const BIN = 0.00025;
 // Latitude spans ±90 degrees, far beyond occupancy's local 16-bit metric bins.
 const BIN_ROWS = Math.ceil(180 / BIN) + 1;
@@ -96,7 +96,7 @@ export function groundsForRoutes(
 function index(rings: Point[][]): RingIndex {
   const saved = ringIndexes.get(rings);
   if (saved) return saved;
-  const out: RingIndex = { bins: new Map(), large: [] };
+  const out: RingIndex = { bins: new Map(), large: [], scratch: new Set() };
   for (const ring of rings) {
     let w = Infinity,
       s = Infinity,
@@ -149,18 +149,27 @@ function crosses(a: Point, b: Point, c: Point, d: Point) {
 }
 /** Test full edges and enclosed obstacles, including roofs narrower than the sample grid. */
 function outlineHits(index: RingIndex, outline: readonly Point[]) {
-  const xs = outline.map((q) => q[0]),
-    ys = outline.map((q) => q[1]);
-  const w = Math.min(...xs),
-    e = Math.max(...xs),
-    s = Math.min(...ys),
-    n = Math.max(...ys);
-  const nearby = new Set(index.large);
+  if (!index.bins.size && !index.large.length) return false;
+  let w = Infinity,
+    e = -Infinity,
+    s = Infinity,
+    n = -Infinity;
+  for (const [x, y] of outline) {
+    w = Math.min(w, x);
+    e = Math.max(e, x);
+    s = Math.min(s, y);
+    n = Math.max(n, y);
+  }
+  const nearby = index.scratch;
+  nearby.clear();
+  for (const r of index.large) nearby.add(r);
   for (let y = Math.floor(s / BIN); y <= Math.floor(n / BIN); y++)
-    for (let x = Math.floor(w / BIN); x <= Math.floor(e / BIN); x++)
-      for (const r of index.bins.get(binKey(x, y)) ?? []) nearby.add(r);
-  return [...nearby].some(
-    (r) =>
+    for (let x = Math.floor(w / BIN); x <= Math.floor(e / BIN); x++) {
+      const bin = index.bins.get(binKey(x, y));
+      if (bin) for (const r of bin) nearby.add(r);
+    }
+  for (const r of nearby)
+    if (
       r.w <= e &&
       r.e >= w &&
       r.s <= n &&
@@ -171,8 +180,10 @@ function outlineHits(index: RingIndex, outline: readonly Point[]) {
           r.ring.some((c, j) =>
             crosses(a, outline[(i + 1) % outline.length]!, c, r.ring[(j + 1) % r.ring.length]!),
           ),
-        )),
-  );
+        ))
+    )
+      return true;
+  return false;
 }
 export function eventGroundAllows(
   ground: EventGround,

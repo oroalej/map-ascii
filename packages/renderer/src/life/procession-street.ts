@@ -57,6 +57,7 @@ export class GroundProcessionScene {
   private readonly polyline: ReturnType<typeof routePolyline>;
   readonly profile: Float64Array;
   private readonly tail: number;
+  private readonly leadingExtent: number;
   private scopedIds?: { scope: string; ids: string[] };
   private adopted: VisibleAgent[] = [];
   private massCells = new Map<string, Point>();
@@ -91,6 +92,16 @@ export class GroundProcessionScene {
         (tail, actor) => (actor.destination ? tail : Math.max(tail, actor.back)),
         PROCESSION.street.tailPadding,
       ) + PROCESSION.street.tailPadding;
+    this.leadingExtent = this.actors.reduce<number>(
+      (extent, actor) =>
+        actor.destination
+          ? extent
+          : Math.max(
+              extent,
+              -actor.back + eventBodySize(actor).length / 2 + PROCESSION_GEOMETRY.probePadding,
+            ),
+      PROCESSION.street.headMargin,
+    );
   }
   get playDuration() {
     return Math.max(
@@ -128,15 +139,19 @@ export class GroundProcessionScene {
         const permission = { regions: [ring], blocked: this.ground.blocked };
         const xy = ring.map(this.frame.to),
           xs = xy.map((q) => q[0]),
-          ys = xy.map((q) => q[1]);
+          ys = xy.map((q) => q[1]),
+          minX = Math.min(...xs),
+          maxX = Math.max(...xs),
+          minY = Math.min(...ys),
+          maxY = Math.max(...ys);
         for (
-          let y = Math.ceil((Math.min(...ys) + PERSON_REACH) / MASS_CELL);
-          y * MASS_CELL < Math.max(...ys) - PERSON_REACH;
+          let y = Math.ceil((minY + PERSON_REACH) / MASS_CELL);
+          y * MASS_CELL < maxY - PERSON_REACH;
           y++
         )
           for (
-            let x = Math.ceil((Math.min(...xs) + PERSON_REACH) / MASS_CELL);
-            x * MASS_CELL < Math.max(...xs) - PERSON_REACH;
+            let x = Math.ceil((minX + PERSON_REACH) / MASS_CELL);
+            x * MASS_CELL < maxX - PERSON_REACH;
             x++
           ) {
             const q: Point = [x * MASS_CELL, y * MASS_CELL];
@@ -163,9 +178,15 @@ export class GroundProcessionScene {
       }
       const anchor = this.frame.to(r.site.anchor),
         distance = (q: Point) => Math.hypot(q[0] - anchor[0], q[1] - anchor[1]);
-      const root = [...cells.keys()].sort(
-        (a, b) => distance(cells.get(a)!) - distance(cells.get(b)!),
-      )[0];
+      let root: string | undefined,
+        closest = Infinity;
+      for (const [id, point] of cells) {
+        const d = distance(point);
+        if (d < closest) {
+          closest = d;
+          root = id;
+        }
+      }
       if (!root) return;
       const parents = new Map<string, string | undefined>([[root, undefined]]),
         queue = [root];
@@ -286,6 +307,9 @@ export class GroundProcessionScene {
             PERSON_REACH -
             PROCESSION.street.spectatorMargin,
         );
+        // On a 1 m sidewalk the accepted 0.44 m inset leaves 0.11 m of padded
+        // reach on the closed carriageway. Retain those spectators within the
+        // shared event envelope; ordinary vehicle traffic is excluded there.
         if (inset < 0) continue;
         add(-s, side * (segment.width_m / 2 + inset), 3 + Math.floor(rng() * 5));
         this.actors.at(-1)!.destination = this.frame.from([
@@ -363,6 +387,13 @@ export class GroundProcessionScene {
     this.adopted = [];
     if (this.route.kind === 'mass') this.actors.forEach((a, i) => (a.approach = this.massPaths[i]));
   }
+  saveAdoption() {
+    return { actors: [...this.adopted], paths: this.actors.map((actor) => actor.approach) };
+  }
+  restoreAdoption(state: ReturnType<GroundProcessionScene['saveAdoption']>) {
+    this.adopted = [...state.actors];
+    this.actors.forEach((actor, i) => (actor.approach = state.paths[i]));
+  }
   private at(s: number) {
     return this.polyline.at(s);
   }
@@ -381,7 +412,7 @@ export class GroundProcessionScene {
     if (route.kind === 'mass') return spans;
     const head = this.head(progress),
       from = Math.max(0, head - this.tail),
-      to = Math.min(this.along.at(-1)!, head + PROCESSION.street.headMargin);
+      to = Math.min(this.along.at(-1)!, head + this.leadingExtent);
     if (to < from) return spans;
     for (let i = 0; i < this.streetSpans.length; i++)
       if (this.along[i + 1]! >= from && this.along[i]! <= to) spans.push(this.streetSpans[i]!);
@@ -413,6 +444,7 @@ export class GroundProcessionScene {
       const head = this.route.kind === 'mass' ? 0 : this.head(actorProgress);
       if (a.destination && options.crowds === false) continue;
       let x: number, y: number, hx: number, hy: number;
+      let holding = false;
       if (this.route.kind === 'mass') {
         const path = a.approach!;
         // Queue new walkers over the arrival window instead of placing hundreds at the
@@ -427,6 +459,7 @@ export class GroundProcessionScene {
             : actorProgress > PROCESSION.mass.disperseStart
               ? (1 - actorProgress) / (1 - PROCESSION.mass.disperseStart)
               : 1;
+        holding = t === 1;
         const travel = Math.max(0, Math.min(1, t)) * (path.length - 1),
           k = Math.min(path.length - 2, Math.floor(travel)),
           u = travel - k,
@@ -449,7 +482,7 @@ export class GroundProcessionScene {
       }
       const q = this.frame.from([x, y]);
       const fixed = this.route.kind !== 'mass' && !!a.destination;
-      if (!fixed || a.groundAllowed === undefined) {
+      if (!holding && (!fixed || a.groundAllowed === undefined)) {
         const dimensions = eventBodySize(a);
         const corners = bodyCorners({
           x,
@@ -462,7 +495,7 @@ export class GroundProcessionScene {
         const allowed = eventGroundAllows(this.ground, [q, ...corners], corners);
         if (fixed) a.groundAllowed = allowed;
         if (!allowed) continue;
-      } else if (!a.groundAllowed) continue;
+      } else if (fixed && !a.groundAllowed) continue;
       out.push(
         identifyEventActor(
           {

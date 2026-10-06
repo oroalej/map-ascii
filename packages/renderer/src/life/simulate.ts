@@ -5523,6 +5523,8 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  /** Serializable event membership for discarding a superseded formation on host commands. */
+  event?: true;
   emoji?: EmojiCue;
   /** Assigned only in item mode; global fallback keeps the ordinary agent shape. */
   inspectionId?: number;
@@ -5709,7 +5711,10 @@ export class LifeWorld {
       s?.installations?.some((i) => i.kind === 'christmas-tree' || i.kind === 'carnival');
     const hadPhysical = physical(this.seasonalConfig);
     const seasonalKey = this.physicalSeasonKey(this.tiles.values(), config);
-    if (seasonalKey !== this.seasonalTerrainKey) this.groundTerrain = undefined;
+    if (seasonalKey !== this.seasonalTerrainKey) {
+      this.groundTerrain = undefined;
+      this.eventTileDescriptors = undefined;
+    }
     this.seasonalTerrainKey = seasonalKey;
     this.seasonalConfig = config;
     this.seasonsDirty = false;
@@ -5955,6 +5960,7 @@ export class LifeWorld {
       origin: string;
       sources: TileLife[];
       seasonal: string;
+      closure: PolygonIndex | undefined;
       reader: LaneTerrain;
     }
   >();
@@ -5967,6 +5973,10 @@ export class LifeWorld {
     routes: { life: TileLife; line: number; id: number; ends: string[] }[][];
   };
   private groundTerrain?: GroundTerrain;
+  private eventTileDescriptors?: {
+    terrain: GroundTerrain;
+    tiles: { life: TileLife; x: number; y: number; endX: number; endY: number; units: number }[];
+  };
   private preparedTerrain = new WeakMap<TileLife, GroundTerrain>();
   private preparedSettled = new WeakSet<TileLife>();
   private preparationTouched = new WeakSet<TileLife>();
@@ -6009,7 +6019,15 @@ export class LifeWorld {
         time?: { progress: number; value: EventTime };
       }
     | undefined;
-  private suspendedLiveOwners?: { id: string; occurrence?: string; owners: Map<string, object> };
+  private suspendedLiveOwners?: {
+    id: string;
+    occurrence?: string;
+    owners: Map<string, object>;
+    adoption?: {
+      scene: GroundProcessionScene;
+      state: ReturnType<GroundProcessionScene['saveAdoption']>;
+    };
+  };
   private eventAgents: VisibleAgent[] = [];
   private eventReservations?: {
     terrain: GroundTerrain;
@@ -6101,6 +6119,7 @@ export class LifeWorld {
     this.junctions.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
+    this.eventTileDescriptors = undefined;
     this.groundBuffers = new WeakMap();
     this.roadCache = new WorldRoadCache();
     this.railTopology = undefined;
@@ -6220,6 +6239,7 @@ export class LifeWorld {
         this.seasonsDirty = true;
         this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
         this.groundTerrain = undefined;
+        this.eventTileDescriptors = undefined;
         for (const life of prepared?.values() ?? []) {
           const terrain = this.preparedTerrain.get(life);
           if (terrain?.key === this.terrainKey([...this.tiles.keys()]))
@@ -6727,6 +6747,8 @@ export class LifeWorld {
       saved.gatherers === life.gatherers.length
     )
       return;
+    if (saved?.terrain !== terrain || saved.closure !== closure)
+      life.setLaneTerrain(this.laneTerrain(life));
     const transform = (body: Body) => {
       body.x = o.x + body.x * o.scale;
       body.y = o.y + body.y * o.scale;
@@ -6868,12 +6890,14 @@ export class LifeWorld {
       seasonal.polygons.filter((polygon) => touches(boundsOf(polygon[0]!))),
     );
     const originKey = `${o.x}/${o.y}/${o.scale}`;
+    const closure = this.trafficClosure();
     const previous = this.laneReaders.get(life);
     if (
       previous &&
       previous.ref === ref &&
       previous.origin === originKey &&
       previous.seasonal === seasonalKey &&
+      previous.closure === closure &&
       previous.sources.length === sources.length &&
       previous.sources.every((source, i) => source === sources[i])
     )
@@ -6908,7 +6932,14 @@ export class LifeWorld {
         );
       },
     };
-    this.laneReaders.set(life, { ref, origin: originKey, sources, seasonal: seasonalKey, reader });
+    this.laneReaders.set(life, {
+      ref,
+      origin: originKey,
+      sources,
+      seasonal: seasonalKey,
+      closure,
+      reader,
+    });
     return reader;
   }
 
@@ -7088,10 +7119,34 @@ export class LifeWorld {
           },
         });
         const arrivals = scene.route.kind === 'mass' ? new Occupancy() : undefined;
-        const tiles = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
-        const toMetric = (q: [number, number]) => {
+        const terrain = this.groundTerrain!;
+        if (this.eventTileDescriptors?.terrain !== terrain)
+          this.eventTileDescriptors = {
+            terrain,
+            tiles: [...this.tiles.values()]
+              .sort((a, b) => b.tile.z - a.tile.z)
+              .map((life) => {
+                const o = origin(life),
+                  units = life.perMeter / o.scale;
+                return {
+                  life,
+                  x: o.x,
+                  y: o.y,
+                  endX: o.x + EXTENT / units,
+                  endY: o.y + EXTENT / units,
+                  units,
+                };
+              }),
+          };
+        const tiles = this.eventTileDescriptors.tiles;
+        const at = { x: 0, y: 0 },
+          ahead = { x: 0, y: 0 },
+          local = { x: 0, y: 0 };
+        const toMetric = (q: [number, number], out: { x: number; y: number }) => {
           const at = lngLatToTile(ref.tile, q[0], q[1]);
-          return { x: at.x / ref.perMeter, y: at.y / ref.perMeter };
+          out.x = at.x / ref.perMeter;
+          out.y = at.y / ref.perMeter;
+          return out;
         };
         const bridgeAllows = (body: Body) => {
           const points = bodyCorners(body).map((point) =>
@@ -7103,16 +7158,28 @@ export class LifeWorld {
           return eventBridgeAllows(scene.ground, points);
         };
         for (const agent of candidates) {
-          const at = toMetric([agent.lng, agent.lat]);
-          const owner = tiles.find((life) => {
-            const o = origin(life),
-              x = ((at.x - o.x) / o.scale) * life.perMeter,
-              y = ((at.y - o.y) / o.scale) * life.perMeter;
-            return x >= 0 && x < EXTENT && y >= 0 && y < EXTENT && this.owns(life, { x, y });
-          });
+          const projected = lngLatToTile(ref.tile, agent.lng, agent.lat);
+          at.x = projected.x / ref.perMeter;
+          at.y = projected.y / ref.perMeter;
+          let owner: TileLife | undefined;
+          for (const descriptor of tiles) {
+            if (
+              at.x < descriptor.x ||
+              at.x >= descriptor.endX ||
+              at.y < descriptor.y ||
+              at.y >= descriptor.endY
+            )
+              continue;
+            local.x = (at.x - descriptor.x) * descriptor.units;
+            local.y = (at.y - descriptor.y) * descriptor.units;
+            if (this.owns(descriptor.life, local)) {
+              owner = descriptor.life;
+              break;
+            }
+          }
           if (!owner || owner.population >= MAX_TILE_AGENTS) continue;
-          const ahead = toMetric(agent.ahead!),
-            dx = ahead.x - at.x,
+          toMetric(agent.ahead!, ahead);
+          const dx = ahead.x - at.x,
             dy = ahead.y - at.y,
             d = Math.hypot(dx, dy) || 1;
           let token = this.eventOwners.get(eventActor(agent)!);
@@ -7120,13 +7187,13 @@ export class LifeWorld {
           const dimensions = eventBodySize(agent);
           const out = buffer(token).live;
           const body = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
-          Object.assign(body, at, {
-            hx: dx / d,
-            hy: dy / d,
-            length: dimensions.length,
-            width: dimensions.width,
-            kind: agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human,
-          });
+          body.x = at.x;
+          body.y = at.y;
+          body.hx = dx / d;
+          body.hy = dy / d;
+          body.length = dimensions.length;
+          body.width = dimensions.width;
+          body.kind = agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human;
           out.length = 1;
           if (
             admission.conflicts(token, out) > 0 ||
@@ -7141,8 +7208,8 @@ export class LifeWorld {
           this.eventAgents.push(agent);
         }
         for (const span of scene.spans(run.progress)) {
-          const a = toMetric(span.a),
-            b = toMetric(span.b),
+          const a = toMetric(span.a, at),
+            b = toMetric(span.b, ahead),
             dx = b.x - a.x,
             dy = b.y - a.y,
             length = Math.hypot(dx, dy);
@@ -7791,6 +7858,10 @@ export class LifeWorld {
     for (const key of this.arrivals.keys()) if (!keep.has(key)) this.arrivals.delete(key);
   }
 
+  /** Host commands use the current route to retain only compatible ordinary drawables. */
+  processionRoute(id: string | undefined) {
+    return id ? this.scenes.get(id)?.route : undefined;
+  }
   /** The city's processions (its `<slug>.processions.json`). */
   setProcessions(routes: readonly ProcessionRoute[]) {
     this.played = undefined;
@@ -7810,8 +7881,17 @@ export class LifeWorld {
   /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
   play(id: string, timing?: EventTiming): boolean {
     if (!this.scenes.has(id)) return false;
-    if (!this.played && this.live)
-      this.suspendedLiveOwners = { ...this.live, owners: new Map(this.eventOwners) };
+    if (!this.played && this.live) {
+      const scene = this.scenes.get(this.live.id);
+      this.suspendedLiveOwners = {
+        ...this.live,
+        owners: new Map(this.eventOwners),
+        ...(scene instanceof GroundProcessionScene &&
+          scene.route.kind === 'mass' && {
+            adoption: { scene, state: scene.saveAdoption() },
+          }),
+      };
+    }
     const adopted = this.handover(id);
     this.played = { id, start: this.clock, elapsed: 0, timing };
     this.releaseEventActors(false, adopted);
@@ -7834,8 +7914,10 @@ export class LifeWorld {
       this.live &&
       saved.id === this.live.id &&
       saved.occurrence === this.live.occurrence
-    )
+    ) {
+      if (saved.adoption) saved.adoption.scene.restoreAdoption(saved.adoption.state);
       for (const [id, owner] of saved.owners) this.eventOwners.set(id, owner);
+    }
     this.suspendedLiveOwners = undefined;
     this.reconcileEventTraffic();
   }
@@ -8046,6 +8128,7 @@ export class LifeWorld {
               scope: this.eventScope(run),
             })
           : [];
+    for (const agent of staged) agent.event = true;
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);

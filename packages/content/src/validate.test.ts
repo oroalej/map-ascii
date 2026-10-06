@@ -14,6 +14,28 @@ vi.mock('node:fs/promises', async (load) => {
 });
 
 describe('loadCityPacks', () => {
+  it('reports an invalid predecessor without a cascading missing-reference error', async () => {
+    const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+    vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      const text = await original(...args);
+      if (
+        typeof args[0] !== 'string' ||
+        !args[0].replaceAll('\\', '/').endsWith('/processions/street.json')
+      )
+        return text;
+      const value = JSON.parse(String(text)) as { schedule: Record<string, unknown> };
+      value.schedule = { ...value.schedule, start: '25:00' };
+      return JSON.stringify(value);
+    });
+    try {
+      const { packs, errors } = await loadCityPacks(eventRoot, { only: 'fixture' });
+      expect(packs).toEqual([]);
+      expect(errors.some((error) => error.file.endsWith('/processions/street.json'))).toBe(true);
+      expect(errors.some((error) => /missing predecessor/.test(error.message))).toBe(false);
+    } finally {
+      vi.mocked(fs.readFile).mockImplementation(original);
+    }
+  });
   it('reports inherited schedule overflow at the dependent event file', async () => {
     const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
     vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {

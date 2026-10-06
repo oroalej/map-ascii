@@ -3,7 +3,8 @@
  * after `pnpm build`. Initial JS is the gzipped scripts each city page loads (the tile worker
  * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted). The
  * asynchronous map renderer has its own gzipped budget, and each city's `<slug>.pmtiles`
- * must stay under its cap. The page's own HTML, with the content inlined
+ * must stay under its cap. Each `<slug>.processions.json` has a 60 KiB gzip cap.
+ * The page's own HTML, with the content inlined
  * in it, is reported alongside.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';

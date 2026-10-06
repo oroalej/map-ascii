@@ -89,7 +89,7 @@ function ordinaryPerson(x: number, y = 2000, rank = 0): Mover {
     group: [{ figure: 'adult', shirt: 3, umbrella: 0, canopy: 0, lateral: 0, back: 0, step: 0 }],
   };
 }
-function world(inspection = false, profiler?: FrameProfiler) {
+function world(inspection = false, profiler?: FrameProfiler, roadWidth = 8) {
   const b = new LifeBuilder();
   b.line(
     [
@@ -97,7 +97,7 @@ function world(inspection = false, profiler?: FrameProfiler) {
       { x: 4096, y: 2000 },
     ],
     LifeLine.roadMinor,
-    8,
+    roadWidth,
     1,
     1,
   );
@@ -110,6 +110,30 @@ function world(inspection = false, profiler?: FrameProfiler) {
   return { w, life };
 }
 describe('street event simulation', () => {
+  it.each(['stop', 'live-end'] as const)(
+    'releases cached lane bends on %s without replacing tiles',
+    (end) => {
+      const { w, life } = world(false, undefined, 20);
+      const car: Mover = {
+        ...ordinaryPerson(1000 + 100 * pm),
+        kind: 'vehicle',
+        vehicle: 'car',
+        group: undefined,
+      };
+      const lanes = life as unknown as {
+        bendOn(mover: Mover, line: number, dir: 1 | -1, travelled: number): number;
+      };
+      const at = 1000 / pm + 100;
+      expect(lanes.bendOn(car, 0, 1, at)).toBe(0);
+      if (end === 'stop') w.play(street.id);
+      else w.setLive(street.id, 0.5, '2026');
+      expect(Math.abs(lanes.bendOn(car, 0, 1, at))).toBeGreaterThan(0);
+      if (end === 'stop') w.stop();
+      else w.setLive(undefined);
+      expect(lanes.bendOn(car, 0, 1, at)).toBe(0);
+      expect(worldTiles(w).get('road')).toBe(life);
+    },
+  );
   it('skips distant closure checks but rejects a swept car entering the route', () => {
     const { w, life } = world();
     w.setLive(street.id, 0.5, '2026');
@@ -139,6 +163,8 @@ describe('street event simulation', () => {
         pause: 0,
         rank: 0,
       };
+      // Lane profiles also query closures once; measure the subsequent swept guard.
+      life.groundBodies(car, 0, []);
       hits.mockClear();
       expect(guard(life, { ...car, x: 3501 }, car)).toBe(true);
       expect(hits).not.toHaveBeenCalled();
@@ -169,11 +195,42 @@ describe('street event simulation', () => {
       expect(permission.mock.calls.length).toBeGreaterThan(0);
       permission.mockClear();
       const middle = arrival.agents(0.5, 1);
-      expect(permission.mock.calls.length).toBeGreaterThan(0);
+      expect(permission).not.toHaveBeenCalled();
       const same = middle.find((a) => eventActor(a) === eventActor(early[0]))!;
       expect([same.lng, same.lat]).not.toEqual([early[0]!.lng, early[0]!.lat]);
+      permission.mockClear();
+      arrival.agents(0.9, 2);
+      expect(permission.mock.calls.length).toBeGreaterThan(0);
     } finally {
       permission.mockRestore();
+    }
+  });
+  it('reserves the first segment when twelve leading marshals enter before the formation head', () => {
+    const scene = new GroundProcessionScene({
+      ...street,
+      formation: { bearers: 1, ranks: 0, marshals: 12 },
+    });
+    const motion = scene as unknown as { head(progress: number): number };
+    let lo = 0,
+      hi = 1;
+    for (let i = 0; i < 30; i++) {
+      const p = (lo + hi) / 2;
+      if (motion.head(p) < -20) lo = p;
+      else hi = p;
+    }
+    const actors = scene.agents(hi, 0, { crowds: false });
+    expect(actors.length).toBeGreaterThan(0);
+    const spans = scene.spans(hi);
+    expect(spans.length).toBeGreaterThan(0);
+    for (const actor of actors) {
+      const [x] = scene.frame.to([actor.lng, actor.lat]);
+      expect(
+        spans.some((span) => {
+          const a = scene.frame.to(span.a)[0],
+            b = scene.frame.to(span.b)[0];
+          return x >= Math.min(a, b) && x <= Math.max(a, b);
+        }),
+      ).toBe(true);
     }
   });
   it.each([
@@ -515,6 +572,12 @@ describe('street event simulation', () => {
     const { w, life } = world();
     w.setLive(street.id, 0.6, 'test');
     w.step(0.1, undefined, 18);
+    const descriptors = () =>
+      (w as unknown as { eventTileDescriptors?: { tiles: unknown[] } }).eventTileDescriptors;
+    const initial = descriptors();
+    expect(initial).toBeDefined();
+    w.step(0.1, undefined, 18);
+    expect(descriptors()).toBe(initial);
     const ids = w
       .visible(18, 1, point(1500))
       .filter((actor) => eventActor(actor))
@@ -528,6 +591,8 @@ describe('street event simulation', () => {
     expect(w.visible(18, 1, point(1500)).filter((actor) => eventActor(actor))).toEqual([]);
     w.sync([neighbor, { key: 'road', tile, life: life.geo }]);
     w.step(0.1, undefined, 18);
+    expect(descriptors()).not.toBe(initial);
+    expect(descriptors()!.tiles).toHaveLength(2);
     expect(
       w
         .visible(18, 1, point(1500))
@@ -1103,7 +1168,7 @@ describe('street event simulation', () => {
       expect(life.eventPopulation).toBe(0);
     },
   );
-  it.each(['stop', 'completion', 'no-playback'] as const)(
+  it.each(['stop', 'completion', 'mass-stop', 'mass-completion', 'no-playback'] as const)(
     'preserves adopted live Mass actors and inspection tokens after %s',
     (end) => {
       const { w } = world(true);
@@ -1117,8 +1182,9 @@ describe('street event simulation', () => {
         .filter((a) => predecessor.some((b) => b.inspectionId === a.inspectionId));
       expect(before.length).toBeGreaterThan(0);
       if (end !== 'no-playback') {
-        w.play(street.id, eventOccurrence(street.schedule, new Date('2026-06-01')));
-        w.step(end === 'completion' ? 180 : 1, undefined, 18);
+        const replay = end.startsWith('mass-') ? mass : street;
+        w.play(replay.id, eventOccurrence(replay.schedule, new Date('2026-06-01')));
+        w.step(end.endsWith('completion') ? 180 : 1, undefined, 18);
       }
       w.stop();
       w.step(0.1, undefined, 18);
