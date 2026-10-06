@@ -128,7 +128,7 @@ it('preserves moving exit capacity across adjacent and finer ownership frames an
   f.p.junction.x = 4096;
   f.m.x = 4096 - 30 * f.pm;
   const leader = { ...f.leader, x: neighbor.perMeter, v: 8 * neighbor.perMeter },
-    copy = { ...leader, x: leader.x * 2, v: leader.v! * 2 };
+    copy = { ...leader, x: leader.x * 2, v: leader.v * 2 };
   f.traffic.begin(f.life);
   f.traffic.add(neighbor, leader);
   const room = f.traffic.room(f.m, f.p, f.life);
