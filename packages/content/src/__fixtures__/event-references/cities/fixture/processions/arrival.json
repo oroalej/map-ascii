@@ -1,0 +1,12 @@
+{
+  "id": "procession/arrival",
+  "title": { "en": "Mass" },
+  "label": { "en": "Mass" },
+  "story": { "en": "Illustrative" },
+  "status": "draft",
+  "kind": "mass",
+  "site": "osm:way/3",
+  "grounds": ["osm:way/4"],
+  "radius_m": 60,
+  "schedule": { "follows": "procession/street", "duration_min": 90 }
+}

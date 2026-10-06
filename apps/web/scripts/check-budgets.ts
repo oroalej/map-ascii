@@ -3,7 +3,8 @@
  * after `pnpm build`. Initial JS is the gzipped scripts each city page loads (the tile worker
  * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted). The
  * asynchronous map renderer has its own gzipped budget, and each city's `<slug>.pmtiles`
- * must stay under its cap. The page's own HTML, with the content inlined
+ * must stay under its cap. Each `<slug>.processions.json` has a 60 KiB gzip cap.
+ * The page's own HTML, with the content inlined
  * in it, is reported alongside.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -13,7 +14,12 @@ import { gzipSync } from 'node:zlib';
 
 const KB = 1024;
 const MB = 1024 * KB;
-const BUDGETS = { initialJs: 250 * KB, renderer: 120 * KB, pmtiles: 40 * MB };
+const BUDGETS = {
+  initialJs: 250 * KB,
+  renderer: 120 * KB,
+  pmtiles: 40 * MB,
+  processions: 60 * KB,
+};
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'out');
@@ -66,6 +72,13 @@ for (const slug of slugs) {
   notes.push(`/${slug} HTML (gzipped): ${human(gzipSync(html).length)}`);
 
   const pmtiles = join(tiles, `${slug}.pmtiles`);
+  const processions = join(tiles, `${slug}.processions.json`);
+  if (existsSync(processions))
+    rows.push({
+      what: `${slug}.processions.json (gzipped)`,
+      size: gzipSync(readFileSync(processions)).length,
+      budget: BUDGETS.processions,
+    });
   if (existsSync(pmtiles)) {
     rows.push({ what: `${slug}.pmtiles`, size: statSync(pmtiles).size, budget: BUDGETS.pmtiles });
   } else {

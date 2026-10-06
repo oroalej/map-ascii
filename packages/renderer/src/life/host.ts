@@ -1,6 +1,13 @@
 import * as Comlink from 'comlink';
 import { simulationSeasons } from './seasonal-simulation';
-import type { RuntimeCityLife, ProcessionRoute, TrafficMix } from '@atlas/shared';
+import {
+  eventTime,
+  localMetricProjection,
+  type EventTiming,
+  type RuntimeCityLife,
+  type ProcessionRoute,
+  type TrafficMix,
+} from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
@@ -15,7 +22,55 @@ import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import { EMPTY_PUFFS } from './exhaust';
+import { groundsForRoutes, routeRings } from './ground-events';
+import { PolygonIndex } from './occupancy';
+import { eventBodySize } from './event-actors';
 let nextGeneration = 0;
+
+/** Commands retain the previous ordinary snapshot while a fresh event frame is produced. */
+function retainOrdinary(
+  view: FrameView | undefined,
+  route?: ProcessionRoute,
+): FrameView | undefined {
+  if (!view) return;
+  const street = route?.kind === 'procession' || route?.kind === 'parade' ? route : undefined;
+  const projection = street && localMetricProjection(street.route[0]!);
+  const closure = projection && new PolygonIndex();
+  if (closure && street && projection)
+    for (const ring of routeRings(street))
+      closure.add([
+        ring.map((point) => {
+          const [x, y] = projection.to(point);
+          return { x, y };
+        }),
+      ]);
+  return {
+    ...view,
+    puffs: EMPTY_PUFFS,
+    procession: undefined,
+    agents: view.agents.filter((agent) => {
+      if (agent.event || agent.eventGround || agent.prop === 'event') return false;
+      if (route?.kind === 'fluvial' && (agent.kind === 'boat' || agent.aboard)) return false;
+      if (!agent.vehicle || !closure || !projection) return true;
+      const [x, y] = projection.to([agent.lng, agent.lat]);
+      const [ax, ay] = projection.to(agent.ahead ?? [agent.lng, agent.lat]);
+      const dx = ax - x,
+        dy = ay - y,
+        distance = Math.hypot(dx, dy) || 1;
+      const { length, width } = eventBodySize(agent);
+      return !closure.hits([
+        {
+          x,
+          y,
+          hx: distance === 1 && !dx && !dy ? 1 : dx / distance,
+          hy: dy / distance,
+          length,
+          width,
+        },
+      ]);
+    }),
+  };
+}
 
 export type FrameView = {
   generation?: number;
@@ -33,8 +88,10 @@ export interface LifeHost {
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
+  /** Replace event geography without changing tile residency or ordinary population. */
+  setProcessions(routes: readonly ProcessionRoute[]): void;
   setLive(id: string | undefined, progress?: number, occurrence?: string): void;
-  play(id: string): boolean;
+  play(id: string, timing?: EventTiming): boolean;
   stop(): void;
   dispose(): void;
 }
@@ -86,6 +143,8 @@ export function createInlineHost(
             { roads: terrain.roads, forbidden: terrain.forbidden },
             terrain.trees,
             toCell,
+            terrain.events,
+            terrain.blocked,
           ),
       };
       preparation.schedule();
@@ -103,9 +162,22 @@ export function createInlineHost(
         procession: world.procession(),
       };
     },
+    setProcessions(routes) {
+      if (disposed) return;
+      world.setProcessions(routes);
+      view = retainOrdinary(view);
+      acceptedPost = undefined;
+    },
     setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
-    play: (id) => world.play(id),
-    stop: () => world.stop(),
+    play: (id, timing) => {
+      if (!world.play(id, timing)) return false;
+      view = retainOrdinary(view, world.processionRoute(id));
+      return true;
+    },
+    stop: () => {
+      world.stop();
+      view = retainOrdinary(view, world.processionRoute(world.procession()?.id));
+    },
     dispose: () => {
       disposed = true;
       world.clearTiles();
@@ -127,6 +199,7 @@ export function createWorkerHost(
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
+  let eventGrounds = groundsForRoutes(processions);
   let worker: Worker;
   const inline = () => {
     const world = new LifeWorld(
@@ -165,6 +238,7 @@ export function createWorkerHost(
   let viewContext: LifeViewContext | undefined;
   let live: { id: string | undefined; progress?: number; occurrence?: string } = { id: undefined };
   let played: string | undefined;
+  let playedTiming: EventTiming | undefined;
   const sent = new Set<string>();
   const release = () => {
     remote[Comlink.releaseProxy]();
@@ -178,7 +252,7 @@ export function createWorkerHost(
     fallback = inline();
     fallback.sync(tiles, focus, viewContext);
     fallback.setLive(live.id, live.progress, live.occurrence);
-    if (played) fallback.play(played);
+    if (played) fallback.play(played, playedTiming);
   };
   worker.addEventListener('error', fail);
   worker.addEventListener('messageerror', fail);
@@ -272,14 +346,21 @@ export function createWorkerHost(
             const cellTerrain = terrain;
             if (view || result.terrain !== undefined)
               view = {
-                agents: [],
+                agents: view?.agents ?? [],
                 puffs: EMPTY_PUFFS,
                 generation,
                 procession: view?.procession,
                 signalClock: view?.signalClock ?? 0,
                 cellGuard: (toCell) =>
                   cellTerrain &&
-                  makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+                  makeCellGuard(
+                    cellTerrain.ref,
+                    cellTerrain.access,
+                    cellTerrain.trees,
+                    toCell,
+                    eventGrounds,
+                    cellTerrain.blocked,
+                  ),
               };
             return;
           }
@@ -298,7 +379,14 @@ export function createWorkerHost(
             signalClock: result.signalClock,
             cellGuard: (toCell) =>
               cellTerrain &&
-              makeCellGuard(cellTerrain.ref, cellTerrain.access, cellTerrain.trees, toCell),
+              makeCellGuard(
+                cellTerrain.ref,
+                cellTerrain.access,
+                cellTerrain.trees,
+                toCell,
+                eventGrounds,
+                cellTerrain.blocked,
+              ),
           };
           if (result.profile) profiler?.merge(result.profile);
         })
@@ -314,23 +402,63 @@ export function createWorkerHost(
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return view;
     },
+    setProcessions(routes) {
+      if (disposed) return;
+      processions = routes;
+      eventGrounds = groundsForRoutes(routes);
+      agentEpoch++;
+      played = undefined;
+      playedTiming = undefined;
+      live = { id: undefined };
+      acceptedPost = undefined;
+      view = retainOrdinary(view);
+      if (fallback) fallback.setProcessions(routes);
+      else void remote.setProcessions(routes).catch(fail);
+    },
     setLive(id, progress, occurrence) {
       if (disposed) return;
       live = { id, progress, occurrence };
       if (fallback) fallback.setLive(id, progress, occurrence);
       else void remote.setLive(id, progress, occurrence).catch(fail);
     },
-    play(id) {
+    play(id, timing) {
       if (disposed || !processions.some((route) => route.id === id)) return false;
+      agentEpoch++;
       played = id;
+      playedTiming = timing;
       playedFrom = frames;
-      if (fallback) return fallback.play(id);
-      void remote.play(id).catch(fail);
+      const procession: ProcessionRun = {
+        id,
+        progress: 0,
+        live: false,
+        ...(timing && { time: eventTime(timing, 0) }),
+      };
+      const retained = retainOrdinary(
+        view,
+        processions.find((route) => route.id === id),
+      );
+      view = {
+        ...retained,
+        generation,
+        agents: retained?.agents ?? [],
+        puffs: EMPTY_PUFFS,
+        signalClock: view?.signalClock ?? 0,
+        cellGuard: retained?.cellGuard ?? (() => undefined),
+        procession,
+      };
+      if (fallback) return fallback.play(id, timing);
+      void remote.play(id, timing).catch(fail);
       return true;
     },
     stop() {
       if (disposed) return;
+      agentEpoch++;
       played = undefined;
+      playedTiming = undefined;
+      view = retainOrdinary(
+        view,
+        processions.find((route) => route.id === live.id),
+      );
       if (fallback) fallback.stop();
       else void remote.stop().catch(fail);
     },

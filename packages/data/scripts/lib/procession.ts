@@ -5,12 +5,14 @@
  */
 import {
   LEGACY_LOCAL_METERS_PER_DEGREE,
+  resolveProcessionSchedules,
   localMetricProjection,
   pointInPolygon,
   type Procession,
   type ProcessionRoute,
 } from '@atlas/shared';
 import type { Feature, Geometry, Position } from 'geojson';
+import { routeStreet, bakeMassSite } from './procession-ground';
 
 type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: string }>;
 
@@ -312,6 +314,14 @@ export function measureBanks(
  */
 export function routeProcessions(
   features: readonly Feature<Geometry, Record<string, unknown>>[],
+  processions: readonly Extract<Procession, { kind: 'fluvial' }>[],
+): { routes: Extract<ProcessionRoute, { kind: 'fluvial' }>[]; warnings: string[] };
+export function routeProcessions(
+  features: readonly Feature<Geometry, Record<string, unknown>>[],
+  processions: readonly Procession[],
+): { routes: ProcessionRoute[]; warnings: string[] };
+export function routeProcessions(
+  features: readonly Feature<Geometry, Record<string, unknown>>[],
   processions: readonly Procession[],
 ): { routes: ProcessionRoute[]; warnings: string[] } {
   const byId = new Map(features.map((f) => [f.properties?.id as string, f]));
@@ -322,8 +332,41 @@ export function routeProcessions(
       (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'),
   );
   const routes: ProcessionRoute[] = [];
+  const schedules = resolveProcessionSchedules(processions);
   const warnings: string[] = [];
   for (const p of processions) {
+    const metadata = {
+      id: p.id,
+      title: p.title,
+      status: p.status,
+      schedule: schedules.get(p.id)!,
+      ...(p.sources && { sources: p.sources }),
+      ...(p.season && { season: p.season }),
+      ...(p.label && { label: p.label }),
+      ...('follows' in p.schedule && { follows: p.schedule.follows }),
+    };
+    if (p.kind === 'mass') {
+      routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p) });
+      continue;
+    }
+    if (p.kind !== 'fluvial') {
+      const geography = routeStreet(features, p);
+      if (p.kind === 'procession')
+        routes.push({
+          ...metadata,
+          ...geography,
+          kind: p.kind,
+          ...(p.formation && { formation: p.formation }),
+        });
+      else
+        routes.push({
+          ...metadata,
+          ...geography,
+          kind: p.kind,
+          ...(p.formation && { formation: p.formation }),
+        });
+      continue;
+    }
     const find = (id: string) => {
       const f = byId.get(id);
       if (!f) throw new Error(`${p.id}: ${id} is not in the data`);
@@ -356,18 +399,14 @@ export function routeProcessions(
       );
     }
     routes.push({
-      id: p.id,
-      title: p.title,
-      status: p.status,
+      ...metadata,
       kind: p.kind,
       route: path.map((m) => graph.project.from(m).map((v) => Math.round(v * 1e7) / 1e7) as Point),
       length_m: Math.round(length),
       ...(banks
         ? { banks: banks.map(([l, r]) => [Math.round(l * 2) / 2, Math.round(r * 2) / 2]) }
         : {}),
-      schedule: p.schedule,
       ...(p.formation ? { formation: p.formation } : {}),
-      ...(p.sources ? { sources: p.sources } : {}),
     });
   }
   return { routes, warnings };

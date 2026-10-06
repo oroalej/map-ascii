@@ -3,10 +3,15 @@ import { makeScenario, worldTiles } from './testing/scenarios';
 import { valid } from './testing/scenario-checks';
 import { LifeWorld } from './simulate';
 import { LifeBuilder, LifeLine } from './geometry';
+import { remoteGroundEvent } from './testing/processions';
 
 // Split from scenarios.test.ts so these run in parallel with the soaks.
-for (const seed of [1, 42]) {
-  it(`seed ${seed}: purchases and boarding complete through the world's collision guard`, () => {
+for (const [seed, remoteEvent] of [
+  [1, false],
+  [42, false],
+  [1, true],
+] as const) {
+  it(`seed ${seed}, remote event ${remoteEvent}: purchases and boarding complete through the world's collision guard`, () => {
     const s = makeScenario('transit', 1, false, seed);
     const b = new LifeBuilder();
     b.line(
@@ -36,6 +41,10 @@ for (const seed of [1, 42]) {
     b.site({ x: 1900, y: 2090 }, 0, 7, true);
     b.market({ x: 2300, y: 2090 });
     const world = new LifeWorld({ road_major: { jeepney: 1 } });
+    if (remoteEvent) {
+      world.setProcessions([remoteGroundEvent]);
+      world.setLive(remoteGroundEvent.id, 0.6, 'remote');
+    }
     world.sync([{ ...s.tiles[0]!, life: b.finish() }]);
     const tile = [...worldTiles(world).values()][0]!;
     const people = tile.movers.filter((m) => m.kind === 'person').slice(0, 2);
@@ -82,15 +91,23 @@ for (const seed of [1, 42]) {
     });
     world.visible(18, s.levels, s.center, undefined, s.bounds);
     const states = new Set<string>();
+    const vendorStates = new Set<string>();
     let services = 0;
-    for (let frame = 0; frame < 180 * 30; frame++) {
+    for (let frame = 0; frame < (remoteEvent ? 20 : 180) * 30; frame++) {
       world.step(1 / 30, undefined, 18, s.bounds, undefined, { rain: 0 }, 0.9);
       world.visible(18, s.levels, s.center, undefined, s.bounds);
       for (const visit of tile.scenes.visits.values()) states.add(visit.state);
+      const visit = tile.scenes.visits.get(people[1]!);
+      if (visit) vendorStates.add(visit.state);
       services = Math.max(services, tile.scenes.services.size);
       if (frame % 60 === 0) valid(world);
     }
     valid(world);
+    if (remoteEvent) {
+      expect(tile.eventPopulation).toBe(0);
+      for (const state of ['approach', 'wait', 'purchase', 'return'])
+        expect(vendorStates.has(state)).toBe(true);
+    }
     expect(services).toBeGreaterThan(0);
     for (const state of ['wait', 'purchase', 'board', 'aboard', 'return'])
       expect(states.has(state), `missing ${state}; observed ${[...states].join(', ')}`).toBe(true);

@@ -1,0 +1,60 @@
+{
+  "id": "procession/military-parade",
+  "title": {
+    "en": "Bicol Regional Military Parade Exhibition"
+  },
+  "story": {
+    "en": "TODO(verify): The original schedule names Panganiban Drive to Plaza Quezon at 07:00. The rotonda landmark is an illustrative start, snapped to the street; Plaza Quezon is also snapped to the named corridor. Marching contingents, color guard, band, vehicles, two-hour duration and route arrangement are illustrative."
+  },
+  "status": "draft",
+  "kind": "parade",
+  "season": "penafrancia-fiesta",
+  "label": {
+    "en": "Military parade"
+  },
+  "route": {
+    "from": "osm:way/252223489",
+    "to": "osm:way/201276958",
+    "via": [
+      "osm:way/23518904",
+      "osm:way/23519164",
+      "osm:way/23519483",
+      "osm:way/23540253",
+      "osm:way/23540254",
+      "osm:way/252223485",
+      "osm:way/272595409",
+      "osm:way/721779874",
+      "osm:way/836685800",
+      "osm:way/836685805",
+      "osm:way/1553212752"
+    ]
+  },
+  "schedule": {
+    "month": 9,
+    "weekday": 6,
+    "nth": 3,
+    "offset_days": -1,
+    "start": "07:00",
+    "duration_min": 120,
+    "timezone": "Asia/Manila"
+  },
+  "formation": {
+    "contingents": 3,
+    "ranks": 4,
+    "band": 12,
+    "color_guard": 4,
+    "vehicles": ["truck", "car"]
+  },
+  "sources": [
+    {
+      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
+      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+    },
+    {
+      "title": "OpenStreetMap: event anchors and grounds",
+      "url": "https://www.openstreetmap.org/way/252223489",
+      "note": "Mapped anchors: osm:way/252223489, osm:way/201276958. Street endpoints are snapped within 200 m; a roof-safe endpoint may move up to 50 m beyond its nearest safe road position. Mapped bridge decks and directly connected approaches inform bounded water permissions. Paths, formation, sidewalks and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+    }
+  ]
+}

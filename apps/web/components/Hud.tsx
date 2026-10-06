@@ -34,7 +34,9 @@ import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import styles from './Hud.module.css';
-import { SeasonControl, useSeasonState } from './SeasonControl';
+import { SeasonControl, SeasonEvents, useSeasonState } from './SeasonControl';
+import { useLifeShown } from './useProcessionPlayback';
+import { ProcessionPlayButton } from './ProcessionPlayButton';
 import type { RuntimeSeasonConfig } from '@atlas/shared';
 import { SpeechControls } from './SpeechControls';
 import { EmojiControls } from './EmojiControls';
@@ -302,13 +304,6 @@ function LegendControls({
   );
 }
 
-/** Whether the life layer's agents are on screen (never with reduced motion). */
-function useLifeShown() {
-  const enabled = useLifeStore((s) => s.enabled);
-  const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
-  return enabled && !reduced;
-}
-
 const TIME_LABELS: Record<TimeChoice, string> = {
   live: 'Time: live',
   dawn: 'Time: 05:30',
@@ -353,6 +348,8 @@ function LifeControls({
 }) {
   const enabled = useLifeStore((s) => s.enabled);
   const time = useLifeStore((s) => s.time);
+  const run = useUiStore((s) => s.procession);
+  const eventTime = run && !run.live ? run.time : undefined;
   const wind = useLifeStore((s) => s.wind);
   // With no time zone, the sun's time at the view's longitude, to the degree (4 minutes).
   const month = useCityMonth(
@@ -382,6 +379,7 @@ function LifeControls({
       <button
         type="button"
         className={styles.button}
+        disabled={!!eventTime}
         title={
           time === 'live'
             ? 'The time of day in the city now'
@@ -389,7 +387,7 @@ function LifeControls({
         }
         onClick={() => useLifeStore.setState({ time: nextTime })}
       >
-        {TIME_LABELS[time]}
+        {eventTime ? `${eventTime.time} · event` : TIME_LABELS[time]}
       </button>
       <button
         type="button"
@@ -405,42 +403,31 @@ function LifeControls({
 }
 
 /**
- * River processions (SPEC.md §4 "Processions"): a button to play each, and while one is under
- * way, what it is and whether it is live. A draft says its route and schedule aren't verified.
+ * Event captions survive season changes; season-less records keep a generic play fallback.
+ * Captions identify the event and live/play status; drafts disclose unverified arrangements.
  */
 function ProcessionControls() {
   const processions = useUiStore((s) => s.processions);
   const run = useUiStore((s) => s.procession);
   const atlas = useAtlasInstance((s) => s.atlas);
-  const life = useLifeShown();
   if (processions.length === 0) return null;
   const current = run && processions.find((p) => p.id === run.id);
-  const play = (id: string) => {
-    const route = processions.find((p) => p.id === id);
-    if (!atlas || !route || !atlas.playProcession(id)) return;
-    const [lng, lat] = route.route[0]!;
-    atlas.flyTo({ lng, lat, zoom: Math.max(17.5, atlas.getCamera().zoom) });
-  };
   return (
     <>
-      {processions.map((p) => (
-        <div className={styles.row} key={p.id}>
-          <button
-            type="button"
-            className={styles.button}
-            disabled={!life}
-            title={life ? 'Play it as a time-lapse' : 'Turn Life on to see it'}
-            onClick={() => play(p.id)}
-          >
-            ▶ {p.title.en}
-          </button>
-        </div>
-      ))}
+      {processions
+        .filter((p) => !p.season)
+        .map((p) => (
+          <div className={styles.row} key={p.id}>
+            <ProcessionPlayButton id={p.id} label={p.title.en} />
+          </div>
+        ))}
       {current && (
         <div className={styles.row}>
           <p className={styles.line} role="status">
             {current.title.en} (simulated){run.live ? ' · happening now' : ''}
-            {current.status === 'draft' ? ' · draft: route and schedule not yet verified' : ''}
+            {current.status === 'draft'
+              ? ` · draft: ${current.kind === 'mass' ? 'gathering' : 'route'} and schedule not yet verified`
+              : ''}
           </p>
           {!run.live && (
             <button type="button" className={styles.button} onClick={() => atlas?.stopProcession()}>
@@ -585,6 +572,7 @@ export function Hud({
           <SeasonControl seasons={seasons} />
           <QualityControl />
         </div>
+        <SeasonEvents seasons={seasons} />
         <ProcessionControls />
         {dialogue && <SpeechControls catalog={dialogue} />}
         <EmojiControls />
