@@ -618,6 +618,7 @@ export class PedestrianCrossings {
     dt: number,
     holds: readonly PedestrianHold[] = NO_HOLDS,
     velocity = target / this.pm,
+    clearingCrossings?: ReadonlySet<string>,
   ) {
     const found = this.along(path, halfWidth, this.foundCrossings);
     const candidates = this.limitCandidates,
@@ -667,7 +668,7 @@ export class PedestrianCrossings {
             : { ...(previous ?? c.identity), elapsed, expired, committed };
         records.push(record);
         // Expiry ends the courtesy hold; people in the physical lane still limit speed.
-        if (!expired && !committed && blocked) {
+        if (!expired && !committed && blocked && !clearingCrossings?.has(c.identity.key)) {
           target = Math.min(target, stopTarget(ahead, length, k, this.pm, dt));
         }
       }

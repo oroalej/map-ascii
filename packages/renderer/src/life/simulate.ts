@@ -784,6 +784,7 @@ export class TileLife {
   private readonly localJunctions = new JunctionTable();
   private readonly localJunctionTraffic = new JunctionTraffic();
   private readonly clearingJunctions = new Set<string>();
+  private readonly clearingCrossings = new Set<string>();
   readonly junctionCrossings = new JunctionCrossings(this);
   private readonly junctionRequests: JunctionRequest[] = [];
   private junctionMover!: Mover;
@@ -2340,6 +2341,18 @@ export class TileLife {
     const segments = this.hasPedestrianCrossing(m)
       ? this.pedestrianSegments(m, fullRange, range)
       : undefined;
+    const clearing = this.clearingCrossings;
+    clearing.clear();
+    // The entry gate already admitted this occupant. It must clear the box,
+    // retaining physical pedestrian braking and courtesy at unrelated crossings.
+    for (const r of this.junctionTable?.holds(m) ?? []) {
+      if (!r.inside) continue;
+      for (let i = 0; i < 2; i++) {
+        const arm = i === 0 ? r.movement.entry : r.movement.exit;
+        for (const c of this.junctionCrossings.forArm(r.movement.junction, arm))
+          clearing.add(c.identity.key);
+      }
+    }
     const crossing =
       segments &&
       crossings.limit(
@@ -2353,6 +2366,7 @@ export class TileLife {
         dt,
         m.pedestrianHolds,
         (m.v ?? m.speed) / this.perMeter,
+        clearing,
       );
     m.pedestrianHolds = crossing?.holds;
     const physicalTarget = crossing?.target ?? target;

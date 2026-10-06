@@ -288,6 +288,34 @@ it('denies occupied entry after the front passed the stripe while the rear still
   expect(table.snapshot().find((r) => r.key === p.key)!.inside).toBe(false);
 });
 
+for (const inside of [false, true])
+  it(`retains ${inside ? 'physical braking while an occupant clears' : 'courtesy for an outside provisional grant'}`, () => {
+    const { life, car, table } = fixture();
+    const distance = inside ? 5 : 25;
+    Object.assign(car, { x: 2000 - distance * pm, d: (200 - distance) * pm });
+    life.prepareTraffic(() => true);
+    life.requestJunctions(table, () => true, 0);
+    table.resolve(0);
+    expect(table.granted(car)).toBe(true);
+    expect(table.snapshot()[0]!.inside).toBe(inside);
+    const target = (
+      life as unknown as {
+        pedestrianTarget(m: Mover, target: number, view: PedestrianView, dt: number): number;
+      }
+    ).pedestrianTarget.bind(life);
+    const view: PedestrianView = {
+      ...EMPTY_PEDESTRIANS,
+      empty: false,
+      walkersInArea: () => true,
+    };
+    const limited = target(car, 8 * pm, view, 0.1);
+    if (inside) expect(limited).toBe(8 * pm);
+    else expect(limited).toBeLessThan(8 * pm);
+    expect(car.pedestrianHolds?.length).toBeGreaterThan(0);
+    expect(target(car, 8 * pm, { ...view, walkersAlong: () => 5 }, 0.1)).toBeLessThan(8 * pm);
+    expect(table.snapshot()[0]!.inside).toBe(inside);
+  });
+
 it('reuses one curb predicate across repeated entry and exit clearance queries', () => {
   const { life, car } = fixture(),
     movement = life.junctionIndex.movement(car, 60 * pm)!,

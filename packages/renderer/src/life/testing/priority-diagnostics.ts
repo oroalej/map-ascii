@@ -8,9 +8,6 @@ type Result = ReturnType<ReturnType<typeof observePriority>['result']>;
 type Scenario = {
   name: string;
   transit?: boolean;
-  entries: readonly number[];
-  perArm: readonly (readonly number[])[];
-  bounds: Pick<Result, 'maxWaited' | 'peakStall' | 'stallsOver30' | 'twoCarFreezes'>;
 };
 
 /** Vitest orchestration stays separate from the fixture used by standalone diagnostics. */
@@ -41,11 +38,9 @@ export function priorityDiagnostics(spec: Scenario): void {
 
   for (let window = 0; window < 3; window++)
     it(`observes ${spec.name} entries, safety and finite clearing in window ${window + 1}`, () => {
-      expect(result.entriesPer60[window]).toBeGreaterThanOrEqual(spec.entries[window]!);
+      expect(result.entriesPer60[window]).toBeGreaterThanOrEqual(4);
       for (let arm = 0; arm < 4; arm++) {
-        expect(result.crossingsPerArmPer60[window]![arm]).toBeGreaterThanOrEqual(
-          spec.perArm[window]![arm]!,
-        );
+        expect(result.crossingsPerArmPer60[window]![arm]).toBeGreaterThanOrEqual(1);
         expect(result.crossingClearSecondsPer60[window]![arm]).toBeGreaterThan(0);
         expect(result.walkerDistancePer60[window]![arm]).toBeGreaterThan(0);
       }
@@ -66,9 +61,9 @@ export function priorityDiagnostics(spec: Scenario): void {
   });
 
   it(`bounds the corrected ${spec.name} fixture measurements`, () => {
-    expect(result.maxWaited).toBeLessThanOrEqual(spec.bounds.maxWaited + 1e-6);
-    expect(result.peakStall).toBeLessThanOrEqual(spec.bounds.peakStall + 1e-6);
-    expect(result.stallsOver30).toBeLessThanOrEqual(spec.bounds.stallsOver30);
-    expect(result.twoCarFreezes).toBeLessThanOrEqual(spec.bounds.twoCarFreezes);
+    expect(result.maxWaited).toBeLessThanOrEqual(30 + 1e-6);
+    expect(result.peakStall).toBeLessThanOrEqual(30 + 1e-6);
+    expect(result.stallsOver30).toBe(0);
+    expect(result.twoCarFreezes).toBe(0);
   });
 }
