@@ -1,0 +1,41 @@
+{
+  "id": "landmark/jesse-robredo-monument",
+  "osm_id": "osm:node/13958319312",
+  "name": {
+    "en": "Jesse Robredo Monument"
+  },
+  "type": "monument",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap standing geometry",
+      "url": "https://www.openstreetmap.org/node/13958319312",
+      "note": "The seated statue at Museo ni Jesse Robredo; distinct from the City Hall bust."
+    },
+    {
+      "title": "Bicol Mail: NHCP chair and VP Leni to lead opening of Robredo museum",
+      "url": "https://www.bicolmail.net/single-post/2017/08/17/nhcp-chair-vp-leni-to-lead-opening-of-robredo-museum",
+      "note": "Supports the statue material, pose, clothing and three inscribed pillars; no construction year inferred."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "This life-size bronze statue at Museo ni Jesse Robredo depicts the former Naga mayor sitting on the ground."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Robredo wears a plain shirt and shorts, reflecting the museum's portrayal of his simple, down-to-earth character."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Three pillars behind the statue bear the words “Matino, Mahusay, Matapat,” in a design by Jun Vicaldo."
+      },
+      "source": 1
+    }
+  ]
+}
