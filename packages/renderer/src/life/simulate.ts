@@ -192,6 +192,7 @@ import {
 } from './turn-signals';
 import {
   bodyInside,
+  bodyCorners,
   bodiesOverlap,
   sweptBodyOverlap,
   segmentCrossing,
@@ -6879,6 +6880,7 @@ export class LifeWorld {
       origin: string;
       sources: TileLife[];
       seasonal: string;
+      parking: string;
       reader: LaneTerrain;
     }
   >();
@@ -7708,16 +7710,40 @@ export class LifeWorld {
       seasonal.polygons.filter((polygon) => touches(boundsOf(polygon[0]!))),
     );
     const originKey = `${o.x}/${o.y}/${o.scale}`;
+    const parkingBodies: Body[] = [];
+    for (const source of this.tiles.values()) {
+      const at = origins.get(source);
+      if (!at) continue;
+      for (const parked of source.parked) {
+        if (!this.owns(source, parked)) continue;
+        const spec = VEHICLES[parked.vehicle];
+        const body = {
+          x: at.x + (parked.x / source.perMeter) * at.scale,
+          y: at.y + (parked.y / source.perMeter) * at.scale,
+          hx: parked.hx,
+          hy: parked.hy,
+          length: spec.length * at.scale,
+          width: spec.width * at.scale,
+        };
+        if (touches(boundsOf(bodyCorners(body)))) parkingBodies.push(body);
+      }
+    }
+    const parkingKey = JSON.stringify(parkingBodies);
     const previous = this.laneReaders.get(life);
     if (
       previous &&
       previous.ref === ref &&
       previous.origin === originKey &&
       previous.seasonal === seasonalKey &&
+      previous.parking === parkingKey &&
       previous.sources.length === sources.length &&
       previous.sources.every((source, i) => source === sources[i])
     )
       return previous.reader;
+    // Parking is a fixed physical obstacle just like a mapped curb. Plan the
+    // bend before reaching it; every actual move still uses the swept guard.
+    const parking = new PolygonIndex();
+    for (const body of parkingBodies) parking.add([bodyCorners(body)]);
     const sample: Body[] = [{ x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 }];
     const reader: LaneTerrain = {
       near: (x0, y0, x1, y1) => {
@@ -7726,7 +7752,11 @@ export class LifeWorld {
           bx = o.x + x1 * o.scale,
           by = o.y + y1 * o.scale;
         const current = this.groundTerrain!;
-        return current.blocked.near(ax, ay, bx, by) || current.vehicleBlocked.near(ax, ay, bx, by);
+        return (
+          current.blocked.near(ax, ay, bx, by) ||
+          current.vehicleBlocked.near(ax, ay, bx, by) ||
+          parking.near(ax, ay, bx, by)
+        );
       },
       hits: (body) => {
         const b = sample[0]!;
@@ -7737,10 +7767,21 @@ export class LifeWorld {
         b.length = body.length * o.scale;
         b.width = body.width * o.scale;
         const current = this.groundTerrain!;
-        return current.blocked.hits(sample) || current.vehicleBlocked.hits(sample);
+        return (
+          current.blocked.hits(sample) ||
+          current.vehicleBlocked.hits(sample) ||
+          parking.hits(sample)
+        );
       },
     };
-    this.laneReaders.set(life, { ref, origin: originKey, sources, seasonal: seasonalKey, reader });
+    this.laneReaders.set(life, {
+      ref,
+      origin: originKey,
+      sources,
+      seasonal: seasonalKey,
+      parking: parkingKey,
+      reader,
+    });
     return reader;
   }
 
