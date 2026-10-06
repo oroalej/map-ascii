@@ -58,6 +58,7 @@ export type Operation = {
   after: Snapshot | null;
   paths: string[];
   expectedTree: string | null;
+  expectedParents?: string[] | null;
   commit: string | null;
   data: Json;
 };
@@ -195,6 +196,13 @@ export function parseState(v: unknown): ReviewState {
         (op.after === null || snapshotShape(op.after)) &&
         strings(op.paths) &&
         nullableString(op.expectedTree) &&
+        (op.expectedParents === undefined ||
+          op.expectedParents === null ||
+          (strings(op.expectedParents) &&
+            op.expectedParents.length > 0 &&
+            op.expectedParents.every(sha) &&
+            record(op.before) &&
+            op.expectedParents[0] === op.before.headSha)) &&
         nullableString(op.commit) &&
         json(op.data),
     ) ||
@@ -541,7 +549,7 @@ export function recover(
     pending.expectedTree &&
     git(options.checkout, 'rev-parse', 'HEAD^{tree}') === pending.expectedTree &&
     git(options.checkout, 'rev-list', '--parents', '-n', '1', 'HEAD') ===
-      `${now.headSha} ${pending.before.headSha}`
+      [now.headSha, ...(pending.expectedParents ?? [pending.before.headSha])].join(' ')
   )
     recoveredCommit = now.headSha;
   const pushCompleted =
@@ -564,8 +572,14 @@ export function recover(
     next = 'sync';
     reason = 'Current main must be synchronized before consuming saved review results';
   } else if (recoveredCommit) {
-    next = 'push';
-    reason = 'Pending commit already exists; push it instead of committing again';
+    if (options.remoteSha === recoveredCommit) {
+      next = 'review';
+      round = Math.max(round, (pending?.round ?? state.round) + 1);
+      reason = 'Pending commit already reached the remote; review it without another push';
+    } else {
+      next = 'push';
+      reason = 'Pending commit already exists; push it instead of committing again';
+    }
   } else if (
     now.headSha === state.headSha &&
     options.remoteSha !== state.headSha &&
@@ -830,6 +844,28 @@ function retireCommittedOwnership(state: ReviewState, parent: string, commit: st
   for (const name of committed) delete state.owned[name];
 }
 
+/** Merge ancestry belongs to a recorded synchronization, not just an observed MERGE_HEAD. */
+function expectedCommitParents(state: ReviewState, head: string): string[] {
+  const mergeFile = resolve(
+    state.checkout,
+    git(state.checkout, 'rev-parse', '--git-path', 'MERGE_HEAD'),
+  );
+  if (!existsSync(mergeFile)) return [head];
+  const mergeHeads = readFileSync(mergeFile, 'utf8').trim().split(/\s+/);
+  const synchronization = state.operations.some(
+    (op) =>
+      op.phase === 'sync' &&
+      op.before.headSha === head &&
+      record(op.data) &&
+      strings(op.data.mergeHeads) &&
+      op.data.mergeHeads.length === mergeHeads.length &&
+      op.data.mergeHeads.every((parent, i) => parent === mergeHeads[i]),
+  );
+  if (!mergeHeads.every(sha) || !synchronization)
+    throw new Error('Merge parents have no matching owned synchronization');
+  return [head, ...mergeHeads];
+}
+
 export async function beginOperation(
   run: string,
   id: string,
@@ -863,7 +899,7 @@ export async function beginOperation(
         throw new Error(`Unrecorded edit: ${name}`);
     }
     if (step === 'commit') {
-      const staged = gitRaw(state.checkout, 'diff', '--cached', '--name-only', '-z')
+      const staged = gitRaw(state.checkout, 'diff', '--cached', '--no-renames', '--name-only', '-z')
         .split('\0')
         .filter(Boolean);
       for (const name of staged) {
@@ -881,6 +917,7 @@ export async function beginOperation(
       step === 'commit' && gitSucceeds(state.checkout, 'write-tree')
         ? git(state.checkout, 'write-tree')
         : null;
+    const expectedParents = step === 'commit' ? expectedCommitParents(state, before.headSha) : null;
     state.phase = step;
     state.current = before;
     state.headSha = before.headSha;
@@ -893,6 +930,7 @@ export async function beginOperation(
       after: null,
       paths,
       expectedTree,
+      expectedParents,
       commit: null,
       data,
     });

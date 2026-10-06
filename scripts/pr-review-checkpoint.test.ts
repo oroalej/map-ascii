@@ -239,6 +239,11 @@ describe('review checkpoints', () => {
     git(setup.directory, 'add', '--', 'file.txt');
     await beginOperation(state.run, 'commit', 'commit');
     const head = commit(setup.directory);
+    await updateState(state.run, (saved) => {
+      const operation = saved.operations.find((op) => op.id === 'commit');
+      if (!operation) throw new Error('Expected pending commit');
+      delete operation.expectedParents; // Older checkpoints have single-parent evidence only.
+    });
     const second = await startReview(setup.options);
     expect(second.recoveredCommit).toBe(head);
     expect(second.state.phase).toBe('push');

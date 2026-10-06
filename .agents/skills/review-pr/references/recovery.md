@@ -71,7 +71,7 @@ Before each synchronization, reviewer launch, validation launch, fix, verificati
 }
 ```
 
-Operation IDs are unique within the review lineage. List every file before editing it, including new files and deletions; each must be clean or match previously recorded owned bytes. For a multi-step fix reaching another file, create another operation before changing it. Baseline or unrecorded edits cannot be claimed as owned. Operations without source edits use an empty paths array. Do not begin a commit until explicit staging is complete; the helper saves its expected tree and parent.
+Operation IDs are unique within the review lineage. List every file before editing it, including new files and deletions; each must be clean or match previously recorded owned bytes. For a multi-step fix reaching another file, create another operation before changing it. Baseline or unrecorded edits cannot be claimed as owned. Operations without source edits use an empty paths array. Before starting a merge, begin a synchronization with `data.mergeHeads: ["<intended-main-sha>"]` (ordered if there are several intended parents), and retain that field in its finish data. Do not begin a commit until explicit staging is complete. The helper checks every changed path, including rename sources, and saves its expected tree and complete ordered parents. A merge's current heads must match the recorded synchronization heads and pre-merge HEAD before its commit can begin.
 
 After the operation succeeds, call `finish`:
 
@@ -91,7 +91,7 @@ Record `mainSha` after fetching main and refresh `remoteSha` after every push. R
 
 Reconcile a pending operation before repeating it:
 
-- A commit with the recorded parent and staged tree already exists: adopt its SHA and continue at push. If remote already contains it, skip the redundant push and checkpoint that fact.
+- A commit with the recorded complete ordered parent list and staged tree already exists: adopt its SHA, close its operation and retire only its committed owned paths. Continue at push when unpushed, or advance to review once when its head already reached the refreshed remote. Older checkpoints lacking parent-list evidence can recover a matching single-parent commit; they cannot authorize a merge merely by its first parent.
 - A pending push's commit is already an ancestor of refreshed PR head: acknowledge the push; review any subsequent/new commits. Never duplicate a commit or force-push.
 - A pending main merge is owned only when its saved pre-merge head and intended main SHA match Git's merge state. Continue its resolution; otherwise preserve that checkout and use a detached one.
 - A running child is identified by PID and OS start identity. Read its existing logs and await completion. Missing output from a live child is not a retry condition.

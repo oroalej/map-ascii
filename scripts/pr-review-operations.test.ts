@@ -61,6 +61,37 @@ it('refuses committing unrelated staged changes', async () => {
 });
 
 it.each([false, true])(
+  'checks ownership of both rename paths (owned source: %s)',
+  async (ownedSource) => {
+    if (!ownedSource) git(setup.directory, 'rm', '--', 'file.txt');
+    const { state } = await startReview(setup.options);
+    await beginOperation(
+      state.run,
+      'rename',
+      'fixes',
+      ownedSource ? ['file.txt', 'renamed.txt'] : ['renamed.txt'],
+    );
+    if (ownedSource) unlinkSync(join(setup.directory, 'file.txt'));
+    writeFileSync(join(setup.directory, 'renamed.txt'), 'before\n');
+    await finishOperation(state.run, 'rename', 'commit', 'Check every changed path');
+    git(
+      setup.directory,
+      'add',
+      '--',
+      ...(ownedSource ? ['file.txt', 'renamed.txt'] : ['renamed.txt']),
+    );
+    expect(git(setup.directory, 'diff', '--cached', '--name-only')).toBe('renamed.txt');
+    const admission = beginOperation(state.run, 'rename-commit', 'commit');
+    if (ownedSource) {
+      await expect(admission).resolves.toMatchObject({ phase: 'commit' });
+    } else {
+      await expect(admission).rejects.toThrow('unowned or partially staged bytes: file.txt');
+      expect(loadState(state.run).baseline.files).toHaveProperty('file.txt', null);
+    }
+  },
+);
+
+it.each([false, true])(
   'retains an unstaged owned area after commit (recovered: %s)',
   async (interrupted) => {
     const { state } = await startReview(setup.options);
