@@ -233,7 +233,9 @@ it('constrains the measured box to the canvas/visual viewport and responds to re
   const before = dialog()!.style.width;
   viewport.width = 180;
   viewport.height = 140;
-  act(() => viewport.dispatchEvent(new Event('resize')));
+  act(() => {
+    viewport.dispatchEvent(new Event('resize'));
+  });
   flush();
   verify();
   expect(dialog()!.style.width).not.toBe(before);
@@ -270,7 +272,9 @@ it('preserves pointer focus, focuses keyboard opening once, and clears through C
   expect(dialog()).toBeNull();
   clickSelection();
   flush();
-  act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
   expect(dialog()).toBeNull();
   expect(useUiStore.getState().factsVisible).toBe(false);
   button.remove();
