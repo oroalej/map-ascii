@@ -1,3 +1,4 @@
+import { tileToLngLat } from '../raster/geometry';
 import { describe, expect, it, vi } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import {
@@ -989,7 +990,23 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   // The mapped walking path is much longer than the stripe.
   builder.line([point(0, -40), point(0, 40)], LifeLine.path, 3);
   builder.area('crossing', [[point(-1.5, -7), point(1.5, -7), point(1.5, 7), point(-1.5, 7)]]);
-  if (signal) builder.signal(point(-10, 0), 8, 90, 0, true);
+  if (signal) {
+    builder.signal(point(-10, 0), 8, 90, 0, true);
+    builder.controlledCrossing({
+      id: 'crossing',
+      anchor: point(0, 0),
+      bearing: 90,
+      width: 14,
+      lineId: 42,
+      controller: {
+        id: 'signal',
+        at: tileToLngLat(tile, point(-10, 0)),
+        seed: 7,
+        midBlock: false,
+        walk: 'b',
+      },
+    });
+  }
   const geo = builder.finish(),
     life = new StandaloneLife(tile, geo, 1);
   const crossings = new PedestrianCrossings(tile, pm);
@@ -1025,6 +1042,48 @@ function crossingFixture(angle = 0, reverse = false, signal = false) {
   return { pm, crossings, path, occupied, view, body, limit };
 }
 describe('unsignalised pedestrian crossings', () => {
+  it('skips courtesy only for clearing identities, preserving timers and physical lane braking', () => {
+    const f = crossingFixture(),
+      owner = {},
+      crossing = [...f.crossings.along(f.path, 1.2).keys()][0]!;
+    f.occupied.set(owner, [f.body(0, -5)]);
+    const limit = (keys: ReadonlySet<string>, holds?: readonly PedestrianHold[]) =>
+      f.crossings.limit(
+        f.view,
+        f.path,
+        1.2,
+        4.4,
+        30,
+        8 * f.pm,
+        kinematicsOf('car'),
+        0.1,
+        holds,
+        8,
+        keys,
+      );
+    const unrelated = limit(new Set(['another crossing']));
+    expect(unrelated.target).toBeLessThan(8 * f.pm);
+    const clearing = limit(new Set([crossing.identity.key]), unrelated.holds);
+    expect(clearing.target).toBe(8 * f.pm);
+    expect(clearing.holds?.[0]).toMatchObject({ elapsed: 0.2, expired: false, committed: false });
+    f.occupied.set(owner, [f.body(0, 3.5)]);
+    const physical = limit(new Set([crossing.identity.key]), clearing.holds);
+    f.path[0]!.x += 5;
+    expect(
+      pedestrianLimit(
+        f.view,
+        f.path,
+        1.2,
+        4.4,
+        physical.target,
+        kinematicsOf('car'),
+        f.pm,
+        0.1,
+        30,
+      ),
+    ).toBeLessThan(physical.target);
+    expect(limit(new Set(), physical.holds).target).toBeLessThan(8 * f.pm);
+  });
   for (const expired of [false, true])
     it(`retains a real crossing timer through an adjacent-tile handover (expired=${expired})`, () => {
       const right = { ...tile, x: tile.x + 1 },

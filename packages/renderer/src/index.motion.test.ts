@@ -217,6 +217,35 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('emits fixture changes when only pedestrian head visibility changes', () => {
+    const changed = vi.fn();
+    atlas.on('fixtureschange', changed);
+    vi.mocked(fixturePass).mockReturnValue({
+      streetlights: false,
+      trafficSignals: false,
+      utilities: false,
+    });
+    draw(100);
+    changed.mockClear();
+    vi.mocked(fixturePass).mockReturnValue({
+      streetlights: false,
+      trafficSignals: false,
+      utilities: false,
+      pedestrianSignals: true,
+    });
+    draw(200);
+    expect(changed).toHaveBeenCalledWith(expect.objectContaining({ pedestrianSignals: true }));
+    changed.mockClear();
+    draw(300);
+    expect(changed).not.toHaveBeenCalled();
+    vi.mocked(fixturePass).mockReturnValue({
+      streetlights: false,
+      trafficSignals: false,
+      utilities: false,
+    });
+    draw(400);
+    expect(changed).toHaveBeenCalledWith(expect.not.objectContaining({ pedestrianSignals: true }));
+  });
   const defaultGetExtension = vi.fn(() => null);
   let canvas: HTMLCanvasElement,
     gl: WebGL2RenderingContext,

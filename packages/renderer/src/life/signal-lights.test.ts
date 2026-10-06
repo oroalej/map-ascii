@@ -95,7 +95,7 @@ describe('signal light lookup', () => {
         const source = sourceAt(lookup, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols));
         expect(packed.texels[source + 1]! & 63).toBe(part);
       }
-      expect(updateFixtureSignals(packed, clock)).toBe(false);
+      expect(updateFixtureSignals(packed, clock)).toBe(0);
       expect(light(packed)).toEqual(lookup);
       expect(packed.signals[0]!.emitters).toEqual(positions);
       fields.push(lookup);

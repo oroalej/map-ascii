@@ -49,7 +49,10 @@ function fixture(oneway = false, simplified = false) {
       width: 10,
       ...(inbound
         ? {
-            stop: tileToLngLat(tile, { x: at.x + hx * 7.5 * pm, y: at.y + hy * 7.5 * pm }),
+            stop: tileToLngLat(tile, {
+              x: at.x + (hx * 7.5 + hy * (oneway ? 0 : 2.5)) * pm,
+              y: at.y + (hy * 7.5 - hx * (oneway ? 0 : 2.5)) * pm,
+            }),
             stop_width: oneway ? 10 : 5,
           }
         : {}),
@@ -114,6 +117,188 @@ const clockFor = (life: TileLife, group: 'a' | 'b', color: 'green' | 'red' | 'am
   )!;
 
 describe('authoritative signal approaches', () => {
+  it('keeps keyed red fallback admission closed after passing an unmatched layout stop', () => {
+    const builder = new LifeBuilder(),
+      center = { x: 2000, y: 2000 };
+    for (const [hx, hy] of [
+      [1, 0],
+      [0, 1],
+    ])
+      builder.line(
+        [
+          { x: center.x - hx! * 100 * pm, y: center.y - hy! * 100 * pm },
+          center,
+          { x: center.x + hx! * 100 * pm, y: center.y + hy! * 100 * pm },
+        ],
+        LifeLine.roadMajor,
+        4,
+      );
+    builder.signal(center, 6, 90, 0, true, {
+      members: [tileToLngLat(tile, center)],
+      arms: [
+        {
+          road_id: 'unmatched/road',
+          junction: tileToLngLat(tile, center),
+          toward: tileToLngLat(tile, { x: center.x - 100 * pm, y: center.y }),
+          direction: 1,
+          inbound: true,
+          outbound: true,
+          bearing: 90,
+          width: 4,
+          group: 'a',
+        },
+      ],
+    });
+    const life = new TileLife(tile, builder.finish(), 1),
+      table = new JunctionTable();
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const m: Mover = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d: 93 * pm,
+      x: center.x - 7 * pm,
+      y: center.y,
+      hx: 1,
+      hy: 0,
+      speed: 8 * pm,
+      v: 8 * pm,
+      paint: 0,
+      lane: 0,
+      pause: 0,
+      rank: 0,
+      next: 2,
+    };
+    life.movers.push(m);
+    const movement = life.junctionIndex.movement(m, 60 * pm)!,
+      red = clockFor(life, 'a', 'red');
+    expect(life.signals.signals[0]!.approaches).toEqual([]);
+    expect(movement.key).not.toBe(life.signals.signals[0]!.key);
+    expect(movement.ahead).toBeGreaterThan(0);
+    expect(life.signals.vehicleSpeed(m, 0.1, red)).toBe(m.speed);
+    expect(life.signals.allows(m, center.x, center.y, red, movement.ahead, movement)).toBe(false);
+    const green = clockFor(life, 'a', 'green');
+    expect(life.signals.allows(m, center.x, center.y, green, movement.ahead, movement)).toBe(true);
+    life.prepareTraffic(() => true);
+    table.begin(new Set([life]));
+    life.requestJunctions(table, () => true, red);
+    table.resolve(red);
+    expect(table.canEnter(m, movement.key)).toBe(false);
+    const x = m.x;
+    life.step(0.1, undefined, undefined, undefined, { clock: red, rain: 0 }, undefined, {
+      junctions: table,
+    });
+    expect(m.x).toBeCloseTo(x + movement.ahead, 3);
+    expect(life.junctionIndex.movement(m, 60 * pm)!.ahead / pm).toBeCloseTo(0, 4);
+  });
+  for (const authorized of [false, true])
+    it(`${authorized ? 'clears earned green entry' : 'holds newly adopted traffic'} just past an unlinked red painted stop`, () => {
+      const b = new LifeBuilder(),
+        center = { x: 2000, y: 2000 };
+      b.line(
+        [{ x: center.x - 100 * pm, y: center.y }, center, { x: center.x + 100 * pm, y: center.y }],
+        LifeLine.roadMajor,
+        10,
+        hashString('single/0'),
+      );
+      b.line(
+        [{ x: center.x, y: center.y - 100 * pm }, center, { x: center.x, y: center.y + 100 * pm }],
+        LifeLine.roadMajor,
+        10,
+        hashString('single/1'),
+      );
+      const layout: SignalLayout = {
+        members: [tileToLngLat(tile, center)],
+        arms: [
+          [-1, 0],
+          [1, 0],
+          [0, -1],
+          [0, 1],
+        ].map(([hx, hy], i) => ({
+          road_id: `single/${i < 2 ? 0 : 1}`,
+          junction: tileToLngLat(tile, center),
+          toward: tileToLngLat(tile, {
+            x: center.x + hx! * 100 * pm,
+            y: center.y + hy! * 100 * pm,
+          }),
+          direction: i % 2 === 0 ? 1 : -1,
+          inbound: true,
+          outbound: true,
+          group: i < 2 ? ('a' as const) : ('b' as const),
+          bearing: ((Math.atan2(-hx!, hy!) * 180) / Math.PI + 360) % 360,
+          width: 10,
+          stop: tileToLngLat(tile, {
+            x: center.x + (hx! * 10 + hy! * 2.5) * pm,
+            y: center.y + (hy! * 10 - hx! * 2.5) * pm,
+          }),
+          stop_width: 5,
+        })),
+      };
+      b.signal(center, 6, 90, 0, true, layout);
+      b.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
+      const life = new TileLife(tile, b.finish(), 1),
+        table = new JunctionTable();
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+      const m: Mover = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 80 * pm,
+        x: center.x - 20 * pm,
+        y: center.y,
+        hx: 1,
+        hy: 0,
+        speed: 8 * pm,
+        v: 0,
+        paint: 0,
+        lane: 0,
+        pause: 0,
+        rank: 0,
+        next: 2,
+      };
+      life.movers.push(m);
+      const movement = life.junctionIndex.movement(m, 60 * pm)!;
+      expect(movement.junction.linked).toBe(false);
+      expect(movement.junction.controlled).toBe(true);
+      if (authorized) {
+        const green = clockFor(life, 'a', 'green');
+        life.prepareTraffic(() => true);
+        table.begin(new Set([life]));
+        life.requestJunctions(table, () => true, green);
+        table.resolve(green);
+        expect(table.granted(m)).toBe(true);
+      }
+      const distance = movement.ahead + 0.1 * pm;
+      m.d += distance;
+      m.x += distance;
+      expect(life.junctionIndex.canSpawnVehicle(m)).toBe(false);
+      const red = clockFor(life, 'a', 'red');
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, red);
+      table.resolve(red);
+      expect(table.snapshot()[0]!.inside).toBe(true);
+      const x = m.x;
+      life.step(0.1, undefined, undefined, undefined, { clock: red, rain: 0 }, undefined, {
+        junctions: table,
+      });
+      if (authorized) expect(m.x).toBeGreaterThan(x);
+      else expect(m.x).toBe(x);
+      Object.assign(m, {
+        line: movement.exit.line,
+        from: life.geo.starts[movement.exit.line]!,
+        dir: 1,
+        d: 25 * pm,
+        x: center.x + 25 * pm,
+      });
+      expect(life.junctionIndex.canSpawnVehicle(m)).toBe(true);
+    });
   it('varies the first linked-route fallback across bicycle ranks deterministically', () => {
     const route = (rank: number) => {
       const { life, car } = fixture();
@@ -330,15 +515,13 @@ describe('authoritative signal approaches', () => {
     expect(north.key).toBe(south.key);
     expect(compatible(north, south)).toBe(false);
   });
-  it('holds amber when it can brake and clears walkers already inside either member', () => {
-    const { life, car, p, q } = fixture();
+  it('holds amber when it can brake', () => {
+    const { life, car, q } = fixture();
     const m = car(3),
       amber = clockFor(life, 'b', 'amber');
     expect(life.signals.allows(m, q.x, q.y, amber, 10 * pm)).toBe(false);
     m.v = 30 * pm;
     expect(life.signals.allows(m, q.x, q.y, amber, pm)).toBe(true);
-    const red = clockFor(life, 'b', 'red');
-    expect(life.signals.walkDistance(p, q, 12 * pm, red)).toBe(12 * pm);
   });
   it('waits for room on the final exit beyond the linked junction', () => {
     const { life, car } = fixture();

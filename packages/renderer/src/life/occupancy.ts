@@ -141,6 +141,7 @@ function overlapDepth(a: Body, b: Body, gap = 0.15): number {
   return depth;
 }
 /** Half the footprint's extent projected onto an axis. */
+
 export function reach(p: Body, x: number, y: number) {
   return (
     (Math.abs(p.hx * x + p.hy * y) * p.length) / 2 + (Math.abs(-p.hy * x + p.hx * y) * p.width) / 2

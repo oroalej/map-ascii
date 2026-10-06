@@ -26,6 +26,42 @@ function fixture(entries: LifeTile[]) {
 }
 
 describe('runtime geographic seam handover', () => {
+  it('previews a unique turnable future exit and discovers both junctions without choosing a route', () => {
+    const pm = 1 / metersPerUnit(left),
+      builder = new LifeBuilder(),
+      a = { x: 4096 - 30 * pm, y: 2000 },
+      b = { x: 4096 - 10 * pm, y: 2000 };
+    builder.line([{ x: a.x - 100 * pm, y: a.y }, a], LifeLine.roadMajor, 4);
+    builder.line([a, b], LifeLine.roadMajor, 4);
+    builder.line([b, { x: b.x + 100 * pm, y: b.y }], LifeLine.roadMajor, 4);
+    builder.line(
+      [
+        b,
+        { x: b.x - 100 * Math.cos(Math.PI / 18) * pm, y: b.y + 100 * Math.sin(Math.PI / 18) * pm },
+      ],
+      LifeLine.roadMajor,
+      4,
+    );
+    builder.line([a, { x: a.x, y: a.y - 100 * pm }], LifeLine.roadMinor, 4);
+    const entry = continuityTile(left);
+    entry.life = builder.finish();
+    const { lives } = fixture([entry]),
+      source = lives[0]!,
+      mover = continuityMover(source, a.x - 5 * pm);
+    Object.assign(mover, { from: 0, d: 95 * pm, x: a.x - 5 * pm, y: a.y, next: 2 });
+    const before = structuredClone(mover);
+    expect(source.seamExit(mover, 1, 1)).toBe(4);
+    const movements = source.junctionIndex.movements(mover, 60 * pm, (line, dir) =>
+      source.seamExit(mover, line, dir),
+    );
+    expect(movements).toHaveLength(2);
+    expect(movements[1]!.exit.line).toBe(2);
+    expect(seamAhead(source, mover, [], 100 * pm)?.preview.line).toBe(2);
+    expect(mover).toEqual(before);
+    // The existing dead-end policy still permits the only legal hairpin.
+    source.geo.oneway![2] = -1;
+    expect(source.seamExit(mover, 1, 1)).toBe(6);
+  });
   it('previews reserved future exits ahead of competing plans and remembered exits', () => {
     const builder = new LifeBuilder();
     builder.line(

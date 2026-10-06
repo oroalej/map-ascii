@@ -18,6 +18,10 @@ import {
   featureZoomBand,
   LIFE_SITE_KINDS,
   SignalLayout,
+  ControllerSeed,
+  SignalStops,
+  decodeCrossingController,
+  decodeCrossingSignal,
   type ZoomBand,
   FRONTAGE_KINDS,
   type FrontageKind,
@@ -71,7 +75,11 @@ import {
   type SeasonalPayload,
 } from '../life/geometry';
 import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
-import { stripRing } from '../life/terrain';
+import { RoadAccess, stripRing } from '../life/terrain';
+import {
+  finalizeControlledCrossings,
+  controlledCrossingConnectors,
+} from '../life/crossing-geometry';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
 import {
   CROSSING_WALK_PAST_M,
@@ -1053,10 +1061,32 @@ export function buildTileGeometry(
               continue;
             }
             if (className === 'furniture' && variant === 7) {
+              const controller = decodeCrossingController(feature.properties);
               if (unitMeters && !isRegion) {
                 const theta = (Number(feature.properties.crossing_bearing ?? 0) * Math.PI) / 180;
                 const halfWidth = Number(feature.properties.crossing_width ?? 6) / 2 / unitMeters;
                 const along = 1.5 / unitMeters;
+                if (controller) {
+                  life.controlledCrossing({
+                    id: featureId,
+                    controller,
+                    anchor: p,
+                    bearing: Number(feature.properties.crossing_bearing ?? 0),
+                    width: Number(feature.properties.crossing_width ?? 6),
+                    lineId: hashString(`${featureId}/crossing`),
+                  });
+                  const signal = decodeCrossingSignal(feature.properties, controller);
+                  if (signal && tile)
+                    life.signal(
+                      lngLatToTile(tile, ...signal.at),
+                      signal.radius,
+                      signal.a,
+                      signal.b,
+                      signal.mapped,
+                      signal.layout,
+                      { id: signal.id, seed: signal.seed, stops: signal.stops, fallback: true },
+                    );
+                }
                 const a = { x: p.x - Math.sin(theta) * along, y: p.y + Math.cos(theta) * along };
                 const b = { x: p.x + Math.sin(theta) * along, y: p.y - Math.cos(theta) * along };
                 // The walkable cut runs past the mapped width: the carriageway's corners and
@@ -1115,6 +1145,17 @@ export function buildTileGeometry(
                   feature.properties.signal_layout === undefined
                     ? undefined
                     : SignalLayout.parse(JSON.parse(String(feature.properties.signal_layout))),
+                  {
+                    id: featureId,
+                    seed:
+                      feature.properties.signal_seed === undefined
+                        ? undefined
+                        : ControllerSeed.parse(feature.properties.signal_seed),
+                    stops:
+                      feature.properties.signal_stops === undefined
+                        ? undefined
+                        : SignalStops.parse(JSON.parse(String(feature.properties.signal_stops))),
+                  },
                 );
               continue;
             }
@@ -1496,6 +1537,40 @@ export function buildTileGeometry(
   }
 
   for (const line of walkingLines) life.line(line.points, LifeLine.path, line.width, line.id);
+  if (unitMeters && life.crossingAnchors.length) {
+    const access = new RoadAccess(life.roadPolygons, life.crossingCuts);
+    finalizeControlledCrossings(life.crossingAnchors, life.roadPolygons, 1 / unitMeters, access);
+    const routes = controlledCrossingConnectors(
+      life.crossingAnchors,
+      life.walkingLinesView,
+      life.roadPolygons,
+      life.crossingCuts,
+      life.walkingObstacles(1 / unitMeters, stripRing),
+      1 / unitMeters,
+      hashString,
+      access,
+    );
+    life.joinWalking(routes.joins, routes.connectors);
+    if (strips)
+      for (const crossing of life.crossingAnchors)
+        for (const side of crossing.sides ?? [])
+          for (const pad of side.pads) {
+            const vertices = pad.slice(0, -1),
+              base = main.fills.count;
+            for (const p of vertices)
+              main.fills.vertex(
+                p.x,
+                p.y,
+                classId('path'),
+                0,
+                Flags.corridor | Flags.sidewalk,
+                registry.index(crossing.id),
+                0,
+              );
+            for (const i of earcut(vertices.flatMap((p) => [p.x, p.y])))
+              main.fills.indices.push(base + i);
+          }
+  }
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
   if (unitMeters && tile && tile.z >= LIFE_TILE_MIN_ZOOM)
     life.splitRoadJunctions(1 / unitMeters, ROAD_SPLIT_CLEARANCE_M);

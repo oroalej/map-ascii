@@ -80,10 +80,12 @@ import {
   type FixturePackingScratch,
   packSignalLights,
   updateFixtureSignals,
+  FixtureSignalChange,
   updateFixtureFlags,
   type FixtureMotion,
   type PackedFixtures,
   type StreetFixture,
+  updatePedestrianVisibility,
   type FixtureVisibility,
 } from './life/fixtures';
 import type { TileId } from './tiles';
@@ -799,6 +801,7 @@ export function fixturePass(
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
+  let lightsChanged = false;
   const viewport = screenArea(view, placement.grid, view.cellDev);
   if (
     repack ||
@@ -873,14 +876,17 @@ export function fixturePass(
     };
     fixturesOf.set(targets, cache);
     changed = true;
+    lightsChanged = true;
   } else {
-    changed = updateFixtureSignals(cache.packed, clock);
+    const phases = updateFixtureSignals(cache.packed, clock);
+    changed = phases !== 0;
+    lightsChanged = (phases & FixtureSignalChange.vehicle) !== 0;
   }
   const flagsChanged = updateFixtureFlags(cache.packed, motion);
   if (changed || flagsChanged) {
     uploadFixtures(gl, targets, cache.packed.texels);
   }
-  if (changed) {
+  if (lightsChanged) {
     packSignalLights(
       cache.lightTexels,
       cache.packed,
@@ -903,6 +909,12 @@ export function fixturePass(
   ) {
     cache.packed.visibility.utilities = utilityViewportVisibility(
       cache.packed.utilityCells,
+      targets.cols,
+      (c, r) =>
+        c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
+    );
+    updatePedestrianVisibility(
+      cache.packed,
       targets.cols,
       (c, r) =>
         c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,

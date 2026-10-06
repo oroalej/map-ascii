@@ -156,6 +156,9 @@ export const RECOVERY = {
   retreats: [0, 0.5, 1, 2, 3, 4],
 } as const;
 
+export const COS20 = Math.cos(Math.PI / 9),
+  COS30 = Math.cos(Math.PI / 6);
+
 /** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
 export type Kinematics = { accel: number; brake: number; maxBrake: number; lateral: number };
@@ -179,6 +182,8 @@ export const FILLET = { maxM: 10, minAngle: 3, maxAngle: 150, padM: 0.5, lookahe
 /** A terrain-cleared corner may run this far past its vertex, m. */
 export const FILLET_RUN_ON_M = 2 * FILLET.maxM;
 export const JUNCTION = {
+  insideToleranceM: 0.05,
+  atLine: 3,
   linkedLookaheadM: 60,
   gap: 1.5,
   margin: 1,
@@ -186,6 +191,8 @@ export const JUNCTION = {
   maxWait: 10,
   giveUp: 30,
   holdMax: 20,
+  exitHalfWidth: 4,
+  crossingReach: 30,
 } as const;
 export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
 
@@ -762,8 +769,6 @@ export const SIGNAL = {
   lookahead: 40,
   brake: 3,
   walkMin: 5,
-  /** Additional radius for associating crossing quads with signal controllers, m. */
-  crossingMargin: 3.5,
 } as const;
 
 /** Protect full road-vehicle signal and linked-route lookahead before splitting a road. */

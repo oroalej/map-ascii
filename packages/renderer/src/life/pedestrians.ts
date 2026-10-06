@@ -291,13 +291,48 @@ export type PedestrianCrossing = {
 const DIRECT_CROSSINGS = 8;
 const NO_HOLDS: readonly PedestrianHold[] = [];
 
+/** Prepared owner/neighbor geometry in a consumer's metric frame, cached by junction gating. */
+export function transformCrossing(c: PedestrianCrossing, f: MetricFrame): PedestrianCrossing {
+  if (f.x === 0 && f.y === 0 && f.scale === 1) return c;
+  const point = (p: Point) => ({ x: f.x + p.x * f.scale, y: f.y + p.y * f.scale });
+  const polygon = (p: Polygon) => preparedArea(p.map((r) => r.map(point)));
+  return {
+    ...c,
+    polygon: polygon(c.polygon),
+    body: {
+      ...c.body,
+      ...point(c.body),
+      length: c.body.length * f.scale,
+      width: c.body.width * f.scale,
+    },
+    entrances: [point(c.entrances[0]), point(c.entrances[1])],
+    entranceAreas: [polygon(c.entranceAreas[0]), polygon(c.entranceAreas[1])],
+  };
+}
+
 /** Cached road associations and metric quads; neither walkers nor tiles are retained here. */
 export class PedestrianCrossings {
   private readonly index = new Map<number, PedestrianCrossing[]>();
   private readonly lines = new Map<number, PedestrianCrossing[]>();
+  private readonly controlledLines = new Map<number, PedestrianCrossing[]>();
+  /** Junction gating reads both; courtesy APIs continue to see only uncontrolled stripes. */
+  get uncontrolledAssociations(): ReadonlyMap<number, readonly PedestrianCrossing[]> {
+    return this.lines;
+  }
+  get controlledAssociations(): ReadonlyMap<number, readonly PedestrianCrossing[]> {
+    return this.controlledLines;
+  }
   private readonly foundCrossings = new Map<PedestrianCrossing, number>();
   private readonly limitCandidates = new Map<string, PedestrianCrossing>();
   private readonly usedHolds = new Set<PedestrianHold>();
+  private curbX = 0;
+  private curbY = 0;
+  private towardX = 0;
+  private towardY = 0;
+  // Queries are synchronous; the predicate reads this entrance's metric coordinates.
+  private readonly inwardCurb = (b: Readonly<Body>) =>
+    Math.hypot(b.x - this.curbX, b.y - this.curbY) <= PEDESTRIAN.curbReach &&
+    b.hx * this.towardX + b.hy * this.towardY > 0;
   get empty() {
     return this.index.size === 0;
   }
@@ -407,16 +442,17 @@ export class PedestrianCrossings {
       yield;
       if (!prepared.lines.size) continue;
       const shared = this.derive(polygon, prepared.hx, prepared.hy);
+      const controlled = signals.controlsCrossing({
+        x: prepared.centre.x * this.pm,
+        y: prepared.centre.y * this.pm,
+      });
       for (const line of prepared.lines) {
-        const controlled = signals.controlsCrossing(line, {
-          x: prepared.centre.x * this.pm,
-          y: prepared.centre.y * this.pm,
-        });
-        if (controlled) continue;
         const crossing = { ...shared, line, controlled };
-        let associated = this.lines.get(line);
-        if (!associated) this.lines.set(line, (associated = []));
+        const lines = controlled ? this.controlledLines : this.lines;
+        let associated = lines.get(line);
+        if (!associated) lines.set(line, (associated = []));
         associated.push(crossing);
+        if (controlled) continue;
         for (const key of binKeys(polygon[0]!)) {
           let entries = this.index.get(key);
           if (!entries) this.index.set(key, (entries = []));
@@ -558,18 +594,18 @@ export class PedestrianCrossings {
     }
     return found;
   }
-  private blocked(c: PedestrianCrossing, view: PedestrianView): boolean {
+  blocked(c: PedestrianCrossing, view: PedestrianView): boolean {
     if (view.walkersInArea(c.polygon)) return true;
-    const reach = PEDESTRIAN.curbReach;
-    return c.entrances.some((p, i) => {
-      const toward = c.entrances[1 - i]!;
-      return view.walkersInArea(
-        c.entranceAreas[i]!,
-        (b) =>
-          Math.hypot(b.x - p.x, b.y - p.y) <= reach &&
-          b.hx * (toward.x - p.x) + b.hy * (toward.y - p.y) > 0,
-      );
-    });
+    for (let i = 0; i < c.entrances.length; i++) {
+      const p = c.entrances[i]!,
+        toward = c.entrances[1 - i]!;
+      this.curbX = p.x;
+      this.curbY = p.y;
+      this.towardX = toward.x - p.x;
+      this.towardY = toward.y - p.y;
+      if (view.walkersInArea(c.entranceAreas[i]!, this.inwardCurb)) return true;
+    }
+    return false;
   }
   limit(
     view: PedestrianView,
@@ -582,6 +618,7 @@ export class PedestrianCrossings {
     dt: number,
     holds: readonly PedestrianHold[] = NO_HOLDS,
     velocity = target / this.pm,
+    clearingCrossings?: ReadonlySet<string>,
   ) {
     const found = this.along(path, halfWidth, this.foundCrossings);
     const candidates = this.limitCandidates,
@@ -632,7 +669,7 @@ export class PedestrianCrossings {
             : { ...(previous ?? c.identity), elapsed, expired, committed };
         records.push(record);
         // Expiry ends the courtesy hold; people in the physical lane still limit speed.
-        if (!expired && !committed && blocked) {
+        if (!expired && !committed && blocked && !clearingCrossings?.has(c.identity.key)) {
           const courtesyTarget = stopTarget(ahead, length, k, this.pm, dt);
           target = Math.min(target, courtesyTarget);
           // A live record only excludes a stop actually applied at the stripe edge.

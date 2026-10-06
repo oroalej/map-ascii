@@ -270,7 +270,7 @@ describe('curved traffic', () => {
   });
 
   for (const dir of [-1, 1] as const)
-    it(`keeps the bus setback while settling at a different-road T in ${dir} flow`, () => {
+    it(`rejects a bus settlement overlapping a different-road T box in ${dir} flow`, () => {
       const b = new LifeBuilder();
       b.line(
         dir === 1
@@ -318,7 +318,7 @@ describe('curved traffic', () => {
         expect(m.dir).toBe(dir);
         return owner === m && ((2000 - m.x) * dir) / pm <= setback + 1e-6;
       });
-      expect(life.movers).toEqual([m]);
+      expect(life.movers).toEqual([]);
       expect(m.line).toBe(0);
       expect(((2000 - m.x) * dir) / pm).toBeCloseTo(setback, 6);
       expect(m.routing?.turns ?? 0).toBe(0);

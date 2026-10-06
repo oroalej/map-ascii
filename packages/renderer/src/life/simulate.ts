@@ -1,3 +1,9 @@
+import {
+  CrossingReservations,
+  CrossingWaits,
+  type CrossingWaitState,
+  type CrossingCursor,
+} from './crossing-wait';
 import type { SimulationSeason } from './seasonal-simulation';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
@@ -28,7 +34,7 @@ import {
 } from './ground-events';
 import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
-import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
+import { frameBetween, metricFrame, overlaps, masked, cede, ownedFootprints } from './frames';
 import {
   projectMover,
   SegmentGrid,
@@ -163,7 +169,15 @@ import { SignalControl } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
 import { bendAt, laneBend, LANE_BEND, type LaneTerrain } from './lane-clearance';
-import { JunctionIndex, JunctionTable } from './junctions';
+import {
+  boxAhead,
+  JunctionIndex,
+  JunctionTable,
+  type JunctionRequest,
+  type Movement,
+} from './junctions';
+import { JunctionTraffic } from './junction-traffic';
+import { JunctionCrossings } from './junction-crossings';
 import { trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
@@ -238,6 +252,9 @@ import {
 export { hashString, random } from './random';
 
 const NO_MOVERS: readonly Mover[] = [];
+const compareJunctionRequests = (a: JunctionRequest, b: JunctionRequest) =>
+  Number(b.inside) - Number(a.inside) ||
+  (a.movement.boxAhead ?? a.movement.ahead) - (b.movement.boxAhead ?? b.movement.ahead);
 const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
 const moverAttendance = (m: Mover, levels: Activity | undefined, crowd: number) =>
   !!m.train || !levels || m.rank < levels[m.kind] * crowd;
@@ -248,8 +265,8 @@ function terminalReach(velocity: number, length: number, brake: number) {
   return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
 }
 
-type GroundAgent = Mover | Gatherer | Stall;
-type GroundGuard = ((
+export type GroundAgent = Mover | Gatherer | Stall;
+export type GroundGuard = ((
   owner: GroundAgent,
   before?: GroundAgent,
   reserve?: boolean,
@@ -320,6 +337,8 @@ type SeamLimit = {
   boundary?: Pick<Mover, 'line' | 'dir'>;
 };
 export type StepPass = {
+  /** The supplied world guard already composes transactional crossing checks. */
+  crossingGuard?: boolean;
   pedestrians?: PedestrianView;
   junctions: JunctionTable;
   trains?: ReadonlyMap<Mover, TrainLimit>;
@@ -411,6 +430,7 @@ const handoffHalf = (a: number, b: number) =>
 
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
+  crossingWait?: CrossingWaitState;
   /** Displayed social heading, separate from the navigation cursor and detour. */
   momentFacing?: { hx: number; hy: number };
   /** Cats' resting or grooming pose. */
@@ -567,6 +587,7 @@ export type Stall = {
  * end: `sign`), leading a carabao in `carabao`'s paint.
  */
 export type Gatherer = {
+  crossingWait?: CrossingWaitState;
   seasonal?: 'visitors' | 'congregations';
   /** Original place ordinal; adjacent or coincident records retain separate ownership. */
   source?: number;
@@ -812,6 +833,23 @@ export class TileLife {
   private commerceAdmitted = false;
   junctionIndex!: JunctionIndex;
   private readonly localJunctions = new JunctionTable();
+  private readonly localJunctionTraffic = new JunctionTraffic();
+  private readonly clearingJunctions = new Set<string>();
+  private readonly clearingCrossings = new Set<string>();
+  readonly junctionCrossings = new JunctionCrossings(this);
+  private readonly junctionRequests: JunctionRequest[] = [];
+  private junctionMover!: Mover;
+  private junctionTable!: JunctionTable;
+  private junctionTraffic!: JunctionTraffic;
+  private junctionPedestrians: PedestrianView = EMPTY_PEDESTRIANS;
+  private junctionClock = 0;
+  private junctionTileKey = '';
+  private junctionIndexInTile = 0;
+  private junctionRoom = Infinity;
+  private readonly junctionNext = (line: number, dir: 1 | -1) =>
+    this.seamExit(this.junctionMover, line, dir);
+  private readonly carriedReady = (movement: Movement) =>
+    this.junctionAllowed(movement, this.junctionRoom);
   private readonly trafficGroups = new Map<number, number[]>();
   private readonly trafficGroupBuffers = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
@@ -836,6 +874,11 @@ export class TileLife {
     { line: number; from: number; dir: 1 | -1; d: number; shift: number; blocked?: number }
   >();
   signals!: SignalControl;
+  crossingWaits!: CrossingWaits;
+  private crossingClock = 0;
+  private crossingMinimum = 0;
+  private readonly crossingCursor = { x: 0, y: 0, hx: 0, hy: 0 };
+  private readonly crossingTarget = { x: 0, y: 0 };
   scenes!: LocalScenes;
   private readonly catRng: () => number;
   private readonly runRng: () => number;
@@ -1006,10 +1049,17 @@ export class TileLife {
       return false;
     }
     const preview = this.projectFrom(m, source, options);
-    if (!preview || (admit && !admit(preview))) return false;
+    const clock = options.crossingClock ?? source.crossingClock;
+    const minimum = options.crossingMinimum ?? source.crossingMinimum;
+    if (
+      !preview ||
+      !this.crossingWaits.permits(preview, undefined, clock, minimum) ||
+      (admit && !admit(preview))
+    )
+      return false;
     if (replace) this.release(replace);
     this.emoji.adopt(m, source.emoji);
-    source.release(m);
+    source.release(m, true);
     m.line = preview.line;
     m.from = preview.from;
     m.dir = preview.dir;
@@ -1029,14 +1079,19 @@ export class TileLife {
     m.entered = preview.entered;
     m.junctionRoute = preview.junctionRoute;
     m.waiting = preview.waiting;
+    m.crossingWait = preview.crossingWait;
     m.routing = preview.routing;
     m.train = preview.train;
     this.movers.push(m);
+    if (source.crossingWaits.registry !== this.crossingWaits.registry && m.crossingWait?.waiting)
+      source.crossingWaits.registry.release(m.crossingWait.waiting.owner);
+    this.crossingWaits.accept(m, undefined, clock, minimum);
     this.effects.adopt(m);
     return true;
   }
 
-  release(m: Mover): void {
+  release(m: Mover, transferring = false): void {
+    if (!transferring) this.crossingWaits.release(m);
     this.emoji.release(m);
     const index = this.movers.indexOf(m);
     if (index >= 0) this.movers.splice(index, 1);
@@ -1173,6 +1228,8 @@ export class TileLife {
   private readonly along: Float64Array;
   /** Line ends by packed position, holding line * 2 + (0 start, 1 end). */
   private readonly ends = new Map<number, number[]>();
+  private readonly exitHeading = new Float64Array(4);
+  private readonly seamExitOptions: number[] = [];
   private readonly curvable: Uint8Array;
   /** Fixed obstacles lanes bend around (`setLaneTerrain`); none without a world guard. */
   private laneTerrain?: LaneTerrain;
@@ -1192,7 +1249,7 @@ export class TileLife {
   private time = 0;
   private junctions: { x: number; y: number; radius: number }[] = [];
 
-  private pedestrianCrossings!: PedestrianCrossings;
+  pedestrianCrossings!: PedestrianCrossings;
   private readonly pathScratch: { cursor: Mover; at: Pose; next: Pose }[] = [];
   private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly followingPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
@@ -1306,11 +1363,26 @@ export class TileLife {
       );
     this.signals = new SignalControl(tile, geo, this.perMeter, this.along, true);
     yield* this.signals.prepare(tile, geo);
+    this.crossingWaits = new CrossingWaits(
+      geo,
+      this.perMeter,
+      (owner, minimum, natural, cursor) =>
+        this.groundBodies(
+          natural && 'crossingWait' in owner ? { ...owner, crossingWait: undefined } : owner,
+          minimum,
+          undefined,
+          owner,
+          cursor,
+        ),
+      this.roadTerrain.access,
+      (owner, minimum) => this.crossingRadius(owner, minimum),
+    );
     const crossings = new PedestrianCrossings(tile, this.perMeter);
     this.pedestrianCrossings = crossings;
     yield* crossings.prepare(geo, this.signals);
     this.junctionIndex = new JunctionIndex(tile, geo, this.perMeter, this.along, true);
     yield* this.junctionIndex.prepare(tile);
+    this.junctionCrossings.prepare([this]);
     // Parking first, on its own random stream: it narrows the lanes, but doesn't change who
     // else is out.
     yield* this.findJunctions();
@@ -1322,7 +1394,15 @@ export class TileLife {
       line = end;
     }
     // Dogs last, on their own stream: they don't change who else is out.
-    for (let line = 0; line < lines; line++) yield* this.spawnOn(line, true);
+    for (let line = 0; line < lines;) {
+      const kind = geo.kinds[line];
+      const end =
+        kind === LifeLine.path || kind === LifeLine.plaza
+          ? this.populationRange(line).end
+          : line + 1;
+      yield* this.spawnOn(line, true, end);
+      line = end;
+    }
     yield* this.spawnStalls();
     yield* this.spawnGatherers();
     yield* this.spawnFlocks();
@@ -1424,10 +1504,14 @@ export class TileLife {
   private strandedWalk(line: number): boolean {
     const kind = this.geo.kinds[line]!;
     if (kind !== LifeLine.path && kind !== LifeLine.plaza) return false;
-    if (this.lineLength(line) / this.perMeter >= STRANDED_WALK_M && !this.crossingLine(line))
+    const range = this.populationRange(line);
+    if (
+      this.populationLength(range.first, range.end) / this.perMeter >= STRANDED_WALK_M &&
+      !this.crossingLine(range.first)
+    )
       return false;
     const joined = (atStart: boolean) => {
-      const v = atStart ? this.first(line) : this.last(line);
+      const v = atStart ? this.first(range.first) : this.last(range.end - 1);
       const x = this.geo.coords[v * 2]!,
         y = this.geo.coords[v * 2 + 1]!;
       // Cut at the tile's edge, it goes on in the next tile.
@@ -1437,7 +1521,8 @@ export class TileLife {
           .get(this.endKey(v))
           ?.some(
             (code) =>
-              code >> 1 !== line &&
+              (code >> 1 < range.first || code >> 1 >= range.end) &&
+              !this.geo.navigationOnly?.[code >> 1] &&
               (this.geo.kinds[code >> 1] === LifeLine.path ||
                 this.geo.kinds[code >> 1] === LifeLine.plaza),
           ) ?? false
@@ -1485,6 +1570,7 @@ export class TileLife {
 
   /** Spawn the movers of `line`: its dogs with `dogs`, else everyone else. */
   private *spawnOn(line: number, dogs = false, endLine = line + 1): Generator<void, void, void> {
+    if (this.geo.navigationOnly?.[line]) return;
     const kind = this.geo.kinds[line]! as LifeLine;
     const rules = spawnRules[kind];
     const road = trafficRoadFor[kind];
@@ -2099,6 +2185,20 @@ export class TileLife {
       out.hx = hx / norm;
       out.hy = hy / norm;
     }
+    const wait = m.crossingWait?.waiting;
+    if (wait) {
+      const facing = wait.poses[0];
+      if (facing) {
+        out.hx = facing.hx;
+        out.hy = facing.hy;
+      }
+      if (m.kind === 'dog' || m.kind === 'cat') {
+        if (facing) {
+          out.x = m.x + facing.x * this.perMeter;
+          out.y = m.y + facing.y * this.perMeter;
+        }
+      }
+    }
     if (!m.vehicle || m.train || !this.curvable[m.line]) return out;
     // A curve can run on past its vertex for up to twice the usual fillet (`clearCorner`).
     const reach = FILLET_RUN_ON_M * this.perMeter;
@@ -2508,6 +2608,18 @@ export class TileLife {
     const segments = this.hasPedestrianCrossing(m)
       ? this.pedestrianSegments(m, fullRange, range)
       : undefined;
+    const clearing = this.clearingCrossings;
+    clearing.clear();
+    // The entry gate already admitted this occupant. It must clear the box,
+    // retaining physical pedestrian braking and courtesy at unrelated crossings.
+    for (const r of this.junctionTable?.holds(m) ?? []) {
+      if (!r.inside) continue;
+      for (let i = 0; i < 2; i++) {
+        const arm = i === 0 ? r.movement.entry : r.movement.exit;
+        for (const c of this.junctionCrossings.forArm(r.movement.junction, arm))
+          clearing.add(c.identity.key);
+      }
+    }
     const crossing =
       segments &&
       crossings.limit(
@@ -2521,6 +2633,7 @@ export class TileLife {
         dt,
         m.pedestrianHolds,
         (m.v ?? m.speed) / this.perMeter,
+        clearing,
       );
     if (commit) m.pedestrianHolds = crossing?.holds;
     const physicalTarget = crossing?.target ?? target;
@@ -2546,7 +2659,13 @@ export class TileLife {
   }
 
   /** The same meters and group slots used by the life drawing pass. */
-  groundBodies(a: GroundAgent, minimum = 0, out: Body[] = [], identity: GroundAgent = a): Body[] {
+  groundBodies(
+    a: GroundAgent,
+    minimum = 0,
+    out: Body[] = [],
+    identity: GroundAgent = a,
+    cursor: CrossingCursor = a,
+  ): Body[] {
     if (!('kind' in a) && !('walker' in a)) {
       const cart = VEHICLES.cart;
       const put = (i: number, x: number, y: number, length: number, width: number) => {
@@ -2583,20 +2702,27 @@ export class TileLife {
     }
     const sceneOwner = 'kind' in identity ? identity : undefined;
     const lane = mover ? this.offsetOf(a, sceneOwner) : 0;
-    const x = a.x / this.perMeter - a.hy * lane;
-    const y = a.y / this.perMeter + a.hx * lane;
+    const x = cursor.x / this.perMeter - cursor.hy * lane;
+    const y = cursor.y / this.perMeter + cursor.hx * lane;
+
     if (mover && (a.kind === 'dog' || a.kind === 'cat')) {
       const size = animalSize(a.kind);
       const b = out[0] ?? (out[0] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
       Object.assign(b, {
         x,
         y,
-        hx: a.hx,
-        hy: a.hy,
+        hx: cursor.hx,
+        hy: cursor.hy,
         length: Math.max(size.length, minimum),
         width: Math.max(size.width, minimum),
         kind: BODY_KIND.animal,
       });
+      const waiting = a.crossingWait?.waiting?.poses[0];
+      if (waiting)
+        Object.assign(b, waiting, {
+          x: cursor.x / this.perMeter + waiting.x,
+          y: cursor.y / this.perMeter + waiting.y,
+        });
       out.length = 1;
       return out;
     }
@@ -2613,7 +2739,8 @@ export class TileLife {
       return out;
     }
     const walkers = mover ? (a.group ?? []) : [a.walker];
-    const { hx, hy } = a.momentFacing ?? a;
+    const { hx, hy } = a.momentFacing ?? cursor;
+
     for (let i = 0; i < walkers.length; i++) {
       const w = walkers[i]!;
       const b = out[i] ?? (out[i] = { x: 0, y: 0, hx: 0, hy: 0, length: 0, width: 0 });
@@ -2624,9 +2751,39 @@ export class TileLife {
       b.length = Math.max(memberSize(w.figure).length, minimum);
       b.width = Math.max(memberSize(w.figure).width, minimum);
       b.kind = BODY_KIND.human;
+      const waiting = a.crossingWait?.waiting?.poses[i];
+      if (waiting)
+        Object.assign(b, waiting, {
+          x: cursor.x / this.perMeter + waiting.x,
+          y: cursor.y / this.perMeter + waiting.y,
+        });
     }
     out.length = walkers.length;
     return out;
+  }
+
+  /** Conservative complete formation radius, without constructing individual bodies. */
+  private crossingRadius(a: GroundAgent, minimum: number): number {
+    const mover = 'kind' in a;
+    const lane = mover ? Math.abs(this.offsetOf(a)) : 0;
+    if (mover && (a.kind === 'dog' || a.kind === 'cat')) {
+      const size = animalSize(a.kind);
+      return lane + Math.hypot(Math.max(size.length, minimum), Math.max(size.width, minimum)) / 2;
+    }
+    if (!mover && !('walker' in a)) return 0;
+    const facing = a.momentFacing ?? a;
+    const scale = Math.hypot(facing.hx, facing.hy);
+    let radius = 0;
+    const count = mover ? (a.group?.length ?? 0) : 1;
+    for (let i = 0; i < count; i++) {
+      const w = mover ? a.group![i]! : a.walker;
+      const size = memberSize(w.figure);
+      const footprint =
+        Math.hypot(Math.max(size.length, minimum), Math.max(size.width, minimum)) / 2;
+      const extent = lane + Math.hypot(w.lateral, w.back) * scale + footprint;
+      radius = Math.max(radius, extent);
+    }
+    return radius;
   }
 
   /** World terrain supplies neighboring carriageways; standalone tiles use their own roads. */
@@ -2655,14 +2812,13 @@ export class TileLife {
       yield;
       const m = this.movers[i]!;
       if (m.kind !== 'vehicle' && m.kind !== 'person') continue;
-      let fits = (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m, true)) && guard(m);
+      let fits = (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m)) && guard(m);
+
       for (let attempt = 0; !fits && attempt < 24; attempt++) {
         yield;
         this.advance(m, (3 + attempt) * this.perMeter, false);
         fits =
-          inTile(m) &&
-          (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m, true)) &&
-          guard(m);
+          inTile(m) && (m.kind !== 'vehicle' || this.junctionIndex.canSpawnVehicle(m)) && guard(m);
       }
       if (!fits) this.movers.splice(i, 1);
     }
@@ -2713,30 +2869,40 @@ export class TileLife {
     }
     for (const shoppers of [false, true]) {
       const rng = shoppers ? this.commercePeopleRng : this.commerceStallsRng;
-      for (let line = 0; line < this.geo.kinds.length; line++) {
+      for (let line = 0, end = 0; line < this.geo.kinds.length; line = end) {
+        end = this.populationRange(line).end;
+        if (this.geo.navigationOnly?.[line]) continue;
         yield;
         const kind = this.geo.kinds[line];
         if (kind !== LifeLine.path && kind !== LifeLine.plaza) continue;
-        const length = this.lineLength(line),
+        const length = this.populationLength(line, end),
           meters = length / this.perMeter;
         if (!length) continue;
         let shops = 0;
         for (let i = 0; i < commerce.length; i += 2) {
           const p = { x: commerce[i]!, y: commerce[i + 1]! };
-          for (let v = this.first(line); v < this.last(line); v++) {
-            if ((v & 63) === 0) yield;
-            const x = this.geo.coords[v * 2]!,
-              y = this.geo.coords[v * 2 + 1]!,
-              dx = this.geo.coords[(v + 1) * 2]! - x,
-              dy = this.geo.coords[(v + 1) * 2 + 1]! - y;
-            const t = Math.max(
-              0,
-              Math.min(1, ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy || 1)),
-            );
-            if (Math.hypot(p.x - x - dx * t, p.y - y - dy * t) <= COMMERCE.reach * this.perMeter) {
-              shops++;
-              break;
+          let matched = false;
+          for (let piece = line; piece < end; piece++) {
+            for (let v = this.first(piece); v < this.last(piece); v++) {
+              if ((v & 63) === 0) yield;
+              const x = this.geo.coords[v * 2]!,
+                y = this.geo.coords[v * 2 + 1]!,
+                dx = this.geo.coords[(v + 1) * 2]! - x,
+                dy = this.geo.coords[(v + 1) * 2 + 1]! - y;
+              const t = Math.max(
+                0,
+                Math.min(1, ((p.x - x) * dx + (p.y - y) * dy) / (dx * dx + dy * dy || 1)),
+              );
+              if (
+                Math.hypot(p.x - x - dx * t, p.y - y - dy * t) <=
+                COMMERCE.reach * this.perMeter
+              ) {
+                shops++;
+                matched = true;
+                break;
+              }
             }
+            if (matched) break;
           }
         }
         const count = Math.min(
@@ -2767,7 +2933,10 @@ export class TileLife {
             hy: 0,
             walked: rng() * 2 * PEOPLE.stride,
           };
-          this.advance(m, rng() * length, false);
+          const position = this.populationPiece(line, end, rng() * length, dir);
+          m.line = position.line;
+          m.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+          this.advance(m, position.distance, false);
           if (!inTile(m)) continue;
           let close = false;
           for (let j = 0; j < commerce.length; j += 2)
@@ -2789,7 +2958,7 @@ export class TileLife {
                 step: rng() < 0.5 ? 0 : 1,
               },
             ];
-            if (!this.strandedWalk(line) && guard(m)) this.movers.push(m);
+            if (!this.strandedWalk(m.line) && guard(m)) this.movers.push(m);
           } else {
             let market = false;
             for (let j = 0; j < this.geo.markets.length; j += 2)
@@ -2824,12 +2993,22 @@ export class TileLife {
   private *spawnCats(): Generator<void, void, void> {
     const rng = this.catRng;
     let count = 0;
-    for (let line = 0; line < this.geo.kinds.length && count < CAT.maxPerTile; line++) {
+    for (
+      let line = 0, end = 0;
+      line < this.geo.kinds.length && count < CAT.maxPerTile;
+      line = end
+    ) {
+      const kind = this.geo.kinds[line];
+      end =
+        kind === LifeLine.path || kind === LifeLine.plaza
+          ? this.populationRange(line).end
+          : line + 1;
       yield;
+      if (this.geo.navigationOnly?.[line]) continue;
       if (!usableLines.cat.includes(this.geo.kinds[line]! as LifeLine)) continue;
       const rule = spawnRules[this.geo.kinds[line]! as LifeLine].find((r) => r.kind === 'cat');
       if (!rule) continue;
-      const length = this.lineLength(line);
+      const length = this.populationLength(line, end);
       const cats = Math.floor(length / this.perMeter / rule.spacing + rng());
       for (
         let i = 0;
@@ -2855,7 +3034,10 @@ export class TileLife {
           hy: 0,
           walked: 0,
         };
-        this.advance(m, rng() * length, false);
+        const position = this.populationPiece(line, end, rng() * length, dir);
+        m.line = position.line;
+        m.from = dir === 1 ? this.first(position.line) : this.last(position.line);
+        this.advance(m, position.distance, false);
         if (
           !inTile(m) ||
           !this.scenes.walkable(m, m) ||
@@ -2975,6 +3157,7 @@ export class TileLife {
     const paints = VEHICLES.cart.paints;
     for (let line = 0, end = 0; line < geo.kinds.length; line = end) {
       end = this.populationRange(line).end;
+      if (geo.navigationOnly?.[line]) continue;
       const kind = geo.kinds[line]! as LifeLine;
       const spacing = VENDORS.spacing[kind];
       const length = this.populationLength(line, end);
@@ -3253,7 +3436,15 @@ export class TileLife {
       const dx = g.tx - g.x;
       const dy = g.ty - g.y;
       const dist = Math.hypot(dx, dy);
-      const move = g.speed * dt;
+      this.crossingTarget.x = g.tx;
+      this.crossingTarget.y = g.ty;
+      const move = this.crossingWaits.limit(
+        g,
+        this.crossingTarget,
+        g.speed * dt,
+        this.crossingClock,
+        this.crossingMinimum,
+      );
       const before = guard && { ...g };
       delete g.momentFacing;
       if (dist <= move) {
@@ -3666,8 +3857,7 @@ export class TileLife {
   seamExit(m: Mover, line: number, dir: 1 | -1, consumed?: number): number | undefined {
     const end = dir === 1 ? this.last(line) : this.first(line);
     const current = line === m.line && dir === m.dir && (consumed === undefined || consumed === 0);
-    const cursor = current ? m : { kind: m.kind, line, dir };
-    const exits = this.exitOptions(cursor, end);
+
     const route = m.junctionRoute?.exits;
     const enteredAt = route?.indexOf(line * 2 + (dir === 1 ? 0 : 1)) ?? -1;
     const routeIndex = consumed ?? (current ? 0 : enteredAt >= 0 ? enteredAt + 1 : -1);
@@ -3677,9 +3867,12 @@ export class TileLife {
       current && plan?.line === line && plan.dir === dir && plan.vertex === end
         ? plan.exit
         : undefined;
+    const remembered = current ? m.next : undefined;
+    const options = this.seamExitOptions;
+    this.writeExitOptions(m.kind, line, dir, end, options);
     return (
-      this.committedExit(exits, reserved, planned, current ? m.next : undefined) ??
-      (exits.length === 1 ? exits[0] : undefined)
+      this.committedExit(options, reserved, planned, remembered) ??
+      (options.length === 1 ? options[0] : undefined)
     );
   }
 
@@ -3714,6 +3907,26 @@ export class TileLife {
       if (left <= 0) break;
       const to = m.from + m.dir;
       const length = this.segment(m.from, to);
+      if (junctions && this.crossingWaits.records.length && isWalker(m.kind) && length > 0) {
+        const hx = (coords[to * 2]! - coords[m.from * 2]!) / length;
+        const hy = (coords[to * 2 + 1]! - coords[m.from * 2 + 1]!) / length;
+        const cursor = this.crossingCursor;
+        cursor.x = coords[m.from * 2]! + hx * m.d;
+        cursor.y = coords[m.from * 2 + 1]! + hy * m.d;
+        cursor.hx = hx;
+        cursor.hy = hy;
+        this.crossingTarget.x = coords[to * 2]!;
+        this.crossingTarget.y = coords[to * 2 + 1]!;
+        const cap = this.crossingWaits.limit(
+          m,
+          this.crossingTarget,
+          Math.min(left, length - m.d),
+          this.crossingClock,
+          this.crossingMinimum,
+          cursor,
+        );
+        if (cap < Math.min(left, length - m.d)) left = cap;
+      }
       const traveled = Math.min(left, Math.max(0, length - m.d));
       moved += traveled;
       if (m.routing?.signal && traveled > 0) {
@@ -3767,29 +3980,46 @@ export class TileLife {
   }
 
   private exitOptions(m: Pick<Mover, 'kind' | 'line' | 'dir'>, vertex: number): number[] {
-    const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
-    const codes =
-      m.kind === 'vehicle'
-        ? (this.roadVertices.get(this.endKey(vertex)) ?? []).map((arm) => arm.code)
-        : (this.ends.get(this.endKey(vertex)) ?? []);
-    const options = codes.filter((code) => this.legalExit(m, code, arrived));
-    if (m.kind !== 'vehicle' || options.length < 2) return options;
+    const options: number[] = [];
+    this.writeExitOptions(m.kind, m.line, m.dir, vertex, options);
+    return options;
+  }
+  /** Owned routing arrays and scratch-only previews use the same future-cursor policy. */
+  private writeExitOptions(
+    kind: Mover['kind'],
+    line: number,
+    dir: 1 | -1,
+    vertex: number,
+    out: number[],
+  ): void {
+    out.length = 0;
+    const arrived = line * 2 + (dir === 1 ? 1 : 0);
+    if (kind === 'vehicle') {
+      for (const arm of this.roadVertices.get(this.endKey(vertex)) ?? [])
+        if (this.legalExit(kind, arm.code, arrived)) out.push(arm.code);
+    } else
+      for (const code of this.ends.get(this.endKey(vertex)) ?? [])
+        if (this.legalExit(kind, code, arrived)) out.push(code);
+    if (kind !== 'vehicle' || out.length < 2) return;
     // A vehicle doesn't double back sharper than a corner can curve (`FILLET.maxAngle`), which
     // would spin it on the spot, unless that is the only way on.
-    const [bx, by] = this.endHeading(arrived, vertex);
+    const headings = this.exitHeading;
+    this.writeEndHeading(arrived, headings, 0, vertex);
     const limit = Math.cos((FILLET.maxAngle * Math.PI) / 180);
-    const turnable = options.filter((code) => {
-      const [ox, oy] = this.endHeading(code, vertex);
-      return -bx * ox - by * oy >= limit;
-    });
-    return turnable.length ? turnable : options;
+    let turnable = 0;
+    for (const code of out) {
+      this.writeEndHeading(code, headings, 2, vertex);
+      if (-headings[0]! * headings[2]! - headings[1]! * headings[3]! >= limit)
+        out[turnable++] = code;
+    }
+    if (turnable) out.length = turnable;
   }
-  private legalExit(m: Pick<Mover, 'kind'>, code: number, arrived: number): boolean {
+  private legalExit(kind: Mover['kind'], code: number, arrived: number): boolean {
     return (
       code !== arrived &&
-      usableLines[m.kind].includes(this.geo.kinds[code >> 1]! as LifeLine) &&
+      usableLines[kind].includes(this.geo.kinds[code >> 1]! as LifeLine) &&
       !(
-        m.kind === 'vehicle' &&
+        kind === 'vehicle' &&
         this.geo.oneway?.[code >> 1] &&
         this.geo.oneway[code >> 1] !== (code & 1 ? -1 : 1)
       )
@@ -3798,7 +4028,7 @@ export class TileLife {
   private vehicleExitDraw(m: Mover, vertex: number): number {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     const legacy = this.ends.get(this.endKey(vertex)) ?? [];
-    if (legacy.some((code) => this.legalExit(m, code, arrived))) return this.routeRng();
+    if (legacy.some((code) => this.legalExit(m.kind, code, arrived))) return this.routeRng();
     return hashString(`${this.routingSeed}/${m.rank}/${m.line}/${m.dir}`) / 0x1_0000_0000;
   }
 
@@ -3806,10 +4036,11 @@ export class TileLife {
     const arrived = m.line * 2 + (m.dir === 1 ? 1 : 0);
     if (m.kind === 'vehicle') {
       for (const arm of this.roadVertices.get(this.endKey(vertex)) ?? [])
-        if (this.legalExit(m, arm.code, arrived)) return true;
+        if (this.legalExit(m.kind, arm.code, arrived)) return true;
     } else
       for (const code of this.ends.get(this.endKey(vertex)) ?? [])
-        if (this.legalExit(m, code, arrived)) return true;
+        if (this.legalExit(m.kind, code, arrived)) return true;
+
     return false;
   }
 
@@ -3836,6 +4067,16 @@ export class TileLife {
 
   /** Heading from a line end into that line, skipping repeated endpoint coordinates. */
   endHeading(code: number, shared?: number): readonly [number, number] {
+    const result: [number, number] = [0, 0];
+    this.writeEndHeading(code, result, 0, shared);
+    return result;
+  }
+  private writeEndHeading(
+    code: number,
+    result: number[] | Float64Array,
+    offset = 0,
+    shared?: number,
+  ): void {
     const line = code >> 1;
     const dir = (code & 1) === 0 ? 1 : -1;
     const end = this.directedVertex(code, shared);
@@ -3844,9 +4085,13 @@ export class TileLife {
       const dx = this.geo.coords[v * 2]! - this.geo.coords[end * 2]!;
       const dy = this.geo.coords[v * 2 + 1]! - this.geo.coords[end * 2 + 1]!;
       const length = Math.hypot(dx, dy);
-      if (length > 0) return [dx / length, dy / length];
+      if (length > 0) {
+        result[offset] = dx / length;
+        result[offset + 1] = dy / length;
+        return;
+      }
     }
-    return [0, 0];
+    result[offset] = result[offset + 1] = 0;
   }
 
   private plannedExit(
@@ -4375,104 +4620,134 @@ export class TileLife {
     active: (m: Mover) => boolean,
     clock: number,
     tileKey = '',
+    traffic?: JunctionTraffic,
+    pedestrians: PedestrianView = EMPTY_PEDESTRIANS,
   ) {
-    // A tile without junctions can still carry a reservation adopted from another tile.
     if (!this.junctionIndex.junctions.length && table.empty) return;
+    traffic ??= this.localJunctionTraffic;
+    if (traffic === this.localJunctionTraffic) {
+      traffic.begin(this);
+      for (const m of this.movers) if (active(m)) traffic.add(this, m);
+    }
+    this.junctionTable = table;
+    this.junctionTraffic = traffic;
+    this.junctionPedestrians = pedestrians;
+    this.junctionClock = clock;
+    this.junctionTileKey = tileKey;
     for (let index = 0; index < this.movers.length; index++) {
       const m = this.movers[index]!;
       if (m.kind !== 'vehicle' || !m.vehicle || !active(m)) continue;
+      this.junctionMover = m;
+      this.junctionIndexInTile = index;
       const pm = this.perMeter,
         length = VEHICLES[m.vehicle].length * pm;
-      if (table.carried(m)) {
-        const movement = table.movement(m)!;
-        let room = Infinity;
-        const ex = movement.exit.x ?? movement.junction.x,
-          ey = movement.exit.y ?? movement.junction.y;
-        for (const other of this.movers) {
-          if (other === m || other.kind !== 'vehicle' || !other.vehicle) continue;
-          const past = (other.x - ex) * movement.outHx + (other.y - ey) * movement.outHy;
-          const side = Math.abs((other.x - ex) * movement.outHy - (other.y - ey) * movement.outHx);
-          if (past >= 0 && side < 4 * pm)
-            room = Math.min(
-              room,
-              past / pm - VEHICLES[other.vehicle].length / 2 - movement.junction.radius / pm,
-            );
-        }
-        table.refreshCarried(
-          m,
-          (p) =>
-            this.signals.allows(
-              m,
-              p.entry?.x ?? p.junction.x,
-              p.entry?.y ?? p.junction.y,
-              clock,
-              Math.max(0, p.ahead),
-            ),
-          room,
-        );
-        continue;
-      }
-      const previous = table.movement(m);
-      let movement = previous;
-      if (previous) {
-        const j = previous.junction;
-        const past =
-          (m.x - (previous.exit.x ?? j.x)) * previous.outHx +
-          (m.y - (previous.exit.y ?? j.y)) * previous.outHy;
-        const sameApproach =
-          m.line === previous.line &&
-          m.dir === previous.dir &&
-          m.dir * (previous.stop - this.along[m.from]! - m.dir * m.d) > 0;
-        if (!sameApproach && past > j.radius + length / 2) {
-          table.release(m);
-          movement = undefined;
-        } else if (sameApproach && previous.ahead >= 0) {
-          // Refresh a pending route as it becomes known; retain the committed route inside.
-          movement = this.junctionIndex.movement(m, 60 * pm) ?? previous;
-        }
-      }
-      movement ??= this.junctionIndex.movement(
+      const movements = this.junctionIndex.movements(
         m,
         Math.max(
           60 * pm,
           (m.v ?? m.speed) ** 2 / (2 * kinematicsOf(m.vehicle).brake * pm) + 20 * pm,
         ),
+        this.junctionNext,
       );
-      if (!movement) continue;
-      const j = movement.junction;
-      const before =
-        m.line === movement.line && m.dir === movement.dir
-          ? m.dir * (movement.stop - this.along[m.from]! - m.dir * m.d)
-          : -Infinity;
-      const ahead =
-        before -
-        (movement.entry?.stopAlong !== undefined
-          ? movement.dir * (movement.stop - movement.entry.stopAlong)
-          : j.radius + JUNCTION.gap * pm) -
-        length / 2;
-      const inside = ahead < -0.05 * pm;
-      // Do not change the incoming/outgoing movement when a holder crosses its endpoint.
-      movement = { ...movement, ahead };
-      const exit = movement.exit;
-      let room = Infinity;
-      for (const other of this.trafficGroups.get(exit.line * 2 + (exit.out === 1 ? 1 : 0)) ?? []) {
-        const leader = this.movers[other]!;
-        if (leader === m) continue;
-        const past = this.progress[other]! * pm - exit.out * exit.along;
-        if (past < 0) continue;
-        room = Math.min(room, past - (VEHICLES[leader.vehicle!].length * pm) / 2 - j.radius);
+      const requests = this.junctionRequests;
+      requests.length = 0;
+      for (const r of table.holds(m)) {
+        const previous = r.movement,
+          j = previous.junction;
+        const past =
+          (m.x - (previous.exit.x ?? j.x)) * previous.outHx +
+          (m.y - (previous.exit.y ?? j.y)) * previous.outHy;
+        const candidate = movements.find((p) => p.key === previous.key);
+        const sameApproach =
+          m.line === previous.line &&
+          m.dir === previous.dir &&
+          m.dir * (previous.stop - this.along[m.from]! - m.dir * m.d) > 0;
+        if ((r.inside || !candidate) && !sameApproach && past > j.radius + length / 2) {
+          table.release(m, previous.key);
+          continue;
+        }
+        if (r.carried && !r.inside && candidate) {
+          r.carried = false;
+          this.submitJunction(
+            candidate,
+            candidate.ahead < -JUNCTION.insideToleranceM * pm && candidate.line === m.line,
+          );
+        } else if (r.carried) {
+          const availableRoom = traffic.room(m, previous, this);
+          this.junctionRoom = availableRoom;
+          const refreshed = table.refreshCarried(
+            m,
+            this.carriedReady,
+            availableRoom,
+            previous.key,
+            traffic,
+            this.junctionIndexInTile,
+          );
+          if (refreshed) requests.push(refreshed);
+        } else if (r.inside) {
+          previous.ahead = boxAhead(m, previous, pm);
+          previous.boxAhead = previous.ahead;
+          this.submitJunction(previous, true);
+        } else if (candidate)
+          this.submitJunction(
+            candidate,
+            candidate.ahead < -JUNCTION.insideToleranceM * pm && candidate.line === m.line,
+          );
+        else table.release(m, previous.key); // A committed route was abandoned, not rear-cleared.
+        if (candidate) movements.splice(movements.indexOf(candidate), 1);
       }
-      const ready =
-        room >= length + FOLLOW.minGap * pm &&
-        this.signals.allows(
-          m,
-          movement.entry?.x ?? j.x,
-          movement.entry?.y ?? j.y,
-          clock,
-          Math.max(0, ahead),
+      for (const movement of movements)
+        this.submitJunction(
+          movement,
+          movement.ahead < -JUNCTION.insideToleranceM * pm && movement.line === m.line,
         );
-      table.request({ m, life: this, tileKey, index, movement, ready, inside, room: room / pm });
+      if (requests.length > 1) requests.sort(compareJunctionRequests);
+      for (let i = 0; i < requests.length; i++)
+        requests[i]!.precedingKey = requests[i - 1]?.movement.key;
     }
+  }
+
+  private junctionAllowed(movement: Movement, availableRoom?: number): boolean {
+    const m = this.junctionMover;
+    this.junctionCrossings.holdAhead(movement, this.junctionControlled(movement));
+    this.junctionRoom = availableRoom ?? this.junctionTraffic.room(m, movement, this);
+    return (
+      this.junctionRoom >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
+      this.signals.allows(
+        m,
+        movement.entry?.x ?? movement.junction.x,
+        movement.entry?.y ?? movement.junction.y,
+        this.junctionClock,
+        Math.max(0, movement.ahead),
+        movement,
+      ) &&
+      this.junctionClear(movement, this.junctionPedestrians)
+    );
+  }
+  private submitJunction(movement: Movement, inside: boolean): void {
+    const m = this.junctionMover;
+    const ready = this.junctionAllowed(movement);
+    const request: JunctionRequest = {
+      m,
+      life: this,
+      tileKey: this.junctionTileKey,
+      index: this.junctionIndexInTile,
+      movement,
+      ready,
+      inside,
+      atLine: this.junctionTraffic.atLine(m, movement, this, this.junctionTable),
+      room: this.junctionRoom,
+      traffic: this.junctionTraffic,
+    };
+    this.junctionRequests.push(request);
+    this.junctionTable.request(request);
+  }
+
+  private junctionControlled(movement: Movement): boolean {
+    return this.junctionCrossings.controlled(movement);
+  }
+  junctionClear(movement: Movement, pedestrians: PedestrianView): boolean {
+    return this.junctionCrossings.clear(movement, pedestrians, this.junctionControlled(movement));
   }
 
   private terminalTarget(m: Mover, target: number, remaining: number): number {
@@ -4527,6 +4802,21 @@ export class TileLife {
       Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
     );
     return separation < width + FOLLOW.lateralPad;
+  }
+
+  private capJunction(index: number, movement: Movement, dt: number): void {
+    const pm = this.perMeter;
+    const ahead =
+      movement.ahead >= -JUNCTION.insideToleranceM * pm
+        ? movement.ahead
+        : (movement.boxAhead ?? movement.ahead);
+    if (ahead < -JUNCTION.insideToleranceM * pm) return;
+    const m = this.movers[index]!;
+    this.speeds[index] = Math.min(
+      this.speeds[index]!,
+      approach(ahead, 0, kinematicsOf(m.vehicle).brake * pm),
+    );
+    this.caps[index] = Math.min(this.caps[index]!, Math.max(0, ahead) / dt);
   }
 
   /** Nearest overlapping leader, including the chosen exit when this line is clear. */
@@ -4625,13 +4915,8 @@ export class TileLife {
             }
           }
         }
-        const movement = table.movement(m);
-        if (movement && !table.granted(m) && movement.ahead >= -0.05 * pm) {
-          speeds[i] = Math.min(
-            speeds[i],
-            approach(movement.ahead, 0, kinematicsOf(m.vehicle).brake * pm),
-          );
-          caps[i] = Math.min(caps[i]!, Math.max(0, movement.ahead) / dt);
+        for (const { movement } of table.holds(m)) {
+          if (!table.canEnter(m, movement.key)) this.capJunction(i, movement, dt);
         }
       }
     return speeds;
@@ -4669,7 +4954,14 @@ export class TileLife {
       !this.scenes.hidden(m);
     this.prepareTraffic(active);
     table.begin(new Set([this]));
-    this.requestJunctions(table, active, clock);
+    this.requestJunctions(
+      table,
+      active,
+      clock,
+      '',
+      undefined,
+      this.standalonePedestrians(shows, near, env),
+    );
     table.resolve(clock);
   }
 
@@ -4823,6 +5115,11 @@ export class TileLife {
     }
     return fitsGround(m, before, undefined, rejected);
   }
+  private readonly standaloneGround: GroundGuard = (owner, before) =>
+    !('kind' in owner) ||
+    (owner.kind !== 'cat' && owner.kind !== 'dog') ||
+    (this.scenes.walkable(before ?? owner, owner) &&
+      this.roadTerrain.access.allows(this.groundBodies(owner)));
 
   private stepFrame(
     dt: number,
@@ -4841,8 +5138,59 @@ export class TileLife {
     this.time += dt;
     const { rng } = this;
     const clock = env?.clock ?? this.time;
+    this.crossingClock = clock;
+    const minimum = pass?.momentView?.cellWidth ?? 0;
+    this.crossingMinimum = minimum;
+    this.crossingWaits.beginStep();
+    if (this.crossingWaits.records.length) {
+      if (!guard || !pass?.crossingGuard) {
+        const physical = guard ?? this.standaloneGround;
+        guard = Object.assign(
+          (
+            owner: GroundAgent,
+            before?: GroundAgent,
+            reserve?: boolean,
+            reject?: (reason: ContinuityRejection) => void,
+          ) => {
+            const trial = this.crossingWaits.prepare(owner, before, minimum);
+            if (!this.crossingWaits.permits(owner, before, clock, minimum, trial)) return false;
+            if (!physical(owner, before, reserve, reject)) return false;
+            if (reserve !== false)
+              this.crossingWaits.accept(
+                owner,
+                before,
+                clock,
+                minimum,
+                () => this.movers.indexOf(owner as Mover),
+                trial,
+              );
+            return true;
+          },
+          physical,
+        );
+      }
+      for (const owner of this.movers) {
+        if (
+          owner === this.inspected ||
+          (near && !near(owner.x, owner.y)) ||
+          (pass?.owns && !pass.owns(owner))
+        )
+          continue;
+        this.crossingWaits.tick(owner, dt, clock, minimum, guard);
+      }
+      for (const owner of this.gatherers) {
+        if (
+          owner === this.inspected ||
+          (near && !near(owner.x, owner.y)) ||
+          (pass?.owns && !pass.owns(owner))
+        )
+          continue;
+        this.crossingWaits.tick(owner, dt, clock, minimum, guard);
+      }
+    }
     const walkDistance = (m: Mover, target: { x: number; y: number }, distance: number) =>
-      this.signals.walkDistance(m, target, distance, clock, env?.diagnostics);
+      this.crossingWaits.limit(m, target, distance, clock, minimum);
+
     this.scenes.step(
       dt,
       this.movers,
@@ -4852,6 +5200,7 @@ export class TileLife {
       guard,
       (m) => this.offsetOf(m),
       walkDistance,
+
       pass?.owns,
       this.inspected,
       env?.diagnostics,
@@ -4899,14 +5248,9 @@ export class TileLife {
     const rejected = (reason: ContinuityRejection) => {
       terrainRejected ||= reason === 'terrain';
     };
-    // Standalone animal callers still enforce terrain without a world guard.
-    const fitsGround: GroundGuard =
-      guard ??
-      ((next, previous) =>
-        !('kind' in next) ||
-        (next.kind !== 'cat' && next.kind !== 'dog') ||
-        (this.scenes.walkable(previous ?? next, next) &&
-          this.roadTerrain.access.allows(this.groundBodies(next))));
+    const fitsGround: GroundGuard = guard ?? this.standaloneGround;
+    let livePedestrians = pass?.pedestrians;
+
     // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
     // the cap in stable mover order.
     let running = 0;
@@ -4951,17 +5295,20 @@ export class TileLife {
           limit.target = speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
-          const movement = table.movement(m);
+          const clearing = this.clearingJunctions;
+          clearing.clear();
+          for (const r of table.holds(m))
+            if (r.inside && r.since !== undefined && r.authorizedOutside)
+              clearing.add(r.movement.key);
           intentionalHold = this.signals.vehicleLimit(
             m,
             dt,
             clock,
             limit,
-            movement && table.granted(m) && movement.ahead < -0.05 * this.perMeter
-              ? movement.key
-              : undefined,
+            clearing,
             env?.diagnostics,
           );
+
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
         } else
@@ -5065,7 +5412,12 @@ export class TileLife {
             running -= Number(this.stopRun(m));
             continue;
           }
-        } else if (idle && this.walkerRng() < PERSON_TURN_CHANCE * dt && !dashing) {
+        } else if (
+          idle &&
+          this.walkerRng() < PERSON_TURN_CHANCE * dt &&
+          !dashing &&
+          !m.crossingWait?.waiting
+        ) {
           running -= Number(this.stopRun(m));
           const previous = snapshotMover(m);
           const heading = m.momentFacing ?? { hx: m.hx, hy: m.hy };
@@ -5085,15 +5437,7 @@ export class TileLife {
       }
       const walking = isWalker(m.kind);
       if (walking) {
-        speeds[i] =
-          this.signals.walkDistance(
-            m,
-            { x: m.x + m.hx * speeds[i]! * dt, y: m.y + m.hy * speeds[i]! * dt },
-            speeds[i]! * dt,
-            clock,
-            env?.diagnostics,
-          ) / dt;
-        if (m.kind === 'person' && speeds[i] > 0 && this.trafficTooClose(m, speeds[i] * dt))
+        if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
           speeds[i] = 0;
       }
       if (m.vehicle) {
@@ -5104,12 +5448,29 @@ export class TileLife {
             speeds[i]!,
             approach(seam.room, 0, kinematicsOf(m.vehicle).brake * this.perMeter),
           );
+        if (m.kind === 'vehicle') {
+          livePedestrians ??= this.standalonePedestrians(shows, near, env);
+          let revoked = false;
+          for (const r of table.holds(m)) {
+            const p = r.movement;
+            if (r.inside || r.since === undefined || this.junctionClear(p, livePedestrians))
+              continue;
+            table.revokeGrant(m, p.key);
+            this.capJunction(i, p, dt);
+            revoked = true;
+          }
+          if (revoked)
+            for (const r of table.holds(m))
+              if (!r.inside && !table.canEnter(m, r.movement.key))
+                this.capJunction(i, r.movement, dt);
+        }
         if (pedestrianTarget && m.kind === 'vehicle') {
           const decision = pedestrianTarget(m, speeds[i]!);
           speeds[i] = decision.target;
           intentionalHold ||= decision.held;
           if (decision.held) env?.diagnostics?.hold(m, 'signal');
         }
+
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
         const next = nextSpeed(
@@ -5184,7 +5545,6 @@ export class TileLife {
       if (walking) {
         if (m.momentFacing) faceGroup(m, m.hx, m.hy);
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
-        m.walked = (m.walked ?? 0) + distance / this.perMeter;
       }
       const restored =
         m.kind === 'vehicle' && before.roadShift !== m.roadShift
@@ -5217,6 +5577,7 @@ export class TileLife {
       }
       let curveForward = 0;
       terrainRejected = false;
+
       if (m.kind === 'vehicle' || walking) {
         this.trialYaw(m, before, moved);
         let fits = this.motionFits(
@@ -5458,6 +5819,7 @@ export class TileLife {
           restoreMover(m, before);
           moved = 0;
         } else if (m.kind === 'vehicle') this.clearPastCurve(m);
+        if (walking && fits) m.walked = (before.walked ?? 0) + Math.max(0, moved) / this.perMeter;
         if (m.kind === 'vehicle' && !intentionalHold) {
           const refused = distance > 1e-8 * this.perMeter && (!fits || moved <= distance * 1e-6);
           m.terrainWait = refused && terrainRejected ? (before.terrainWait ?? 0) + dt : undefined;
@@ -5538,12 +5900,14 @@ export class TileLife {
             if (m.roadSteering !== undefined) m.roadSteering = undefined;
           }
         } else m.waiting = before.waiting ?? 0;
+
         const walledIn =
           forwardTerrainRejected &&
           (m.turnedAt === undefined ||
             (m.walked ?? 0) - m.turnedAt >= WALK_RECOVERY.terrainMinWalkM);
         if (
           (m.kind === 'person' || m.kind === 'dog') &&
+          !m.crossingWait?.waiting &&
           (m.waiting >= WALK_RECOVERY.blockedTurnSeconds ||
             (m.kind === 'person' && walledIn && !m.momentFacing)) &&
           !this.walkerRecoveryProgress.has(m) &&
@@ -5641,7 +6005,20 @@ export class TileLife {
           }
         }
       }
-      if (m.vehicle) m.v = Math.max(0, moved, curveForward) / dt;
+      if (m.vehicle) {
+        let travelled = Math.max(0, moved, curveForward);
+        if (guard && m.kind === 'vehicle' && travelled > 0 && motionTrial.origin) {
+          // Expanded curves and merges can use the whole physical budget with
+          // less cursor travel. Do not brake again for that accepted distance;
+          // a shorter inner arc retains the ordinary cursor pace.
+          const pose = this.pose(m);
+          travelled = Math.max(
+            travelled,
+            Math.hypot(pose.x - motionTrial.origin.x, pose.y - motionTrial.origin.y),
+          );
+        }
+        m.v = travelled / dt;
+      }
       const walkingRecovery = isWalker(m.kind) ? this.walkerRecoveryProgress.get(m) : undefined;
       if (walkingRecovery !== undefined) {
         if (moved > 0) {
@@ -5672,6 +6049,7 @@ export class TileLife {
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
     if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
 
@@ -6559,6 +6937,24 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  readonly crossingReservations = new CrossingReservations();
+  private crossingCellMeters = 0;
+  private retainCrossingClaims() {
+    if (this.crossingReservations.empty) return;
+    const active = new Set<string>();
+    for (const life of this.tiles.values()) {
+      if (!life.crossingWaits.records.length) continue;
+      for (const owner of life.movers) {
+        const wait = owner.crossingWait?.waiting;
+        if (wait && this.owns(life, owner)) active.add(wait.owner);
+      }
+      for (const owner of life.gatherers) {
+        const wait = owner.crossingWait?.waiting;
+        if (wait && this.owns(life, owner)) active.add(wait.owner);
+      }
+    }
+    this.crossingReservations.retain(active);
+  }
   private sourceSerial = 0;
   private readonly nextSourceId = () => ++this.sourceSerial;
   private puffPacket = EMPTY_PUFFS;
@@ -6902,6 +7298,11 @@ export class LifeWorld {
       route?: readonly { x: number; y: number }[];
     }
   >();
+  private readonly junctionTraffic = new JunctionTraffic();
+  private crossingGeometryVersion = 0;
+  private preparedCrossingVersion = -1;
+  private readonly dirtyCrossingConsumers = new Set<TileLife>();
+
   private roadCache = new WorldRoadCache();
   private readonly metricTerrain = new WeakMap<
     TileLife,
@@ -7089,10 +7490,13 @@ export class LifeWorld {
     for (const tile of this.tiles.values()) tile.momentHost.clear();
     for (const { life } of this.retired.values()) life.momentHost.clear();
     this.tiles.clear();
+    this.crossingGeometryVersion++;
     this.retired.clear();
     this.covers.clear();
     this.mixedZoom = false;
     this.junctions.clear();
+    this.dirtyCrossingConsumers.clear();
+    this.crossingReservations.clear();
     this.arrivals.clear();
     this.groundTerrain = undefined;
     this.eventTileDescriptors = undefined;
@@ -7110,6 +7514,8 @@ export class LifeWorld {
       if (this.clock - entry.at >= RETIRE.seconds) {
         this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
+        for (const owner of [...entry.life.movers, ...entry.life.gatherers])
+          entry.life.crossingWaits.release(owner);
         entry.life.emoji.dispose();
         this.retired.delete(key);
       }
@@ -7119,6 +7525,7 @@ export class LifeWorld {
         const life = this.retired.get(key)!.life;
         this.forgetBirds(life);
         life.momentHost.clear();
+        for (const owner of [...life.movers, ...life.gatherers]) life.crossingWaits.release(owner);
         life.emoji.dispose();
         this.retired.delete(key);
       }
@@ -7185,6 +7592,8 @@ export class LifeWorld {
               { memory: this.emojiMemory, enabled: this.emojiObserver },
             );
           this.retired.delete(key);
+          fresh.crossingWaits.registry = this.crossingReservations;
+          fresh.crossingWaits.shared = true;
           this.tiles.set(key, fresh);
           if (saved)
             for (const m of fresh.movers)
@@ -7215,6 +7624,7 @@ export class LifeWorld {
           changed = true;
         }
       if (changed) {
+        this.crossingGeometryVersion++;
         this.releaseEventActors(false, true);
         this.seasonsDirty = true;
         this.seasonalTerrainKey = this.physicalSeasonKey(this.tiles.values(), this.seasonalConfig);
@@ -7337,6 +7747,7 @@ export class LifeWorld {
         for (const m of life.movers) if (!this.owns(life, m)) this.junctions.release(m);
       this.junctions.begin(new Set(this.tiles.values()));
       this.pruneRetired();
+      this.retainCrossingClaims();
       if (tiles.length) this.bootstrapped = true;
     } finally {
       if (start !== undefined) this.profiler!.add('sync', this.profiler!.time() - start);
@@ -7422,6 +7833,8 @@ export class LifeWorld {
           c.life,
           {
             replace,
+            crossingClock: this.clock,
+            crossingMinimum: this.crossingCellMeters,
             snapM: kind === 'train' ? TRAIN.handover : ADOPT.snap,
             reject: this.profiler && ((reason) => this.profiler!.countContinuity(reason)),
           },
@@ -7453,6 +7866,7 @@ export class LifeWorld {
           [...this.tiles].find(([, life]) => life === target)![0],
           c.life,
         );
+        if (this.junctions.movement(c.m)) this.dirtyCrossingConsumers.add(target);
         if (replace) {
           this.junctions.release(replace);
           guard.remove(replace);
@@ -7497,12 +7911,7 @@ export class LifeWorld {
     const origin = (life: TileLife) => {
       const found = terrain.origins.get(life);
       if (found) return found;
-      const scale = 2 ** (ref!.tile.z - life.tile.z);
-      const at = {
-        x: ((life.tile.x * scale - ref!.tile.x) * EXTENT) / ref!.perMeter,
-        y: ((life.tile.y * scale - ref!.tile.y) * EXTENT) / ref!.perMeter,
-        scale: (scale * life.perMeter) / ref!.perMeter,
-      };
+      const at = metricFrame(life, ref!);
       terrain.origins.set(life, at);
       return at;
     };
@@ -8361,6 +8770,9 @@ export class LifeWorld {
     ) => {
       eventDenials.delete(identity);
       if (!this.owns(life, owner)) return true;
+      const crossingTrial = life.crossingWaits.prepare(owner, before, minimum);
+      if (!life.crossingWaits.permits(owner, before, this.clock, minimum, crossingTrial))
+        return false;
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
@@ -8561,6 +8973,14 @@ export class LifeWorld {
         }
       }
       if (reserve) {
+        life.crossingWaits.accept(
+          owner,
+          before,
+          this.clock,
+          minimum,
+          () => life.movers.indexOf(identity as Mover),
+          crossingTrial,
+        );
         queryOnly?.delete(identity);
         const reserved = reservations.get(identity);
         occupied.set(identity, reserved ? [...next, ...reserved] : next);
@@ -8967,6 +9387,7 @@ export class LifeWorld {
     // Otherwise a slow drawing frame stretches the scheduled event and its displayed clock.
     if (this.played?.timing) this.played.elapsed += Math.max(0, dt);
     this.effectCellMeters = effectCellMeters;
+    this.crossingCellMeters = cellMeters;
     if (clamped === 0) return;
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
@@ -9082,8 +9503,34 @@ export class LifeWorld {
       }
     }
     for (const tile of this.tiles.values()) tile.prepareTraffic(eligibility.get(tile)!);
+    this.junctionTraffic.begin(this.tiles.values().next().value!);
+    for (const tile of this.tiles.values())
+      for (const m of tile.movers) if (eligibility.get(tile)!(m)) this.junctionTraffic.add(tile, m);
+    const crossingGeometryChanged = this.preparedCrossingVersion !== this.crossingGeometryVersion;
+    if (crossingGeometryChanged || this.dirtyCrossingConsumers.size) {
+      const sources = [...this.tiles.values()];
+      for (const tile of sources) {
+        if (!crossingGeometryChanged && !this.dirtyCrossingConsumers.has(tile)) continue;
+        const bounds = tile.junctionCrossings.bounds(this.junctions);
+        tile.junctionCrossings.prepare(
+          sources.filter((source) => tile.junctionCrossings.relevant(source, bounds)),
+          crossingGeometryChanged ? this.crossingGeometryVersion : undefined,
+          bounds,
+        );
+      }
+      this.dirtyCrossingConsumers.clear();
+      this.preparedCrossingVersion = this.crossingGeometryVersion;
+    }
+
     for (const [key, tile] of this.tiles)
-      tile.requestJunctions(this.junctions, eligibility.get(tile)!, this.clock, key);
+      tile.requestJunctions(
+        this.junctions,
+        eligibility.get(tile)!,
+        this.clock,
+        key,
+        this.junctionTraffic,
+        guard.pedestrians(tile),
+      );
     this.junctions.resolve(this.clock);
     const trains = trainLimits(
       [...this.tiles.values()],
@@ -9226,6 +9673,7 @@ export class LifeWorld {
           },
         ),
         {
+          crossingGuard: true,
           pedestrians: guard.pedestrians(tile),
           junctions: this.junctions,
           trains,
@@ -9255,7 +9703,14 @@ export class LifeWorld {
         target.adoptFrom(
           m,
           source,
-          { nudgeM: clipped ? 0.001 : 0, reject, insideTile: true },
+          {
+            nudgeM: clipped ? 0.001 : 0,
+            reject,
+            insideTile: true,
+            crossingClock: this.clock,
+            crossingMinimum: cellMeters,
+          },
+
           (preview) =>
             inTile(preview) &&
             this.owns(target, preview) &&
@@ -9267,13 +9722,15 @@ export class LifeWorld {
         this.profiler?.countContinuity('transfers');
         this.clearSeamRecovery(m);
         effectOwners!.set(m, target);
-        if (held)
+        if (held) {
           this.junctions.rebind(
             m,
             target,
             [...this.tiles].find(([, life]) => life === target)![0],
             source,
           );
+          this.dirtyCrossingConsumers.add(target);
+        }
         guard.remove(m);
         if (m.kind === 'vehicle') guard(target, m, m);
       } else {
@@ -9327,6 +9784,8 @@ export class LifeWorld {
     if (!shows || shows('train')) this.stepArrivals(clamped);
     this.retireStalled();
     this.admitBirths(clamped);
+    this.retainCrossingClaims();
+    this.crossingReservations.resolve();
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     if (this.profiler)
       for (const [key, life] of this.tiles)
@@ -9870,7 +10329,16 @@ export class LifeWorld {
           const clock = inspection?.clock(m, this.clock) ?? this.clock;
           // Turning round, the group keeps its footing while the drawn facing swings: each
           // member's place, held in the walking heading's frame, is redrawn in the swinging one.
-          const place = (w: { lateral: number; back: number }) => {
+          const place = (w: { lateral: number; back: number }, member: number) => {
+            const wait = m.crossingWait?.waiting?.poses[member];
+            if (wait) {
+              const dx = (m.x - x) / perMeter + wait.x,
+                dy = (m.y - y) / perMeter + wait.y;
+              return {
+                lateral: -hy * dx + hx * dy,
+                back: -(hx * dx + hy * dy),
+              };
+            }
             if (!m.turning) return { lateral: w.lateral, back: w.back };
             const wx = -m.hy * w.lateral - m.hx * w.back,
               wy = m.hx * w.lateral - m.hy * w.back;
@@ -9881,9 +10349,12 @@ export class LifeWorld {
               {
                 figure: w.figure,
                 paint: w.shirt,
-                ...place(w),
+                ...place(w, member),
                 // Standing still, feet together.
-                flap: m.pause > 0 ? 0 : (stride + w.step) & 1,
+                flap:
+                  m.pause > 0 || (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing)
+                    ? 0
+                    : (stride + w.step) & 1,
                 pose: life.momentHost.pose(m, member),
               },
               w,
@@ -10012,9 +10483,12 @@ export class LifeWorld {
               people: [{ ...look, lateral: 1 }],
             });
           } else {
-            const [lng, lat] = at(g.x, g.y);
-            const { hx, hy } = g.momentFacing ?? g;
-            const ahead = at(g.x + hx * perMeter, g.y + hy * perMeter);
+            const wait = g.crossingWait?.waiting?.poses[0];
+            const gx = g.x + (wait?.x ?? 0) * perMeter,
+              gy = g.y + (wait?.y ?? 0) * perMeter;
+            const [lng, lat] = at(gx, gy);
+            const { hx, hy } = wait ?? g.momentFacing ?? g;
+            const ahead = at(gx + hx * perMeter, gy + hy * perMeter);
             const agent: VisibleAgent = {
               kind: 'person',
               lng,

@@ -6,14 +6,13 @@ import { continuityMover, continuityTile, left, right } from './testing/continui
 
 const life = new TileLife({ z: 16, x: 1, y: 1 }, new LifeBuilder().finish(), 1);
 const mover = () => ({ kind: 'vehicle', vehicle: 'car' }) as Mover;
-const movement = (ix: number, iy: number, ox: number, oy: number, rank = 0): Movement => ({
+const movement = (ix: number, iy: number, ox: number, oy: number): Movement => ({
   key: 'cross',
   junction: { key: 'cross', x: 0, y: 0, radius: 7, arms: [] },
   inHx: ix,
   inHy: iy,
   outHx: ox,
   outHy: oy,
-  rank,
   stop: 0,
   line: 0,
   dir: 1,
@@ -21,7 +20,7 @@ const movement = (ix: number, iy: number, ox: number, oy: number, rank = 0): Mov
   ahead: 2,
 });
 const east = movement(1, 0, 1, 0),
-  south = movement(0, 1, 0, 1, LifeLine.roadMinor);
+  south = movement(0, 1, 0, 1);
 it('keeps initial traffic outside ordinary junction reservation zones', () => {
   const b = new LifeBuilder();
   b.line(
@@ -62,11 +61,10 @@ it('keeps initial traffic outside ordinary junction reservation zones', () => {
   };
   expect(tile.junctionIndex.hasLinked).toBe(false);
   expect(tile.junctionIndex.movement(car, 60 * tile.perMeter)!.ahead).toBeLessThan(0);
-  expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(true);
-  expect(tile.junctionIndex.canSpawnVehicle(car, true)).toBe(false);
+  expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(false);
   car.d -= 30 * tile.perMeter;
   car.x -= 30 * tile.perMeter;
-  expect(tile.junctionIndex.canSpawnVehicle(car, true)).toBe(true);
+  expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(true);
   car.d += 30 * tile.perMeter;
   car.x += 30 * tile.perMeter;
   tile.movers.splice(0, tile.movers.length, car);
@@ -74,8 +72,7 @@ it('keeps initial traffic outside ordinary junction reservation zones', () => {
   tile.settleGround((owner) => {
     if (owner !== car) return true;
     checked++;
-    const movement = tile.junctionIndex.movement(car, 60 * tile.perMeter);
-    expect(movement === undefined || movement.ahead >= 0).toBe(true);
+    expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(true);
     return true;
   });
   expect(checked).toBeGreaterThan(0);
@@ -148,7 +145,7 @@ describe('junction arbitration', () => {
     expect(compatible(east, movement(0, 1, 1, 0))).toBe(false);
     expect(compatible(movement(1, 0, 0, 1), movement(0, 1, -1, 0))).toBe(true);
   });
-  it('uses road rank in the arrival tie and ages a conflicting waiter', () => {
+  it('breaks arrival ties to the right and ages a conflicting waiter', () => {
     const table = new JunctionTable(),
       a = mover(),
       b = mover();
@@ -162,6 +159,7 @@ describe('junction arbitration', () => {
         movement: south,
         ready: true,
         inside: false,
+        atLine: true,
       });
       if (includeA)
         table.request({
@@ -172,6 +170,7 @@ describe('junction arbitration', () => {
           movement: east,
           ready: true,
           inside: false,
+          atLine: true,
         });
       table.resolve(clock);
     };

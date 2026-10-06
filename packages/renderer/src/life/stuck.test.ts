@@ -8,7 +8,7 @@ import { packLife } from './draw';
 import { themes } from '../theme';
 import { FOLLOW, WALK_RECOVERY, ROAD_AVOID, PEDESTRIAN, RECOVERY, activityLevels } from './config';
 import { VEHICLES } from './vehicles';
-import { snapshotMover } from './mover-pose';
+import { snapshotMover, restoreMover } from './mover-pose';
 import { bodiesOverlap, PolygonIndex } from './occupancy';
 
 const tile = { z: 16, x: 55192, y: 30266 };
@@ -978,20 +978,27 @@ it('clears a committed turning jeepney past a curbside group with retained physi
   );
   b.line(
     [
-      { x: 533.0589, y: 272.7298 },
-      { x: 466.9411, y: 253.2702 },
+      // Leave enough mapped pavement beyond both curbs for the entire group
+      // to clear main's crossing admission zone, including its rear child.
+      { x: 566.1178, y: 282.4596 },
+      { x: 433.8822, y: 243.5404 },
     ],
     LifeLine.path,
     3,
   );
   b.area('crossing', [
+    // Cover both road shoulders at this oblique bend and leave enough width
+    // for the actual formation. A shorter stripe strands its rear child on
+    // forbidden carriageway, so main's whole-crossing gate can never clear.
     [
-      { x: 523.528192, y: 280.701481 },
-      { x: 529.36605, y: 260.866141 },
-      { x: 476.471808, y: 245.298519 },
-      { x: 470.63395, y: 265.133859 },
-      { x: 523.528192, y: 280.701481 },
-    ],
+      [6, 2.5],
+      [6, -2.5],
+      [-6, -2.5],
+      [-6, 2.5],
+    ].map(([along, side]) => ({
+      x: 500 + (0.95931394 * along! - 0.28234156 * side!) * pm,
+      y: 263 + (0.28234156 * along! + 0.95931394 * side!) * pm,
+    })),
   ]);
   const world = new LifeWorld(undefined, undefined, { enabled: false });
   world.sync([{ key: 'curb', tile, life: b.finish() }]);
@@ -1023,7 +1030,7 @@ it('clears a committed turning jeepney past a curbside group with retained physi
     line: 3,
     from: 7,
     dir: 1,
-    d: 49.060868,
+    d: 49.060868 + Math.hypot(33.0589, 9.7298),
     x: 485.994124,
     y: 258.877845,
     hx: -0.95931394,
@@ -1033,23 +1040,43 @@ it('clears a committed turning jeepney past a curbside group with retained physi
     waiting: 4,
     group: [walker(), { ...walker(1), figure: 'child' }, { ...walker(), back: 1, figure: 'child' }],
   });
-  life.movers.push(car, person);
+  // This regression starts with an admitted vehicle. Obtain its grant at the
+  // actual upstream gate before restoring the committed curve pose.
+  const table = (world as unknown as { junctions: JunctionTable }).junctions;
+  const committed = snapshotMover(car);
+  life.movers.push(car);
+  car.d = Math.max(0, car.d - 12 * pm);
+  (
+    life as unknown as { advance: (m: Mover, distance: number, junctions: boolean) => number }
+  ).advance(car, 0, false);
+  life.prepareTraffic(() => true);
+  table.begin(new Set([life]));
+  life.requestJunctions(table, () => true, 0);
+  table.resolve(0);
+  expect(table.granted(car)).toBe(true);
+  restoreMover(car, committed);
+  life.movers.push(person);
   const group = person.group,
     start = life.pose(car);
-  let granted = false;
-  const table = (world as unknown as { junctions: JunctionTable }).junctions;
+  const access = (
+    life as unknown as {
+      roadTerrain: {
+        access: { allows: (bodies: ReturnType<typeof life.groundBodies>) => boolean };
+      };
+    }
+  ).roadTerrain.access;
+  expect(access.allows(life.groundBodies(person))).toBe(true);
   // Main's courtesy controller can spend its full hold before the original
   // 25-second physical-progress window starts.
   for (let frame = 0; frame < (25 + PEDESTRIAN.holdMax) * 30; frame++) {
     world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
-    granted ||= table.granted(car);
+    expect(access.allows(life.groundBodies(person))).toBe(true);
     expect(
       life
         .groundBodies(car)
         .some((a) => life.groundBodies(person).some((b) => bodiesOverlap(a, b, 0))),
     ).toBe(false);
   }
-  expect(granted).toBe(true);
   expect(Math.hypot(life.pose(car).x - start.x, life.pose(car).y - start.y) / pm).toBeGreaterThan(
     VEHICLES.jeepney.length,
   );

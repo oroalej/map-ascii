@@ -26,6 +26,7 @@ import {
 } from './classes';
 import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
+import { PEDESTRIAN_MASTERS } from './life/pedestrian-glyphs';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
 import type { FixtureVisibility } from './life/fixtures';
@@ -46,7 +47,7 @@ export type LegendEntryId =
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
-  | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'utilities'}`;
+  | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'pedestrian-signals' | 'utilities'}`;
 
 export type LegendEntry = {
   /** Stable identity, independent of display wording and currently visible class membership. */
@@ -260,7 +261,10 @@ export function legendEntries(
     emoji?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
-    fixtures?: Pick<FixtureVisibility, 'streetlights' | 'trafficSignals' | 'seasonal'> & {
+    fixtures?: Pick<
+      FixtureVisibility,
+      'streetlights' | 'trafficSignals' | 'pedestrianSignals' | 'seasonal'
+    > & {
       utilities?: boolean;
     };
     season?: SeasonState | null;
@@ -394,6 +398,26 @@ export function legendEntries(
       label: 'Traffic signals (simulated phases)',
       glyphs: zoom >= 18.5 ? '○○○' : '•',
       color: css(theme.fixturePaints[5]!),
+    });
+  if (fixtures?.pedestrianSignals)
+    entries.push({
+      id: 'info:pedestrian-signals',
+      classes: [],
+      label: 'Pedestrian signals (synced with traffic signals)',
+      glyphs: '',
+      color: css(theme.fixturePaints[5]!),
+      icons: [
+        {
+          pixels: PEDESTRIAN_MASTERS.stop,
+          paint: css(theme.fixturePaints[3]!),
+          tone: css(theme.fixturePaints[3]!),
+        },
+        {
+          pixels: PEDESTRIAN_MASTERS.walk,
+          paint: css(theme.fixturePaints[5]!),
+          tone: css(theme.fixturePaints[5]!),
+        },
+      ],
     });
   if (fixtures?.utilities)
     entries.push({
