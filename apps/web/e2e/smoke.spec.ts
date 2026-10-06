@@ -272,6 +272,10 @@ for (const city of cities) {
           };
           await expectAttributionExposed();
           if (hasTouch) {
+            await expect(page.getByLabel(/^Scale:/)).toBeHidden();
+            await expect(
+              page.getByRole('button', { name: 'Coordinates', exact: true }),
+            ).toBeHidden();
             await panel.locator('button[aria-expanded]').click();
             await expect(panel.locator('button[aria-expanded]')).toHaveAttribute(
               'aria-expanded',
@@ -282,6 +286,12 @@ for (const city of cities) {
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
+          if (hasTouch) {
+            await expect(page.getByLabel(/^Scale:/)).toBeVisible();
+            await expect(
+              page.getByRole('button', { name: 'Coordinates', exact: true }),
+            ).toBeVisible();
+          }
           // Reuse the loaded map for browser-only keyboard and layout checks. Focus
           // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
           const summary = legend.locator('summary');

@@ -167,6 +167,23 @@ it.each([640, 640.5, 641])('matches the compact CSS breakpoint at %s CSS pixels'
   expect(legend().open).toBe(width > 640);
 });
 
+it('suppresses phone bottom controls for visible facts and retains tour suppression after close', async () => {
+  await mount(renderer());
+  const controls = container.querySelector('[data-touring]')!;
+  expect(controls.getAttribute('data-touring')).toBe('false');
+  act(() => useUiStore.setState({ factsVisible: true }));
+  expect(controls.getAttribute('data-touring')).toBe('true');
+  act(() => useUiStore.setState({ factsVisible: false }));
+  expect(controls.getAttribute('data-touring')).toBe('false');
+  act(() => useAtlasStore.setState({ tour: { id: 'tour/test', step: 0, paused: true } }));
+  expect(controls.getAttribute('data-touring')).toBe('true');
+  act(() => useUiStore.setState({ factsVisible: true }));
+  act(() => useUiStore.setState({ factsVisible: false }));
+  expect(controls.getAttribute('data-touring')).toBe('true');
+  act(() => useAtlasStore.setState({ tour: null }));
+  expect(controls.getAttribute('data-touring')).toBe('false');
+});
+
 it('keeps a clear control outside the collapsed/hidden legend and preserves selection when cleared', async () => {
   const instance = renderer();
   await mount(instance);

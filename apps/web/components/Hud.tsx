@@ -544,7 +544,11 @@ export function Hud({
           hidden={factsVisible}
         />
       </div>
-      <div className={styles.bottomLeft} data-touring={touring} data-speech-obstacle>
+      <div
+        className={styles.bottomLeft}
+        data-touring={touring || factsVisible}
+        data-speech-obstacle
+      >
         <ScaleBar />
         {subdivision && (
           <p className={styles.line}>
