@@ -28,6 +28,13 @@ export const phases = [
   'complete',
 ] as const;
 export type Phase = (typeof phases)[number];
+export const claudeEfforts = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ClaudeEffort = (typeof claudeEfforts)[number];
+export function parseClaudeEffort(value: unknown): ClaudeEffort {
+  if (typeof value !== 'string' || !claudeEfforts.some((effort) => effort === value))
+    throw new Error('Invalid Claude effort: expected low, medium, high, xhigh or max');
+  return value as ClaudeEffort;
+}
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Identity = { repository: string; pr: number; branch: string };
 export type Snapshot = {
@@ -62,6 +69,7 @@ export type ReviewState = Identity & {
   run: string;
   resumedFrom: string | null;
   fast: boolean;
+  claudeEffort: ClaudeEffort;
   phase: Phase;
   round: number;
   status: 'running' | 'interrupted' | 'clean' | 'error';
@@ -152,6 +160,7 @@ export function parseState(v: unknown): ReviewState {
     !['checkout', 'run', 'nextAction', 'rejected'].every((key) => typeof v[key] === 'string') ||
     !nullableString(v.resumedFrom) ||
     typeof v.fast !== 'boolean' ||
+    ('claudeEffort' in v && !claudeEfforts.some((effort) => effort === v.claudeEffort)) ||
     !phase(v.phase) ||
     !integer(v.round) ||
     v.round === 0 ||
@@ -206,7 +215,8 @@ export function parseState(v: unknown): ReviewState {
     )
   )
     throw new Error('Invalid review checkpoint');
-  return v as ReviewState;
+  // Version 1 predates effort selection; normalize without changing the source object/file.
+  return { ...v, claudeEffort: v.claudeEffort ?? 'high' } as ReviewState;
 }
 
 export function parseReceipt(v: unknown): Receipt {
@@ -448,6 +458,7 @@ export type StartOptions = {
   branch: string;
   remoteSha: string;
   fast?: boolean;
+  claudeEffort?: ClaudeEffort;
   fresh?: boolean;
   resume?: string;
 };
@@ -463,6 +474,7 @@ export type Recovery = {
 
 /** Selection is read-only. The caller imports legacy evidence if this finds no checkpoint. */
 export function selectState(options: StartOptions): ReviewState | null {
+  if (options.claudeEffort !== undefined) parseClaudeEffort(options.claudeEffort);
   if (options.fresh && options.resume) throw new Error('--fresh and --resume cannot be combined');
   const repo = repository(options.checkout);
   if (options.resume) {
@@ -611,6 +623,7 @@ export async function startReview(
   previous: ReviewState | null = selectState(options),
   isActive: (receipt: Receipt) => boolean = () => true,
 ): Promise<Recovery> {
+  if (options.claudeEffort !== undefined) parseClaudeEffort(options.claudeEffort);
   if (options.fresh && options.resume) throw new Error('--fresh and --resume cannot be combined');
   if (!Number.isSafeInteger(options.pr) || options.pr < 1 || !sha(options.remoteSha))
     throw new Error('Invalid PR or remote commit');
@@ -685,6 +698,7 @@ export async function startReview(
         run,
         resumedFrom: null,
         fast: !!options.fast,
+        claudeEffort: options.claudeEffort ?? 'high',
         phase: recovery.phase,
         round: recovery.round,
         status: 'running',
@@ -709,6 +723,7 @@ export async function startReview(
     resumedFrom: previous?.run ?? null,
     checkout: resolve(options.checkout),
     fast: !!options.fast,
+    claudeEffort: options.claudeEffort ?? previous?.claudeEffort ?? 'high',
     phase: recovery.phase,
     round: recovery.round,
     status: 'running',

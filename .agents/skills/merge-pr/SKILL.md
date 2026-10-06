@@ -1,13 +1,15 @@
 ---
 name: merge-pr
-description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, synchronizing main and fixing CI first. An interrupted delegated review retains progress before any merge. After merging, clean task scratch with pnpm plans:clean, update the task row, and remove its local branch and worktree with pnpm worktree:remove; the remote branch stays. Use for $merge-pr with an optional branch and Head SHA, or when $sync-review reaches its merge step.
+description: Merge a branch's PR into main once CI is green and GitHub reports it mergeable, synchronizing main and fixing CI first. An interrupted delegated review retains progress before any merge. After merging, clean task scratch with pnpm plans:clean, update the task row, and remove its local branch and worktree with pnpm worktree:remove; the remote branch stays. Use for $merge-pr with an optional branch, Head SHA and --claude-effort, or when $sync-review reaches its merge step.
 ---
 
 # Merge a PR, then clean up its scratch, branch and worktree
 
-Usage: `$merge-pr [<branch>] [Head: <sha>]`. Without a branch, it uses the current branch (`git branch --show-current`).
+Usage: `$merge-pr [--claude-effort <level>] [<branch>] [Head: <sha>]`. Without a branch, it uses the current branch (`git branch --show-current`).
 
 `Head: <sha>` is optional. A caller such as `$sync-review` passes the commit it reviewed and checked CI on, so nothing pushed after that review gets merged.
+
+`--claude-effort <level>` selects `low`, `medium`, `high`, `xhigh` or `max` for PR reviews required by the merge gates. Parse and reject missing/invalid values before mutations or process launches. Pass explicit effort into review checkpoint initialization and through relaunches; omit it when absent to inherit saved effort or default to `high`. Use the initialized state's effort for delegated and inline reviews. This option does not authorize repeating a completed review; `review-pr --fresh` does that.
 
 Invoking `$merge-pr` authorizes these actions, for that branch only:
 
@@ -44,7 +46,7 @@ Don't ask for confirmation between steps. An interrupted delegated PR review end
 ## 2. Gate
 
 Each gate either passes or gets solved; none ends the run. `<skill-dir>` is the absolute folder of this `SKILL.md`.
-Exception: when gate 2 or gate 4 delegates into `review-pr`, use `<skill-dir>/../review-pr/references/recovery.md`'s initialized coordinator wrapper, preserving the exact review model/effort/speed settings. An `interrupted` result, quota receipt or wrapper exit 75 ends this merge invocation before the merge or cleanup. Return `merge-pr-result` with status `interrupted`, null mergeCommit, the review's `resume` object and stopReason. Preserve all task scratch/worktrees; the next invocation resumes the saved review. Inspect receipts before retrying an absent final result and await live children.
+Exception: when gate 2 or gate 4 delegates into `review-pr`, use `<skill-dir>/../review-pr/references/recovery.md`'s initialized coordinator wrapper, preserving the pinned models, Codex effort/speed settings and resolved Claude effort. Initialize with explicit `claudeEffort` only when supplied, and pass `--claude-effort <state.claudeEffort>` plus `Worker checkpoint` to the coordinator. Retain its resolved effort for inline CI reviews. An `interrupted` result, quota receipt or wrapper exit 75 ends this merge invocation before the merge or cleanup. Return `merge-pr-result` with status `interrupted`, null mergeCommit, the review's `resume` object and stopReason. Preserve all task scratch/worktrees; the next invocation resumes the saved review. Inspect receipts before retrying an absent final result and await live children.
 
 1. **Pick `<work>`** (Rules). Uncommitted files in `<wt>` belong to the user or another session: they never block the merge, and a detached work tree keeps them untouched. Step 4's dry-run reports them for cleanup.
 2. **Pin the head.** Fetch `origin/<branch>` (with Retry). The PR's `headRefOid` is what gets merged; local-only commits in `<wt>` stay local, and cleanup reports them.

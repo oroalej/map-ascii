@@ -65,7 +65,7 @@ describe('review process receipts', () => {
   });
 
   it('saves quota exhaustion immediately and publishes a usable interrupted result', async () => {
-    const { state } = await startReview(setup.options);
+    const { state } = await startReview({ ...setup.options, claudeEffort: 'medium' });
     await updateState(state.run, (saved) => {
       saved.phase = 'review';
       saved.ci.status = 'pending';
@@ -89,10 +89,12 @@ describe('review process receipts', () => {
     const published = publishInterrupted(state.run);
     expect(published).toMatchObject({
       status: 'interrupted',
+      claudeEffort: 'medium',
       ci: { status: 'pending' },
       resume: { phase: 'review', round: 1, checkpoint: state.run },
     });
     expect(existsSync(`${state.run}/result.json`)).toBe(true);
+    expect((await startReview(setup.options)).state.claudeEffort).toBe('medium');
   });
 
   it('keeps capacity failures, partial reports and spawn failures eligible for retry', async () => {

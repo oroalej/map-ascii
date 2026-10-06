@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews, Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
+description: Review a pull request until clean and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort, Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
 # Claude review → Codex validation → fixes, until clean, then CI
@@ -11,11 +11,11 @@ Read [recovery.md](references/recovery.md) before initialization or launching a 
 
 ## Models
 
-Always pass these explicitly. Never change them or fall back to another model.
+Always pass these explicitly. Claude effort is the resolved `--claude-effort` selection; keep the listed models and Codex effort settings. Never fall back to another model.
 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
-| Review (every round) | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
+| Review (every round) | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal |
 | Codex #1: validates Claude's review (analysis only, every round) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 | This session: fixes, commits, pushes, CI fixes | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 
@@ -30,10 +30,11 @@ Always pass these explicitly. Never change them or fall back to another model.
   - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
   `--fast` doesn't change Claude or this session.
+- `--claude-effort <level>`: select `low`, `medium`, `high`, `xhigh` or `max` for Claude PR reviews. Reject a missing or unsupported value before initialization or process launches. Resolve an explicit value first, then a resumed checkpoint's selection, then `high`. A fresh run without this option uses `high`. For example: `$review-pr 40 --claude-effort medium`. Save the resolved value as `claudeEffort`; use it for unfinished Claude reviews and later rounds. Completed verified work remains reusable at its original effort; use `--fresh` to repeat the full review. Codex settings are unchanged.
 - `Result file: <path>`: a caller such as `$sync-review` passes this. Write the final result JSON there (step 7).
 - `--fresh`: start an independent review, retaining earlier invocations. Do not duplicate an active review process.
 - `--resume <run-path>`: select that checkpoint or verifiable legacy invocation. With no PR argument, resolve the PR from its saved identity; reject a mismatched explicit target. Reject combining `--fresh` and `--resume`.
-- `Worker checkpoint: <run-path>`: internal delegated invocation only. Attach to the caller's initialized checkpoint after verifying its repository, PR and branch. Do not initialize a second invocation or mistake the supervising coordinator receipt for another reviewer.
+- `Worker checkpoint: <run-path>`: internal delegated invocation only. Attach to the caller's initialized checkpoint after verifying its repository, PR and branch. Its `claudeEffort` is authoritative; any explicit effort argument must match it. Do not initialize a second invocation or mistake the supervising coordinator receipt for another reviewer.
 
 ## Ends
 
@@ -82,7 +83,7 @@ Everything else is solved with the patterns below. `$implement-handoff`, `$revie
    - Say which PR (#, branch) and `<pr-checkout>` this run uses, and whether it is a detached work tree, in the first lines of output. In a detached work tree, every `git push` in this skill is `git push origin HEAD:<headRefName>`.
 4. Fetch `origin/main` and refresh the PR head, then initialize with the recovery reference's `init` command (or attach to `Worker checkpoint`). Set `<scratch>` to the returned new invocation path. It automatically selects the latest valid checkpoint or imports verifiable legacy work; explicit `--fresh` starts independently. Earlier invocation files remain read-only. Report the recovered phase and source invocation. Carry the cumulative round numbers, history and rejected decisions.
 5. Save `<scratch>/status-baseline.txt` from the checkpoint's baseline status when resuming; on a fresh run use `git status --porcelain=v1 -z --untracked-files=all`. Use this same NUL-separated form for baseline comparisons. Verified owned WIP is tracked separately from baseline edits. Never adopt all current dirty files as the review's own changes.
-6. Set `<speed>` from `--fast`, and say in the first line of output which speed is used. Then resolve the binaries (PowerShell; `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`). `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`):
+6. Set `<speed>` from `--fast` and `<claude-effort>` from `state.claudeEffort`, and say in the first line of output which speed and Claude effort are used. Then resolve the binaries (PowerShell; `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`). `<repo>` is the checkout holding this `SKILL.md` (`<skill-dir>/../../..`):
 
    ```
    pnpm.cmd -C <repo> --silent cli:latest codex
@@ -122,7 +123,7 @@ Run from `<pr-checkout>`, with a shell timeout of at least 20 minutes:
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-input.json
 ```
 
-- Use the reference's exact Claude arguments. Never change the model or effort, or drop a flag. Combine the pinned head instruction and saved rejection text in one `--append-system-prompt` argument.
+- Use the reference's exact Claude arguments with the saved effort substituted by the wrapper. Never change the model or resolved effort, or drop a flag. Combine the pinned head instruction and saved rejection text in one `--append-system-prompt` argument.
 - `--report-only` keeps the Claude skill from editing. Afterwards, compare `git -C <pr-checkout> status --porcelain=v1 -z --untracked-files=all` with the baseline. If anything changed, record the difference in the round's record, never revert or stage it, and protect the unfamiliar changes with the reference's `protect` command.
 - Require a successful native exit and a complete report with a verified receipt and unchanged PR head. A newly launched process uses its new report; a recovered receipt must pass the reference's checks. Quota receipt or wrapper exit 75 → `interrupted`; other failed or incomplete attempts → Retry. Use the receipt's report path as `<claude-report>` in validation. Do not review the PR yourself instead.
 
@@ -159,8 +160,8 @@ Otherwise, work in `<pr-checkout>` on the PR's head branch:
 5. Commit with a gitmoji + conventional message that matches `git log` (e.g. `🐛 fix(renderer): …`). Use one commit, or one per area if the fixes are unrelated.
 6. Push to the PR's branch with a plain `git push`, then refresh and checkpoint `remoteSha`. If the fixes change what the PR description says, update it with `gh pr edit <N> --body-file`.
 
-Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeVerdict, entries, noticed, commits}` (shape in step 7).
-Also record it in checkpoint `history`, with findings, noticed items, rejected decisions, commits and the next phase, before starting another round.
+Write this round's record to `<scratch>/round<k>/result.json`: `{round, claudeEffort, claudeVerdict, entries, noticed, commits}` (shape in step 7).
+Also record it in checkpoint `history`, with findings, noticed items, rejected decisions, commits and the next phase, before starting another round. Each round's `claudeEffort` is the actual value in its review receipt's `--effort` argument, including reused receipts; older records without effort proof use the original fixed `high`.
 
 ## 5. Review loop (until clean)
 
@@ -199,7 +200,7 @@ Report:
 - Anything under "Noticed, not in Claude's review", with its severity. Noticed blockers and should-fix items were fixed as entries (step 4); noticed nits are listed for the user
 - The CI gate: reruns, fix attempts and fix commits, and the final check state
 - Which checks ran locally, and which were left to CI
-- The PR URL, the speed Codex #1 ran at (fast or normal), the `codex` and `claude` versions from step 1.6, and the final status
+- The PR URL, the speed Codex #1 ran at (fast or normal), selected Claude effort and each completed round's actual effort, the `codex` and `claude` versions from step 1.6, and the final status
 
 End the report with a fenced block tagged `review-pr-result`, holding one JSON object:
 
@@ -209,6 +210,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "pr": 12,
   "headSha": "def5678",
   "fast": false,
+  "claudeEffort": "high",
   "cli": { "codex": "0.159.3", "claude": "2.1.289" },
   "mainMerge": "current",
   "workTree": null,
@@ -216,6 +218,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
   "rounds": [
     {
       "round": 1,
+      "claudeEffort": "high",
       "claudeVerdict": "Changes requested — …",
       "entries": [
         {
@@ -248,6 +251,7 @@ End the report with a fenced block tagged `review-pr-result`, holding one JSON o
 - `verdict` is one of `valid`, `partly` or `invalid`. `outcome` is one of `fixed`, `open` (carried into the PR body, with `openReason`) or `none`. `repeat` names the earlier round of a repeated entry; `decision` records an oscillation decision. `claudeSeverity` is `null` for an entry promoted from "Noticed". `outOfDiff` is `null`, or the files outside the PR's diff that the fix touched and why.
 - `headSha`: the PR's head SHA when the run ends (`gh pr view <N> --json headRefOid`). The review and CI results apply to this commit only.
 - `cli`: the versions step 1.6 resolved (`null` for one not resolved).
+- `claudeEffort`: the checkpoint's resolved selection for unfinished/future Claude reviews. Each round records its actual effort separately; changing the selection does not relabel completed work.
 - `mainMerge`: `current` (already had `origin/main`), `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (ended before step 1.7).
 - `workTree`: `null`, or the detached work tree's path and why the PR's worktree wasn't used.
 - `roundCount`: the number of review rounds run, the same `<k>` as the report's first line.

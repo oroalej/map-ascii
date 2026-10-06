@@ -1,11 +1,11 @@
 ---
 name: sync-review
-description: For each comma-separated branch, commit and push, open a PR, delegate synchronization and resumable review to $review-pr, get CI green, and merge with $merge-pr. Usage exhaustion retains progress and ends the loop. Other branch errors skip only branches stacked on them. Use for $sync-review with optional --fast and comma-separated branches.
+description: For each comma-separated branch, commit and push, open a PR, delegate synchronization and resumable review to $review-pr, get CI green, and merge with $merge-pr. Usage exhaustion retains progress and ends the loop. Other branch errors skip only branches stacked on them. Use for $sync-review with optional --fast, --claude-effort and comma-separated branches.
 ---
 
 # Sync, review and merge branches
 
-Usage: `$sync-review [--fast] codex/tree-canopy, codex/stable-labels, codex/vehicle-lamps-exhaust`
+Usage: `$sync-review [--fast] [--claude-effort <level>] codex/tree-canopy, codex/stable-labels, codex/vehicle-lamps-exhaust`
 
 The user lists only branches that are safe to process. Invoking `$sync-review` authorizes these actions, for the listed branches only:
 
@@ -22,12 +22,12 @@ Don't ask for confirmation between steps or branches. Propagate an interrupted d
 
 ## Models
 
-Always pass these explicitly. Never change them or fall back to another model.
+Always pass these explicitly. Claude PR-review effort follows the explicit option or recovered checkpoint; keep the listed models and Codex effort settings. Never fall back to another model.
 
 | Role | Model | Effort | Speed | How |
 | --- | --- | --- | --- | --- |
 | Loop session (this session): commits, conflicts, PRs, CI fixes, merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
-| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal | started by `$review-pr` |
+| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by `$review-pr` |
 | Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
 | Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
 
@@ -42,6 +42,8 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 `--fast` also gets forwarded to `$review-pr`, so Codex #1 uses the same speed in every round. It doesn't change Claude, or this session's own speed.
 
+`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for all listed branches' PR reviews. Reject missing/invalid values before any Git mutation or process launch. Forward an explicit selection into each branch's checkpoint initialization as `claudeEffort`; omit it when absent so each branch resumes its saved setting or defaults to `high`. Carry it through coordinator relaunches. Codex settings are unchanged.
+
 ## Rules for every branch
 
 - **Keep going:** a branch ends unmerged only with an "Ends" `error` (nothing to do, or a missing tool). Then continue with the next branch, skipping only later branches whose PR base, or whose merge-base with `main`, is that branch's head (they're stacked on it): report them as `not processed: stacked on <branch>`. A missing tool that every branch needs (`gh` auth, `codex`) ends the loop, since no later branch could run either.
@@ -54,6 +56,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 1. Parse the argument:
    - Take out `--fast` if present and set `<speed>`.
+   - Take out and validate `--claude-effort <level>` if present, retaining whether it was explicit.
    - Split the rest on commas. Trim, drop empty entries and duplicates, and strip a leading `origin/`.
    - Drop `main` and report it as skipped.
    - Print the branch order and the speed (fast or normal) as the first line of output.
@@ -96,7 +99,7 @@ Nothing to do here: `$review-pr` merges `origin/main` into the branch as its fir
 
 ## 4. Review until clean, with the CI gate ($review-pr)
 
-`$review-pr` runs the review loop and CI gate itself. Read `<skill-dir>/../review-pr/references/recovery.md`. Follow its delegated coordinator protocol: initialize with the PR identity and current head, then launch Codex #2 through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<run>/<slug>-review.json"`. Use the reference's exact model/effort/speed arguments and add `Worker checkpoint: <review-scratch>` to the prompt. Initialization automatically continues earlier verified work.
+`$review-pr` runs the review loop and CI gate itself. Read `<skill-dir>/../review-pr/references/recovery.md`. Follow its delegated coordinator protocol: initialize with the PR identity, current head and explicit `claudeEffort` if supplied, then launch Codex #2 through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<run>/<slug>-review.json"`. Use the reference's exact model/effort/speed arguments, add `--claude-effort <state.claudeEffort>` and `Worker checkpoint: <review-scratch>` to the prompt, and retain that resolved effort for inline CI reviews. Initialization automatically continues earlier verified work.
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-input.json
@@ -120,7 +123,7 @@ pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-in
 1. Check that `$review-pr` ended `clean` and step 5 passed on the PR's current head SHA. Held-back files were never committed, so they don't block the merge.
 
    Don't check whether the PR is behind `main` or conflicting: if `main` moved, `$merge-pr` merges `origin/main` into it (its gate 3).
-2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>` and `--claude-effort <review-result.claudeEffort>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). If an older result lacks effort, read its checkpoint or use the original fixed `high`. It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
 3. Read its `merge-pr-result`.
    - `merged` → done. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
    - `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going". `$merge-pr` fixes CI and syncs `main` itself, so nothing else comes back.

@@ -4,6 +4,7 @@ import {
   beginOperation,
   finishOperation,
   loadState,
+  parseClaudeEffort,
   protectChanges,
   readJson,
   record,
@@ -47,6 +48,7 @@ function startOptions(input: Record<string, unknown>): StartOptions {
     branch: string(input, 'branch'),
     remoteSha: string(input, 'remoteSha'),
     fast: input.fast as boolean | undefined,
+    claudeEffort: 'claudeEffort' in input ? parseClaudeEffort(input.claudeEffort) : undefined,
     fresh: input.fresh as boolean | undefined,
     resume: input.resume as string | undefined,
   };

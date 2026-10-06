@@ -1,11 +1,11 @@
 ---
 name: implement-handoff
-description: Take an ASCII Atlas handoff from two-round review to PR, implementation, synchronization, resumable PR review and CI. Retains progress when delegated PR review exhausts usage; never merges. Use for $implement-handoff [--fast] with a task name or handoff path.
+description: Take an ASCII Atlas handoff from two-round review to PR, implementation, synchronization, resumable PR review and CI. Retains progress when delegated PR review exhausts usage; never merges. Use for $implement-handoff with optional --fast, --claude-effort and a task name or handoff path.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
 
-Usage: `$implement-handoff [--fast] [--candidate <prior candidate path>] <task | path to handoff.md>`
+Usage: `$implement-handoff [--fast] [--claude-effort <level>] [--candidate <prior candidate path>] <task | path to handoff.md>`
 
 Invoking `$implement-handoff` authorizes these actions for this one task:
 
@@ -21,7 +21,7 @@ Don't ask for confirmation between steps. An interrupted delegated PR review end
 
 ## Models
 
-Always pass these explicitly. Never change them or fall back to another model.
+Always pass these explicitly. Claude PR-review effort follows the explicit option or recovered checkpoint; keep the listed models, handoff-review effort and Codex effort settings. Never fall back to another model.
 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@ Always pass these explicitly. Never change them or fall back to another model.
 | Inside `$review-handoff`: round 1 review / round 2 validation | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 | Inside `$review-handoff`: round 2 review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
 | PR review coordinator: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
-| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), high / Sol 6.1, max | | normal / `<speed>` |
+| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, max | | normal / `<speed>` |
 
 **Binaries:** several copies of `codex` can be installed, and an old one rejects `gpt-6.1-sol`. Run only `<codex>`, the newest installed copy, resolved in step 0.1. Never run a bare `codex` or any path other than the resolved `<codex>`. `$review-handoff` and `$review-pr` resolve their own newest `codex` and `claude`.
 
@@ -41,6 +41,8 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 - without it: `--disable fast_mode`. Pass this explicitly, because the user's Codex config may default to fast.
 
 `--fast` is also forwarded to `$review-handoff` and `$review-pr`. It doesn't change Claude, or this session's own speed.
+
+`--claude-effort <level>` accepts `low`, `medium`, `high`, `xhigh` or `max` for PR reviews only. Reject missing/invalid values before changing the task or launching a process. Pass an explicit selection into PR checkpoint initialization as `claudeEffort`; omit it when absent so recovery inherits the saved setting or defaults to `high`. Preserve it on coordinator relaunches. Do not forward it to `$review-handoff`; its Claude review stays at `high`.
 
 ## Rules
 
@@ -54,7 +56,7 @@ This session must be Sol 6.1 (`gpt-6.1-sol`) at xhigh effort. If it's running a 
 
 ## 0. Resolve the handoff
 
-1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Resolve an explicitly supplied `--candidate` path against the invocation directory and retain its absolute path for the handoff review; it is not the original handoff path. Resolve the newest installed Codex (PowerShell):
+1. `<main-checkout>` is the first entry of `git worktree list`. Take out `--fast` if present, and set `<speed>`. Take out and validate `--claude-effort <level>` if present, retaining whether it was explicit. Resolve an explicitly supplied `--candidate` path against the invocation directory and retain its absolute path for the handoff review; it is not the original handoff path. Resolve the newest installed Codex (PowerShell):
 
    ```
    pnpm.cmd -C <repo> --silent cli:latest codex
@@ -138,7 +140,7 @@ For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SK
 
 ## 5. Run $review-pr
 
-Read `<skill-dir>/../review-pr/references/recovery.md` and follow its delegated coordinator protocol. Initialize the PR identity/current head (automatic recovery), then run the coordinator through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<scratch>/review.json"`. Use the exact model/effort/speed arguments below, substitute `{report}` for the output path, and add `Worker checkpoint: <review-scratch>` to the prompt. Allow at least 4 hours:
+Read `<skill-dir>/../review-pr/references/recovery.md` and follow its delegated coordinator protocol. Initialize the PR identity/current head with explicit `claudeEffort` only when supplied (automatic recovery), then run the coordinator through `review:state run` with `phase: "coordinator"`, `output: "file"`, and `resultFile: "<scratch>/review.json"`. Use the reference's exact model/effort/speed arguments, substitute `{report}` for the output path, and add `--claude-effort <state.claudeEffort>` and `Worker checkpoint: <review-scratch>` to the prompt. Allow at least 4 hours:
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input.json

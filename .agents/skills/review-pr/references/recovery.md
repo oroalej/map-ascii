@@ -22,7 +22,7 @@ Before altering a worktree, run `inspect` with:
 }
 ```
 
-It returns the latest matching checkpoint or a legacy source. Add `fresh: true` or `resume: "<absolute-run-path>"` for the corresponding flags. Reject both together. A `--resume` target without a PR argument gets its PR and branch from the saved checkpoint, or verified `invocation.json`/`pr-round1.json` legacy metadata; then query that PR. Never use the main checkout's fallback PR selection for an explicit resume.
+It returns the latest matching checkpoint or a legacy source. Add `claudeEffort: "<level>"` only when `--claude-effort` was explicitly supplied; omit it to inherit saved effort on resume. Accept only `low`, `medium`, `high`, `xhigh` or `max`. Reject missing/invalid option values before initialization or process launches. Add `fresh: true` or `resume: "<absolute-run-path>"` for the corresponding flags. Reject both together. A `--resume` target without a PR argument gets its PR and branch from the saved checkpoint, or verified `invocation.json`/`pr-round1.json` legacy metadata; then query that PR. Never use the main checkout's fallback PR selection for an explicit resume.
 
 Inspect the original checkout, baseline, owned bytes and pending operations. Keep owned WIP only when the saved bytes and index/working-tree hashes still match. Preserve unknown changes; if a detached worktree is needed, replay only recorded owned bytes with `restore` below. Legacy dirty files have no ownership proof and remain baseline edits.
 
@@ -30,7 +30,9 @@ Fetch the branch and main, reconcile local and remote commits under the skill's 
 
 Set `<scratch>` to `state.run`. Retain `state.resumedFrom`, cumulative `round`, `history`, `rejected`, baseline, operations and reporting metadata. Write inherited rejection text to the new invocation's `rejected.md` before launching Claude. Resolve newest installed binaries again; saved executable paths are provenance only. Current speed applies to unfinished steps.
 
-For `Worker checkpoint`, verify its identity with `show` and attach directly to that initialized invocation. The caller's coordinator receipt supervises this worker. Do not run `init` again. The worker checkpoints its own operations and launches reviewer/validator wrappers normally.
+Use `state.claudeEffort` for every new Claude PR-review attempt. Initialization resolves explicit effort, then resumed effort, then `high`; fresh runs default to `high`. Older version-1 checkpoints without effort normalize to `high` in memory, preserving their saved bytes. An explicit override applies to unfinished reviews and later rounds without invalidating completed verified reports. Keep their actual effort from receipt arguments in each round's history, defaulting legacy fixed-effort records to `high`.
+
+For `Worker checkpoint`, verify its identity with `show` and attach directly to that initialized invocation. Its saved effort is authoritative; reject a conflicting explicit worker option. The caller's coordinator receipt supervises this worker. Do not run `init` again. The worker checkpoints its own operations and launches reviewer/validator wrappers normally.
 
 After main synchronization, dispatch to the recovered phase only when the reviewed head is unchanged. A new merge or external commit requires a new review round, retaining old rounds as history. Before consuming a saved clean result, verify local HEAD equals current PR head, current main is an ancestor, the worktree has no uncommitted review fixes, and GitHub CI passes for that exact head.
 
@@ -108,12 +110,12 @@ Use `run` with this shape; the wrapper creates a new attempt, substitutes `{repo
   "round": 2,
   "headSha": "<full synchronized PR/local head>",
   "executable": "<newest resolved absolute claude path>",
-  "args": ["-p", "/review-pr 12 --report-only", "--model", "claude-opus-5-5", "--effort", "high", "--dangerously-skip-permissions", "--output-format", "text"],
+  "args": ["-p", "/review-pr 12 --report-only", "--model", "claude-opus-5-5", "--effort", "{claudeEffort}", "--dangerously-skip-permissions", "--output-format", "text"],
   "output": "stdout"
 }
 ```
 
-For Claude, append one `--append-system-prompt` argument combining the pinned head instruction and saved rejection text. Require review of the pinned commit; if the PR head differs, the report is unusable. Query the PR head after either reviewer exits and discard results if it moved.
+For Claude, the wrapper substitutes `{claudeEffort}` from the checkpoint in review-phase arguments and records the resolved native arguments in the receipt. Append one `--append-system-prompt` argument combining the pinned head instruction and saved rejection text. Require review of the pinned commit; if the PR head differs, the report is unusable. Query the PR head after either reviewer exits and discard results if it moved.
 
 For validation, use `phase: "validation"`, `output: "file"`, the exact Codex model/effort/speed flags from the skill, `-o`, `{report}`, and a prompt naming the verified Claude receipt's actual report path and pinned head. Store prompts/config in the input JSON, never reference an unrelated run's output.
 
@@ -121,7 +123,7 @@ Validation arguments are `exec`, `-m`, `gpt-6.1-sol`, `-c`, `model_reasoning_eff
 
 For delegated coordinators and wrong-model relaunches, the caller first initializes the invocation, then uses `phase: "coordinator"`, `output: "file"`, the existing Codex xhigh/speed flags, `-o`, `{report}`, and a prompt with the same review invocation plus `Worker checkpoint: <scratch>` and the requested result path. Add `resultFile: "<caller-result-path>"` to the process input. This allows the wrapper to publish quota interruption even when the worker produces no final report.
 
-Coordinator arguments are `exec`, `-m`, `gpt-6.1-sol`, `-c`, `model_reasoning_effort="xhigh"`, the individual `<speed>` arguments, `-C`, `<pr-checkout>`, `-o`, `{report}`, then: `Use the review-pr skill at <review-pr-skill>, following it exactly, on PR #<N>. Arguments: <--fast, or nothing>. Worker checkpoint: <scratch>. Result file: <caller-result-path>.` Pass `state.round` and the initialized local `state.headSha` to the wrapper. A coordinator can start while a recorded local commit still needs pushing; reviewer/validator processes require synchronized local and remote heads.
+Coordinator arguments are `exec`, `-m`, `gpt-6.1-sol`, `-c`, `model_reasoning_effort="xhigh"`, the individual `<speed>` arguments, `-C`, `<pr-checkout>`, `-o`, `{report}`, then: `Use the review-pr skill at <review-pr-skill>, following it exactly, on PR #<N>. Arguments: --claude-effort <state.claudeEffort> <--fast, or nothing>. Worker checkpoint: <scratch>. Result file: <caller-result-path>.` Pass the actual initialized effort in the prompt, `state.round` and the initialized local `state.headSha` to the wrapper. Preserve public arguments on wrong-model relaunches and pass explicit effort into initialization. A coordinator can start while a recorded local commit still needs pushing; reviewer/validator processes require synchronized local and remote heads.
 
 After a worker exits, read the canonical `<scratch>/result.json` or requested result copy. If missing and its receipt reports quota exhaustion, publish `interrupt`. If the process ended abruptly without quota metadata, inspect the last checkpoint and dead/live child receipts before Retry. A dead coordinator retry uses a new invocation recovering that state; do not repeat successful reviewer/validator steps. A live coordinator is awaited.
 
@@ -133,6 +135,6 @@ Known usage-limit text or structured quota codes produce wrapper exit 75 immedia
 
 `interrupt` takes `{ "run": "<scratch>", "reason": "<actual reason>", "reset": "<reported reset or omit>", "resultFile": "<optional caller copy>" }`. It saves interrupted state and publishes the canonical result plus the exact authorized absolute caller destination, rejecting linked paths. Use the caller's established task scratch or temporary run folder. The wrapper publishes a canonical result on quota even without this follow-up. On orderly interruption, step 7 updates the index and reports completed work, unfinished operations and the resume command. Keep the task active and preserve all scratch and WIP.
 
-The result adds `status: "interrupted"` and `resume: {checkpoint, phase, round, reason, reset, command}`. CI may be pending; green history applies only to its recorded head and does not approve WIP. On a normal final result set `resume: null`. Checkpoint the actual final status and reporting metadata before publication.
+Normal and interrupted results include `claudeEffort: state.claudeEffort`. The interrupted result adds `status: "interrupted"` and `resume: {checkpoint, phase, round, reason, reset, command}`. Its resume command inherits the saved effort without requiring the flag again. CI may be pending; green history applies only to its recorded head and does not approve WIP. On a normal final result set `resume: null`. Checkpoint the actual final status and reporting metadata before publication.
 
 Resume with `$review-pr <N>` for automatic selection or `$review-pr <N> --resume "<run-path>"` for an exact continuation. A caller can instead be invoked again; it restores its own retained gates and delegates into this recovery procedure. No timer or automatic restart is scheduled.

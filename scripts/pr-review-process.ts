@@ -209,7 +209,12 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     mkdirSync(attempt);
     const report = join(attempt, 'report.md'),
       receiptPath = join(attempt, 'receipt.json');
-    const args = spec.args.map((arg) => arg.replaceAll('{report}', report));
+    const args = spec.args.map((arg) => {
+      const value = arg.replaceAll('{report}', report);
+      return spec.phase === 'review'
+        ? value.replaceAll('{claudeEffort}', state.claudeEffort)
+        : value;
+    });
     if (spec.output === 'file' && !spec.args.some((arg) => arg.includes('{report}')))
       throw new Error('File output requires a {report} argument');
     const receipt: Receipt = {
@@ -312,6 +317,7 @@ export function interruptedResult(run: string): Record<string, Json> {
     pr: state.pr,
     headSha: state.remoteSha,
     fast: state.fast,
+    claudeEffort: state.claudeEffort,
     cli: state.report.cli ?? { codex: null, claude: null },
     mainMerge: state.report.mainMerge ?? 'not-run',
     workTree: state.report.workTree ?? null,
