@@ -205,13 +205,20 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       p.segments.every(
         (e) =>
           isRecord(e) &&
-          only(e, ['id', 'width_m', 'sidewalk_m']) &&
+          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m']) &&
           isText(e.id) &&
           OSM_ID_PATTERN.test(e.id) &&
           isNumber(e.width_m) &&
           e.width_m > 0 &&
           isNumber(e.sidewalk_m) &&
-          e.sidewalk_m >= 0,
+          e.sidewalk_m >= 0 &&
+          (e.sidewalks_m === undefined ||
+            (isRecord(e.sidewalks_m) &&
+              only(e.sidewalks_m, ['left', 'right']) &&
+              isNumber(e.sidewalks_m.left) &&
+              e.sidewalks_m.left >= 0 &&
+              isNumber(e.sidewalks_m.right) &&
+              e.sidewalks_m.right >= 0)),
       )
     );
   });

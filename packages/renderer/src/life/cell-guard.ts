@@ -8,6 +8,17 @@ import { eventGroundAllows, type EventGround } from './ground-events';
 type Hits = { hits(bodies: readonly Body[]): boolean };
 const CELL_OFFSETS = [0, 0.5, 1] as const;
 const CACHE_CELLS = 4096;
+type PermissionCache = {
+  tile: TileId;
+  perMeter: number;
+  width: number;
+  height: number;
+  columns: Map<number, Map<number, boolean>>;
+  cells: number;
+};
+const NO_BLOCKED: Hits = { hits: () => false };
+// Prepared terrain and route grounds are immutable; weak keys retire their caches too.
+const permissions = new WeakMap<EventGround, WeakMap<Hits, PermissionCache>>();
 
 /** Whole-cell clearance shared by the inline world and received terrain snapshots. */
 export function makeCellGuard(
@@ -25,20 +36,43 @@ export function makeCellGuard(
   const body: Body = { x: 0, y: 0, hx: 1, hy: 0, length: width, width: height };
   const sample = [body];
   const points: [number, number][] = Array.from({ length: 9 }, () => [0, 0]);
-  const permissions = new Map<EventGround, Map<number, Map<number, boolean>>>();
-  let cachedCells = 0;
+  const terrain = blocked ?? NO_BLOCKED;
   return (agent: VisibleAgent, col: number, row: number) => {
     if (agent.aboard) return true;
     if (agent.eventGround) {
       const ground = grounds?.get(agent.eventGround);
       if (!ground) return false;
-      let columns = permissions.get(ground);
-      const saved = columns?.get(col)?.get(row);
+      let frames = permissions.get(ground);
+      if (!frames) permissions.set(ground, (frames = new WeakMap<Hits, PermissionCache>()));
+      let cache = frames.get(terrain);
+      if (
+        !cache ||
+        cache.tile.z !== ref.tile.z ||
+        cache.tile.x !== ref.tile.x ||
+        cache.tile.y !== ref.tile.y ||
+        cache.perMeter !== ref.perMeter ||
+        cache.width !== width ||
+        cache.height !== height
+      ) {
+        cache = {
+          tile: { ...ref.tile },
+          perMeter: ref.perMeter,
+          width,
+          height,
+          columns: new Map<number, Map<number, boolean>>(),
+          cells: 0,
+        };
+        frames.set(terrain, cache);
+      }
+      // Exact tile-relative offsets reuse integer-cell pans, but never alias a shifted
+      // cell footprint, another zoom, metric frame, route or blocked-terrain snapshot.
+      const x = col - c0,
+        y = row - r0;
+      const saved = cache.columns.get(x)?.get(y);
       if (saved !== undefined) return saved;
-      if (cachedCells >= CACHE_CELLS) {
-        permissions.clear();
-        columns = undefined;
-        cachedCells = 0;
+      if (cache.cells >= CACHE_CELLS) {
+        cache.columns.clear();
+        cache.cells = 0;
       }
       let i = 0;
       for (const dx of CELL_OFFSETS)
@@ -55,11 +89,10 @@ export function makeCellGuard(
       const allowed =
         !blocked?.hits(sample) &&
         eventGroundAllows(ground, points, [points[0]!, points[6]!, points[8]!, points[2]!]);
-      if (!columns) permissions.set(ground, (columns = new Map<number, Map<number, boolean>>()));
-      let rows = columns.get(col);
-      if (!rows) columns.set(col, (rows = new Map<number, boolean>()));
-      rows.set(row, allowed);
-      cachedCells++;
+      let rows = cache.columns.get(x);
+      if (!rows) cache.columns.set(x, (rows = new Map<number, boolean>()));
+      rows.set(y, allowed);
+      cache.cells++;
       return allowed;
     }
     body.x = (col + 0.5 - c0) * width;

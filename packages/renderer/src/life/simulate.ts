@@ -13,7 +13,12 @@ import { MOMENTS } from './moments';
 import { makeCellGuard } from './cell-guard';
 import { GroundProcessionScene } from './procession-street';
 import { eventActor, identifyEventActor, eventBodySize } from './event-actors';
-import { eventBridgeAllows, eventGroundBounds, groundsForRoutes } from './ground-events';
+import {
+  eventBridgeAllows,
+  eventGroundBounds,
+  groundsForRoutes,
+  routeRings,
+} from './ground-events';
 import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
 import { frameBetween, overlaps, masked, cede, ownedFootprints } from './frames';
@@ -32,7 +37,6 @@ import { admitBirths, outsideView, type LifeViewContext, type PendingSeed } from
 import type { FrameProfiler } from '../profile';
 import {
   bandVisibility,
-  seasonalAccessRing,
   VEHICLE_TYPES,
   carnivalRing,
   type PlaceKind,
@@ -5509,6 +5513,7 @@ export class LifeWorld {
     this.seasonsDirty = true;
   }
   private seasonsDirty = false;
+  private readonly eventTrimmedStalls = new Set<TileLife>();
   /** Retired tiles retain their carts and reconcile the season when they return. */
   private readonly appliedSeasons = new WeakMap<TileLife, SimulationSeason | null>();
   private readonly stallAnchors = new WeakMap<TileLife, readonly SeasonAnchor[]>();
@@ -5893,6 +5898,17 @@ export class LifeWorld {
     terrain: GroundTerrain;
     index: PolygonIndex;
   };
+  private readonly reconciledActors = new WeakMap<
+    TileLife,
+    {
+      terrain: GroundTerrain;
+      closure?: PolygonIndex;
+      movers: number;
+      parked: number;
+      stalls: number;
+      gatherers: number;
+    }
+  >();
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
@@ -6031,6 +6047,7 @@ export class LifeWorld {
             );
           this.retired.delete(key);
           this.tiles.set(key, fresh);
+          this.reconciledActors.delete(fresh);
           if (!saved) {
             if (!this.preparedRegistered?.has(fresh))
               this.profiler?.registerPopulation(key, fresh.movers);
@@ -6495,6 +6512,7 @@ export class LifeWorld {
       for (const life of fresh) this.preparedSettled.add(life);
     }
     // Serialization buffers are prepared privately too; the worker transfers them once.
+    yield* terrain.blocked.toFlatSteps();
     yield* terrain.roadAccess.roads.toFlatSteps();
     yield* terrain.roadAccess.forbidden.toFlatSteps();
     yield* terrain.trees.toFlatSteps();
@@ -6554,6 +6572,16 @@ export class LifeWorld {
     const o = terrain.origins.get(life);
     if (!o) return;
     const closure = this.trafficClosure();
+    const saved = this.reconciledActors.get(life);
+    if (
+      saved?.terrain === terrain &&
+      saved.closure === closure &&
+      saved.movers === life.movers.length &&
+      saved.parked === life.parked.length &&
+      saved.stalls === life.stalls.length &&
+      saved.gatherers === life.gatherers.length
+    )
+      return;
     const transform = (body: Body) => {
       body.x = o.x + body.x * o.scale;
       body.y = o.y + body.y * o.scale;
@@ -6600,6 +6628,14 @@ export class LifeWorld {
       },
       terrain.seasonal.polygons.length > 0 || !!closure,
     );
+    this.reconciledActors.set(life, {
+      terrain,
+      closure,
+      movers: life.movers.length,
+      parked: life.parked.length,
+      stalls: life.stalls.length,
+      gatherers: life.gatherers.length,
+    });
   }
 
   /** Ordinary traffic yields the full carriageway for the active street event. */
@@ -6621,14 +6657,7 @@ export class LifeWorld {
       const q = lngLatToTile(ref.tile, lng, lat);
       return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
     };
-    for (let i = 1; i < scene.route.route.length; i++)
-      index.add([
-        seasonalAccessRing({
-          from: scene.route.route[i - 1]!,
-          to: scene.route.route[i]!,
-          width_m: scene.route.segments[i - 1]!.width_m,
-        }).map(metric),
-      ]);
+    for (const ring of routeRings(scene.route)) index.add([ring.map(metric)]);
     this.trafficClosureCache = { scene, terrain, index };
     return index;
   }
@@ -6845,7 +6874,15 @@ export class LifeWorld {
         if (moving) {
           if (allBodies || life.seasonalStalls.includes(s)) occupied.set(s, out);
           else {
-            occupied.set(s, [out[0]!]);
+            // Admission retains the complete inflated cart/attendant pair. Ordinary
+            // movement reserves the physical cart without mutating that shared pair.
+            occupied.set(s, [
+              {
+                ...out[0]!,
+                length: VEHICLES.cart.length * o.scale,
+                width: VEHICLES.cart.width * o.scale,
+              },
+            ]);
             (queryOnly ??= new Occupancy()).set(s, [out[1]!]);
           }
         }
@@ -7035,6 +7072,7 @@ export class LifeWorld {
       y1 += radius;
       const crossing = 'kind' in owner || 'walker' in owner;
       const blockedNear = blocked.near(x0, y0, x1, y1);
+      const closureNear = !onFoot && !!closure?.near(x0, y0, x1, y1);
       const curbNear =
         !onFoot && vehicleBlocked.polygons.length > 0 && vehicleBlocked.near(x0, y0, x1, y1);
       const waterNear = onFoot && water.near(x0, y0, x1, y1);
@@ -7060,7 +7098,7 @@ export class LifeWorld {
         }
         if (
           (blockedNear && blocked.hits(sample)) ||
-          (!onFoot && closure?.hits(sample)) ||
+          (closureNear && closure!.hits(sample)) ||
           (curbNear && vehicleBlocked.hits(sample)) ||
           (waterNear && water.hits(sample)) ||
           (roadNear && !roadAccess.allows(sample, crossing))
@@ -7169,9 +7207,7 @@ export class LifeWorld {
     effectCellMeters = cellMeters,
   ) {
     this.syncSeason(weather?.season);
-    if (this.seasonalConfig)
-      for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
+    if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
     // Timed playback follows accepted viewer time, while physical movement keeps its safe step.
     // Otherwise a slow drawing frame stretches the scheduled event and its displayed clock.
@@ -7412,9 +7448,7 @@ export class LifeWorld {
     if (!shows || shows('train')) this.stepArrivals(clamped);
     this.retireStalled();
     this.admitBirths(clamped);
-    if (this.seasonalConfig)
-      for (const tile of this.tiles.values())
-        tile.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - tile.population));
+    if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -7684,11 +7718,23 @@ export class LifeWorld {
     return false;
   }
 
+  private trimSeasonalStalls(life: TileLife) {
+    const before = life.seasonalStalls.length;
+    life.clearSeasonalStalls(Math.max(0, MAX_TILE_AGENTS - life.population));
+    if (life.eventPopulation && life.seasonalStalls.length < before)
+      this.eventTrimmedStalls.add(life);
+  }
+
   private releaseEventActors(reset = true, retainOwners = false) {
     this.eventAgents = [];
     this.eventReservations = undefined;
     if (!retainOwners) this.eventOwners.clear();
     for (const life of this.tiles.values()) life.eventPopulation = 0;
+    // Re-admit trimmed sites once capacity returns, even when season and quota agree
+    // with the inputs saved before the event. Keep the shared budget during playback.
+    for (const life of this.eventTrimmedStalls) this.stallInputs.delete(life);
+    if (this.eventTrimmedStalls.size) this.seasonsDirty = true;
+    this.eventTrimmedStalls.clear();
     if (reset)
       for (const scene of this.scenes.values())
         if (scene instanceof GroundProcessionScene) scene.reset();

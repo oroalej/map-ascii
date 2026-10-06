@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CityProcessions, Procession } from '@atlas/shared';
+import { CityProcessions, Procession, pointInPolygon } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { routeProcessions } from './procession';
 import { requiredFormationWidth } from './procession-ground';
@@ -71,6 +71,102 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it.each([undefined, 0, 2])(
+    'uses measured Mass path width %s without inventing connecting ground',
+    (width) => {
+      const frame = localFrame([0, 0]);
+      const q = (x: number, y: number) => frame.toLngLat([x, y]);
+      const box = (id: string, cls: string, x0: number, y0: number, x1: number, y1: number): F => ({
+        type: 'Feature',
+        properties: { id, class: cls, ...(cls.startsWith('building') && { height: 5 }) },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[q(x0, y0), q(x1, y0), q(x1, y1), q(x0, y1), q(x0, y0)]],
+        },
+      });
+      const church = box('osm:way/1', 'building_worship', 49, 49, 51, 51);
+      const north = box('osm:way/2', 'park', -14, 0.7, 14, 14),
+        south = box('osm:way/3', 'park', -14, -14, 14, -0.7);
+      const path = road('osm:way/4', [q(-20, 0), q(20, 0)], {
+        class: 'path',
+        highway: 'footway',
+        event_path_width: width,
+      });
+      const event = Procession.parse({
+        id: base.id,
+        title: base.title,
+        story: base.story,
+        status: base.status,
+        schedule: base.schedule,
+        kind: 'mass',
+        site: church.properties.id,
+        grounds: [north.properties.id, south.properties.id],
+        radius_m: 90,
+        gathering_anchor: q(-4, 4),
+      });
+      const route = routeProcessions([church, north, south, path], [event]).routes[0]!;
+      if (route.kind !== 'mass') throw Error();
+      expect(route.site.grounds.some((ring) => pointInPolygon(q(-4, -4), [ring]))).toBe(
+        width === 2,
+      );
+    },
+  );
+  it.each([
+    [{}, { left: 0, right: 0 }],
+    [
+      { sidewalk: 'none', sidewalk_width: 2 },
+      { left: 0, right: 0 },
+    ],
+    [
+      { sidewalk: 'left', sidewalk_left_width: 1.5, sidewalk_right_width: 4 },
+      { left: 1.5, right: 0 },
+    ],
+    [
+      { sidewalk: 'right', sidewalk_width: 2 },
+      { left: 0, right: 2 },
+    ],
+    [
+      { sidewalk: 'both', sidewalk_left_width: 1.5, sidewalk_right_width: 3 },
+      { left: 1.5, right: 3 },
+    ],
+  ] as const)(
+    'preserves mapped sidewalk sides and swaps them on reversed routes: %j',
+    (tags, sides) => {
+      for (const reversed of [false, true]) {
+        const event = Procession.parse({
+          ...base,
+          route: {
+            from: reversed ? 'osm:node/2' : 'osm:node/1',
+            to: reversed ? 'osm:node/1' : 'osm:node/2',
+          },
+        });
+        const route = routeProcessions(
+          [
+            features[0]!,
+            features[1]!,
+            road(
+              'osm:way/3',
+              [
+                [0, 0],
+                [0.002, 0],
+              ],
+              tags,
+            ),
+          ],
+          [event],
+        ).routes[0]!;
+        if (route.kind !== 'procession') throw Error();
+        expect(
+          route.segments.every(
+            (s) =>
+              s.sidewalks_m?.left === (reversed ? sides.right : sides.left) &&
+              s.sidewalks_m.right === (reversed ? sides.left : sides.right),
+          ),
+        ).toBe(true);
+        expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+      }
+    },
+  );
   it('uses an exterior Mass anchor and excludes complete cells and approaches from a thin diagonal church footprint', () => {
     const frame = localFrame([0, 0]);
     const church: F = {

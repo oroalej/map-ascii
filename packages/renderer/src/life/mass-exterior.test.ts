@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CityProcessions,
@@ -7,6 +8,7 @@ import {
   PROCESSION_GEOMETRY,
 } from '@atlas/shared';
 import churches from './testing/arrival-churches.json';
+import lock from '../../../content/cities/naga/tiles.lock.json';
 import { GroundProcessionScene } from './procession-street';
 import { bodyHitsPolygon, segmentBody } from './occupancy';
 import { eventBodySize } from './event-actors';
@@ -14,6 +16,7 @@ import { eventBodySize } from './event-actors';
 // Select this integration test when generated geography or authored exterior anchors change.
 import.meta.glob('../../../../apps/web/public/tiles/*.processions.json');
 import.meta.glob('../../../content/cities/naga/processions/*.json');
+const archive = new URL('../../../../apps/web/public/tiles/naga.pmtiles', import.meta.url);
 const routes = CityProcessions.parse(
   JSON.parse(
     readFileSync(
@@ -23,6 +26,19 @@ const routes = CityProcessions.parse(
   ),
 ).processions;
 describe('shipped exterior Mass gatherings', () => {
+  it('binds church outlines to pinned geometry while allowing event-only releases', () => {
+    expect(churches.geometrySha256).toBe(lock.files['naga.pmtiles']);
+  });
+  // Unit-only CI checkouts contain the tracked event JSON but no downloaded archive.
+  // Any checkout using actual tiles also verifies unpublished geometry changes.
+  it.runIf(existsSync(archive))(
+    'matches the actual geometry archive used with generated events',
+    () => {
+      expect(createHash('sha256').update(readFileSync(archive)).digest('hex')).toBe(
+        churches.geometrySha256,
+      );
+    },
+  );
   for (const route of routes) {
     if (route.kind !== 'mass') continue;
     it(`keeps all ${route.id} approaches, exits and complete crowd footprints outside the church`, () => {

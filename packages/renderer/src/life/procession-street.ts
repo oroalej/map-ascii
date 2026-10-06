@@ -9,7 +9,12 @@ import {
 } from '@atlas/shared';
 import { PROCESSION, motionProfile, profileAt, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
-import { eventGroundAllows, groundForRoute, type EventGround } from './ground-events';
+import {
+  eventGroundAllows,
+  groundForRoute,
+  streetSidewalks,
+  type EventGround,
+} from './ground-events';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
 import type { LifeInspection } from './inspection';
@@ -40,6 +45,7 @@ type Actor = {
   destination?: Point;
   approach?: Point[];
   adopted?: VisibleAgent;
+  groundAllowed?: boolean;
 };
 export type EventSpan = { a: Point; b: Point; width: number };
 export class GroundProcessionScene {
@@ -57,6 +63,8 @@ export class GroundProcessionScene {
   private massParents = new Map<string, string | undefined>();
   private massOrder = new Map<string, number>();
   private massPaths: Point[][] = [];
+  private readonly streetSpans: EventSpan[];
+  private readonly spanBuffer: EventSpan[] = [];
   constructor(readonly route: StreetRoute | MassRoute) {
     const origin = route.kind === 'mass' ? route.site.location : route.route[0]!;
     // Mass permissions were baked on this exact church-centred 2 m lattice.
@@ -67,6 +75,12 @@ export class GroundProcessionScene {
         : {},
     );
     this.points = route.kind === 'mass' ? [] : route.route.map(this.frame.to);
+    this.streetSpans =
+      route.kind === 'mass'
+        ? []
+        : route.route
+            .slice(1)
+            .map((b, i) => ({ a: route.route[i]!, b, width: route.segments[i]!.width_m }));
     this.polyline = routePolyline(this.points);
     this.along = this.polyline.along;
     this.profile = motionProfile(hashString(route.id), this.along.at(-1)!);
@@ -268,7 +282,9 @@ export class GroundProcessionScene {
           segment = this.route.segments[at.index]!;
         const inset = Math.min(
           PROCESSION.street.spectatorInset,
-          segment.sidewalk_m - PERSON_REACH - PROCESSION.street.spectatorMargin,
+          streetSidewalks(segment)[side > 0 ? 'left' : 'right'] -
+            PERSON_REACH -
+            PROCESSION.street.spectatorMargin,
         );
         if (inset < 0) continue;
         add(-s, side * (segment.width_m / 2 + inset), 3 + Math.floor(rng() * 5));
@@ -360,22 +376,16 @@ export class GroundProcessionScene {
   spans(progress: number): EventSpan[] {
     // Mass road overflow is reserved by its actual admitted bodies, not every nearby road.
     const route = this.route;
-    if (route.kind === 'mass') return [];
+    const spans = this.spanBuffer;
+    spans.length = 0;
+    if (route.kind === 'mass') return spans;
     const head = this.head(progress),
       from = Math.max(0, head - this.tail),
       to = Math.min(this.along.at(-1)!, head + PROCESSION.street.headMargin);
-    if (to < from) return [];
-    return this.points.slice(1).flatMap((b, i) =>
-      this.along[i + 1]! >= from && this.along[i]! <= to
-        ? [
-            {
-              a: this.frame.from(this.points[i]!),
-              b: this.frame.from(b),
-              width: route.segments[i]!.width_m,
-            },
-          ]
-        : [],
-    );
+    if (to < from) return spans;
+    for (let i = 0; i < this.streetSpans.length; i++)
+      if (this.along[i + 1]! >= from && this.along[i]! <= to) spans.push(this.streetSpans[i]!);
+    return spans;
   }
   agents(
     progress: number,
@@ -438,16 +448,21 @@ export class GroundProcessionScene {
         y = at.y + hx * a.off;
       }
       const q = this.frame.from([x, y]);
-      const dimensions = eventBodySize(a);
-      const corners = bodyCorners({
-        x,
-        y,
-        hx,
-        hy,
-        length: dimensions.length + 2 * PROCESSION_GEOMETRY.probePadding,
-        width: dimensions.width + 2 * PROCESSION_GEOMETRY.probePadding,
-      }).map((point) => this.frame.from([point.x, point.y]));
-      if (!eventGroundAllows(this.ground, [q, ...corners], corners)) continue;
+      const fixed = this.route.kind !== 'mass' && !!a.destination;
+      if (!fixed || a.groundAllowed === undefined) {
+        const dimensions = eventBodySize(a);
+        const corners = bodyCorners({
+          x,
+          y,
+          hx,
+          hy,
+          length: dimensions.length + 2 * PROCESSION_GEOMETRY.probePadding,
+          width: dimensions.width + 2 * PROCESSION_GEOMETRY.probePadding,
+        }).map((point) => this.frame.from([point.x, point.y]));
+        const allowed = eventGroundAllows(this.ground, [q, ...corners], corners);
+        if (fixed) a.groundAllowed = allowed;
+        if (!allowed) continue;
+      } else if (!a.groundAllowed) continue;
       out.push(
         identifyEventActor(
           {

@@ -25,7 +25,7 @@ import { makeCellGuard } from './cell-guard';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';
 import { buildLifeGlyphs, packLife } from './draw';
 import { mapGlyphs, themes } from '../theme';
-import { Occupancy, type Body } from './occupancy';
+import { BODY_KIND, Occupancy, type PolygonIndex, type Body } from './occupancy';
 
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
@@ -110,6 +110,176 @@ function world(inspection = false, profiler?: FrameProfiler) {
   return { w, life };
 }
 describe('street event simulation', () => {
+  it('skips distant closure checks but rejects a swept car entering the route', () => {
+    const { w, life } = world();
+    w.setLive(street.id, 0.5, '2026');
+    const internal = w as unknown as {
+      trafficClosure: () => PolygonIndex;
+      groundGuard: () => (tileLife: typeof life, owner: Mover, before?: Mover) => boolean;
+    };
+    const closure = internal.trafficClosure();
+    const hits = vi.spyOn(closure, 'hits');
+    try {
+      const guard = internal.groundGuard();
+      const car: Mover = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 3500,
+        x: 3500,
+        y: 2000,
+        hx: 1,
+        hy: 0,
+        speed: 0,
+        v: 0,
+        paint: 0,
+        lane: 0,
+        pause: 0,
+        rank: 0,
+      };
+      hits.mockClear();
+      expect(guard(life, { ...car, x: 3501 }, car)).toBe(true);
+      expect(hits).not.toHaveBeenCalled();
+      expect(guard(life, { ...car, x: 1500 }, car)).toBe(false);
+      expect(hits.mock.calls.length).toBeGreaterThan(0);
+    } finally {
+      hits.mockRestore();
+    }
+  });
+  it('caches fixed street permissions while checking moving Mass poses and preserving span objects', () => {
+    const scene = new GroundProcessionScene(street);
+    scene.actors.splice(0, scene.actors.length, ...scene.actors.filter((a) => a.destination));
+    const permission = vi.spyOn(groundEvents, 'eventGroundAllows');
+    try {
+      const first = scene.agents(0.3, 0);
+      const checked = permission.mock.calls.length;
+      expect(checked).toBe(scene.actors.length);
+      expect(scene.agents(0.6, 1).map(eventActor)).toEqual(first.map(eventActor));
+      expect(permission).toHaveBeenCalledTimes(checked);
+      const held = [...scene.spans(0.3)],
+        snapshot = structuredClone(held);
+      scene.spans(0.8);
+      expect(held).toEqual(snapshot);
+      permission.mockClear();
+      const arrival = new GroundProcessionScene(mass);
+      permission.mockClear();
+      const early = arrival.agents(0.08, 0);
+      expect(permission.mock.calls.length).toBeGreaterThan(0);
+      permission.mockClear();
+      const middle = arrival.agents(0.5, 1);
+      expect(permission.mock.calls.length).toBeGreaterThan(0);
+      const same = middle.find((a) => eventActor(a) === eventActor(early[0]))!;
+      expect([same.lng, same.lat]).not.toEqual([early[0]!.lng, early[0]!.lat]);
+    } finally {
+      permission.mockRestore();
+    }
+  });
+  it.each([
+    { left: 2, right: 0 },
+    { left: 0, right: 1 },
+    { left: 1, right: 2 },
+    { left: 0, right: 0 },
+  ])('places spectators only on available sides: %j', (sides) => {
+    const scene = new GroundProcessionScene({
+      ...street,
+      segments: street.segments.map((s) => ({ ...s, sidewalks_m: sides })),
+    });
+    const spectators = scene.actors.filter((a) => a.destination);
+    const expected = sides.left && sides.right ? 2 : sides.left || sides.right ? 1 : 0;
+    expect(new Set(spectators.map((a) => Math.sign(a.off))).size).toBe(expected);
+    if (!sides.left) expect(spectators.every((a) => a.off < 0)).toBe(true);
+    if (!sides.right) expect(spectators.every((a) => a.off > 0)).toBe(true);
+    const at = (side: number) => scene.frame.from([100, side * 4.7]);
+    expect(eventGroundAllows(scene.ground, [at(1)])).toBe(sides.left > 0);
+    expect(eventGroundAllows(scene.ground, [at(-1)])).toBe(sides.right > 0);
+    const admitted = new Set(scene.agents(0.5, 0).map(eventActor));
+    // Rounded end caps may omit a whole footprint at an endpoint; interior sides fit.
+    expect(
+      spectators
+        .filter((a) => -a.back > 0 && -a.back < street.length_m)
+        .every((a) => admitted.has('live/default/' + a.id)),
+    ).toBe(true);
+  });
+  it('reconciles once per terrain, closure or resident activation and restores traffic immediately', () => {
+    const { w, life } = world();
+    const reconcile = vi.spyOn(life, 'reconcileSeasonalActors');
+    w.setLive(street.id, 0.5, '2026');
+    w.step(0.01, undefined, 21);
+    reconcile.mockClear();
+    for (let i = 0; i < 3; i++) {
+      w.setLive(street.id, 0.5 + i * 0.01, '2026');
+      w.step(0.01, undefined, 21);
+    }
+    expect(reconcile).not.toHaveBeenCalled();
+    const parked = { x: 1500, y: 2000, hx: 1, hy: 0, vehicle: 'car' as const, paint: 0, rank: 0 };
+    life.parked.push(parked);
+    w.step(0.01, undefined, 21);
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(life.parked).not.toContain(parked);
+    w.setLive(undefined);
+    expect(life.parked).toContain(parked);
+    expect(reconcile).toHaveBeenCalledTimes(2);
+  });
+  it('keeps physical ordinary carts passable while retaining inflated event-admission pairs', () => {
+    const { w, life } = world();
+    const stall: Stall = {
+      x: 1500,
+      y: 2000 - 10 * pm,
+      hx: 1,
+      hy: 0,
+      side: 1,
+      rank: 0,
+      paint: 0,
+      shirt: 0,
+    };
+    life.stalls.push(stall);
+    const reserved: Body[][] = [];
+    // The intercepted method is invoked only with the actual occupancy via .call below.
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    const original = Occupancy.prototype.set;
+    const spy = vi.spyOn(Occupancy.prototype, 'set').mockImplementation(function (
+      this: Occupancy,
+      owner,
+      bodies,
+    ) {
+      if (owner === stall && bodies.some((b) => b.kind === BODY_KIND.fixed))
+        reserved.push(bodies.map((b) => ({ ...b })));
+      return original.call(this, owner, bodies);
+    });
+    try {
+      const internal = w as unknown as {
+        groundGuard: (...args: unknown[]) => (tileLife: typeof life, owner: Mover) => boolean;
+      };
+      const guard = internal.groundGuard(
+        3,
+        undefined,
+        undefined,
+        false,
+        undefined,
+        false,
+        street.route.reduce<[number, number, number, number]>(
+          (b, q) => [
+            Math.min(b[0], q[0] - 0.01),
+            Math.min(b[1], q[1] - 0.01),
+            Math.max(b[2], q[0] + 0.01),
+            Math.max(b[3], q[1] + 0.01),
+          ],
+          [Infinity, Infinity, -Infinity, -Infinity],
+        ),
+      );
+      expect(reserved.some((pair) => pair.length === 2 && pair[0]!.width === 3)).toBe(true);
+      expect(
+        reserved.some(
+          (pair) => pair.length === 1 && pair[0]!.length === 1.8 && pair[0]!.width === 1,
+        ),
+      ).toBe(true);
+      expect(guard(life, ordinaryPerson(stall.x, stall.y - 2.5 * pm))).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
   it('rejects narrow roofs crossing complete footprints even when every sample is outside', () => {
     const corners = [point(1000, 2000), point(1010, 2000), point(1010, 2010), point(1000, 2010)];
     const roof = [
@@ -209,6 +379,54 @@ describe('street event simulation', () => {
     } finally {
       permission.mockRestore();
     }
+  });
+  it('reuses recreated cell guards and integer pans but invalidates changed footprints and terrain', () => {
+    const baseGround = groundForRoute(street);
+    const ground = { ...baseGround };
+    const blocked = { hits: vi.fn(() => false) };
+    const empty = { hits: () => false };
+    const agent = {
+      kind: 'person' as const,
+      lng: point(1500)[0],
+      lat: point(1500)[1],
+      flap: 0,
+      eventGround: 'event',
+    };
+    const zero = lngLatToTile(tile, ...tileToLngLat(tile, { x: 0, y: 0 }));
+    const unit = lngLatToTile(tile, ...tileToLngLat(tile, { x: pm, y: pm }));
+    const make = (shift = 0, scale = 1, terrain = blocked, reference = tile, g = ground) =>
+      makeCellGuard(
+        { tile: reference, perMeter: pm },
+        { roads: empty, forbidden: empty },
+        empty,
+        (lng, lat) => {
+          const q = lngLatToTile(tile, lng, lat);
+          return [
+            ((q.x - zero.x) / (unit.x - zero.x)) * scale + shift,
+            ((q.y - zero.y) / (unit.y - zero.y)) * scale + shift,
+          ];
+        },
+        new Map([['event', g]]),
+        terrain,
+      );
+    const col = Math.floor(1500 / pm),
+      row = Math.floor(2000 / pm);
+    expect(make()(agent, col, row)).toBe(true);
+    expect(make()(agent, col, row)).toBe(true);
+    expect(make(10)(agent, col + 10, row + 10)).toBe(true);
+    expect(blocked.hits).toHaveBeenCalledTimes(1);
+    make(0.25)(agent, col, row);
+    expect(blocked.hits).toHaveBeenCalledTimes(2);
+    make(0, 2)(agent, col * 2, row * 2);
+    expect(blocked.hits).toHaveBeenCalledTimes(3);
+    const roof = { hits: vi.fn(() => true) };
+    expect(make(0, 1, roof)(agent, col, row)).toBe(false);
+    expect(make(0, 1, roof)(agent, col, row)).toBe(false);
+    expect(roof.hits).toHaveBeenCalledTimes(1);
+    make(0, 1, blocked, { ...tile, x: tile.x + 1 })(agent, col, row);
+    expect(blocked.hits).toHaveBeenCalledTimes(4);
+    make(0, 1, blocked, tile, { ...ground })(agent, col, row);
+    expect(blocked.hits).toHaveBeenCalledTimes(5);
   });
   it.each([
     [179.999, 89.999],

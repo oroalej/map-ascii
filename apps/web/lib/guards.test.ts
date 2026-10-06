@@ -85,6 +85,19 @@ describe('browser shape guards agree with the schemas', () => {
         roads: [],
       },
     };
+    for (const [sidewalks_m, accepted] of [
+      [{ left: 0, right: 2 }, true],
+      [{ left: 1.5, right: 3 }, true],
+      [{ left: -1, right: 2 }, false],
+      [{ left: 2 }, false],
+      [{ left: 2, right: 2, other: 1 }, false],
+    ] as const) {
+      const bundle = {
+        processions: [{ ...street, segments: [{ ...street.segments[0]!, sidewalks_m }] }],
+      };
+      expect(CityProcessions.safeParse(bundle).success).toBe(accepted);
+      expect(isCityProcessions(bundle)).toBe(accepted);
+    }
     for (const p of [fluvial, street, { ...street, kind: 'parade' }, mass]) {
       expect(CityProcessions.safeParse({ processions: [p] }).success).toBe(true);
       expect(isCityProcessions({ processions: [p] })).toBe(true);

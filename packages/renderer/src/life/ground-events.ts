@@ -1,6 +1,7 @@
 /** Bounded geographic permissions shared by event admission and inline/worker cell packing. */
 import {
   pointInPolygon,
+  localMetricProjection,
   seasonalAccessRing,
   type StreetRoute,
   type MassRoute,
@@ -32,6 +33,31 @@ const indexes = new WeakMap<
 const EMPTY: Point[][] = [];
 const routeGrounds = new WeakMap<StreetRoute | MassRoute, EventGround>();
 const groundBounds = new WeakMap<EventGround, LngLatBounds>();
+export function streetSidewalks(segment: StreetRoute['segments'][number]) {
+  return segment.sidewalks_m ?? { left: segment.sidewalk_m, right: segment.sidewalk_m };
+}
+/** Shared carriageway/access traversal; asymmetric sidewalks shift the envelope. */
+export function routeRings(route: StreetRoute, options: { sidewalks?: boolean } = {}): Point[][] {
+  const rings: Point[][] = [];
+  for (let i = 1; i < route.route.length; i++) {
+    const segment = route.segments[i - 1]!;
+    const sides = options.sidewalks ? streetSidewalks(segment) : { left: 0, right: 0 };
+    const offset = (sides.left - sides.right) / 2;
+    const frame = localMetricProjection(route.route[i - 1]!);
+    const end = frame.to(route.route[i]!);
+    const d = Math.hypot(...end);
+    const shift = (q: Point) =>
+      frame.from([q[0] - (end[1] / d) * offset, q[1] + (end[0] / d) * offset]);
+    rings.push(
+      seasonalAccessRing({
+        from: offset && d ? shift([0, 0]) : route.route[i - 1]!,
+        to: offset && d ? shift(end) : route.route[i]!,
+        width_m: segment.width_m + sides.left + sides.right,
+      }),
+    );
+  }
+  return rings;
+}
 /** Full event envelope, independent of the camera; guard callers add their body margin. */
 export function eventGroundBounds(ground: EventGround): LngLatBounds {
   const saved = groundBounds.get(ground);
@@ -55,18 +81,7 @@ export function groundForRoute(route: StreetRoute | MassRoute): EventGround {
     route.kind === 'mass'
       ? { regions: route.site.grounds, blocked: route.site.blocked }
       : { regions: [], blocked: route.blocked, water: route.water, bridges: route.bridges };
-  if (route.kind !== 'mass') {
-    for (let i = 1; i < route.route.length; i++) {
-      const segment = route.segments[i - 1]!;
-      ground.regions.push(
-        seasonalAccessRing({
-          from: route.route[i - 1]!,
-          to: route.route[i]!,
-          width_m: segment.width_m + 2 * segment.sidewalk_m,
-        }),
-      );
-    }
-  }
+  if (route.kind !== 'mass') ground.regions = routeRings(route, { sidewalks: true });
   routeGrounds.set(route, ground);
   return ground;
 }

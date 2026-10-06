@@ -2,8 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { FrozenPolygonIndex, PolygonIndex, type Body } from './occupancy';
 import { makeScenario } from './testing/scenarios';
 import { snapshotOf } from './terrain-snapshot';
+import { LifeWorld } from './simulate';
 
 describe('transferred polygon indexes', () => {
+  it('cooperatively prepares all four serialization caches before activation replies', () => {
+    const complete = <T>(steps: Generator<void, T, void>) => {
+      let next = steps.next();
+      while (!next.done) next = steps.next();
+      return next.value;
+    };
+    const entries = makeScenario('crossroads', 1).world.activeEntries();
+    const world = new LifeWorld();
+    const ready = new Map(entries.map((entry) => [entry.key, complete(world.prepareTile(entry))]));
+    complete(world.prepareActivation(entries, ready));
+    world.sync(entries, undefined, undefined, ready);
+    const terrain = world.cellTerrain()!;
+    for (const name of ['blocked', 'roads', 'forbidden', 'trees'] as const)
+      expect(terrain[name].toFlatSteps().next().done).toBe(true);
+  });
   it('rebuilds detached cached serialization buffers and invalidates them on added geometry', () => {
     const terrain = makeScenario('crossroads', 1).world.cellTerrain()!;
     const first = snapshotOf(terrain);

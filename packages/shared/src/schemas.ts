@@ -1020,7 +1020,15 @@ const streetEventBase = {
   ...movingEventBase,
   segments: z
     .array(
-      z.strictObject({ id: OsmId, width_m: z.number().positive(), sidewalk_m: z.number().min(0) }),
+      z.strictObject({
+        id: OsmId,
+        width_m: z.number().positive(),
+        // Legacy symmetric allowance; new archives carry route-relative sides.
+        sidewalk_m: z.number().min(0),
+        sidewalks_m: z
+          .strictObject({ left: z.number().min(0), right: z.number().min(0) })
+          .optional(),
+      }),
     )
     .min(1),
   blocked: z.array(EventRing),

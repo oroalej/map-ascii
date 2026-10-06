@@ -24,10 +24,16 @@ const BRIDGE_APPROACH_M = 25,
   BARRIER_HALF_WIDTH_M = 0.5,
   MASS_CORRIDOR_INSET_M = 0.7;
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
-const sidewalkWidth = (road: AtlasFeature) =>
-  road.properties.class === 'path' || road.properties.sidewalk === 'none'
-    ? 0
-    : Number(road.properties.sidewalk_width ?? 1);
+function sidewalks(road: AtlasFeature, reversed = false) {
+  const tags = road.properties;
+  const present = (side: 'left' | 'right') =>
+    tags.class !== 'path' && (tags.sidewalk === 'both' || tags.sidewalk === side);
+  const measured = (value: number | undefined) =>
+    value !== undefined && Number.isFinite(value) && value >= 0 ? value : 2;
+  const left = present('left') ? measured(tags.sidewalk_left_width ?? tags.sidewalk_width) : 0;
+  const right = present('right') ? measured(tags.sidewalk_right_width ?? tags.sidewalk_width) : 0;
+  return reversed ? { left: right, right: left } : { left, right };
+}
 const polygons = (g: Geometry): Position[][][] =>
   g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
 const asPoints = (ring: Position[]) => ring.map((p) => [p[0]!, p[1]!] as Point);
@@ -218,18 +224,28 @@ export function routeStreet(features: readonly F[], p: Street) {
       (a, b) => Math.min(dist.get(a.a)!, dist.get(a.b)!) - Math.min(dist.get(b.a)!, dist.get(b.b)!),
     );
   const route: Point[] = [root.at];
-  const segments: { id: string; width_m: number; sidewalk_m: number }[] = [];
+  const segments: {
+    id: string;
+    width_m: number;
+    sidewalk_m: number;
+    sidewalks_m: { left: number; right: number };
+  }[] = [];
   let length_m = 0;
   for (const e of ordered) {
     const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b;
     const b = a === e.a ? e.b : e.a;
     const count = Math.ceil(e.length / ROUTE_STEP_M);
     const road = byId.get(e.road)!;
-    const sidewalk_m = sidewalkWidth(road);
+    const sidewalks_m = sidewalks(road, a !== e.a);
     for (let k = 1; k <= count; k++) {
       const t = k / count;
       route.push(unproject([a.xy[0] + (b.xy[0] - a.xy[0]) * t, a.xy[1] + (b.xy[1] - a.xy[1]) * t]));
-      segments.push({ id: e.road, width_m: e.width, sidewalk_m });
+      segments.push({
+        id: e.road,
+        width_m: e.width,
+        sidewalk_m: Math.min(sidewalks_m.left, sidewalks_m.right),
+        sidewalks_m,
+      });
     }
     length_m += e.length;
   }
@@ -241,11 +257,17 @@ export function routeStreet(features: readonly F[], p: Street) {
     Math.max(...route.map((q) => q[0])) + 0.001,
     Math.max(...route.map((q) => q[1])) + 0.001,
   ];
-  const corridors = ordered.map(
-    (e) =>
-      seatingFootprint([e.a.at, e.b.at], e.width + 2 * sidewalkWidth(byId.get(e.road)!))
-        .coordinates as Point[][][],
-  );
+  const corridors = ordered.map((e) => {
+    const sides = sidewalks(byId.get(e.road)!);
+    const dx = e.b.xy[0] - e.a.xy[0],
+      dy = e.b.xy[1] - e.a.xy[1];
+    const d = Math.hypot(dx, dy),
+      offset = (sides.left - sides.right) / 2;
+    const shift = (q: Point): Point =>
+      unproject([q[0] - (dy / d) * offset, q[1] + (dx / d) * offset]);
+    return seatingFootprint([shift(e.a.xy), shift(e.b.xy)], e.width + sides.left + sides.right)
+      .coordinates as Point[][][];
+  });
   // Balance clipping, rounding far below source precision, as seatingFootprint does.
   let merged = corridors.map((poly) =>
     poly.map((p) =>
@@ -316,9 +338,10 @@ export function bakeMassSite(
         .filter(nearby)
         .map((line) => ({
           line: asPoints(line),
-          width_m: Number(f.properties.event_path_width ?? 2),
+          width_m: eventWidth(f as AtlasFeature),
         })),
-    );
+    )
+    .filter((path) => Number.isFinite(path.width_m) && path.width_m > 0);
   const corridors = [...roads, ...paths].map((r) => ({ ...r, xy: r.line.map(frame.toMeters) }));
   const nearLine = (q: Point) =>
     corridors.some((r) =>
