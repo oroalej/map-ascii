@@ -1803,7 +1803,7 @@ export class TileLife {
 
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
   offsetOf(m: Mover, identity = m): number {
-    if (isWalker(m.kind)) return this.scenes.visits.has(identity) ? 0 : (m.avoid ?? 0);
+    if (isWalker(m.kind)) return this.scenes.walkingOffset(m, identity);
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
@@ -1869,8 +1869,7 @@ export class TileLife {
       const next = m.routing?.plan?.exit ?? m.next;
       if (next === undefined || next < 0) return;
       outLine = next >> 1;
-      const target = this.directedExit(next, vertex);
-      outgoing = target.vertex + target.dir;
+      outgoing = this.directedVertex(next, vertex) + (next & 1 ? -1 : 1);
     }
     const c = this.geo.coords;
     const x = c[vertex * 2]!,
@@ -1931,9 +1930,8 @@ export class TileLife {
           offsetOut = lane(m.line, m.dir, at + reachOut, m.came, next);
         } else if (inLine === m.line) {
           offsetIn = lane(m.line, m.dir, this.lineLength(m.line) / pm - reachIn, m.came, next);
-          const target = this.directedExit(next!, vertex);
-          const entryDistance =
-            (outDir === 1 ? target.along : this.lineLength(outLine) - target.along) / pm;
+          const along = this.along[this.directedVertex(next!, vertex)]!;
+          const entryDistance = (outDir === 1 ? along : this.lineLength(outLine) - along) / pm;
           offsetOut = lane(
             outLine,
             outDir,
@@ -3791,15 +3789,20 @@ export class TileLife {
     return false;
   }
 
+  /** Vertex-only callers share the directed reference without allocating a plan. */
+  private directedVertex(code: number, shared?: number): number {
+    if (shared !== undefined) {
+      const arms = this.roadVertices.get(this.endKey(shared));
+      if (arms) for (const arm of arms) if (arm.code === code) return arm.vertex;
+    }
+    return code & 1 ? this.last(code >> 1) : this.first(code >> 1);
+  }
+
   /** Resolve the same directed reference for planning, curves, following and entry. */
   directedExit(code: number, shared?: number) {
     const line = code >> 1,
-      dir: 1 | -1 = code & 1 ? -1 : 1;
-    const vertex =
-      shared === undefined
-        ? undefined
-        : this.roadVertices.get(this.endKey(shared))?.find((arm) => arm.code === code)?.vertex;
-    const entry = vertex ?? (dir === 1 ? this.first(line) : this.last(line));
+      dir: 1 | -1 = code & 1 ? -1 : 1,
+      entry = this.directedVertex(code, shared);
     return { line, dir, vertex: entry, along: this.along[entry]! };
   }
 
@@ -3811,7 +3814,7 @@ export class TileLife {
   private endHeading(code: number, shared?: number): readonly [number, number] {
     const line = code >> 1;
     const dir = (code & 1) === 0 ? 1 : -1;
-    const end = this.directedExit(code, shared).vertex;
+    const end = this.directedVertex(code, shared);
     const opposite = dir === 1 ? this.last(line) : this.first(line);
     for (let v = end + dir; dir === 1 ? v <= opposite : v >= opposite; v += dir) {
       const dx = this.geo.coords[v * 2]! - this.geo.coords[end * 2]!;
@@ -5421,12 +5424,28 @@ export class TileLife {
               : 0;
         } else if (!intentionalHold && commanded > 1e-8 * this.perMeter) {
           let progress = this.blockedProgress.get(m);
-          const afterPose = walking && fits ? this.pose(m) : undefined;
+          const afterPose =
+            fits && (walking || (m.kind === 'vehicle' && progress)) ? this.pose(m) : undefined;
           const previousPose = afterPose && this.pose(before, undefined, m);
           const forward =
             afterPose && previousPose
               ? (afterPose.x - previousPose.x) * m.hx + (afterPose.y - previousPose.y) * m.hy
               : 0;
+          if (
+            progress &&
+            m.kind === 'vehicle' &&
+            moved > commanded * 0.25 &&
+            forward >= commanded * 0.25 &&
+            m.hx * progress.hx + m.hy * progress.hy < 0.95
+          ) {
+            // Accepted forward travel after a mapped turn changes route intent.
+            // Keep its blockage age until half a metre in that new direction;
+            // refused, sideways-only and backward trials cannot rearm recovery.
+            progress.x = previousPose!.x;
+            progress.y = previousPose!.y;
+            progress.hx = m.hx;
+            progress.hy = m.hy;
+          }
           if (
             progress &&
             walking &&
@@ -5611,7 +5630,7 @@ export class TileLife {
         : 0;
     const previous = before.roadYaw ?? 0;
     // Distance easing leaves stopped actors' headings unchanged.
-    const yaw = previous + (target - previous) * Math.min(1, forward * 1.5);
+    const yaw = previous + (target - previous) * Math.max(0, Math.min(1, forward * 1.5));
     m.roadYaw =
       (m.kind === 'vehicle' ? m.roadShift === undefined : !m.avoid) && Math.abs(yaw) < 1e-3
         ? undefined

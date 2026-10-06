@@ -37,7 +37,12 @@ import { classifyTerminalStops, MEASUREMENT_VERSION } from './observe-life';
 import { simulationSeasons } from '../src/life/seasonal-simulation';
 import { configureLifeWorld } from '../src/life/worker-api';
 import { liveProgress } from '../src/life/procession';
-import { diagnosticCompletion } from './diag-status';
+import {
+  diagnosticCompletion,
+  diagnosticPackingOutcomes,
+  requireDiagnosticPacking,
+  requireDiagnosticProfiler,
+} from './diag-status';
 import { summary } from './paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -391,6 +396,7 @@ try {
           const caseStart = performance.now();
           const diagnostics = new LifeDiagnostics({ rawMotion: true });
           const profiler = new FrameProfiler(() => 0, diagnostics);
+          requireDiagnosticProfiler(profiler, diagnostics);
           const world = new LifeWorld(config.traffic, profiler, {
             dialogue: runtime && dialogueChoices(runtime),
             periods: runtime?.periods,
@@ -543,7 +549,7 @@ try {
             );
             const agents = world.visible(zoom, levels, center, weather, bounds, crowd);
             const placement = placeGrid({ camera, ...size, dpr: 1 }, cellDev, cols, rows);
-            const outcomes = new Uint8Array(agents.length);
+            const outcomes = diagnosticPackingOutcomes(agents.length);
             const denials = new Uint8Array(agents.length);
             const cellGuard = world.groundCellGuard(placement.toCell);
             measuring = frame >= warmup / dt;
@@ -568,6 +574,7 @@ try {
               { groupRetry, loneRetry },
             );
             if (measuring) packingTimes.push(performance.now() - packingStart);
+            requireDiagnosticPacking(outcomes);
             classifyTerminalStops(world, diagnostics);
             if (frame >= warmup / dt && flickerSamples.length < 100) {
               // Read-only examples supplement the common observer's counters. They

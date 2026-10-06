@@ -109,6 +109,13 @@ const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.h
 
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
+  private returningToRoute?: Mover;
+
+  /** Effective walking offset during a scene or its checked route handoff. */
+  walkingOffset(m: Mover, identity = m): number {
+    return this.visits.has(identity) && this.returningToRoute !== identity ? 0 : (m.avoid ?? 0);
+  }
+
   /** Normal purchase outcomes, bounded and replaced on every accepted step. */
   readonly purchaseCompletions: { mover: Mover; stall: Stall; key: object }[] = [];
   /** Bounded, frame-local entry notifications; observers cannot mutate service ownership. */
@@ -1034,6 +1041,63 @@ export class LocalScenes {
     return false;
   }
 
+  /** Release the scene at its mapped anchor, checking the ordinary walking pose. */
+  private finishReturn(
+    m: Mover,
+    anchor: WalkPoint,
+    guard?: MoveGuard,
+    owns?: (p: WalkPoint) => boolean,
+  ) {
+    const previous = snapshotMover(m),
+      physical = snapshotMover(m),
+      heading = m.momentFacing ?? { hx: m.hx, hy: m.hy },
+      end = m.from + m.dir,
+      ax = this.geo.coords[m.from * 2]!,
+      ay = this.geo.coords[m.from * 2 + 1]!,
+      dx = this.geo.coords[end * 2]! - ax,
+      dy = this.geo.coords[end * 2 + 1]! - ay,
+      length = Math.hypot(dx, dy);
+    if (!length) return false;
+    const hx = dx / length,
+      hy = dy / length,
+      d = (anchor.x - ax) * hx + (anchor.y - ay) * hy;
+    if (d < 0 || d > length) return false;
+    // Scene movement ignores the retained ordinary lane offset. The guard must
+    // compare against that same physical pose while evaluating ordinary walking.
+    physical.avoid = 0;
+    this.returningToRoute = m;
+    try {
+      for (const retainFacing of [false, true]) {
+        restoreMover(m, previous);
+        m.d = d;
+        m.x = ax + hx * d;
+        m.y = ay + hy * d;
+        m.avoid =
+          (-(previous.x - m.x) * hy) / this.perMeter + ((previous.y - m.y) * hx) / this.perMeter;
+        if (retainFacing) {
+          m.hx = hx;
+          m.hy = hy;
+          m.momentFacing = { hx: heading.hx, hy: heading.hy };
+        } else faceGroup(m, hx, hy);
+        const unchanged =
+          Math.hypot(previous.x - m.x, previous.y - m.y) <= 1e-8 * this.perMeter &&
+          Math.hypot(heading.hx - hx, heading.hy - hy) <= 1e-8;
+        if (unchanged) return true;
+        if (
+          inTile(m) &&
+          (!owns || owns(m)) &&
+          this.graph.allowsBodies(this.walkingBodies(m, m, m.avoid), true) &&
+          (!guard || guard(m, physical))
+        )
+          return true;
+      }
+    } finally {
+      this.returningToRoute = undefined;
+    }
+    restoreMover(m, previous);
+    return false;
+  }
+
   step(
     dt: number,
     movers: readonly Mover[],
@@ -1105,20 +1169,7 @@ export class LocalScenes {
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
         if (!this.move(m, visit, dt, guard, walkLimit, owns)) continue;
         if (visit.state === 'return') {
-          const end = m.from + m.dir;
-          const dx = this.geo.coords[end * 2]! - this.geo.coords[m.from * 2]!;
-          const dy = this.geo.coords[end * 2 + 1]! - this.geo.coords[m.from * 2 + 1]!;
-          const length = Math.hypot(dx, dy);
-          if (length && Math.hypot(m.hx - dx / length, m.hy - dy / length) > 1e-8) {
-            const previous = snapshotMover(m);
-            faceGroup(m, dx / length, dy / length);
-            if (guard && !guard(m, previous)) {
-              restoreMover(m, previous);
-              continue;
-            }
-          }
-          m.x = visit.trail[0]!.x;
-          m.y = visit.trail[0]!.y;
+          if (!this.finishReturn(m, visit.trail[0]!, guard, owns)) continue;
           m.pause = 0;
           m.lying = false;
           this.visits.delete(m);

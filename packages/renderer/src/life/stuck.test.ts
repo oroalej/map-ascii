@@ -89,6 +89,116 @@ function mover(kind: 'person' | 'vehicle', metres: number, dir: 1 | -1): Mover {
   };
 }
 
+it('retains physical yaw through accepted vehicle retreat and refused retries', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8);
+  const car = mover('vehicle', 70, 1);
+  car.roadYaw = 0.3;
+  car.roadShift = 0.5;
+  car.roadSteering = -1;
+  life.movers.push(car);
+  const start = car.x;
+  let retreats = 0;
+  for (let frame = 0; frame < 12; frame++) {
+    life.step(1 / 30, undefined, undefined, undefined, undefined, (next, before) => {
+      const fits = !!before && next.x < before.x - 1e-8;
+      if (fits) {
+        retreats++;
+        expect((before.x - next.x) / pm).toBeLessThanOrEqual(car.speed / pm / 30);
+        expect('roadYaw' in next && next.roadYaw).toBe(0.3);
+      }
+      return fits;
+    });
+    expect(car.roadYaw).toBe(0.3);
+  }
+  expect(retreats).toBe(12);
+  expect(car.x).toBeLessThan(start);
+  const pose = life.pose(car);
+  life.step(1 / 30, undefined, undefined, undefined, undefined, () => false);
+  expect(life.pose(car)).toEqual(pose);
+  expect(car.roadYaw).toBe(0.3);
+});
+
+it('clears transient blockage after a mapped dead-end turn without a false recovery', () => {
+  const { life } = fixture(LifeLine.roadMajor, 8);
+  const car = mover('vehicle', 219.9, 1);
+  life.movers.push(car);
+  life.step(1 / 30, undefined, undefined, undefined, undefined, () => false);
+  const age = car.waiting!;
+  expect(age).toBeGreaterThan(0);
+  let turned = false;
+  let anchor = car.x;
+  for (let frame = 0; frame < 32 * 30; frame++) {
+    life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+    if (car.dir === -1 && !turned) {
+      turned = true;
+      anchor = car.x;
+      expect(car.waiting).toBeGreaterThanOrEqual(age);
+    }
+    if (turned) expect(car.dir).toBe(-1);
+    if (turned && (anchor - car.x) / pm > 1) expect(car.waiting).toBe(0);
+  }
+  expect(turned).toBe(true);
+  expect((anchor - car.x) / pm).toBeGreaterThan(100);
+  expect(car.v! / pm).toBeCloseTo(5);
+});
+
+it('walks away from a returned scene before reconciling a refused final facing', () => {
+  const { world, life } = fixture(LifeLine.path, 4);
+  const p = mover('person', 70, 1),
+    blocker = mover('person', 70, 1),
+    start = { x: p.x, y: p.y },
+    group = p.group,
+    member = group![0];
+  blocker.y += 1.125 * pm;
+  blocker.pause = Infinity;
+  p.avoid = 0.4;
+  p.hx = 0;
+  p.hy = 1;
+  p.y -= 0.2 * pm;
+  life.scenes.visits.set(p, {
+    site: {
+      ...start,
+      kind: 'vendor',
+      modes: 0,
+      covered: false,
+      queue: [],
+      capacity: 4,
+      hx: 1,
+      hy: 0,
+      road: -1,
+      roadWidth: 0,
+      direction: 1,
+    },
+    state: 'return',
+    path: [{ x: p.x, y: p.y }, start],
+    trail: [start],
+    next: 1,
+    time: 0,
+    seat: 0,
+    sheltering: false,
+    blocked: 0,
+  });
+  life.movers.push(p, blocker);
+  let returned = false;
+  for (let frame = 0; frame < 300; frame++) {
+    const before = life.pose(p);
+    world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 0);
+    const after = life.pose(p);
+    expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThan(0.2);
+    expect(
+      life
+        .groundBodies(p)
+        .some((a) => life.groundBodies(blocker).some((b) => bodiesOverlap(a, b, 0))),
+    ).toBe(false);
+    if (!life.scenes.visits.has(p)) returned = true;
+    expect(p.group).toBe(group);
+    expect(p.group![0]).toBe(member);
+  }
+  expect(returned).toBe(true);
+  expect((p.x - start.x) / pm).toBeGreaterThan(3);
+  expect(p.momentFacing).toBeUndefined();
+});
+
 it.each([
   [0, false],
   [1, false],

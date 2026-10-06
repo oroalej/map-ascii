@@ -5,7 +5,7 @@ import { LocalScenes } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 import type { WalkingGraph } from './navigation';
-import { Occupancy } from './occupancy';
+import { Occupancy, memberSize } from './occupancy';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -56,6 +56,51 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('hands a final return back with its checked facing and rolls back a refused handoff', () => {
+    const scene = setup(),
+      p = { ...person(), avoid: 0.4, group: [{ ...walker }, { ...walker, back: 1.2 }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      group = p.group,
+      members = [...group];
+    Object.assign(p, { hx: 0, hy: 1 });
+    Object.assign(visit, { state: 'return', path: [{ x: 40, y: 30 }], next: 1 });
+    const physical = (m: Mover) => {
+      const heading = m.momentFacing ?? m,
+        lane = scene.walkingOffset(m, p);
+      return m.group!.map((member) => ({
+        x: m.x - m.hy * lane - heading.hy * member.lateral - heading.hx * member.back,
+        y: m.y + m.hx * lane + heading.hx * member.lateral - heading.hy * member.back,
+        hx: heading.hx,
+        hy: heading.hy,
+        ...memberSize(member.figure),
+      }));
+    };
+    const bodies = physical(p),
+      occupied = new Occupancy();
+    occupied.set({}, [{ x: 40, y: 31.125, hx: 1, hy: 0, ...memberSize('adult') }]);
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(physical(p)).toEqual(bodies);
+    scene.step(
+      0.1,
+      [p],
+      {},
+      undefined,
+      undefined,
+      (next) => occupied.conflicts(p, physical(next)) === 0,
+    );
+    expect(scene.visits.has(p)).toBe(false);
+    expect(physical(p)).toEqual(bodies);
+    expect(p.momentFacing).toEqual({ hx: 0, hy: 1 });
+    expect(p.hx).toBe(1);
+    expect(p.d).toBe(40);
+    expect(p.avoid).toBe(0);
+    expect(p.group).toBe(group);
+    members.forEach((member, index) => expect(p.group[index]).toBe(member));
+    expect(scene.transferable(p)).toBe(true);
+  });
+
   it.each([false, true])(
     'releases a permanently blocked yield return while preserving checked ownership (visit %s)',
     (visiting) => {
