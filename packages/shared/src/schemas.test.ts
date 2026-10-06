@@ -137,6 +137,7 @@ describe('landmark facts', () => {
   const facts = [fact, fact, fact];
   it('validates the count and every source reference with the fact path', () => {
     expect(Landmark.safeParse({ ...landmark, facts }).success).toBe(true);
+    expect(Landmark.safeParse({ ...landmark, facts: [...facts, fact, fact] }).success).toBe(true);
     for (const count of [0, 1, 2, 6]) {
       expect(Landmark.safeParse({ ...landmark, facts: Array(count).fill(fact) }).success).toBe(
         false,

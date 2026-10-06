@@ -670,12 +670,13 @@ Candidate pooling improved the large artificial crowd but regressed small views.
   - URL (de)serialization
   - zod schemas
   - camera math (fly-to arcs, bounds clamping)
+  - pointer selection cancels flights at the current camera and never calls `flyTo`
 - **Pipeline:**
   - snapshot test on a small fixture OSM extract with a fixture city config (not tied to any real city)
   - asserts expected layers and properties
 - **E2E (Playwright):** a small smoke suite (`apps/web/e2e/smoke.spec.ts`) for what unit tests can't see, run against the static export on desktop Chromium; tests tagged `@mobile` also run on a Pixel 7 (touch and the bottom sheet). Logic (tour player, URL state, life preferences) is unit-tested instead. For each registered city:
   - `/` reaches a city, and the canvas draws with attribution
-  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"), and a click on a landmark with facts opens its dialog without moving the camera
+  - search flies to the smoke landmark from its `city.json` (Naga: "Naga Metropolitan Cathedral"); clicking a landmark with facts opens its dialog, keeps attribution exposed, and Escape closes it
   - share URL round-trips
   - the map redraws after a lost WebGL context is restored
   - the city's first tour plays end to end

@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
+import { SMALL_SCREEN } from '@/lib/screen';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
@@ -29,7 +30,6 @@ const detectWebGL2 = () =>
   (webgl2Supported ??= document.createElement('canvas').getContext('webgl2') !== null);
 const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
-import { SMALL_SCREEN } from '@/lib/screen';
 const SMALL_SCREEN_MIN_CELL = 6;
 const lifeHoverPause = parseLifeHoverPause(process.env.NEXT_PUBLIC_LIFE_HOVER_PAUSE);
 

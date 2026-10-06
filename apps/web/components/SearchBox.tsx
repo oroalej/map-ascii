@@ -12,7 +12,7 @@ import styles from './SearchBox.module.css';
 type LoadState = { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; data: CitySearch };
 
 /** Fly to a search result, select it, and highlight everything it stands for. */
-export function goToEntry(entry: SearchEntry, origin: SelectionOrigin = 'programmatic') {
+export function goToEntry(entry: SearchEntry, origin: SelectionOrigin) {
   const atlas = useAtlasInstance.getState().atlas;
   selectPlace(entry.id, { origin });
   if (!atlas) return;

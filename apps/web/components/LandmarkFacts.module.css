@@ -29,21 +29,22 @@
 }
 .popover[data-side='right']::before {
   left: 2px;
-  top: calc(50% - 3px);
+  top: calc(var(--arrow-offset, 50%) - 3px);
 }
 .popover[data-side='left']::before {
   right: 2px;
-  top: calc(50% - 3px);
+  top: calc(var(--arrow-offset, 50%) - 3px);
 }
 .popover[data-side='bottom']::before {
   top: 2px;
-  left: calc(50% - 3px);
+  left: calc(var(--arrow-offset, 50%) - 3px);
 }
 .popover[data-side='top']::before {
   bottom: 2px;
-  left: calc(50% - 3px);
+  left: calc(var(--arrow-offset, 50%) - 3px);
 }
 .sheet {
+  z-index: 10;
   left: 0;
   right: 0;
   bottom: 0;
@@ -72,10 +73,4 @@
   margin: 0 auto;
   background: var(--fg-dim);
   border-radius: 2px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .popover,
-  .sheet {
-    transition: none;
-  }
 }

@@ -83,6 +83,16 @@ export function LandmarkDetails({
                 target={landmark.sources[fact.source]?.url ? '_blank' : undefined}
                 rel="noreferrer"
                 aria-label={`Source ${fact.source + 1}`}
+                onClick={
+                  landmark.sources[fact.source]?.url
+                    ? undefined
+                    : (event) => {
+                        event.preventDefault();
+                        document
+                          .getElementById(`${headingId}-source-${fact.source}`)
+                          ?.scrollIntoView({ block: 'nearest' });
+                      }
+                }
               >
                 [{fact.source + 1}]
               </a>

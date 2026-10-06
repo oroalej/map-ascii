@@ -1,6 +1,15 @@
 'use client';
 import { useEffect, useRef } from 'react';
-import { popoverPlacement, type Side } from '@/lib/popover';
+import {
+  popoverAnchorVisible,
+  popoverArrowOffset,
+  popoverPlacement,
+  POPOVER_WIDTH,
+  POPOVER_MAX_HEIGHT_RATIO,
+  POPOVER_PADDING,
+  POPOVER_PADDING_RATIO,
+  type Side,
+} from '@/lib/popover';
 import { TOOLTIP_INSET } from '@/lib/tooltip';
 import { useAtlasInstance } from '@/state/store';
 import { LandmarkDetails, type LandmarkDetailsProps } from './LandmarkDetails';
@@ -20,6 +29,8 @@ export function LandmarkPopover({
     if (!root) return;
     let frame: number | null = null,
       side: Side | undefined;
+    let constraints = '';
+    const attribution = document.querySelector<HTMLElement>('footer[data-speech-obstacle]');
     const hide = () => {
       root.hidden = true;
       publishFactsVisible(sequence, false);
@@ -50,24 +61,47 @@ export function LandmarkPopover({
       };
       const projected = atlas.project(anchor),
         point: [number, number] = [rect.left + projected[0], rect.top + projected[1]];
+      const footer = attribution?.getBoundingClientRect();
+      const placementViewport = {
+        ...viewport,
+        height: Math.max(
+          0,
+          (footer && footer.height > 0 && footer.right > left && footer.left < right
+            ? Math.min(bottom, footer.top)
+            : bottom) - top,
+        ),
+      };
       if (
         viewport.width <= TOOLTIP_INSET * 2 ||
-        viewport.height <= TOOLTIP_INSET * 2 ||
-        !popoverPlacement(point, { width: 0, height: 0 }, viewport).visible
+        placementViewport.height <= TOOLTIP_INSET * 2 ||
+        !popoverAnchorVisible(point, viewport)
       ) {
         hide();
         return;
       }
       root.hidden = false;
-      const width = Math.min(320, viewport.width - TOOLTIP_INSET * 2),
-        height = Math.min(viewport.height * 0.6, viewport.height - TOOLTIP_INSET * 2);
-      root.style.width = `${width}px`;
-      root.style.maxHeight = `${height}px`;
-      root.style.padding = `${Math.min(14, width / 8, height / 8)}px`;
+      const width = Math.min(POPOVER_WIDTH, placementViewport.width - TOOLTIP_INSET * 2),
+        height = Math.min(
+          placementViewport.height * POPOVER_MAX_HEIGHT_RATIO,
+          placementViewport.height - TOOLTIP_INSET * 2,
+        ),
+        padding = Math.min(
+          POPOVER_PADDING,
+          width * POPOVER_PADDING_RATIO,
+          height * POPOVER_PADDING_RATIO,
+        );
+      const nextConstraints = `${width}/${height}/${padding}`;
+      if (constraints !== nextConstraints) {
+        root.style.width = `${width}px`;
+        root.style.maxHeight = `${height}px`;
+        root.style.padding = `${padding}px`;
+        constraints = nextConstraints;
+      }
       const size = root.getBoundingClientRect();
-      const placed = popoverPlacement(point, size, viewport, side);
+      const placed = popoverPlacement(point, size, placementViewport, side);
       side = placed.side;
       root.style.transform = `translate(${placed.left}px, ${placed.top}px)`;
+      root.style.setProperty('--arrow-offset', `${popoverArrowOffset(point, size, placed)}px`);
       root.dataset.side = side;
       publishFactsVisible(sequence, true);
       focusFacts(root, sequence);
@@ -83,6 +117,7 @@ export function LandmarkPopover({
     const observer = new ResizeObserver(schedule);
     observer.observe(root);
     if (canvas) observer.observe(canvas);
+    if (attribution) observer.observe(attribution);
     schedule();
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);

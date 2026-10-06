@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
-import { popoverPlacement, type Side } from './popover';
+import { popoverArrowOffset, popoverPlacement, type Side } from './popover';
 const viewport = { left: 20, top: 30, width: 600, height: 500 };
 const size = { width: 200, height: 100 };
 it.each<[Side, [number, number]]>([
@@ -35,4 +35,19 @@ it('handles tiny, empty, and off-screen viewports', () => {
   expect(popoverPlacement([0, 0], size, viewport).visible).toBe(false);
   expect(popoverPlacement([50, 50], size, { ...viewport, width: 0 }).visible).toBe(false);
   expect(popoverPlacement([NaN, 50], size, viewport).visible).toBe(false);
+});
+it('aligns the arrow with a clamped anchor and keeps it inside the box', () => {
+  const placed = popoverPlacement(
+    [880, 700],
+    { width: 320, height: 400 },
+    {
+      left: 0,
+      top: 0,
+      width: 1280,
+      height: 800,
+    },
+  );
+  expect(popoverArrowOffset([880, 700], { width: 320, height: 400 }, placed)).toBe(308);
+  expect(popoverArrowOffset([0, 0], size, { left: 20, top: 30, side: 'bottom' })).toBe(8);
+  expect(popoverArrowOffset([1000, 1000], size, { left: 20, top: 30, side: 'left' })).toBe(92);
 });

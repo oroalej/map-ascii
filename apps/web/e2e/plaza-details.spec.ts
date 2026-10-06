@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { DetailLayouts, normalizeCredits, type SiteDetail, type Landmark } from '@atlas/shared';
 import { expect, test } from '@playwright/test';
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import { isCityMeta } from '../lib/guards';
 import { cities, mapReady } from './helpers';
 import { additionalCredits } from '../lib/attribution';
+import { clickableLandmark } from '../lib/landmark';
 const samples = JSON.parse(
   readFileSync(new URL('./fixtures/detail-selection.json', import.meta.url), 'utf8'),
 ) as Record<string, { slug: string; at: number[] }[]>;
@@ -18,6 +19,13 @@ test.use({
 });
 
 for (const city of cities.filter((city) => city.hasMeta)) {
+  const landmarkDirectory = new URL(
+    `../../../packages/content/cities/${city.slug}/landmarks/`,
+    import.meta.url,
+  );
+  const landmarks = readdirSync(landmarkDirectory)
+    .filter((file) => file.endsWith('.json'))
+    .map((file) => JSON.parse(readFileSync(new URL(file, landmarkDirectory), 'utf8')) as Landmark);
   const directory = new URL(
     `../../../packages/content/cities/${city.slug}/details/`,
     import.meta.url,
@@ -73,15 +81,9 @@ for (const city of cities.filter((city) => city.hasMeta)) {
       const life = page.getByRole('button', { name: 'Life', exact: true });
       const lifeBox = (await life.boundingBox({ timeout: 5000 }))!;
       const selectedId = detail.selection_osm_id ?? detail.osm_id;
-      const landmark = JSON.parse(
-        readFileSync(
-          new URL(
-            `../../../packages/content/cities/${city.slug}/landmarks/${sample.slug}.json`,
-            import.meta.url,
-          ),
-          'utf8',
-        ),
-      ) as Landmark;
+      const landmark = clickableLandmark(selectedId, landmarks);
+      if (!landmark)
+        throw new Error(`${city.slug}: ${selectedId} must select a landmark with facts`);
       const panel = page.getByRole('dialog', { name: landmark.name.en });
       await expect(life).toHaveAttribute('aria-pressed', 'false');
       for (const enabled of [false, true]) {

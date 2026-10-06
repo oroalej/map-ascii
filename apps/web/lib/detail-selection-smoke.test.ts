@@ -2,6 +2,7 @@
 import type { SiteDetail, Landmark } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import samples from '../e2e/fixtures/detail-selection.json';
+import { clickableLandmark } from './landmark';
 
 const details = import.meta.glob('../../../packages/content/cities/*/details/*.json', {
   eager: true,
@@ -25,9 +26,12 @@ describe('detail selection smoke budget', () => {
         expect(sample.at).toHaveLength(2);
         expect(sample.at.every(Number.isFinite)).toBe(true);
         const selectedId = detail!.selection_osm_id ?? detail!.osm_id;
-        const landmark = Object.entries(landmarks).find(
-          ([path, value]) => path.includes(`/cities/${city}/`) && value.osm_id === selectedId,
-        )?.[1];
+        const landmark = clickableLandmark(
+          selectedId,
+          Object.entries(landmarks)
+            .filter(([path]) => path.includes(`/cities/${city}/`))
+            .map(([, value]) => value),
+        );
         expect(landmark?.facts, `${sample.slug} must select a landmark with facts`).toBeDefined();
         selectionKinds.add(detail!.selection_osm_id !== undefined);
       }

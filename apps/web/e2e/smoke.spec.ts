@@ -247,17 +247,38 @@ for (const city of cities) {
           await expect(canvas).not.toHaveCSS('cursor', 'pointer');
           // Send one gesture and wait for its asynchronous GPU result. Retrying the gesture can
           // leave a second pick in flight that reopens the panel after Escape.
-          const beforeClick = query(page);
           if (hasTouch) await canvas.tap({ position });
           else await canvas.click({ position });
           await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark, {
             timeout: 20_000,
           });
           await expect.poll(() => query(page).sel).toBe(place.id);
-          const afterClick = query(page);
-          for (const key of ['lat', 'lng', 'z'] as const)
-            expect(afterClick[key]).toBe(beforeClick[key]);
           await expect(legend).toBeHidden();
+          const attribution = page.getByRole('link', { name: 'OpenStreetMap contributors' });
+          const expectAttributionExposed = async () => {
+            await expect(attribution).toBeVisible();
+            await expect
+              .poll(() =>
+                attribution.evaluate((link) => {
+                  const rect = link.getBoundingClientRect();
+                  const hit = document.elementFromPoint(
+                    rect.x + rect.width / 2,
+                    rect.y + rect.height / 2,
+                  );
+                  return hit === link || (hit !== null && link.contains(hit));
+                }),
+              )
+              .toBe(true);
+          };
+          await expectAttributionExposed();
+          if (hasTouch) {
+            await panel.locator('button[aria-expanded]').click();
+            await expect(panel.locator('button[aria-expanded]')).toHaveAttribute(
+              'aria-expanded',
+              'true',
+            );
+            await expectAttributionExposed();
+          }
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();

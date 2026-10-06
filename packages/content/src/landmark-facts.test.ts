@@ -6,7 +6,7 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for the twelve owner-selected Naga landmarks and the museum statue', () => {
+it('curates facts for twelve owner-selected Naga landmarks, including the museum statue', () => {
   const clickable = Object.values(landmarks).filter((landmark) => landmark.facts);
   expect(clickable.map((landmark) => landmark.id).sort()).toEqual(
     [

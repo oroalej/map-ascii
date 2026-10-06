@@ -45,7 +45,6 @@ export function useAtlasEvents() {
       if (s.selectedId === prev.selectedId) return;
       atlas.setSelected(s.selectedId);
       atlas.setHighlighted([]);
-      if (s.selectedId !== useUiStore.getState().picked?.id) useUiStore.setState({ picked: null });
     });
     return () => {
       offHover();

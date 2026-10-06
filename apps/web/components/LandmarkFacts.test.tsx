@@ -28,7 +28,11 @@ const landmark: Landmark = {
   })),
 };
 const other = { ...landmark, id: 'landmark/b', osm_id: 'osm:node/2', name: { en: 'B place' } };
-let root: Root, container: HTMLDivElement, canvas: HTMLCanvasElement;
+let testLandmarks: Landmark[];
+let root: Root,
+  container: HTMLDivElement,
+  canvas: HTMLCanvasElement,
+  footer: HTMLElement | undefined;
 let frames: Map<number, FrameRequestCallback>,
   next: number,
   projected: [number, number],
@@ -60,16 +64,7 @@ function App() {
   useAtlasEvents();
   return (
     <>
-      <LandmarkFacts
-        city="test"
-        subdivisionLabel="district"
-        landmarks={[
-          landmark,
-          other,
-          { ...landmark, id: 'landmark/c', osm_id: 'osm:node/3', facts: undefined },
-        ]}
-        art={[]}
-      />
+      <LandmarkFacts city="test" subdivisionLabel="district" landmarks={testLandmarks} art={[]} />
       <TourPlayer />
     </>
   );
@@ -94,6 +89,12 @@ beforeEach(() => {
   mediaListeners = new Set();
   observers = new Set();
   shownMeasures = 0;
+  testLandmarks = [
+    landmark,
+    other,
+    { ...landmark, id: 'landmark/c', osm_id: 'osm:node/3', facts: undefined },
+  ];
+  footer = undefined;
   viewport = Object.assign(new EventTarget(), {
     width: 800,
     height: 700,
@@ -172,6 +173,7 @@ afterEach(async () => {
     root.unmount();
   });
   container.remove();
+  footer?.remove();
   useAtlasInstance.setState({ atlas: null, canvas: null });
   useTourStore.setState({ active: null });
   selectPlace(null);
@@ -248,6 +250,52 @@ it('constrains the measured box to the canvas/visual viewport and responds to re
   flush();
   verify();
 });
+it('keeps the box above attribution and follows footer resizing without hiding an onscreen anchor', () => {
+  let footerTop = 550;
+  footer = document.createElement('footer');
+  footer.setAttribute('data-speech-obstacle', '');
+  Object.defineProperty(footer, 'getBoundingClientRect', {
+    value: () => new DOMRect(400, footerTop, 320, 700 - footerTop),
+  });
+  document.body.append(footer);
+  projected = [500, 550];
+  clickSelection();
+  render();
+  flush();
+  const verify = () => {
+    const [, top] = dialog()!
+      .style.transform.match(/[\d.]+/g)!
+      .map(Number);
+    expect(top! + dialog()!.getBoundingClientRect().height).toBeLessThanOrEqual(footerTop - 8);
+    expect(dialog()!.hidden).toBe(false);
+    expect(useUiStore.getState().factsVisible).toBe(true);
+    expect(useAtlasStore.getState().selectedId).toBe(landmark.osm_id);
+  };
+  verify();
+  footerTop = 450;
+  act(() => observers.forEach((cb) => cb()));
+  flush();
+  verify();
+});
+it('releases shell listeners and queued frames on close and media subscriptions on unmount', () => {
+  clickSelection();
+  render();
+  expect(frames.size).toBe(1);
+  expect(observers.size).toBe(1);
+  expect(mediaListeners.size).toBeGreaterThan(0);
+  act(() => selectPlace(null));
+  expect(frames.size).toBe(0);
+  expect(observers.size).toBe(0);
+  expect(cameraChanged).toBeUndefined();
+  expect(mediaListeners.size).toBeGreaterThan(0);
+  act(() => {
+    window.dispatchEvent(new Event('resize'));
+    viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(frames.size).toBe(0);
+  act(() => root.render(null));
+  expect(mediaListeners.size).toBe(0);
+});
 it('preserves pointer focus, focuses keyboard opening once, and clears through Close and Escape', async () => {
   vi.mocked(loadSearch).mockResolvedValue(searchData([entry(landmark.osm_id!, 1)]));
   const button = document.createElement('button');
@@ -307,6 +355,57 @@ it('does not show unlisted selections and cancels stale search responses', async
   expect(project).toHaveBeenLastCalledWith([20, 2]);
   expect(dialog()!.textContent).toContain('B place');
 });
+it('scrolls URL-less citations without adding history or changing the selection operation', () => {
+  testLandmarks[0] = { ...landmark, sources: [{ title: 'Printed history' }] };
+  clickSelection();
+  render();
+  flush();
+  const citation = dialog()!.querySelector<HTMLAnchorElement>('sup a')!;
+  const source = document.getElementById(citation.hash.slice(1))!;
+  const scroll = vi.fn();
+  Object.defineProperty(source, 'scrollIntoView', { value: scroll });
+  const href = location.href,
+    length = history.length,
+    sequence = useUiStore.getState().selectionSequence;
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+  act(() => {
+    citation.dispatchEvent(event);
+  });
+  expect(event.defaultPrevented).toBe(true);
+  expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+  expect(location.href).toBe(href);
+  expect(history.length).toBe(length);
+  expect(useUiStore.getState().selectionSequence).toBe(sequence);
+});
+it.each([false, true])(
+  'warns only for an active failed detail request (cancelled: %s)',
+  async (cancelled) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let reject!: (error: Error) => void;
+    vi.mocked(loadSearch).mockReturnValueOnce(
+      new Promise((_, fail) => {
+        reject = fail;
+      }),
+    );
+    act(() => selectPlace(landmark.osm_id!, { origin: 'keyboard' }));
+    render();
+    if (cancelled) clickSelection(other.osm_id);
+    const error = new Error('Offline');
+    await act(async () => {
+      reject(error);
+      await Promise.resolve();
+    });
+    if (cancelled) expect(warn).not.toHaveBeenCalled();
+    else {
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        `Could not load selected place details for test (${landmark.osm_id})`,
+        error,
+      );
+      flush();
+      expect(dialog()!.hidden).toBe(true);
+    }
+  },
+);
 it('uses the phone sheet, preserves tour-caption precedence, and opens explicit facts even after the tour ends', () => {
   small = true;
   useAtlasStore.setState({ tour: { id: 'test', step: 0, paused: false } });

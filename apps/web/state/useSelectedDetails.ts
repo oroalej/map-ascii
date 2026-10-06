@@ -45,7 +45,10 @@ export function useSelectedDetails(city: string, id: string | null) {
       .then((s) => {
         if (!cancelled) setFound({ id, city, entry: s.entries.get(id) ?? null });
       })
-      .catch(() => {});
+      .catch((error: unknown) => {
+        if (!cancelled)
+          console.warn(`Could not load selected place details for ${city} (${id})`, error);
+      });
     return () => {
       cancelled = true;
     };
