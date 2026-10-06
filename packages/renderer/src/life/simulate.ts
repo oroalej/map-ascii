@@ -766,6 +766,7 @@ export class TileLife {
             (!env?.levels || m.train || m.rank < env.levels[m.kind]) &&
             (!visits || !this.scenes.visits.has(m)),
         );
+      if (this.scenes.usedReturnStep(m)) eligible[i] = 0;
       if (enabled) {
         if (this.inspected === m) {
           const state = vehicleEffects(m);

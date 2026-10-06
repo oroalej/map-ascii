@@ -112,6 +112,12 @@ const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.h
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
   private returningToRoute?: Mover;
+  private readonly returnSteps = new Set<Mover>();
+
+  /** A completed return that already spent this frame's walking budget. */
+  usedReturnStep(m: Mover): boolean {
+    return this.returnSteps.has(m);
+  }
 
   /** Effective walking offset during a scene or its checked route handoff. */
   walkingOffset(m: Mover, identity = m): number {
@@ -1061,6 +1067,8 @@ export class LocalScenes {
     anchor: WalkPoint,
     guard?: MoveGuard,
     owns?: (p: WalkPoint) => boolean,
+    departure = 0,
+    walkLimit?: (m: Mover, target: WalkPoint, distance: number) => number,
   ) {
     const previous = snapshotMover(m),
       physical = snapshotMover(m),
@@ -1083,7 +1091,12 @@ export class LocalScenes {
     physical.avoid = 0;
     this.returningToRoute = m;
     try {
-      for (const retainFacing of [false, true]) {
+      const trials: [number, boolean][] = [
+        [0, false],
+        [0, true],
+      ];
+      if (departure > 0 && length > d) trials.push([Math.min(departure, length - d), true]);
+      for (const [distance, retainFacing] of trials) {
         restoreMover(m, previous);
         m.d = d;
         m.x = ax + hx * d;
@@ -1095,14 +1108,36 @@ export class LocalScenes {
           m.hy = hy;
           m.momentFacing = { hx: heading.hx, hy: heading.hy };
         } else faceGroup(m, hx, hy);
+        if (distance > 0) {
+          const target = { x: m.x + hx * distance, y: m.y + hy * distance };
+          const step = walkLimit ? walkLimit(m, target, distance) : distance;
+          if (step <= 0) continue;
+          m.d += step;
+          m.x += hx * step;
+          m.y += hy * step;
+          m.walked = (previous.walked ?? 0) + step / this.perMeter;
+        }
         const unchanged =
+          distance === 0 &&
           Math.hypot(previous.x - m.x, previous.y - m.y) <= 1e-8 * this.perMeter &&
           Math.hypot(heading.hx - hx, heading.hy - hy) <= 1e-8;
         if (unchanged) return true;
+        const bodies = this.walkingBodies(m, m, m.avoid);
+        if (distance > 0) {
+          const previousBodies = this.walkingBodies(previous, previous, 0);
+          if (
+            bodies.some((body, i) => {
+              const old = previousBodies[i]!;
+              return Math.hypot(body.x - old.x, body.y - old.y) > departure + 1e-8 * this.perMeter;
+            })
+          )
+            continue;
+        }
         if (
           inTile(m) &&
           (!owns || owns(m)) &&
-          this.graph.allowsBodies(this.walkingBodies(m, m, m.avoid), true) &&
+          bodies.every((body) => inTile(body) && (!owns || owns(body))) &&
+          this.graph.allowsBodies(bodies, true) &&
           (!guard || guard(m, physical))
         )
           return true;
@@ -1132,6 +1167,7 @@ export class LocalScenes {
     inspecting?: object,
     diagnostics?: LifeDiagnostics,
   ) {
+    this.returnSteps.clear();
     const rain = env.rain ?? 0;
     this.rain = rain;
     this.speechEvents.length = 0;
@@ -1183,15 +1219,23 @@ export class LocalScenes {
         this.requestReturn(m, visit);
       if (visit.returnPending && this.canIdle(m)) this.returning(m, visit);
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
+        const walked = m.walked ?? 0;
         if (!this.move(m, visit, dt, guard, walkLimit, owns)) continue;
         if (visit.state === 'return') {
-          if (!this.finishReturn(m, visit.trail[0]!, guard, owns)) {
+          // A no-op handoff can be refused by inherited physical clearance.
+          // Try one ordinary, speed-bounded departure through the same guard.
+          const departure =
+            guard && visit.handoffBlocked && (m.walked ?? 0) === walked
+              ? this.pace(m, visit) * dt
+              : 0;
+          if (!this.finishReturn(m, visit.trail[0]!, guard, owns, departure, walkLimit)) {
             visit.handoffBlocked = true;
             visit.blocked += dt;
             diagnostics?.tag(m, 'blockedReturn');
             this.blockedTimeout(m, visit);
             continue;
           }
+          if ((m.walked ?? 0) > walked) this.returnSteps.add(m);
           m.pause = 0;
           m.lying = false;
           this.visits.delete(m);
