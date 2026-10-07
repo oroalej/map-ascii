@@ -4996,7 +4996,25 @@ export class TileLife {
     const velocity = Math.max(0, (m.v ?? m.speed) / this.perMeter);
     for (const index of this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? []) {
       const other = this.movers[index]!;
-      if (other === m) continue;
+      if (other === m || other.line !== m.line || other.dir !== m.dir) continue;
+      const separation = (other.dir * this.along[other.from]! + other.d) / this.perMeter - progress;
+      const peerVelocity =
+        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+      const required =
+        FOLLOW.minGap +
+        (separation >= 0
+          ? continuing
+            ? Math.max(0, (velocity ** 2 - peerVelocity ** 2) / (2 * kinematicsOf(m.vehicle).brake))
+            : FOLLOW.headway * velocity
+          : Math.max(
+              0,
+              (peerVelocity ** 2 - velocity ** 2) / (2 * kinematicsOf(other.vehicle).brake),
+            ));
+      const spec = VEHICLES[other.vehicle!];
+      // A projected half-length cannot exceed half the sum of the physical sides at any yaw.
+      // This bounds the exact gap inequalities before constructing a distant actor's pose.
+      if (Math.abs(separation) > required + body.length + (spec.length + spec.width) / 2 + 1e-6)
+        continue;
       const offset = this.offsetOf(other),
         peer = this.roadEnvelope(other);
       const future = other.maneuver ? this.maneuverOffset(other) : offset;
@@ -5005,7 +5023,6 @@ export class TileLife {
         Math.min(offset, future) - Math.max(at, target),
       );
       if (lateral >= body.width + peer.width + FOLLOW.roadGap) continue;
-      const separation = (other.dir * this.along[other.from]! + other.d) / this.perMeter - progress;
       const gap = Math.abs(separation) - body.length - peer.length;
       if (gap < FOLLOW.minGap) return false;
       if (separation >= 0) {
@@ -5049,9 +5066,18 @@ export class TileLife {
     if (state && state.corridor === undefined && state.kind !== 'filter') return;
     if (
       !state &&
-      (this.followLeaders[index]! < 0 || (m.filterRetry ?? 0) > 0 || (m.roadScan ?? 0) > 0)
+      (this.followLeaders[index]! < 0 ||
+        (m.filterRetry ?? 0) > 0 ||
+        (m.roadScan ?? 0) > 0 ||
+        (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+        m.roadShift !== undefined ||
+        m.curveLengthM !== undefined ||
+        this.scenes.merging(m) ||
+        this.roadProtectedRoom(m, table) <= FILTER.clear)
     )
       return;
+    const refresh = !state || (m.roadScan ?? 0) <= 0;
+    if (refresh) m.roadScan = 0.5;
     const group = this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? [];
     const at = this.offsetOf(m),
       layout = this.directionalLanes(m.line);
@@ -5060,22 +5086,30 @@ export class TileLife {
     let queue: Mover | undefined,
       nearest = Infinity;
     const reference = state ? original : at;
-    for (const j of group) {
-      const peer = this.movers[j]!;
-      if (peer === m || peer.vehicle === 'bicycle' || peer.vehicle === 'motorcycle') continue;
-      const separation = Math.abs(
-        (peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress,
-      );
-      if (
-        separation > 60 ||
-        separation >= nearest ||
-        Math.abs(reference - this.offsetOf(peer)) >=
-          (VEHICLES[m.vehicle].width + VEHICLES[peer.vehicle!].width) / 2 + FOLLOW.roadGap
-      )
-        continue;
-      nearest = separation;
-      queue = peer;
-    }
+    if (refresh)
+      for (const j of group) {
+        const peer = this.movers[j]!;
+        if (
+          peer === m ||
+          peer.line !== m.line ||
+          peer.dir !== m.dir ||
+          peer.vehicle === 'bicycle' ||
+          peer.vehicle === 'motorcycle'
+        )
+          continue;
+        const separation = Math.abs(
+          (peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress,
+        );
+        if (
+          separation > 60 ||
+          separation >= nearest ||
+          Math.abs(reference - this.offsetOf(peer)) >=
+            (VEHICLES[m.vehicle].width + VEHICLES[peer.vehicle!].width) / 2 + FOLLOW.roadGap
+        )
+          continue;
+        nearest = separation;
+        queue = peer;
+      }
     const velocity = queue
       ? this.inspected === queue
         ? 0
@@ -5114,14 +5148,12 @@ export class TileLife {
       velocity >= FILTER.enter ||
       (m.v ?? m.speed) / this.perMeter > FILTER.max ||
       (m.filterRetry ?? 0) > 0 ||
-      (m.roadScan ?? 0) > 0 ||
       m.roadShift !== undefined ||
       m.curveLengthM !== undefined ||
       this.scenes.merging(m) ||
       this.roadProtectedRoom(m, table) <= FILTER.clear
     )
       return;
-    m.roadScan = 0.5;
     const actual = Math.max(
       0,
       Math.min(layout.count - 1, Math.floor((at - layout.start) / layout.width)),

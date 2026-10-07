@@ -160,6 +160,7 @@ describe('physically clear queue filtering', () => {
     // A car beside the rider makes the full return sweep unsafe even though the corridor is clear.
     cars[0]!.d = cars[0]!.x = m.d;
     for (const car of cars) car.v = car.speed = 8 * pm;
+    m.roadScan = 0;
     life.prepareTraffic(() => true);
     const update = life as unknown as { updateFilter(index: number, table: unknown): void };
     const table = { holds: () => [] };
@@ -170,6 +171,7 @@ describe('physically clear queue filtering', () => {
     expect(life.offsetOf(m)).toBe(at);
     // Move every queue body ahead of the complete return envelope; no reset of rider state.
     for (let n = 0; n < cars.length; n++) cars[n]!.d = cars[n]!.x = m.d + (30 + n * 10) * pm;
+    m.roadScan = 0;
     life.prepareTraffic(() => true);
     update.updateFilter(life.movers.indexOf(m), table);
     expect(m.maneuver?.kind).toBe('return');

@@ -180,6 +180,21 @@ function passing(dir: 1 | -1 = 1) {
 }
 
 describe('deterministic passing', () => {
+  it('retains a distant fast rear follower in the braking-distance check', () => {
+    const { life, m } = road();
+    const peer = {
+      ...m,
+      lane: 0.5,
+      d: m.d - 100 * pm,
+      x: m.x - 100 * pm,
+      speed: 50 * pm,
+      v: 50 * pm,
+    };
+    life.movers.push(peer);
+    life.prepareTraffic(() => true);
+    const query = life as unknown as { roadGapSafe(m: Mover, target: number): boolean };
+    expect(query.roadGapSafe(m, 0)).toBe(false);
+  });
   it('freezes accepted state and blink phase during inspection, with hazards taking precedence', () => {
     const fixture = passing();
     const world = new LifeWorld(undefined, undefined, undefined, true);
