@@ -61,6 +61,14 @@ export { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
 /** Vehicles keep at least this far inside the road's edge, m. */
 export const ROAD_MARGIN_M = 0.2;
 
+/** Travel-relative directional carriageway; reverse one-way flow uses the same offsets. */
+export function laneLayout(roadWidth: number, oneway = 0) {
+  const span = oneway ? roadWidth : roadWidth / 2;
+  // Decimal 9.6 / 3.2 can land just below 3 in a JS number; preserve the two-way formula.
+  const count = Math.max(1, Math.floor((span + (oneway ? 1e-8 : 0)) / LANE_WIDTH_M));
+  return { count, start: oneway ? -roadWidth / 2 : 0, span, width: span / count };
+}
+
 /**
  * How far right of a road's center line a vehicle drives, m, so two-way traffic passes: down
  * the middle of one of the lanes on its half of the road (`lane`, 0–1, picks which), or by the
@@ -71,10 +79,17 @@ export function laneOffset(
   vehicleWidth: number,
   lane: number,
   curb = false,
+  oneway = 0,
 ): number {
   const half = roadWidth / 2;
   if (curb) return Math.max(0, half - vehicleWidth / 2 - ROAD_MARGIN_M);
-  const lanes = Math.max(1, Math.floor(half / LANE_WIDTH_M));
+  const layout = laneLayout(roadWidth, oneway);
+  const lanes = layout.count;
+  if (oneway) {
+    const index = Math.max(0, Math.min(lanes - 1, Math.floor(lane * lanes)));
+    const edge = Math.max(0, half - vehicleWidth / 2 - ROAD_MARGIN_M);
+    return Math.max(-edge, Math.min(edge, layout.start + (index + 0.5) * layout.width));
+  }
   const index = Math.min(lanes - 1, Math.floor(lane * lanes));
   const offset = ((index + 0.5) * half) / lanes;
   return Math.max(0, Math.min(offset, half - vehicleWidth / 2 - ROAD_MARGIN_M));

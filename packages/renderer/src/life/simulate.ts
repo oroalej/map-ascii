@@ -80,7 +80,7 @@ import {
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   frontClearance,
-  LANE_WIDTH_M,
+  laneLayout,
   TERMINAL,
   PEDESTRIAN,
   STALL,
@@ -1757,15 +1757,16 @@ export class TileLife {
     if (this.laneNear[line] === 1) return;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(line);
-    const lanes = Math.max(1, Math.floor(road / 2 / LANE_WIDTH_M));
+    const oneway = this.geo.oneway?.[line] ?? 0;
+    const lanes = laneLayout(road, oneway).count;
     const index = spec.curb ? lanes : Math.min(lanes - 1, Math.floor(m.lane * lanes));
     const key =
-      ((line * 2 + (dir === 1 ? 1 : 0)) * VEHICLE_KINDS.length + VEHICLE_KINDS.indexOf(m.vehicle)) *
-        8 +
-      Math.min(7, index);
+      (line * 2 + (dir === 1 ? 1 : 0)) * VEHICLE_KINDS.length +
+      VEHICLE_KINDS.indexOf(m.vehicle) +
+      index / (lanes + 1);
     let bend = this.laneBends.get(key);
     if (bend === undefined) {
-      const base = laneOffset(road, spec.width, m.lane, spec.curb);
+      const base = laneOffset(road, spec.width, m.lane, spec.curb, oneway);
       const [lo, hi] = this.laneBounds(spec.width, line);
       bend =
         laneBend(
@@ -1918,7 +1919,7 @@ export class TileLife {
     const next = m.routing?.plan?.exit ?? m.next;
     const normal =
       !this.laneTerrain && m.came === undefined && (next === undefined || next < 0)
-        ? laneOffset(road, spec.width, m.lane, spec.curb)
+        ? laneOffset(road, spec.width, m.lane, spec.curb, this.geo.oneway?.[m.line] ?? 0)
         : this.routeLane(m, m.line, m.dir, this.travelled(m), m.came, next);
     if (!this.scenes.hasCurbScenes) return this.shiftedOffset(m, normal);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
@@ -1932,7 +1933,7 @@ export class TileLife {
   private vehicleLane(m: Mover, line: number) {
     const spec = VEHICLES[m.vehicle!],
       road = this.roadWidth(line);
-    const normal = laneOffset(road, spec.width, m.lane, spec.curb);
+    const normal = laneOffset(road, spec.width, m.lane, spec.curb, this.geo.oneway?.[line] ?? 0);
     return this.shiftedOffset(m, normal, line);
   }
 
@@ -4773,7 +4774,13 @@ export class TileLife {
   /** A vehicle's ordinary lane on `line`, m right of centre. */
   private mergeLane(m: Mover, line = m.line): number {
     const spec = VEHICLES[m.vehicle!];
-    return laneOffset(this.roadWidth(line), spec.width, m.lane, spec.curb);
+    return laneOffset(
+      this.roadWidth(line),
+      spec.width,
+      m.lane,
+      spec.curb,
+      this.geo.oneway?.[line] ?? 0,
+    );
   }
 
   private mergingOverlap(i: number, j: number, lane: number): boolean {
@@ -5747,7 +5754,13 @@ export class TileLife {
             const spec = VEHICLES[m.vehicle];
             const effectiveShift =
               this.vehicleLane(before, before.line) -
-              laneOffset(this.roadWidth(before.line), spec.width, before.lane, spec.curb);
+              laneOffset(
+                this.roadWidth(before.line),
+                spec.width,
+                before.lane,
+                spec.curb,
+                this.geo.oneway?.[before.line] ?? 0,
+              );
             if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
               const behind = this.cornerWithin(before, before.from, before.d, m);
               const remaining = this.segment(before.from, before.from + before.dir) - before.d;
