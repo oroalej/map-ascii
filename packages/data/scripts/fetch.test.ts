@@ -1,8 +1,8 @@
 import type { City } from '@atlas/shared';
 import { describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   mergeResponses,
   detailParts,
@@ -191,6 +191,9 @@ describe('boundary-inclusive detail fetch', () => {
   );
   it('retries an interrupted refresh without the old aggregate or unfinished quarters', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-refresh-'));
+    const peer = join(dir, 'peer');
+    await mkdir(peer);
+    const copies = vi.fn((file: string) => [join(peer, basename(file))]);
     const response = (id: number) =>
       new Response(JSON.stringify({ elements: [{ type: 'way', id }] }));
     const fetch = vi
@@ -209,6 +212,11 @@ describe('boundary-inclusive detail fetch', () => {
           JSON.stringify({ elements: [{ type: 'way', id: 101 + i }] }),
         );
         await writeFile(join(dir, `${part.file}.query`), part.query);
+        await writeFile(
+          join(peer, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 101 + i }] }),
+        );
+        await writeFile(join(peer, `${part.file}.query`), part.query);
       }
       await writeFile(
         join(dir, 'detail.osm.json'),
@@ -219,16 +227,17 @@ describe('boundary-inclusive detail fetch', () => {
         detailParts(expanded, [119, 9, 135, 25])[0]!.query,
       );
       await expect(
-        fetchDetail(expanded, [...bounds], dir, { offline: false, refresh: true }),
+        fetchDetail(expanded, [...bounds], dir, { offline: false, refresh: true, copies }),
       ).rejects.toThrow('HTTP 400');
       expect(fetch).toHaveBeenCalledTimes(3);
-      await expect(fetchDetail(expanded, [...bounds], dir, { offline: true })).rejects.toThrow(
-        'detail-part-3',
-      );
+      await expect(
+        fetchDetail(expanded, [...bounds], dir, { offline: true, copies }),
+      ).rejects.toThrow('detail-part-3');
       expect(fetch).toHaveBeenCalledTimes(3);
-      const retry = await fetchDetail(expanded, [...bounds], dir, { offline: false });
+      const retry = await fetchDetail(expanded, [...bounds], dir, { offline: false, copies });
       expect(retry.elements.map((e) => e.id)).toEqual([201, 202, 203, 204]);
       expect(fetch).toHaveBeenCalledTimes(5);
+      expect(copies).not.toHaveBeenCalled();
       expect((await fetchDetail(expanded, [...bounds], dir, { offline: true })).elements).toEqual(
         retry.elements,
       );

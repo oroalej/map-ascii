@@ -1,6 +1,7 @@
 import { join } from 'node:path';
-import { unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import type { BBox, City } from '@atlas/shared';
+import { copiesElsewhere } from './lib/checkouts';
 import { downloadDem } from './lib/dem';
 import {
   bufferBbox,
@@ -20,7 +21,7 @@ import {
   type OsmElement,
   type OverpassResponse,
 } from './lib/overpass';
-import { files, type Step } from './step';
+import { files, paths, type Step } from './step';
 
 const boundaryQuery = ({ boundary }: City) => {
   const parent = boundary.within
@@ -197,16 +198,16 @@ export async function regionBounds(
   const selector = osm_relation
     ? `rel(${osm_relation})`
     : `rel["boundary"="administrative"]["name"=${quote(name)}]`;
+  const tags: Record<string, string> = osm_relation ? {} : { name };
   const region = await overpass(
     `[out:json][timeout:120];
 ${selector};
 out tags bb;`,
     join(rawDir, files.rawRegionRelation),
     cache,
+    (data) => void onlyRelation(data, 'Region', tags),
   );
-  const match = osm_relation
-    ? onlyRelation(region, 'Region', {})
-    : onlyRelation(region, 'Region', { name });
+  const match = onlyRelation(region, 'Region', tags);
   if (!match.bounds) throw new Error('Region relation came back without bounds');
   console.log(`  region: relation/${match.id}`);
   return fromOverpassBounds(match.bounds);
@@ -219,6 +220,9 @@ export const detailParts = (city: City, bbox: BBox) =>
     file: files.rawDetail.replace('.osm.json', `-part-${i + 1}.osm.json`),
   }));
 
+// An inadmissible aggregate query also marks retries which must not adopt pre-refresh peer copies.
+const refreshPending = 'detail refresh pending';
+
 export async function fetchDetail(
   city: City,
   bbox: BBox,
@@ -228,16 +232,20 @@ export async function fetchDetail(
   const aggregate = join(rawDir, files.rawDetail);
   const query = detailQuery(city, toOverpassBbox(bbox));
   if (!includesBoundary(city)) return overpass(query, aggregate, cache);
-  const strict = { ...cache, requireCoverage: true };
+  const strict: FetchOptions = { ...cache, requireCoverage: true };
   const requests = detailParts(city, bbox);
   if (cache.refresh && !cache.offline) {
     // No old quarter may join the new generation after an interrupted refresh.
-    for (const file of [files.rawDetail, ...requests.map((part) => part.file)]) {
+    await mkdir(rawDir, { recursive: true });
+    await writeFile(`${aggregate}.query`, refreshPending);
+    for (const { file } of requests) {
       await unlink(join(rawDir, `${file}.query`)).catch((err: NodeJS.ErrnoException) => {
         if (err.code !== 'ENOENT') throw err;
       });
     }
   }
+  if ((await readFile(`${aggregate}.query`, 'utf8').catch(() => undefined)) === refreshPending)
+    delete strict.copies;
   if (cache.offline || !cache.refresh) {
     const saved = await readCached(query, aggregate, { ...strict, refresh: false });
     if (saved) return saved;
@@ -256,21 +264,25 @@ export async function fetchDetail(
 export const step: Step = {
   name: '01-fetch',
   async run({ city, rawDir, offline, refresh }) {
+    const copies = copiesElsewhere(paths.raw);
     const cache: FetchOptions = {
       offline,
       refresh,
+      copies,
       requireCoverage: includesBoundary(city),
+    };
+    const boundaryTags = {
+      boundary: 'administrative',
+      name: city.boundary.name,
+      admin_level: String(city.boundary.admin_level),
     };
     const boundaryData = await overpass(
       boundaryQuery(city),
       join(rawDir, files.rawBoundary),
       cache,
+      (data) => void onlyRelation(data, 'Boundary', boundaryTags),
     );
-    const boundary = onlyRelation(boundaryData, 'Boundary', {
-      boundary: 'administrative',
-      name: city.boundary.name,
-      admin_level: String(city.boundary.admin_level),
-    });
+    const boundary = onlyRelation(boundaryData, 'Boundary', boundaryTags);
     if (!boundary.bounds) throw new Error('Boundary relation came back without bounds');
     console.log(`  boundary: relation/${boundary.id}`);
 
@@ -333,7 +345,7 @@ export const step: Step = {
     await writeJson(join(rawDir, files.rawRegion), region);
     console.log(`  region: ${region.elements.length} elements (${parts.length} queries)`);
 
-    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline });
+    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline, copies });
     console.log(`  DEM: ${dem.length} tiles`);
   },
 };
