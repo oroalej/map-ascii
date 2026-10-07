@@ -144,6 +144,8 @@ describe('cross-zoom continuity', () => {
         chosenLane: 0.9,
         lat: kind === 'lane' ? -2 : -1.6,
         latYaw: -0.1,
+        roadShift: 0.2,
+        roadYaw: 0.03,
         maneuver: {
           kind,
           target: 0.5,

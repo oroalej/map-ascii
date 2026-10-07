@@ -229,6 +229,7 @@ export function projectMover(
     filterRetry: m.filterRetry,
     roadScan: m.roadScan,
     roadShift: m.roadShift,
+    roadYaw: m.roadYaw,
     pause: m.pause,
     rank: m.rank,
     group: m.group,

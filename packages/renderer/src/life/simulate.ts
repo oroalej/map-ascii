@@ -1326,6 +1326,7 @@ export class TileLife {
         | 'latYaw'
         | 'maneuver'
         | 'roadShift'
+        | 'roadYaw'
         | 'came'
         | 'next'
         | 'curveLengthM'
@@ -2599,6 +2600,7 @@ export class TileLife {
       at.chosenLane === m.chosenLane &&
       at.lat === m.lat &&
       at.latYaw === m.latYaw &&
+      at.roadYaw === m.roadYaw &&
       at.maneuver === m.maneuver &&
       at.roadShift === m.roadShift &&
       at.came === m.came &&
@@ -2633,6 +2635,7 @@ export class TileLife {
         latYaw: m.latYaw,
         maneuver: m.maneuver,
         roadShift: m.roadShift,
+        roadYaw: m.roadYaw,
         came: m.came,
         next: m.next,
         curveLengthM: m.curveLengthM,
@@ -4971,9 +4974,17 @@ export class TileLife {
     const width = spec.width;
     const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
     const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
+    const lateral =
+      !!m.maneuver && (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
     return {
-      length: (along * length + across * width) / 2,
-      width: (along * width + across * length) / 2,
+      length: Math.max(
+        (along * length + across * width) / 2,
+        lateral ? (Math.cos(Math.PI / 12) * length + Math.sin(Math.PI / 12) * width) / 2 : 0,
+      ),
+      width: Math.max(
+        (along * width + across * length) / 2,
+        lateral ? (Math.cos(Math.PI / 12) * width + Math.sin(Math.PI / 12) * length) / 2 : 0,
+      ),
     };
   }
 
@@ -5259,17 +5270,14 @@ export class TileLife {
     // Terrain recovery can use the clear part of the road and then return to the lane.
     // Keep a following gap throughout that maneuver, including both lateral directions.
     if (a.roadShift !== undefined || b.roadShift !== undefined) return true;
-    if (
-      (a.maneuver && a.maneuver.kind !== 'filter') ||
-      (b.maneuver && b.maneuver.kind !== 'filter')
-    ) {
+    if (a.maneuver || b.maneuver) {
       const futureA = a.maneuver ? this.maneuverOffset(a) : lane;
       const futureB = b.maneuver ? this.maneuverOffset(b) : offsets[j]!;
       const gap = Math.max(
         Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
         Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
       );
-      if (gap < (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2 + FOLLOW.roadGap)
+      if (gap < this.roadEnvelope(a).width + this.roadEnvelope(b).width + FOLLOW.roadGap)
         return true;
     }
     const mergingA = this.scenes.merging(a),
