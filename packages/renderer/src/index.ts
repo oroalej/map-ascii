@@ -1082,7 +1082,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             subGuard: drawnLife?.cellGuard((lng, lat) => {
               const [c, r] = placement!.toCell(lng, lat);
               return [c * THRONG_MASK_SIDE, r * THRONG_MASK_SIDE];
-            }),
+            }, true),
           }
         : undefined,
     );

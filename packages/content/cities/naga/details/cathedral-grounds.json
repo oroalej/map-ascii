@@ -192,7 +192,7 @@
       "note": "Quadricentennial Arch is a distinct mapped building between Porta Mariae (way 358807129) and the Cathedral. Retain both existing footprints. Porta Mariae parts are centered and oriented on its mapped footprint, using published 18 × 4 × 11 m dimensions. The schematic processional paving is split around standing buildings and the full widths of mapped carriageways; no road or arch is replaced."
     },
     {
-      "title": "surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ],

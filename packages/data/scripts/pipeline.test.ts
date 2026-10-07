@@ -4,17 +4,21 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import { SiteDetail, OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
+import {
+  CityProcessions,
+  SiteDetail,
+  OSM_ATTRIBUTION,
+  type City,
+  type CityArt,
+  type LngLat,
+} from '@atlas/shared';
 import type { Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, writeMetadata, step as tileStep } from './05-tiles';
-import { landcoverCredits } from './lib/landcover';
-import { cemeteryCredits } from './lib/cemeteries';
-import { detailCredits } from './lib/site-detail';
-import { planCredits } from './lib/plan';
+import { step as processionStep } from './07-processions';
 import { readFeatures, readJson } from './lib/io';
 import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
@@ -118,26 +122,60 @@ describe('pipeline (02–04) on the fixture extract', () => {
     await mkdir(ctx.outDir, { recursive: true });
     const archive = join(ctx.outDir, `${city.slug}.pmtiles`);
     await writeFile(archive, 'archive sentinel');
-    const geography = await readJson<Geography>(join(ctx.buildDir, files.geography));
-    const years = [
-      ...features
-        .flatMap((f) => [f.properties.start_year, f.properties.end_year])
-        .filter((y): y is number => y !== undefined),
-      2026,
-    ];
-    const expected = buildMeta(
-      city,
-      geography,
-      [Math.min(...years), 2026],
-      [
-        ...landcoverCredits(content.landcover),
-        ...cemeteryCredits(content.cemeteries),
-        ...detailCredits(content.details),
-        ...planCredits(content.plans),
+    const creditedContent: ContentBundle = {
+      ...content,
+      plans: content.plans.map((plan) => ({ ...plan, credit: 'Fixture plan survey' })),
+      details: [
+        SiteDetail.parse({
+          id: 'detail/fixture-credits',
+          osm_id: 'osm:way/105',
+          title: 'Fixture plaza',
+          surface: 'paving',
+          status: 'draft',
+          credit: 'Fixture detail survey',
+          sources: [{ title: 'Fixture detail survey' }],
+        }),
       ],
+      processions: [
+        {
+          id: 'procession/fixture-mass',
+          title: { en: 'Fixture Mass' },
+          story: { en: 'Illustrative fixture event.' },
+          kind: 'mass',
+          status: 'draft',
+          site: 'osm:way/105',
+          grounds: ['osm:way/105'],
+          radius_m: 100,
+          schedule: {
+            month: 9,
+            weekday: 6,
+            nth: 3,
+            offset_days: 0,
+            start: '18:00',
+            duration_min: 60,
+            timezone: 'Asia/Manila',
+          },
+          sources: [{ title: 'Fixture festival account', url: 'https://example.test/festival' }],
+        },
+      ],
+    };
+    const creditedContext = { ...ctx, content: creditedContent };
+    const metadata = await writeMetadata(creditedContext, 2026);
+    expect(metadata).toMatchObject({ slug: 'fixture', yearRange: [1890, 2026] });
+    expect(metadata.attribution).toEqual([
+      OSM_ATTRIBUTION,
+      'Fixture imagery',
+      'Fixture detail survey',
+      'Fixture plan survey',
+    ]);
+    expect(await readJson(join(ctx.outDir, `${city.slug}.meta.json`))).toEqual(metadata);
+    await processionStep.run(creditedContext);
+    const events = CityProcessions.parse(
+      await readJson(join(ctx.outDir, `${city.slug}.processions.json`)),
     );
-    expect(await writeMetadata(ctx, 2026)).toEqual(expected);
-    expect(await readJson(join(ctx.outDir, `${city.slug}.meta.json`))).toEqual(expected);
+    expect(events.processions[0]?.sources).toEqual([
+      { title: 'Fixture festival account', url: 'https://example.test/festival' },
+    ]);
     expect(await readFile(archive, 'utf8')).toBe('archive sentinel');
   });
   it('writes aliases using the canonical parent final surface class', async () => {

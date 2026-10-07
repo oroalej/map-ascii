@@ -182,7 +182,7 @@
       "note": "Official facilities description documents a pool and sports grounds. The direct OSM API query now confirms the current mapped swimming-pool footprint, omitted by the old fetch query. Existing trees, Pet Park, parking, tennis/skate facilities and monuments are preserved. No construction date is inferred from OSM edit timestamps."
     },
     {
-      "title": "surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {

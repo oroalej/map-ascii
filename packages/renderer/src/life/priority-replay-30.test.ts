@@ -1,4 +1,9 @@
-import { it } from 'vitest';
-import { priorityReplay } from './testing/priority-replay';
-it('replays complete priority state exactly at 30 Hz through expiry and people closure', () =>
-  priorityReplay(30));
+import { afterAll, expect, it } from 'vitest';
+import { priorityReplaySteps } from './testing/priority-replay';
+
+const steps = priorityReplaySteps(30);
+afterAll(() => steps.return());
+
+it.each([0, 1, 2, 3])('replays complete 30 Hz priority state through section %s', (section) => {
+  expect(steps.next().done === true).toBe(section === 3);
+});

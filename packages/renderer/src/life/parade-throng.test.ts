@@ -5,7 +5,11 @@ import { throng } from './throng';
 import { packLife } from './draw';
 import { themes, mapGlyphs } from '../theme';
 import type { GridPlacement } from '../grid';
-it('packs all 72 contingent blocks with one paint per block', () => {
+it.each([
+  [18, 0],
+  [16, 0],
+  [16, 0.3],
+])('packs all 72 contingent blocks at zoom %s and row offset %s', (zoom, offset) => {
   const frame = localMetricProjection([0, 0]),
     q = (x: number, y: number) => frame.from([x, y]),
     cols = 1400,
@@ -42,13 +46,13 @@ it('packs all 72 contingent blocks with one paint per block', () => {
     grid: { originCol: -cols / 2, originRow: -rows / 2, shiftX: 0, shiftY: 0 },
     toCell: (lng, lat) => {
       const [x, y] = frame.to([lng, lat]);
-      return [x / 8 + cols / 2, -y / 2 + rows / 2];
+      return [x / 8 + cols / 2, -y / 2 + rows / 2 + offset];
     },
-    fromCell: (c, r) => q((c - cols / 2) * 8, -(r - rows / 2) * 2),
+    fromCell: (c, r) => q((c - cols / 2) * 8, -(r - rows / 2 - offset) * 2),
     tileMatrix: () => [],
   };
   const layout = formationLayout(route),
-    payload = throng(route, 0.7, grid, cols, rows, 18),
+    payload = throng(route, 0.7, grid, cols, rows, zoom),
     out = new Uint8Array(cols * rows * 4),
     cells: number[] = [],
     glyphs = mapGlyphs(themes.dark);

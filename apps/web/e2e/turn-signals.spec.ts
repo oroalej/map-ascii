@@ -80,6 +80,21 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           return tex;
         };
         const blank = texture(1, 1, new Uint8Array(4));
+        const crowdMask = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, crowdMask);
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA32UI,
+          1,
+          1,
+          0,
+          gl.RGBA_INTEGER,
+          gl.UNSIGNED_INT,
+          new Uint32Array(4),
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         type Value = number | readonly number[] | WebGLTexture;
         const uniforms = (values: Record<string, Value>) => {
           const key = values.u_focus ? 1 : 0;
@@ -91,9 +106,16 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
             const info = gl.getActiveUniform(program, i)!;
             const loc = gl.getUniformLocation(program, info.name);
             const value = values[info.name.replace(/\[0\]$/, '')];
-            if (info.type === gl.SAMPLER_2D) {
+            if (info.type === gl.SAMPLER_2D || info.type === gl.UNSIGNED_INT_SAMPLER_2D) {
               gl.activeTexture(gl.TEXTURE0 + unit);
-              gl.bindTexture(gl.TEXTURE_2D, value instanceof WebGLTexture ? value : blank);
+              gl.bindTexture(
+                gl.TEXTURE_2D,
+                value instanceof WebGLTexture
+                  ? value
+                  : info.type === gl.UNSIGNED_INT_SAMPLER_2D
+                    ? crowdMask
+                    : blank,
+              );
               gl.uniform1i(loc, unit++);
             } else if (value !== undefined) {
               const a = typeof value === 'number' ? [value] : (value as number[]);
@@ -106,6 +128,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
               else gl.uniform1iv(loc, a);
             }
           }
+          gl.uniform1i(gl.getUniformLocation(program, 'u_hasCrowdMask'), 0);
         };
         // Deterministic ordinary glyph ink isolates shader behavior from font antialiasing.
         const ink = new Uint8Array(input.glyphs.length * input.cw * input.ch);

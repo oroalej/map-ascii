@@ -54,8 +54,8 @@
       "note": "Independent facade photo shows raised access steps, outdoor benches and planted shrubs. Grounds follow the building and mapped monument court inside the outer City Hall Loop; Hall Road is an internal service drive and remains overlaid. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. This note covers the initial facility details authored from OSM and the cited independent reference; later owner-reference or landcover work is described in its own source notes. No timeline dates are inferred."
     },
     {
-      "title": "surface placement audit",
-      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a estimate."
+      "title": "Surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain an estimate."
     },
     {
       "title": "Owner-supplied City Hall overhead, seven-site follow-up",

@@ -133,7 +133,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
+  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: mapped school grounds",
@@ -145,7 +145,7 @@
       "note": "Image #2: owner-supplied Google Maps overhead labeled Tacolod Elementary School – Main near Talidtid Road, inspected 2026-10-04. The owner explicitly instructed proceeding with this reference. Western trees and eastern margins guide landscaping fitted to mapped grounds and four standing classroom roofs. The central blue covered area visible in the reference is reserved from new planting and paths; no missing roof is reconstructed. The imagery is rotated relative to north-up OSM; alignment and dimensions remain approximate. No Google reuse rights are asserted; the reference raster is not distributed. The retained OSM address is Barvo Street; the reference label does not rename a mapped road."
     },
     {
-      "title": "layout limits",
+      "title": "Layout limits",
       "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
     }
   ]

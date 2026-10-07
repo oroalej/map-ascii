@@ -506,7 +506,7 @@
       "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. The earlier schematic pavilion placement was removed after the supplied overhead reference showed the sports layout. The photograph still supports a small outdoor study bench; its exact placement needs a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
     },
     {
-      "title": "surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {

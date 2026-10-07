@@ -6,6 +6,7 @@
 import {
   CAMERA_RANGES,
   PROCESSION_LIMITS,
+  processionActorCount,
   PROCESSION_VEHICLES,
   CLOCK_TIME_PATTERN,
   TIME_ZONE_PATTERN,
@@ -77,13 +78,17 @@ function eventFormation(p: Record<string, unknown>): boolean {
       : p.kind === 'procession'
         ? PROCESSION_LIMITS.procession
         : PROCESSION_LIMITS.parade;
-  return Object.entries(p.formation).every(([k, v]) =>
+  const valid = Object.entries(p.formation).every(([k, v]) =>
     k === 'vehicles' && p.kind === 'parade'
       ? Array.isArray(v) &&
         v.length <= PROCESSION_LIMITS.vehicles &&
         v.every((x: unknown) => PROCESSION_VEHICLES.some((vehicle) => vehicle === x))
       : !!limits[k] && integer(v, ...limits[k]),
   );
+  if (!valid || (p.kind !== 'fluvial' && p.kind !== 'procession' && p.kind !== 'parade'))
+    return false;
+  // Every present field was checked against its numeric or vehicle limits above.
+  return processionActorCount(p.kind, p.formation) <= PROCESSION_LIMITS.actors;
 }
 export function isCityProcessions(v: unknown): v is CityProcessions {
   if (!isRecord(v) || !Array.isArray(v.processions)) return false;
@@ -174,8 +179,8 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
             point(site.altar.at) &&
             isNumber(site.altar.radius_m) &&
             site.altar.radius_m > 0 &&
-            site.altar.radius_m <= 20 &&
-            integer(site.altar.images, 0, 3))) &&
+            site.altar.radius_m <= PROCESSION_LIMITS.altar.radius &&
+            integer(site.altar.images, ...PROCESSION_LIMITS.altar.images))) &&
         isText(site.id) &&
         OSM_ID_PATTERN.test(site.id) &&
         point(site.location) &&
@@ -249,10 +254,10 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
               only(e.verge_m, ['left', 'right']) &&
               isNumber(e.verge_m.left) &&
               e.verge_m.left >= 0 &&
-              e.verge_m.left <= 6 &&
+              e.verge_m.left <= PROCESSION_LIMITS.verge &&
               isNumber(e.verge_m.right) &&
               e.verge_m.right >= 0 &&
-              e.verge_m.right <= 6)) &&
+              e.verge_m.right <= PROCESSION_LIMITS.verge)) &&
           isNumber(e.sidewalk_m) &&
           e.sidewalk_m >= 0 &&
           (e.sidewalks_m === undefined ||

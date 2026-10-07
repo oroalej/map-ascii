@@ -1,9 +1,9 @@
 import { expect, it } from 'vitest';
-import { pointInPolygon, Procession } from '@atlas/shared';
+import { pointInPolygon, Procession, localMetricProjection } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { localFrame } from './geo';
 import { bakeCrowdAreas } from './crowd-ground';
-import { routeStreet, bakeMassSite } from './procession-ground';
+import { routeStreet, bakeMassSite, bakeFluvialCrowd } from './procession-ground';
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
 const frame = localFrame([0, 0]);
@@ -19,6 +19,89 @@ const feature = (id: string, cls: string, ring: Point[], extra = {}): F => ({
   type: 'Feature',
   properties: { id, class: cls, ...extra },
   geometry: { type: 'Polygon', coordinates: [ring] },
+});
+const mass = (extra = {}) =>
+  Procession.parse({
+    id: 'procession/mass',
+    kind: 'mass',
+    title: { en: 'Mass' },
+    story: { en: 'Illustrative' },
+    status: 'draft',
+    site: 'osm:way/1',
+    grounds: ['osm:way/2'],
+    radius_m: 20,
+    schedule: {
+      month: 9,
+      weekday: 6,
+      nth: 3,
+      offset_days: 0,
+      start: '12:00',
+      duration_min: 60,
+      timezone: 'Asia/Manila',
+    },
+    ...extra,
+  });
+it('clips boundary-free seating before and after expansion', () => {
+  const event = mass();
+  if (event.kind !== 'mass') throw Error();
+  const site = bakeMassSite(
+    [
+      feature('osm:way/1', 'building_worship', box(-1, -1, 1, 1), { height: 5 }),
+      feature('osm:way/2', 'park', box(-20, -20, 20, 20)),
+      feature('osm:way/3', 'seating', box(18, -3, 24, 3)),
+      feature('osm:way/4', 'seating', box(100, -3, 108, 3)),
+    ],
+    event,
+  );
+  expect(site.seated_grounds!.length).toBeGreaterThan(0);
+  for (const point of site.seated_grounds!.flat())
+    expect(Math.max(...frame.toMeters(point).map(Math.abs))).toBeLessThanOrEqual(20 + 1e-6);
+  expect(site.seated_grounds!.some((ring) => pointInPolygon(q(102, 0), [ring]))).toBe(false);
+});
+it('derives the Mass extent around the displaced altar and rejects unsupported extents', () => {
+  const source = [
+    feature('osm:way/1', 'building_worship', box(-1, -1, 1, 1), { height: 5 }),
+    feature('osm:way/2', 'park', box(-40, -40, 40, 40)),
+  ];
+  const event = mass({
+    crowd_boundary: box(-40, -40, 40, 40),
+    altar: { at: q(20, 0), radius_m: 2 },
+  });
+  if (event.kind !== 'mass') throw Error();
+  const site = bakeMassSite(source, event),
+    fill = localMetricProjection(event.altar!.at);
+  expect(site.radius_m).toBeGreaterThan(event.radius_m);
+  for (const point of [...site.grounds, ...site.seated_grounds!].flat())
+    expect(Math.hypot(...fill.to(point))).toBeLessThanOrEqual(site.radius_m);
+  expect(() => bakeMassSite(source, { ...event, altar: { at: q(600, 0), radius_m: 2 } })).toThrow(
+    'baked crowd extent',
+  );
+});
+it('admits only accessible decks within the river and bank envelope', () => {
+  const deck = (id: string, x: number, y: number, extra = {}): F => ({
+    type: 'Feature',
+    properties: { id, class: 'road_minor', width: 4, bridge: 'yes', ...extra },
+    geometry: { type: 'LineString', coordinates: [q(x, y - 15), q(x, y + 15)] },
+  });
+  const crowd = bakeFluvialCrowd(
+    [
+      deck('osm:way/1', 0, 0),
+      deck('osm:way/2', 40, 90),
+      deck('osm:way/3', -40, 0, { foot: 'no' }),
+      deck('osm:way/4', 60, 0, { access: 'private' }),
+    ],
+    [q(-100, 0), q(100, 0)],
+    [
+      [5, 5],
+      [5, 5],
+    ],
+  );
+  const onDeck = (x: number, y: number) =>
+    crowd.bridges.some((ring) => pointInPolygon(q(x, y), [ring]));
+  expect(onDeck(0, 0)).toBe(true);
+  expect(onDeck(40, 90)).toBe(false);
+  expect(onDeck(-40, 0)).toBe(false);
+  expect(onDeck(60, 0)).toBe(false);
 });
 it('retains safe disconnected components and removes the complete separator', () => {
   const separator = box(-1, -20, 1, 20);

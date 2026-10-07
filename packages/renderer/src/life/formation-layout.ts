@@ -45,58 +45,78 @@ function build(route: StreetRoute) {
   );
   const actors: Member[] = [],
     blocks: FormationBlock[] = [];
-  const row = (count: number, back: number, paint: number, glyph?: string) => {
+  const row = (
+    count: number,
+    back: number,
+    paint: number,
+    glyph?: string | ((index: number) => string),
+  ) => {
     for (let i = 0; i < count; i++)
       actors.push({
-        back: back + Math.floor(i / columns) * 2,
+        back: back + Math.floor(i / columns) * g.rowPitch,
         off:
           ((i % columns) - (Math.min(columns, count - Math.floor(i / columns) * columns) - 1) / 2) *
           g.columnPitch,
         paint,
-        glyph,
+        glyph: typeof glyph === 'function' ? glyph(i) : glyph,
       });
-    return Math.ceil(count / columns) * 2;
+    return Math.ceil(count / columns) * g.rowPitch;
   };
   let tail = 0,
     leading = 0;
   if (route.kind === 'procession') {
     const f = { ...PROCESSION_DEFAULTS.procession, ...route.formation };
+    const front = Math.ceil(f.bearers / 2),
+      rear = f.bearers - front;
+    const frontBack = -PROCESSION.street.andasGap - (Math.ceil(front / columns) - 1) * g.rowPitch;
+    const rearBack = PROCESSION.street.andasGap;
+    const groupFront = Math.min(-g.andas.length / 2, frontBack - g.person.length / 2);
+    const groupBack = Math.max(
+      g.andas.length / 2,
+      rearBack + (Math.ceil(rear / columns) - 1) * g.rowPitch + g.person.length / 2,
+    );
+    let centre = 0,
+      lastBack = 0;
     for (let image = 0; image < f.images; image++) {
-      const centre = image * 35;
       actors.push({ back: centre, off: 0, paint: 4, glyph: ProcessionGlyph.andas });
-      const front = Math.ceil(f.bearers / 2),
-        rear = f.bearers - front;
-      // Bearers stand fore and aft, leaving the full andas footprint clear on narrow roads.
-      row(front, centre - 4 - Math.ceil(front / columns) * 2, 3);
-      row(rear, centre + 4, 3);
+      row(front, centre + frontBack, 3);
+      row(rear, centre + rearBack, 3);
+      lastBack = centre + groupBack;
+      centre += groupBack - groupFront + PROCESSION.street.imageGap;
     }
-    row(f.marshals, -55, 6, ProcessionGlyph.flag);
-    row(f.ranks * f.columns, (f.images - 1) * 35 + 30, 3);
-    leading = 60;
+    row(
+      f.marshals,
+      groupFront -
+        PROCESSION.street.marshalGap -
+        g.person.length / 2 -
+        (Math.ceil(f.marshals / columns) - 1) * g.rowPitch,
+      6,
+      ProcessionGlyph.flag,
+    );
+    row(f.ranks * f.columns, lastBack + PROCESSION.street.devoteeGap + g.person.length / 2, 3);
+    leading = Math.max(
+      3,
+      ...actors.map(
+        (a) =>
+          -a.back +
+          (a.glyph === ProcessionGlyph.andas ? g.andas.length : g.person.length) / 2 +
+          g.probePadding,
+      ),
+    );
     tail = Math.max(
       route.crowd_grounds !== undefined || route.segments.some((s) => s.verge_m) ? 500 : 0,
-      ...actors.map((a) => a.back + 10),
+      ...actors.map((a) => a.back + PROCESSION.street.tailPadding),
     );
   } else {
     const f = { ...PROCESSION_DEFAULTS.parade, vehicles: [], ...route.formation };
     let back = row(f.color_guard, 0, 5, ProcessionGlyph.flag) + PROCESSION.street.guardGap;
     for (let k = 0; k < f.contingents; k++) {
-      if (
-        f.bands &&
-        k % Math.max(1, Math.ceil(f.contingents / f.bands)) === 0 &&
-        blocks.length / Math.max(1, Math.ceil(f.contingents / f.bands)) < f.bands
-      ) {
-        for (let i = 0; i < f.band; i++)
-          actors.push({
-            back: back + Math.floor(i / columns) * 2,
-            off: ((i % columns) - (columns - 1) / 2) * g.columnPitch,
-            paint: 4,
-            glyph: i % 2 ? ProcessionGlyph.bugle : ProcessionGlyph.drum,
-          });
-        back += Math.ceil(f.band / columns) * 2 + PROCESSION.street.bandGap;
-      }
+      if (f.bands && k % Math.max(1, Math.ceil(f.contingents / f.bands)) === 0)
+        back +=
+          row(f.band, back, 4, (i) => (i % 2 ? ProcessionGlyph.bugle : ProcessionGlyph.drum)) +
+          PROCESSION.street.bandGap;
       const count = f.ranks * f.columns,
-        length = Math.ceil(count / columns) * 2;
+        length = Math.ceil(count / columns) * g.rowPitch;
       blocks.push({
         back,
         length,
@@ -108,10 +128,11 @@ function build(route: StreetRoute) {
       back += length + PROCESSION.street.contingentGap;
     }
     for (const vehicle of f.vehicles) {
-      actors.push({ back, off: 0, paint: 5, vehicle });
-      back += 14;
+      const length = g.vehicles[vehicle].length;
+      actors.push({ back: back + length / 2, off: 0, paint: 5, vehicle });
+      back += length + PROCESSION.street.vehicleGap;
     }
-    tail = back + 10;
+    tail = back + PROCESSION.street.tailPadding;
     leading = 3;
   }
   const profile = motionProfile(hashString(route.id), route.length_m);

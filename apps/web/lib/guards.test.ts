@@ -113,6 +113,34 @@ describe('browser shape guards agree with the schemas', () => {
       expect(CityProcessions.safeParse(bundle).success).toBe(accepted);
       expect(isCityProcessions(bundle)).toBe(accepted);
     };
+    const formation = { images: 2, bearers: 64, ranks: 16, columns: 10, marshals: 10 };
+    agrees({ ...street, formation }, true);
+    agrees({ ...street, formation: { ...formation, marshals: 11 } }, false);
+    agrees(
+      { ...street, formation: { images: 3, bearers: 64, ranks: 20, columns: 10, marshals: 32 } },
+      false,
+    );
+    agrees({ ...street, formation: { images: 3, bearers: 64, marshals: 32 } }, true);
+    agrees({ ...street, formation: { images: 3, bearers: 64, marshals: 32, ranks: 13 } }, false);
+    agrees(
+      {
+        ...street,
+        kind: 'parade',
+        formation: {
+          contingents: 72,
+          bands: 6,
+          band: 48,
+          color_guard: 8,
+          vehicles: ['car', 'car', 'car', 'car'],
+        },
+      },
+      true,
+    );
+    agrees({ ...fluvial, formation: { columns: 6, ranks: 20, escorts: 40, followers: 139 } }, true);
+    agrees(
+      { ...fluvial, formation: { columns: 6, ranks: 20, escorts: 40, followers: 140 } },
+      false,
+    );
     for (const [event, defaults, key, min, max] of [
       [fluvial, PROCESSION_DEFAULTS.fluvial, 'followers', 0, 200],
       [street, PROCESSION_DEFAULTS.procession, 'columns', 2, 10],

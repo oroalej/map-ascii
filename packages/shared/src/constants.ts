@@ -128,6 +128,9 @@ export const PROCESSION_LIMITS = {
     columns: [2, 10],
   },
   radius: 500,
+  actors: 300,
+  verge: 6,
+  altar: { radius: 20, images: [0, 3], apron: 3 },
   vehicles: 4,
   schedule: { offset_days: [-31, 31], duration_min: [1, 1440] },
 } as const;
@@ -137,6 +140,54 @@ export const PROCESSION_DEFAULTS = {
   parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4, bands: 1, columns: 4 },
 } as const;
 export const PROCESSION_VEHICLES = ['car', 'truck', 'motorcycle'] as const;
+type ActorFormation = Partial<
+  Record<
+    | 'columns'
+    | 'ranks'
+    | 'images'
+    | 'bearers'
+    | 'marshals'
+    | 'contingents'
+    | 'bands'
+    | 'band'
+    | 'color_guard'
+    | 'escorts'
+    | 'followers',
+    number
+  >
+> & { vehicles?: readonly unknown[] };
+/** Physical actors only; raster contingent blocks and decorations have no simulated owners. */
+export function processionActorCount(
+  kind: 'fluvial' | 'procession' | 'parade',
+  formation: ActorFormation = {},
+) {
+  if (kind === 'procession') {
+    const f = PROCESSION_DEFAULTS.procession;
+    return (
+      (formation.images ?? f.images) * ((formation.bearers ?? f.bearers) + 1) +
+      (formation.marshals ?? f.marshals) +
+      (formation.ranks ?? f.ranks) * (formation.columns ?? f.columns)
+    );
+  }
+  if (kind === 'fluvial') {
+    const f = PROCESSION_DEFAULTS.fluvial;
+    return (
+      1 +
+      (formation.columns ?? f.columns) * (formation.ranks ?? f.ranks) +
+      (formation.escorts ?? f.escorts) +
+      (formation.followers ?? f.followers)
+    );
+  }
+  const f = PROCESSION_DEFAULTS.parade;
+  const contingents = formation.contingents ?? f.contingents,
+    bands = formation.bands ?? f.bands;
+  const groups = bands ? Math.ceil(contingents / Math.ceil(contingents / bands)) : 0;
+  return (
+    groups * (formation.band ?? f.band) +
+    (formation.color_guard ?? f.color_guard) +
+    (formation.vehicles?.length ?? 0)
+  );
+}
 /** Physical geometry used by event routing, probes and collision reservations, in metres. */
 export const PROCESSION_GEOMETRY = {
   person: { length: 0.9, width: 1 },
@@ -146,10 +197,8 @@ export const PROCESSION_GEOMETRY = {
     truck: { length: 8, width: 2.5 },
     motorcycle: { length: 2, width: 0.8 },
   },
-  bearerOffset: 1.6,
-  marshalOffset: 1.1,
-  columns: 4,
   columnPitch: 0.8,
+  rowPitch: 2,
   probePadding: 0.05,
   clearanceMargin: 0.5,
   massCell: 2,

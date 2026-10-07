@@ -7,7 +7,7 @@ import {
   type StreetRoute,
   type MassRoute,
 } from '@atlas/shared';
-import { PROCESSION, motionProfile, routePolyline } from './procession';
+import { PROCESSION, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
 import { eventGroundAllows, groundForRoute, type EventGround } from './ground-events';
 import { hashString, random } from './random';
@@ -52,7 +52,6 @@ export class GroundProcessionScene {
   readonly points: Point[];
   readonly along: number[];
   private readonly polyline: ReturnType<typeof routePolyline>;
-  readonly profile: Float64Array;
   private readonly tail: number;
   private readonly leadingExtent: number;
   private scopedIds?: { scope: string; ids: string[] };
@@ -81,7 +80,6 @@ export class GroundProcessionScene {
             .map((b, i) => ({ a: route.route[i]!, b, width: route.segments[i]!.width_m }));
     this.polyline = routePolyline(this.points);
     this.along = this.polyline.along;
-    this.profile = motionProfile(hashString(route.id), this.along.at(-1)!);
     this.ground = groundForRoute(route);
     this.build();
     const layout = route.kind === 'mass' ? undefined : formationLayout(route);
@@ -413,7 +411,7 @@ export class GroundProcessionScene {
         y = at.y + hx * a.off;
       }
       const q = this.frame.from([x, y]);
-      const fixed = this.route.kind !== 'mass' && !!a.destination;
+      const fixed = !!a.eventRole || (this.route.kind !== 'mass' && !!a.destination);
       if ((a.eventRole || !holding) && (!fixed || a.groundAllowed === undefined)) {
         const dimensions = eventBodySize(a);
         const corners = bodyCorners({

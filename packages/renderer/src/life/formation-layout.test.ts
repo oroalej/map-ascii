@@ -1,5 +1,7 @@
 import { expect, it } from 'vitest';
-import { localMetricProjection, type StreetRoute } from '@atlas/shared';
+import { localMetricProjection, PROCESSION_GEOMETRY, type StreetRoute } from '@atlas/shared';
+import { ProcessionGlyph } from './procession-glyphs';
+import { eventActor } from './event-actors';
 import { formationLayout } from './formation-layout';
 import { GroundProcessionScene } from './procession-street';
 const street: StreetRoute = {
@@ -25,6 +27,35 @@ const street: StreetRoute = {
   blocked: [],
   formation: { images: 2, bearers: 40, ranks: 20, columns: 6, marshals: 16 },
 };
+it('keeps both large image groups clear on a two-column road without dropping actors', () => {
+  const route: StreetRoute = {
+    ...street,
+    segments: [{ ...street.segments[0]!, width_m: 3.5, clear_m: 3.5 }],
+    formation: { images: 2, bearers: 64, ranks: 20, columns: 6, marshals: 16 },
+  };
+  const layout = formationLayout(route),
+    scene = new GroundProcessionScene(route);
+  expect(layout.columns).toBe(2);
+  expect(layout.actors).toHaveLength(266);
+  const images = layout.actors.filter((a) => a.glyph === ProcessionGlyph.andas);
+  expect(images).toHaveLength(2);
+  for (const image of images)
+    for (const actor of layout.actors) {
+      if (actor === image) continue;
+      const size =
+        actor.glyph === ProcessionGlyph.andas
+          ? PROCESSION_GEOMETRY.andas
+          : PROCESSION_GEOMETRY.person;
+      expect(Math.abs(actor.back - image.back)).toBeGreaterThan(
+        (size.length + PROCESSION_GEOMETRY.andas.length) / 2,
+      );
+    }
+  for (const progress of [0.3, 0.5, 0.7]) expect(scene.agents(progress, 0)).toHaveLength(266);
+  const ids = (p: number) => scene.agents(p, 0).map(eventActor);
+  expect(new Set(ids(0.3)).size).toBe(266);
+  expect(ids(0.3).every(Boolean)).toBe(true);
+  expect(ids(0.3)).toEqual(ids(0.7));
+});
 it('keeps all members clear before a wide-to-constrained transition and through a bend', () => {
   const f = localMetricProjection([0, 0]),
     q = (x: number, y: number) => f.from([x, y]);

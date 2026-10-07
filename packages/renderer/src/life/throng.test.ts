@@ -60,6 +60,71 @@ function grid(w: number, h: number, cols = 100, rows = 40): GridPlacement {
 const theme = themes.dark;
 const glyphs = mapGlyphs(theme),
   glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
+it('reuses coarse permissions across progress and overlapping world cells after a pan', () => {
+  const original = grid(12, 25),
+    terrainKey = {},
+    hardTerrainKey = {};
+  let queries = 0;
+  const guard = Object.assign(
+    () => {
+      queries++;
+      return true;
+    },
+    { terrainKey, hardTerrainKey },
+  );
+  original.world = [1, 1, original.grid.originCol, original.grid.originRow];
+  const first = throng(street, 0.4, original, 100, 40, 15, 1, guard);
+  const cold = queries;
+  expect(cold).toBeGreaterThan(0);
+  throng(street, 0.5, original, 100, 40, 15, 1, guard);
+  expect(queries).toBe(cold);
+  const moved: GridPlacement = {
+    ...original,
+    grid: { ...original.grid, originCol: original.grid.originCol + 1 },
+    world: [1, 1, original.grid.originCol + 1, original.grid.originRow],
+    fromCell: (c, r) => original.fromCell!(c + 1, r),
+    toCell: (lng, lat) => {
+      const [c, r] = original.toCell(lng, lat);
+      return [c - 1, r];
+    },
+  };
+  const panned = throng(street, 0.4, moved, 100, 40, 15, 1, guard);
+  expect(queries).toBe(cold);
+  expect(panned.cells.map((c) => [c.col + 1, c.row, [...c.mask!]])).toEqual(
+    first.cells.map((c) => [c.col, c.row, [...c.mask!]]),
+  );
+  const freshGuard = Object.assign(
+    () => {
+      queries++;
+      return true;
+    },
+    { terrainKey: {}, hardTerrainKey: {} },
+  );
+  throng(street, 0.4, moved, 100, 40, 15, 1, freshGuard);
+  expect(queries).toBeGreaterThan(cold);
+});
+it('uses the wider sidewalk and keeps distant authored grounds static', () => {
+  const event = {
+    ...street,
+    segments: [{ ...street.segments[0]!, sidewalk_m: 3, verge_m: { left: 1, right: 1 } }],
+    crowd_grounds: [box(-40, 150, 40, 160)],
+  };
+  const placement = grid(1, 1, 200, 400);
+  const positions = (p: number) => throng(event, p, placement, 200, 400, 18).cells;
+  expect(
+    positions(0.2).some(
+      (c) =>
+        Math.abs(frame.to([c.agent.lng, c.agent.lat])[1]) > 5 &&
+        Math.abs(frame.to([c.agent.lng, c.agent.lat])[1]) < 7,
+    ),
+  ).toBe(true);
+  const distant = (p: number) =>
+    positions(p)
+      .filter((c) => frame.to([c.agent.lng, c.agent.lat])[1] > 140)
+      .map((c) => [c.col, c.row, c.agent.paint]);
+  expect(distant(0.2).length).toBeGreaterThan(0);
+  expect(distant(0.2)).toEqual(distant(0.8));
+});
 it.each([6, 8])(
   'keeps partial coarse ink on a %s m road and excludes complete roof/water outlines',
   (width) => {
@@ -293,8 +358,28 @@ it.each([0.35, 0.15])(
     };
     const complete = pack(100);
     expect(complete.cells.length).toBeGreaterThan(1);
+    const [lng, lat] = placement.fromCell!(60.5, 40.5);
+    payload.cells.push({
+      ...payload.cells[0]!,
+      col: 60,
+      row: 40,
+      agent: { ...payload.cells[0]!.agent, lng, lat, prop: 'event', glyph: ProcessionGlyph.crowd0 },
+    });
     const rejected = pack(complete.cells.length - 1);
     expect(rejected.cells).toHaveLength(0);
     expect(rejected.out.every((v) => v === 0)).toBe(true);
   },
 );
+
+it('clears a short stream with its layout tail before completion', () => {
+  const event = {
+    ...street,
+    route: [q(-500, 0), q(500, 0)],
+    length_m: 1000,
+    segments: [{ ...street.segments[0]!, verge_m: undefined }],
+  };
+  const placement = grid(2, 2, 550, 20);
+  const cells = throng(event, 0.99, placement, 550, 20, 18).cells;
+  expect(cells.length).toBeGreaterThan(0);
+  expect(cells.every((c) => frame.to([c.agent.lng, c.agent.lat])[0] > 400)).toBe(true);
+});

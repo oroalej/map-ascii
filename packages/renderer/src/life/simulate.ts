@@ -7978,12 +7978,19 @@ export class LifeWorld {
             })),
           );
         for (const a of life.geo.areas ?? []) {
-          if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
+          if (
+            a.kind !== 'parking-exclusion' &&
+            a.kind !== 'blocked' &&
+            a.kind !== 'vehicle-blocked'
+          )
+            continue;
+          const polygon = metric(a.rings);
+          if (a.kind === 'parking-exclusion') cached.trees.push(polygon);
           if (a.kind === 'blocked') {
-            (a.water ? cached.water : cached.blocked).push(metric(a.rings));
-            if (!a.water && !a.seating) cached.hardBlocked.push(metric(a.rings));
+            (a.water ? cached.water : cached.blocked).push(polygon);
+            if (!a.water && !a.seating) cached.hardBlocked.push(polygon);
           }
-          if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(metric(a.rings));
+          if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(polygon);
         }
         const bounds = [Infinity, Infinity, -Infinity, -Infinity];
         for (const polygons of [cached.blocked, cached.vehicleBlocked])
@@ -9397,7 +9404,7 @@ export class LifeWorld {
   }
 
   /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
-  groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
+  groundCellGuard(toCell: (lng: number, lat: number) => [number, number], terrainOnly = false) {
     const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
@@ -9409,6 +9416,7 @@ export class LifeWorld {
       this.eventGrounds,
       terrain.blocked,
       terrain.hardBlocked,
+      terrainOnly,
     );
   }
 

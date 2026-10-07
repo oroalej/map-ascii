@@ -200,7 +200,7 @@
       "note": "Supports existing plaza lighting; schematic fixtures do not claim the layout of the unverified redevelopment."
     },
     {
-      "title": "surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {

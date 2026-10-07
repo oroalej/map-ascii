@@ -1,6 +1,8 @@
 /** Complete-source street and church-ground event geography. */
 import {
   pointInPolygon,
+  localMetricProjection,
+  PROCESSION_LIMITS,
   PROCESSION_GEOMETRY,
   processionFormationWidth,
   type Procession,
@@ -16,7 +18,7 @@ import { isStandingBuilding } from './obstacles';
 import { intersection, union } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
 import { safeLattice, compactLattice, bakeCrowdAreas } from './crowd-ground';
-export const VERGE_MAX_M = 6;
+export const VERGE_MAX_M = PROCESSION_LIMITS.verge;
 
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
@@ -130,6 +132,12 @@ function obstacles(
     if (e < bounds[0] || w > bounds[2] || n < bounds[1] || s > bounds[3]) continue;
     const cls = String(f.properties.class);
     if (ignoreWater && cls.startsWith('water')) continue;
+    if (
+      cls === 'barrier' &&
+      (f.properties.variant === 'gate' || f.properties.barrier === 'gate') &&
+      walkable(f.properties)
+    )
+      continue;
     if (isExclusion(f)) {
       const target = cls.startsWith('water') && water ? water : out;
       const save = (poly: Point[][]) => {
@@ -172,6 +180,67 @@ function obstacles(
     }
   }
   return out;
+}
+
+function assembleExclusions(
+  features: readonly F[],
+  frame: ReturnType<typeof localFrame>,
+  bounds: [number, number, number, number],
+  pieces: Point[][][],
+  allWater = false,
+) {
+  const water: Point[][] = [];
+  const square: Point[][][] = [
+    [
+      [
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[1]],
+        [bounds[2], bounds[3]],
+        [bounds[0], bounds[3]],
+        [bounds[0], bounds[1]],
+      ],
+    ],
+  ];
+  const boxes = pieces.map((poly) => {
+    const q = poly.flat();
+    return [
+      Math.min(...q.map((p) => p[0])),
+      Math.min(...q.map((p) => p[1])),
+      Math.max(...q.map((p) => p[0])),
+      Math.max(...q.map((p) => p[1])),
+    ];
+  });
+  const nearby = [...nearbyFeatures(features, bounds)].filter((f) => {
+    const [w, s, e, n] = featureBox(f);
+    return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
+  });
+  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
+    const w = Math.min(...ring.map((p) => p[0])),
+      s = Math.min(...ring.map((p) => p[1])),
+      e = Math.max(...ring.map((p) => p[0])),
+      n = Math.max(...ring.map((p) => p[1]));
+    return pieces.some((poly, i) => {
+      const b = boxes[i]!;
+      return (
+        w <= b[2]! &&
+        e >= b[0]! &&
+        s <= b[3]! &&
+        n >= b[1]! &&
+        intersection([ring], poly).length > 0
+      );
+    });
+  });
+  water.push(
+    ...obstacles(
+      (allWater ? [...nearbyFeatures(features, bounds)] : nearby).filter((f) =>
+        String(f.properties.class).startsWith('water'),
+      ),
+      frame,
+      bounds,
+      square,
+    ),
+  );
+  return { blocked, water };
 }
 
 export function routeStreet(features: readonly F[], p: Street) {
@@ -280,10 +349,10 @@ export function routeStreet(features: readonly F[], p: Street) {
             features,
             local,
             [
-              Math.min(qa[0], qb[0]) - 0.001,
-              Math.min(qa[1], qb[1]) - 0.001,
-              Math.max(qa[0], qb[0]) + 0.001,
-              Math.max(qa[1], qb[1]) + 0.001,
+              Math.min(...strip.flat(2).map((q) => q[0])),
+              Math.min(...strip.flat(2).map((q) => q[1])),
+              Math.max(...strip.flat(2).map((q) => q[0])),
+              Math.max(...strip.flat(2).map((q) => q[1])),
             ],
             strip,
           ).length
@@ -342,56 +411,10 @@ export function routeStreet(features: readonly F[], p: Street) {
     bounds[2] = Math.max(bounds[2], q[0]);
     bounds[3] = Math.max(bounds[3], q[1]);
   }
-  const water: Point[][] = [];
-  const square: Point[][][] = [
-    [
-      [
-        [bounds[0], bounds[1]],
-        [bounds[2], bounds[1]],
-        [bounds[2], bounds[3]],
-        [bounds[0], bounds[3]],
-        [bounds[0], bounds[1]],
-      ],
-    ],
-  ];
-  const pieces = [...corridors.flat(), ...crowdPolys];
-  const boxes = pieces.map((poly) => {
-    const q = poly.flat();
-    return [
-      Math.min(...q.map((p) => p[0])),
-      Math.min(...q.map((p) => p[1])),
-      Math.max(...q.map((p) => p[0])),
-      Math.max(...q.map((p) => p[1])),
-    ];
-  });
-  const nearby = [...nearbyFeatures(features, bounds)].filter((f) => {
-    const [w, s, e, n] = featureBox(f);
-    return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
-  });
-  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
-    const w = Math.min(...ring.map((p) => p[0])),
-      s = Math.min(...ring.map((p) => p[1])),
-      e = Math.max(...ring.map((p) => p[0])),
-      n = Math.max(...ring.map((p) => p[1]));
-    return pieces.some((poly, i) => {
-      const b = boxes[i]!;
-      return (
-        w <= b[2]! &&
-        e >= b[0]! &&
-        s <= b[3]! &&
-        n >= b[1]! &&
-        intersection([ring], poly).length > 0
-      );
-    });
-  });
-  water.push(
-    ...obstacles(
-      nearby.filter((f) => String(f.properties.class).startsWith('water')),
-      frame,
-      bounds,
-      square,
-    ),
-  );
+  const { blocked, water } = assembleExclusions(features, frame, bounds, [
+    ...corridors.flat(),
+    ...crowdPolys,
+  ]);
   const bridges = ordered
     .filter((e) => {
       return bridgeAllowed(byId.get(e.road)!, e.a.at, e.b.at);
@@ -402,6 +425,8 @@ export function routeStreet(features: readonly F[], p: Street) {
   const crowd_grounds = bakeCrowdAreas(localFrame(route[0]!), crowdPolys, [...blocked, ...water]);
   return { route, length_m, segments, blocked, water, bridges, crowd_grounds };
 }
+
+const hardSources = new WeakMap<readonly F[], F[]>();
 
 /** Connected 2 m outdoor cells; row compaction gives small geographic permission polygons. */
 export function bakeMassSite(
@@ -427,7 +452,11 @@ export function bakeMassSite(
   const a = frame.toLngLat([-radius_m, -radius_m]),
     b = frame.toLngLat([radius_m, radius_m]);
   const square: Point[][][] = [[[a, [b[0], a[1]], b, [a[0], b[1]], a]]];
-  const hardSource = features.filter((f) => f.properties.class !== 'seating');
+  let hardSource = hardSources.get(features);
+  if (!hardSource) {
+    hardSource = features.filter((f) => f.properties.class !== 'seating');
+    hardSources.set(features, hardSource);
+  }
   const domain = p.crowd_boundary ? [[p.crowd_boundary]] : square;
   const hardBlocked = obstacles(hardSource, frame, [a[0], a[1], b[0], b[1]], domain);
   const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]], domain);
@@ -440,7 +469,7 @@ export function bakeMassSite(
       ]),
     );
   };
-  if (p.altar) blocked.push(circle(p.altar.at, p.altar.radius_m + 3));
+  if (p.altar) blocked.push(circle(p.altar.at, p.altar.radius_m + PROCESSION_LIMITS.altar.apron));
   for (const poly of groundPolys)
     for (const hole of poly.slice(1))
       for (const part of intersection([hole], square)) blocked.push(asPoints(part[0]!));
@@ -578,37 +607,47 @@ export function bakeMassSite(
     if (path.length >= 2) approaches.push(path);
   }
   if (!approaches.length) throw new Error(`${p.id}: no connected outdoor approach`);
+  const seated_grounds = bakeCrowdAreas(
+    frame,
+    features
+      .filter((f) => f.properties.class === 'seating')
+      .flatMap((f) => polygons(f.geometry).map((poly) => poly.map(asPoints)))
+      .map((poly) =>
+        p.crowd_boundary
+          ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
+          : intersection(poly, square).map((p) => p.map(asPoints)),
+      )
+      .flat()
+      .flatMap((poly) => seatingFootprint(poly[0]!, 3).coordinates.map((p) => p.map(asPoints)))
+      .flatMap((poly) =>
+        p.crowd_boundary
+          ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
+          : intersection(poly, square).map((p) => p.map(asPoints)),
+      ),
+    hardBlocked,
+    0.5,
+  );
+  const fillFrame = localMetricProjection(p.altar?.at ?? location);
+  let extent = 0;
+  for (const ring of [...grounds, ...seated_grounds])
+    for (const point of ring) extent = Math.max(extent, Math.hypot(...fillFrame.to(point)));
+  const crowdRadius = Math.max(p.radius_m, Math.ceil(extent));
+  if (crowdRadius > PROCESSION_LIMITS.radius)
+    throw new Error(
+      `${p.id}: baked crowd extent ${crowdRadius} m exceeds ${PROCESSION_LIMITS.radius} m`,
+    );
   return {
     id: p.site,
     location,
     anchor: frame.toLngLat(seed[1]),
-    radius_m: p.radius_m,
+    radius_m: crowdRadius,
     ...(p.crowd_boundary && { closure_zone: [p.crowd_boundary] }),
-    seated_grounds: bakeCrowdAreas(
-      frame,
-      features
-        .filter((f) => f.properties.class === 'seating')
-        .flatMap((f) => polygons(f.geometry).map((poly) => poly.map(asPoints)))
-        .map((poly) =>
-          p.crowd_boundary
-            ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
-            : [poly],
-        )
-        .flat()
-        .flatMap((poly) => seatingFootprint(poly[0]!, 3).coordinates.map((p) => p.map(asPoints)))
-        .flatMap((poly) =>
-          p.crowd_boundary
-            ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
-            : [poly],
-        ),
-      hardBlocked,
-      0.5,
-    ),
+    seated_grounds,
     ...(p.altar && {
       altar: { ...p.altar, images },
       altar_ground: bakeCrowdAreas(
         frame,
-        [[circle(p.altar.at, p.altar.radius_m + 3)]],
+        [[circle(p.altar.at, p.altar.radius_m + PROCESSION_LIMITS.altar.apron)]],
         hardBlocked,
         0.5,
       ),
@@ -627,7 +666,8 @@ export function bakeFluvialCrowd(
   banks: [number, number][],
 ) {
   const frame = localFrame(route[0]!);
-  const strips: Point[][][] = [];
+  const strips: Point[][][] = [],
+    river: Point[][][] = [];
   // Crowd permissions need fewer bank joins than the unchanged 10 m boat route.
   for (let start = 0; start < route.length - 1; start += 3) {
     const i = Math.min(start + 3, route.length - 1);
@@ -635,6 +675,17 @@ export function bakeFluvialCrowd(
       b = frame.toMeters(route[i]!);
     const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
     if (!d) continue;
+    const left = Math.max(...banks.slice(start, i + 1).map((p) => p[0])),
+      right = Math.max(...banks.slice(start, i + 1).map((p) => p[1]));
+    const offset = (left - right) / 2;
+    const centre = [a, b].map((q) =>
+      frame.toLngLat([q[0] - ((b[1] - a[1]) / d) * offset, q[1] + ((b[0] - a[0]) / d) * offset]),
+    );
+    river.push(
+      ...seatingFootprint(centre, Math.max(1, left + right + 2)).coordinates.map((poly) =>
+        poly.map(asPoints),
+      ),
+    );
     for (const side of [-1, 1]) {
       const index = side > 0 ? 0 : 1;
       const offset = side * (Math.max(...banks.slice(start, i + 1).map((p) => p[index])) + 15.5);
@@ -651,19 +702,17 @@ export function bakeFluvialCrowd(
     Math.max(...points.map((q) => q[0])) + 0.001,
     Math.max(...points.map((q) => q[1])) + 0.001,
   ];
+  const relevant = [...strips, ...river];
   const bridges = features
-    .filter((f) => f.properties.bridge && f.properties.bridge !== 'no')
+    .filter((f) => f.properties.bridge && f.properties.bridge !== 'no' && walkable(f.properties))
     .flatMap((f) =>
-      lines(f as AtlasFeature).flatMap((line) =>
-        seatingFootprint(asPoints(line), width(f as AtlasFeature)).coordinates.map((poly) =>
-          asPoints(poly[0]!),
-        ),
-      ),
-    )
-    .filter((r) =>
-      r.some(
-        (q) => q[0] >= bounds[0] && q[0] <= bounds[2] && q[1] >= bounds[1] && q[1] <= bounds[3],
-      ),
+      lines(f as AtlasFeature).flatMap((line) => {
+        const deck = seatingFootprint(asPoints(line), width(f as AtlasFeature))
+          .coordinates as Point[][][];
+        return relevant.flatMap((poly) =>
+          intersection(deck, poly).map((part) => asPoints(part[0]!)),
+        );
+      }),
     );
   let envelope: ReturnType<typeof union> = [];
   const pieces = [...strips, ...bridges.map((r) => [r])];
@@ -683,58 +732,6 @@ export function bakeFluvialCrowd(
     groups = next;
   }
   envelope = groups[0] ?? [];
-  const water: Point[][] = [];
-  // Keep water's full outline within the local bbox. Intersecting a long river with
-  // hundreds of jagged bank/deck edges adds no permission and creates costly slivers.
-  const square: Point[][][] = [
-    [
-      [
-        [bounds[0], bounds[1]],
-        [bounds[2], bounds[1]],
-        [bounds[2], bounds[3]],
-        [bounds[0], bounds[3]],
-        [bounds[0], bounds[1]],
-      ],
-    ],
-  ];
-  const boxes = pieces.map((p) => {
-    const q = p.flat();
-    return [
-      Math.min(...q.map((p) => p[0])),
-      Math.min(...q.map((p) => p[1])),
-      Math.max(...q.map((p) => p[0])),
-      Math.max(...q.map((p) => p[1])),
-    ];
-  });
-  const nearby = [...nearbyFeatures(features, bounds)].filter((f) => {
-    const [w, s, e, n] = featureBox(f);
-    return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
-  });
-  // Full nearby hard outlines are safer and cheaper than carving each roof against
-  // the jagged crowd union. The permission polygons already bound the visible ink.
-  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
-    const w = Math.min(...ring.map((p) => p[0])),
-      s = Math.min(...ring.map((p) => p[1])),
-      e = Math.max(...ring.map((p) => p[0])),
-      n = Math.max(...ring.map((p) => p[1]));
-    return pieces.some((poly, i) => {
-      const b = boxes[i]!;
-      return (
-        w <= b[2]! &&
-        e >= b[0]! &&
-        s <= b[3]! &&
-        n >= b[1]! &&
-        intersection([ring], poly).length > 0
-      );
-    });
-  });
-  water.push(
-    ...obstacles(
-      features.filter((f) => String(f.properties.class).startsWith('water')),
-      frame,
-      bounds,
-      square,
-    ),
-  );
+  const { blocked, water } = assembleExclusions(features, frame, bounds, pieces, true);
   return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges };
 }

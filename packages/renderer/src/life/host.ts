@@ -142,7 +142,7 @@ export function createInlineHost(
         ...result,
         generation,
         throngRun: result.procession,
-        cellGuard: (toCell) =>
+        cellGuard: (toCell, terrainOnly) =>
           terrain &&
           makeCellGuard(
             terrain.ref,
@@ -152,6 +152,7 @@ export function createInlineHost(
             terrain.events,
             terrain.blocked,
             terrain.hardBlocked,
+            terrainOnly,
           ),
       };
       preparation.schedule();
@@ -371,7 +372,7 @@ export function createWorkerHost(
                 generation,
                 procession: view?.procession,
                 signalClock: view?.signalClock ?? 0,
-                cellGuard: (toCell) =>
+                cellGuard: (toCell, terrainOnly) =>
                   cellTerrain &&
                   makeCellGuard(
                     cellTerrain.ref,
@@ -381,6 +382,7 @@ export function createWorkerHost(
                     eventGrounds,
                     cellTerrain.blocked,
                     cellTerrain.hardBlocked,
+                    terrainOnly,
                   ),
               };
             return;
@@ -399,7 +401,7 @@ export function createWorkerHost(
             procession: result.procession,
             throngRun: result.procession,
             signalClock: result.signalClock,
-            cellGuard: (toCell) =>
+            cellGuard: (toCell, terrainOnly) =>
               cellTerrain &&
               makeCellGuard(
                 cellTerrain.ref,
@@ -409,6 +411,7 @@ export function createWorkerHost(
                 eventGrounds,
                 cellTerrain.blocked,
                 cellTerrain.hardBlocked,
+                terrainOnly,
               ),
           };
           if (result.profile) profiler?.merge(result.profile);
@@ -440,7 +443,7 @@ export function createWorkerHost(
     },
     setLive(id, progress, occurrence) {
       if (disposed) return;
-      if (live.id !== id || live.occurrence !== occurrence) {
+      if (!played && (live.id !== id || live.occurrence !== occurrence)) {
         agentEpoch++;
         view = retainOrdinary(
           view,

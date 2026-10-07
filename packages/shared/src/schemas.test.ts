@@ -279,6 +279,32 @@ describe('Procession', () => {
     },
   };
   const ok = (p: unknown) => Procession.safeParse(p).success;
+  it('rejects aggregate physical actor overflow and resolves partial formations', () => {
+    const street = {
+      ...procession,
+      kind: 'procession',
+      route: { from: 'osm:way/1', to: 'osm:way/2' },
+    };
+    const formation = { images: 2, bearers: 64, ranks: 16, columns: 10, marshals: 10 };
+    expect(ok({ ...street, formation })).toBe(true); // 300 actors.
+    expect(ok({ ...street, formation: { ...formation, marshals: 11 } })).toBe(false);
+    expect(
+      ok({
+        ...street,
+        formation: { images: 3, bearers: 64, ranks: 20, columns: 10, marshals: 32 },
+      }),
+    ).toBe(false); // 427.
+    expect(ok({ ...street, formation: { images: 3, bearers: 64, marshals: 32 } })).toBe(true); // 299 with defaults.
+    expect(ok({ ...street, formation: { images: 3, bearers: 64, marshals: 32, ranks: 13 } })).toBe(
+      false,
+    );
+    expect(
+      ok({ ...procession, formation: { columns: 6, ranks: 20, escorts: 40, followers: 139 } }),
+    ).toBe(true);
+    expect(
+      ok({ ...procession, formation: { columns: 6, ranks: 20, escorts: 40, followers: 140 } }),
+    ).toBe(false);
+  });
 
   it('accepts a draft with placeholders', () => {
     expect(ok(procession)).toBe(true);

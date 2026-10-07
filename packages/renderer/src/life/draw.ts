@@ -588,8 +588,12 @@ function packThrong(
   drawingOwner = 0;
   drawingFocus = 0;
   drawingClockCells = undefined;
+  const reusable: NonNullable<typeof journal> = { before: new Map(), denied: false };
   for (const cell of payload.cells) {
-    journal = { before: new Map(), denied: false };
+    reusable.before.clear();
+    reusable.denied = false;
+    reusable.incomplete = false;
+    journal = reusable;
     const n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
     const attempt = journal;
     if (!cell.mask && grid.allowsGroundCell)
@@ -600,11 +604,13 @@ function packThrong(
           attempt.denied = true;
           break;
         }
-    if (!n || attempt.denied || attempt.incomplete || used + attempt.before.size > payload.cap) {
+    const overCapacity = used + attempt.before.size > payload.cap;
+    if (!n || attempt.denied || attempt.incomplete || overCapacity) {
       for (const [at, previous] of attempt.before) {
         for (let b = 0; b < 4; b++) out[at + b] = previous[b]!;
         if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
       }
+      if (overCapacity) break;
       continue;
     }
     used += attempt.before.size;
@@ -683,17 +689,13 @@ function drawAgent(
         col + (ax - col) * length * x! + (sx - col) * width * y!,
         row + (ay - row) * length * x! + (sy - row) * width * y!,
       ]);
+      const minX = Math.floor(Math.min(...corners.map((p) => p[0]!))),
+        maxX = Math.floor(Math.max(...corners.map((p) => p[0]!)));
+      const minY = Math.floor(Math.min(...corners.map((p) => p[1]!))),
+        maxY = Math.floor(Math.max(...corners.map((p) => p[1]!)));
       let n = 0;
-      for (
-        let y = Math.floor(Math.min(...corners.map((p) => p[1]!)));
-        y <= Math.floor(Math.max(...corners.map((p) => p[1]!)));
-        y++
-      )
-        for (
-          let x = Math.floor(Math.min(...corners.map((p) => p[0]!)));
-          x <= Math.floor(Math.max(...corners.map((p) => p[0]!)));
-          x++
-        ) {
+      for (let y = minY; y <= maxY; y++)
+        for (let x = minX; x <= maxX; x++) {
           if (x < 0 || y < 0 || x >= cols || y >= rows) {
             if (journal) journal.incomplete = true;
             continue;

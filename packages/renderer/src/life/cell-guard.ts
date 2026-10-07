@@ -29,6 +29,7 @@ export function makeCellGuard(
   grounds?: ReadonlyMap<string, EventGround>,
   blocked?: Hits,
   hardBlocked?: Hits,
+  terrainOnly = false,
 ) {
   const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
   const [c1, r1] = toCell(...tileToLngLat(ref.tile, { x: ref.perMeter, y: ref.perMeter }));
@@ -38,7 +39,7 @@ export function makeCellGuard(
   const sample = [body];
   const points: [number, number][] = Array.from({ length: 9 }, () => [0, 0]);
   const ordinaryTerrain = blocked ?? NO_BLOCKED;
-  return (agent: VisibleAgent, col: number, row: number) => {
+  const guard = (agent: VisibleAgent, col: number, row: number) => {
     if (agent.aboard) return true;
     if (agent.eventGround) {
       const base = grounds?.get(agent.eventGround);
@@ -50,6 +51,12 @@ export function makeCellGuard(
             : base;
       const terrain = agent.eventRole ? (hardBlocked ?? ordinaryTerrain) : ordinaryTerrain;
       if (!ground) return false;
+      // Crowd scanlines already checked geographic permissions for the full subcell.
+      if (terrainOnly) {
+        body.x = (col + 0.5 - c0) * width;
+        body.y = (row + 0.5 - r0) * height;
+        return !terrain.hits(sample);
+      }
       let frames = permissions.get(ground);
       if (!frames) permissions.set(ground, (frames = new WeakMap<Hits, PermissionCache>()));
       let cache = frames.get(terrain);
@@ -109,4 +116,8 @@ export function makeCellGuard(
       return !(agent.vehicle !== 'cart' ? access.forbidden : access.roads).hits(sample);
     return agent.kind !== 'vehicle' || !agent.parked || !agent.vehicle || !trees.hits(sample);
   };
+  return Object.assign(guard, {
+    terrainKey: ordinaryTerrain,
+    hardTerrainKey: hardBlocked ?? ordinaryTerrain,
+  });
 }

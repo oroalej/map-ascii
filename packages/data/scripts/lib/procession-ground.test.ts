@@ -73,6 +73,64 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it('propagates authored crowd areas into baked street permissions', () => {
+    const crowd = area('osm:way/12', 'park', 0.0008, 0.0005, 0.0012, 0.0008);
+    const route = routeProcessions(
+      [...features, crowd],
+      [Procession.parse({ ...base, crowd_areas: ['osm:way/12'] })],
+    ).routes[0]!;
+    if (route.kind !== 'procession') throw Error();
+    expect(route.crowd_grounds!.some((ring) => pointInPolygon([0.001, 0.00065], [ring]))).toBe(
+      true,
+    );
+    expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+  });
+  it.each([undefined, 2])(
+    'derives altar image count from the preceding procession (%s)',
+    (images) => {
+      const church = area('osm:way/10', 'building_worship', 0.00199, 0.00029, 0.00201, 0.00031);
+      const ground = area('osm:way/11', 'park', 0.0016, 0.0, 0.0024, 0.0006);
+      const preceding = Procession.parse({
+        ...base,
+        formation: images === undefined ? undefined : { images },
+      });
+      const mass = Procession.parse({
+        id: 'procession/mass',
+        kind: 'mass',
+        title: base.title,
+        story: base.story,
+        status: 'draft',
+        site: 'osm:way/10',
+        grounds: ['osm:way/11'],
+        radius_m: 50,
+        altar: { at: [0.002, 0.0004], radius_m: 2 },
+        schedule: { follows: base.id, duration_min: 90 },
+      });
+      const route = routeProcessions([...features, church, ground], [mass, preceding]).routes[0]!;
+      if (route.kind !== 'mass') throw Error();
+      expect(route.site.altar?.images).toBe(images ?? 1);
+      expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+    },
+  );
+  it('routes across an accessible gate and preserves restricted and solid barriers', () => {
+    const way = road('osm:way/3', [
+      [0, 0],
+      [0.002, 0],
+    ]);
+    const gate: F = {
+      ...point('osm:node/9', [0.001, 0]),
+      properties: { id: 'osm:node/9', class: 'barrier', variant: 'gate' },
+    };
+    const source = [features[0]!, features[1]!, way, gate];
+    const route = routeProcessions(source, [Procession.parse(base)]).routes[0]!;
+    if (route.kind !== 'procession') throw Error();
+    expect(route.blocked.some((ring) => pointInPolygon([0.001, 0], [ring]))).toBe(false);
+    gate.properties.foot = 'no';
+    expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
+    delete gate.properties.foot;
+    gate.properties.variant = 'wall';
+    expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
+  });
   it.each(['road_major', 'road_mid'])('excludes default-derived sidewalk bands on %s', (cls) => {
     const source = [
       features[0]!,

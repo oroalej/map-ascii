@@ -80,6 +80,50 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('retains played actors and accepts in-flight playback across live schedule updates', async () => {
+    const s = fixture(),
+      other = { ...route, id: 'other' },
+      host = createWorkerHost({}, [route, other]);
+    host.sync(s.tiles);
+    await flush();
+    host.play(route.id);
+    const actor: VisibleAgent = {
+      kind: 'person',
+      lng: 0,
+      lat: 0,
+      flap: 0,
+      event: true,
+      eventGround: route.id,
+    };
+    const played = { id: route.id, progress: 0.4, live: false };
+    mock.frame.mockResolvedValueOnce({ ...result(1), agents: [actor], procession: played });
+    host.request(s.input);
+    await flush();
+    let finish!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    host.request(s.input);
+    host.setLive(other.id, 0.2, 'next-occurrence');
+    expect(host.latest()?.agents).toEqual([actor]);
+    expect(host.latest()?.throngRun).toEqual(played);
+    finish({ ...result(2), agents: [actor], procession: { ...played, progress: 0.5 } });
+    await flush();
+    expect(host.latest()?.throngRun?.progress).toBe(0.5);
+    host.stop();
+    expect(host.latest()?.agents).toEqual([]);
+    expect(host.latest()?.throngRun).toBeUndefined();
+    const live = { id: other.id, progress: 0.2, live: true };
+    mock.frame.mockResolvedValueOnce({ ...result(3), procession: live });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.throngRun).toEqual(live);
+    expect(mock.setLive).toHaveBeenCalledWith(other.id, 0.2, 'next-occurrence');
+    host.dispose();
+  });
   it('publishes zero-agent accepted crowds and discards late crowds after Stop', async () => {
     const s = fixture(),
       host = createWorkerHost({}, [route]);

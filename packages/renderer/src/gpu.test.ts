@@ -5,10 +5,59 @@ import {
   drawGround,
   uploadTile,
   uploadEffectClocks,
+  uploadCrowdMask,
   type GL,
   type CellTargets,
 } from './gpu';
 import { buildTileGeometry, createIdRegistry } from './raster/geometry';
+
+it('keeps crowd texture storage across active updates, Stop and later reactivation', () => {
+  const gl = {
+    TEXTURE_2D: 3553,
+    RGBA32UI: 36208,
+    RGBA_INTEGER: 36249,
+    UNSIGNED_INT: 5125,
+    bindTexture: vi.fn(),
+    texImage2D: vi.fn(),
+    texSubImage2D: vi.fn(),
+    texParameteri: vi.fn(),
+    createTexture: vi.fn(),
+  };
+  const targets = {
+    cols: 2,
+    rows: 2,
+    crowdMaskTex: {},
+    crowdMaskCols: 1,
+    crowdMaskRows: 1,
+  } as CellTargets;
+  for (let i = 0; i < 3; i++) uploadCrowdMask(gl as unknown as GL, targets);
+  expect(targets.crowdMaskActive).toBe(false);
+  expect(gl.bindTexture).not.toHaveBeenCalled();
+  const values = new Uint32Array(32);
+  uploadCrowdMask(gl as unknown as GL, targets, values);
+  expect(gl.texImage2D.mock.calls[0]!.slice(2)).toEqual([
+    gl.RGBA32UI,
+    4,
+    2,
+    0,
+    gl.RGBA_INTEGER,
+    gl.UNSIGNED_INT,
+    values,
+  ]);
+  expect(targets.crowdMaskActive).toBe(true);
+  uploadCrowdMask(gl as unknown as GL, targets, values);
+  uploadCrowdMask(gl as unknown as GL, targets);
+  expect(targets.crowdMaskActive).toBe(false);
+  uploadCrowdMask(gl as unknown as GL, targets, values);
+  expect(gl.texImage2D).toHaveBeenCalledTimes(1);
+  expect(gl.texSubImage2D).toHaveBeenCalledTimes(2);
+  targets.cols = 3;
+  uploadCrowdMask(gl as unknown as GL, targets, new Uint32Array(48));
+  expect(gl.texImage2D).toHaveBeenCalledTimes(2);
+  expect(targets.crowdMaskCols).toBe(6);
+  expect(gl.texParameteri).not.toHaveBeenCalled();
+  expect(gl.createTexture).not.toHaveBeenCalled();
+});
 
 it('allocates an exact float clock texture lazily, reuses it, and releases it when unused', () => {
   const texture = {};

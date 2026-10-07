@@ -6,6 +6,7 @@
 import {
   LEGACY_LOCAL_METERS_PER_DEGREE,
   resolveProcessionSchedules,
+  PROCESSION_DEFAULTS,
   localMetricProjection,
   pointInPolygon,
   type Procession,
@@ -348,7 +349,10 @@ export function routeProcessions(
     if (p.kind === 'mass') {
       const follows = 'follows' in p.schedule ? p.schedule.follows : undefined;
       const preceding = follows ? processions.find((event) => event.id === follows) : undefined;
-      const images = preceding?.kind === 'procession' ? (preceding.formation?.images ?? 1) : 0;
+      const images =
+        preceding?.kind === 'procession'
+          ? (preceding.formation?.images ?? PROCESSION_DEFAULTS.procession.images)
+          : 0;
       routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p, images) });
       continue;
     }

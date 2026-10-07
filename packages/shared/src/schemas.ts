@@ -47,6 +47,7 @@ import {
   YEAR_RANGE,
   RoofShape,
   PROCESSION_LIMITS,
+  processionActorCount,
   TODO_VERIFY,
   PROCESSION_DEFAULTS,
   PROCESSION_VEHICLES,
@@ -636,12 +637,17 @@ export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
 
 /** A procession's boats: paddle-boat columns and ranks ahead of the pagoda, and escorts. */
 const formationCount = (range: readonly [number, number]) => z.int().min(range[0]).max(range[1]);
-export const ProcessionFormation = z.strictObject({
-  columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
-  ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
-  escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
-  followers: formationCount(PROCESSION_LIMITS.fluvial.followers).optional(),
-});
+export const ProcessionFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
+    ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
+    escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
+    followers: formationCount(PROCESSION_LIMITS.fluvial.followers).optional(),
+  })
+  .refine(
+    (f) => processionActorCount('fluvial', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
 const ProcessionId = z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>');
 export const FollowingSchedule = z.strictObject({
@@ -651,32 +657,42 @@ export const FollowingSchedule = z.strictObject({
     .min(PROCESSION_LIMITS.schedule.duration_min[0])
     .max(PROCESSION_LIMITS.schedule.duration_min[1]),
 });
-export const StreetFormation = z.strictObject({
-  columns: formationCount(PROCESSION_LIMITS.procession.columns).optional(),
-  images: formationCount(PROCESSION_LIMITS.procession.images).optional(),
-  bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
-    PROCESSION_DEFAULTS.procession.bearers,
-  ),
-  ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
-    PROCESSION_DEFAULTS.procession.ranks,
-  ),
-  marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
-    PROCESSION_DEFAULTS.procession.marshals,
-  ),
-});
-export const ParadeFormation = z.strictObject({
-  columns: formationCount(PROCESSION_LIMITS.parade.columns).optional(),
-  bands: formationCount(PROCESSION_LIMITS.parade.bands).optional(),
-  contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
-    PROCESSION_DEFAULTS.parade.contingents,
-  ),
-  ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
-  band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
-  color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
-    PROCESSION_DEFAULTS.parade.color_guard,
-  ),
-  vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
-});
+export const StreetFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.procession.columns).optional(),
+    images: formationCount(PROCESSION_LIMITS.procession.images).optional(),
+    bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
+      PROCESSION_DEFAULTS.procession.bearers,
+    ),
+    ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
+      PROCESSION_DEFAULTS.procession.ranks,
+    ),
+    marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
+      PROCESSION_DEFAULTS.procession.marshals,
+    ),
+  })
+  .refine(
+    (f) => processionActorCount('procession', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
+export const ParadeFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.parade.columns).optional(),
+    bands: formationCount(PROCESSION_LIMITS.parade.bands).optional(),
+    contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
+      PROCESSION_DEFAULTS.parade.contingents,
+    ),
+    ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
+    band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
+    color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
+      PROCESSION_DEFAULTS.parade.color_guard,
+    ),
+    vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
+  })
+  .refine(
+    (f) => processionActorCount('parade', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
 const EventPoint = LngLat;
 const EventRing = z
   .array(EventPoint)
@@ -685,7 +701,10 @@ const EventRing = z
     (r) => !!r[0] && r[0][0] === r.at(-1)![0] && r[0][1] === r.at(-1)![1],
     'expected closed ring',
   );
-const EventAltar = z.strictObject({ at: EventPoint, radius_m: z.number().positive().max(20) });
+const EventAltar = z.strictObject({
+  at: EventPoint,
+  radius_m: z.number().positive().max(PROCESSION_LIMITS.altar.radius),
+});
 const CrowdGround = z.strictObject({
   grounds: z.array(EventRing),
   blocked: z.array(EventRing),
@@ -696,7 +715,7 @@ export const ProcessionSite = z.strictObject({
   closure_zone: z.array(EventRing).optional(),
   seated_grounds: z.array(EventRing).optional(),
   altar_ground: z.array(EventRing).optional(),
-  altar: EventAltar.extend({ images: z.int().min(0).max(3) }).optional(),
+  altar: EventAltar.extend({ images: formationCount(PROCESSION_LIMITS.altar.images) }).optional(),
   id: OsmId,
   location: EventPoint,
   anchor: EventPoint,
@@ -1088,7 +1107,10 @@ const streetEventBase = {
           width_m: z.number().positive(),
           clear_m: z.number().positive().optional(),
           verge_m: z
-            .strictObject({ left: z.number().min(0).max(6), right: z.number().min(0).max(6) })
+            .strictObject({
+              left: z.number().min(0).max(PROCESSION_LIMITS.verge),
+              right: z.number().min(0).max(PROCESSION_LIMITS.verge),
+            })
             .optional(),
           // Legacy symmetric allowance; new archives carry route-relative sides.
           sidewalk_m: z.number().min(0),

@@ -217,6 +217,74 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('calls the Life pass for an accepted crowd frame with zero simulated actors', () => {
+    atlas.destroy();
+    const original = Hosts.createInlineHost;
+    const event: FluvialRoute = {
+      id: 'crowd-only',
+      kind: 'fluvial',
+      title: { en: 'Crowd' },
+      status: 'draft',
+      route: [
+        [0, 0],
+        [0.001, 0],
+      ],
+      length_m: 100,
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: 0,
+        start: '12:00',
+        duration_min: 60,
+        timezone: 'Asia/Manila',
+      },
+      crowd_ground: {
+        grounds: [
+          [
+            [-0.001, -0.001],
+            [0.001, -0.001],
+            [0.001, 0.001],
+            [-0.001, 0.001],
+            [-0.001, -0.001],
+          ],
+        ],
+        blocked: [],
+        water: [],
+        bridges: [],
+      },
+    };
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((world, profiler, clock) => {
+      const host = original(world, profiler, clock);
+      host.latest = () => ({
+        agents: [],
+        puffs: new Float64Array(0),
+        signalClock: 0,
+        generation: 1,
+        procession: { id: event.id, progress: 0.4, live: false },
+        throngRun: { id: event.id, progress: 0.4, live: false },
+        cellGuard: () => undefined,
+      });
+      return host;
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 16 },
+      year: 2026,
+      lifeWorker: false,
+      processions: [event],
+    });
+    vi.mocked(lifePass).mockClear();
+    draw(100);
+    expect(
+      vi
+        .mocked(lifePass)
+        .mock.calls.some(
+          (args) => args[6].length === 0 && args[14]?.event === event && args[14]?.progress === 0.4,
+        ),
+    ).toBe(true);
+  });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
     atlas.on('fixtureschange', changed);

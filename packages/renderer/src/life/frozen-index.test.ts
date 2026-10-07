@@ -59,7 +59,7 @@ describe('transferred polygon indexes', () => {
     });
     bodies.push({ x: 100000, y: -100000, hx: 1, hy: 0, length: 1, width: 1 });
     for (const name of ['blocked', 'hardBlocked', 'roads', 'forbidden', 'trees'] as const) {
-      const frozen = new FrozenPolygonIndex(received[name]!);
+      const frozen = new FrozenPolygonIndex(received[name]);
       for (const body of bodies) expect(frozen.hits([body])).toBe(terrain[name].hits([body]));
       // Multiple bodies must reset the per-body deduplication state.
       for (let i = 0; i < bodies.length; i += 3)

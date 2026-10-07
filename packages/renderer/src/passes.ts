@@ -1042,7 +1042,7 @@ export function glyphPass(
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
-    u_crowdMask: targets.crowdMaskTex ?? targets.idTex,
+    u_crowdMask: targets.crowdMaskTex,
     u_hasCrowdMask: !!targets.crowdMaskActive,
     u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
     u_hasEffectClocks: hasEffectClocks,
