@@ -11,6 +11,37 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/23666715",
       "note": "Location and name only."
+    },
+    {
+      "title": "NHCP historical marker: Cathedral of Naga",
+      "url": "https://philhistoricsites.nhcp.gov.ph/registry_database/cathedral-of-naga/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Bishop Bernardo de la Concepción began construction of the present cathedral in 1808."
+      },
+      "source": 1,
+      "year": 1808,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The cathedral was finished and blessed in 1843 by Monsignor Tomás Ladron de Guevara."
+      },
+      "source": 1,
+      "year": 1843,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "An 1887 earthquake damaged the cathedral; repairs followed in 1890 under Bishop Arsenio Campo and engineer Ricardo Ayuso."
+      },
+      "source": 1,
+      "year": 1887,
+      "certainty": "exact"
     }
   ]
 }

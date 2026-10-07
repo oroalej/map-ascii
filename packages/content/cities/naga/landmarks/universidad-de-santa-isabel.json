@@ -11,6 +11,45 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/276457427",
       "note": "Location and name only."
+    },
+    {
+      "title": "Universidad de Sta. Isabel: History",
+      "url": "https://www.usi.edu.ph/history",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Queen Isabella II's royal decree created the Escuela-Colegio de Sta. Isabel in November 1867."
+      },
+      "source": 1,
+      "year": 1867,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The school formally opened on April 12, 1868."
+      },
+      "source": 1,
+      "year": 1868,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "A royal decree in 1872 elevated the college to a teacher-training school for women."
+      },
+      "source": 1,
+      "year": 1872,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The first eleven students graduated in 1877."
+      },
+      "source": 1,
+      "year": 1877,
+      "certainty": "exact"
     }
   ]
 }

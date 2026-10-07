@@ -2,15 +2,15 @@
 
 import type { Atlas, LabelInView } from '@atlas/renderer';
 import { useEffect, useId, useState } from 'react';
-import { useAtlasInstance, useAtlasStore } from '@/state/store';
+import { useAtlasInstance } from '@/state/store';
 import { PLACE_ZOOM } from '@/state/useAtlasEvents';
-import { useUiStore } from '@/state/ui';
+import type { SelectionOrigin } from '@/state/ui';
+import { selectPlace } from '@/state/selection';
 import styles from './PlacesInView.module.css';
 
-/** Select a named feature and fly to it, as a click on it would. */
-function goToLabel(atlas: Atlas, label: LabelInView) {
-  useUiStore.setState({ picked: atlas.getFeature(label.featureId) ?? null });
-  useAtlasStore.getState().setSelected(label.featureId);
+/** Select and fly to any named feature; landmarks with facts also open their dialog. */
+function goToLabel(atlas: Atlas, label: LabelInView, origin: SelectionOrigin) {
+  selectPlace(label.featureId, { origin });
   const [lng, lat] = label.lngLat;
   const zoom = atlas.getCamera().zoom;
   // Places are areas: center on them at this zoom. Landmarks and monuments: come close.
@@ -19,7 +19,7 @@ function goToLabel(atlas: Atlas, label: LabelInView) {
 
 /**
  * A text alternative to the map (SPEC.md §5): the places, landmarks, and monuments whose names
- * are on screen, as a list of buttons that select and fly like a click. It stays out of sight
+ * are on screen, as a list of buttons that select and fly. It stays out of sight
  * until keyboard focus reaches it, first in the tab order.
  */
 export function PlacesInView() {
@@ -53,7 +53,9 @@ export function PlacesInView() {
                 <button
                   type="button"
                   className={styles.item}
-                  onClick={() => atlas && goToLabel(atlas, label)}
+                  onClick={(event) =>
+                    atlas && goToLabel(atlas, label, event.detail === 0 ? 'keyboard' : 'pointer')
+                  }
                 >
                   {label.name}{' '}
                   <span className={styles.kind}>

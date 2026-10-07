@@ -171,7 +171,7 @@ for (const city of cities) {
         expect(errors).toEqual([]);
       });
 
-      test(`search finds "${city.smokeLandmark}", flies there, and opens the panel`, async ({
+      test(`search finds "${city.smokeLandmark}", flies there, and opens the facts dialog`, async ({
         page,
       }) => {
         await page.goto(`/${city.slug}?z=15`);
@@ -184,7 +184,7 @@ for (const city of cities) {
           city.smokeLandmark,
         );
         await box.press('Enter');
-        const panel = page.getByRole('complementary', { name: 'Selected place' });
+        const panel = page.getByRole('dialog', { name: city.smokeLandmark });
         await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
         await expect.poll(() => query(page).sel).toBeTruthy();
         // The flight ends at the place, close in.
@@ -192,7 +192,7 @@ for (const city of cities) {
       });
 
       test(
-        'a click or tap on a place opens the panel, and Esc closes it',
+        'a click or tap on a place opens the facts dialog, and Esc closes it',
         { tag: '@mobile' },
         async ({ page, hasTouch }) => {
           const place = city.smokePlace!;
@@ -207,7 +207,7 @@ for (const city of cities) {
           // Start without a selection: only the actual mouse click or touch tap opens the panel.
           const box = (await canvas.boundingBox())!;
           const position = { x: box.width / 2, y: box.height / 2 };
-          const panel = page.getByRole('complementary', { name: 'Selected place' });
+          const panel = page.getByRole('dialog', { name: city.smokeLandmark });
           await expect(panel).toHaveCount(0);
           const legend = page
             .locator('details')
@@ -254,9 +254,44 @@ for (const city of cities) {
           });
           await expect.poll(() => query(page).sel).toBe(place.id);
           await expect(legend).toBeHidden();
+          const attribution = page.getByRole('link', { name: 'OpenStreetMap contributors' });
+          const expectAttributionExposed = async () => {
+            await expect(attribution).toBeVisible();
+            await expect
+              .poll(() =>
+                attribution.evaluate((link) => {
+                  const rect = link.getBoundingClientRect();
+                  const hit = document.elementFromPoint(
+                    rect.x + rect.width / 2,
+                    rect.y + rect.height / 2,
+                  );
+                  return hit === link || (hit !== null && link.contains(hit));
+                }),
+              )
+              .toBe(true);
+          };
+          await expectAttributionExposed();
+          if (hasTouch) {
+            await expect(page.getByLabel(/^Scale:/)).toBeHidden();
+            await expect(
+              page.getByRole('button', { name: 'Coordinates', exact: true }),
+            ).toBeHidden();
+            await panel.locator('button[aria-expanded]').click();
+            await expect(panel.locator('button[aria-expanded]')).toHaveAttribute(
+              'aria-expanded',
+              'true',
+            );
+            await expectAttributionExposed();
+          }
           await page.keyboard.press('Escape');
           await expect(panel).toHaveCount(0);
           await expect(legend).toBeVisible();
+          if (hasTouch) {
+            await expect(page.getByLabel(/^Scale:/)).toBeVisible();
+            await expect(
+              page.getByRole('button', { name: 'Coordinates', exact: true }),
+            ).toBeVisible();
+          }
           // Reuse the loaded map for browser-only keyboard and layout checks. Focus
           // toggling, collapse and clear-state behavior are covered in Hud.test.tsx.
           const summary = legend.locator('summary');

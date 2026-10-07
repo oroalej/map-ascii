@@ -1,0 +1,86 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.type {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #2a2c36;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus-visible {
+  border-color: var(--fg-dim);
+}
+
+.name {
+  margin: 6px 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.meta {
+  margin: 0 0 6px;
+  color: var(--fg-dim);
+}
+
+.badge {
+  margin-left: 8px;
+  padding: 0 4px;
+  border: 1px solid var(--fg-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.story p {
+  margin: 0 0 10px;
+}
+
+.sources h3 {
+  margin: 16px 0 6px;
+  color: var(--fg-dim);
+  font-size: 12px;
+  font-weight: normal;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sources ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.note {
+  color: var(--fg-dim);
+}
+
+.facts {
+  padding-left: 20px;
+}
+.facts li {
+  margin: 10px 0;
+}
+.facts sup {
+  margin-left: 4px;
+}
+.drawing {
+  margin: 12px 0;
+}

@@ -4,15 +4,17 @@ import type { SearchEntry } from '@atlas/shared';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { typingInField } from '@/lib/dom';
 import { loadSearch, search, TYPE_LABELS, type CitySearch } from '@/lib/search';
-import { useAtlasInstance, useAtlasStore } from '@/state/store';
+import { useAtlasInstance } from '@/state/store';
+import { selectPlace } from '@/state/selection';
+import type { SelectionOrigin } from '@/state/ui';
 import styles from './SearchBox.module.css';
 
 type LoadState = { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; data: CitySearch };
 
 /** Fly to a search result, select it, and highlight everything it stands for. */
-export function goToEntry(entry: SearchEntry) {
+export function goToEntry(entry: SearchEntry, origin: SelectionOrigin) {
   const atlas = useAtlasInstance.getState().atlas;
-  useAtlasStore.getState().setSelected(entry.id);
+  selectPlace(entry.id, { origin });
   if (!atlas) return;
   atlas.setHighlighted(entry.featureIds ?? []);
   atlas.flyTo({ lat: entry.lat, lng: entry.lng, zoom: entry.zoomHint });
@@ -57,9 +59,9 @@ export function SearchBox({ city, subdivisionLabel }: { city: string; subdivisio
   const flat = useMemo(() => groups.flatMap((g) => g.entries), [groups]);
   const showList = open && query.trim().length > 0;
 
-  const choose = (entry: SearchEntry | undefined) => {
+  const choose = (entry: SearchEntry | undefined, origin: SelectionOrigin) => {
     if (!entry) return;
-    goToEntry(entry);
+    goToEntry(entry, origin);
     setOpen(false);
     inputRef.current?.blur();
   };
@@ -73,7 +75,7 @@ export function SearchBox({ city, subdivisionLabel }: { city: string; subdivisio
       setActive((i) => (i + step + flat.length) % flat.length);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      choose(flat[active] ?? flat[0]);
+      choose(flat[active] ?? flat[0], 'keyboard');
     } else if (e.key === 'Escape') {
       // Keep the global Esc (close the panel) out of it.
       e.preventDefault();
@@ -140,7 +142,7 @@ export function SearchBox({ city, subdivisionLabel }: { city: string; subdivisio
                     // Keep focus in the input while clicking a result.
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseEnter={() => setActive(i)}
-                    onClick={() => choose(entry)}
+                    onClick={() => choose(entry, 'pointer')}
                   >
                     <span className={styles.name}>{entry.name}</span>
                     {entry.subdivision && (

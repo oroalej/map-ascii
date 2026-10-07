@@ -11,6 +11,41 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/23662997",
       "note": "Location and name only."
+    },
+    {
+      "title": "Naga City Tourism: San Francisco Church",
+      "url": "https://tourism.naga.gov.ph/attractions/san-francisco-church-2/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Franciscan missionaries established the church in 1578, initially using light materials."
+      },
+      "source": 1,
+      "year": 1578,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Fray Geronimo de Aguilar was its first priest."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Spanish forces made their final stand here in September 1898 against revolutionaries led by Elias Angeles and Felix Plazo."
+      },
+      "source": 1,
+      "year": 1898,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The church faces Plaza Quince Martires in downtown Naga."
+      },
+      "source": 1
     }
   ]
 }

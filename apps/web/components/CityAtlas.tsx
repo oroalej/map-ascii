@@ -9,7 +9,9 @@ import type {
   TrafficMix,
   Tour,
 } from '@atlas/shared';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { useUiStore } from '@/state/ui';
+import { hasFacts } from '@/lib/landmark';
 import dynamic from 'next/dynamic';
 import { useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
@@ -19,7 +21,7 @@ import { Attribution } from './Attribution';
 import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
 import { Hud } from './Hud';
-import { InfoPanel } from './InfoPanel';
+import { LandmarkFacts } from './LandmarkFacts';
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { CueBubbles } from './CueBubbles';
@@ -72,6 +74,17 @@ export function CityAtlas({
   art,
   tours,
 }: CityAtlasProps) {
+  const clickable = useMemo(
+    () => new Set(landmarks.filter(hasFacts).map((l) => l.id)),
+    [landmarks],
+  );
+  useEffect(() => {
+    useUiStore.setState({ clickable });
+    return () => {
+      if (useUiStore.getState().clickable === clickable)
+        useUiStore.setState({ clickable: new Set() });
+    };
+  }, [clickable]);
   useEffect(() => {
     useAtlasStore.getState().setCity(slug);
   }, [slug]);
@@ -106,7 +119,12 @@ export function CityAtlas({
       <TourMenu />
       <HoverTooltip />
       <CueBubbles catalog={dialogue} />
-      <InfoPanel city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} art={art} />
+      <LandmarkFacts
+        city={slug}
+        subdivisionLabel={subdivisionLabel}
+        landmarks={landmarks}
+        art={art}
+      />
       <TourPlayer />
       <Attribution />
       <DebugStats />

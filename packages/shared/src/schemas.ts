@@ -700,6 +700,21 @@ export const ProcessionSite = z.strictObject({
 export function contentSchemas(languages?: readonly string[]) {
   const text = localizedText(languages);
 
+  const LandmarkFact = z
+    .strictObject({
+      text: text.refine((value) => value.en.length <= 240, {
+        message: 'English fact text must be at most 240 characters',
+        path: ['en'],
+      }),
+      year: Year.optional(),
+      certainty: DateCertainty.optional(),
+      source: z.number().int().nonnegative(),
+    })
+    .refine((fact) => fact.certainty === undefined || fact.year !== undefined, {
+      message: 'certainty requires year',
+      path: ['certainty'],
+    });
+
   const Landmark = z
     .object({
       id: z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>'),
@@ -712,6 +727,7 @@ export function contentSchemas(languages?: readonly string[]) {
       certainty: Certainty,
       story: text.optional(),
       photos: z.array(Photo).optional(),
+      facts: z.array(LandmarkFact).min(3).max(5).optional(),
       sources: Sources,
     })
     .refine(endAfterStart, {
@@ -721,6 +737,17 @@ export function contentSchemas(languages?: readonly string[]) {
     .refine((v) => v.osm_id !== undefined || v.geometry !== undefined, {
       message: 'a landmark needs either osm_id or geometry',
       path: ['osm_id'],
+    })
+    .superRefine((landmark, ctx) => {
+      landmark.facts?.forEach((fact, index) => {
+        if (fact.source >= landmark.sources.length) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `fact ${index} source must reference a landmark source`,
+            path: ['facts', index, 'source'],
+          });
+        }
+      });
     });
 
   const NameHistory = z.object({
@@ -978,6 +1005,7 @@ export function contentSchemas(languages?: readonly string[]) {
     });
 
   return {
+    LandmarkFact,
     Landmark,
     NameHistory,
     Event,
@@ -993,6 +1021,7 @@ export function contentSchemas(languages?: readonly string[]) {
 }
 
 export const {
+  LandmarkFact,
   Landmark,
   NameHistory,
   Event,
@@ -1007,6 +1036,7 @@ export type Procession = z.infer<typeof Procession>;
 export type Landcover = z.infer<typeof Landcover>;
 export type LandmarkPlan = z.infer<typeof LandmarkPlan>;
 export type LandmarkArt = z.infer<typeof LandmarkArt>;
+export type LandmarkFact = z.infer<typeof LandmarkFact>;
 export type Landmark = z.infer<typeof Landmark>;
 export type NameHistory = z.infer<typeof NameHistory>;
 export type Event = z.infer<typeof Event>;

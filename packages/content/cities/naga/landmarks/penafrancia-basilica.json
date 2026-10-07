@@ -11,6 +11,41 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/23670362",
       "note": "Location and name only. OSM name: \"Minor Basilica and National Shrine of Our Lady of Peñafrancia\"; the short name is its linked Wikipedia title."
+    },
+    {
+      "title": "Naga City Tourism: The Basilica Minore",
+      "url": "https://tourism.naga.gov.ph/attractions/the-basilica-minore-y-santuario-nacional-de-nuestra-senora-de-penafrancia-2/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Construction began in 1976, and the basilica was completed in 1981."
+      },
+      "source": 1,
+      "year": 1976,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The Holy See granted the church the title of minor basilica in 1985."
+      },
+      "source": 1,
+      "year": 1985,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The basilica houses the venerated image of Our Lady of Peñafrancia."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Its stained-glass windows tell the story of Marian devotion in Bicol."
+      },
+      "source": 1
     }
   ]
 }

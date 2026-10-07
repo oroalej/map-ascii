@@ -15,6 +15,41 @@
     {
       "title": "Owner-supplied civic and seminary reference",
       "note": "Undated owner reference. Draft landscaping and important built forms; dimensions and layout are estimated, with no construction date inferred."
+    },
+    {
+      "title": "Naga City Tourism: Plaza Jorge Barlin",
+      "url": "https://tourism.naga.gov.ph/attractions/plaza-jorge-barlin-3/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The plaza honors Jorge Barlin, the first Filipino consecrated as a Roman Catholic bishop."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Barlin was born in Baao, Camarines Sur in 1850."
+      },
+      "source": 2,
+      "year": 1850,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "He was consecrated bishop on June 29, 1906."
+      },
+      "source": 2,
+      "year": 1906,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The monument stands at the corner of Barlin Street, formerly Calle Elcano, and Arana Street."
+      },
+      "source": 2
     }
   ]
 }
