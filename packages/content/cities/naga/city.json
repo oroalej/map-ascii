@@ -1420,6 +1420,26 @@
           "note": "Philippine folklore figures, not claims about particular graves, churches or hospitals. The nightly hours, November window, densities and reactions are illustrative simulation choices."
         }
       ]
+    },
+    "emergency": {
+      "ambulance": {
+        "max": 1,
+        "interval_s": [150, 300],
+        "dwell_s": [20, 40]
+      },
+      "police": {
+        "max": 2,
+        "interval_s": [5, 15],
+        "call_every_s": [60, 180],
+        "call_s": [30, 75]
+      },
+      "fire": {
+        "max": 1,
+        "interval_s": [240, 480],
+        "dwell_s": [25, 45]
+      },
+      "exclude": ["osm:way/222404483", "osm:way/222405532"],
+      "source": "OpenStreetMap building=hospital, amenity=police and amenity=fire_station tags. Illustrative vehicle frequencies and responses, not emergency dispatch data. https://www.openstreetmap.org/"
     }
   },
   "climate": {

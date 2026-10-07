@@ -205,7 +205,7 @@ export class SignalControl {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of stops) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
-      if (stop.signal.key && clearing?.has(stop.signal.key)) continue;
+      if (clearing?.has(stop.signal.key ?? `legacy:${stop.signal.x}/${stop.signal.y}`)) continue;
       const ahead =
         m.dir * (stop.along - progress) -
         ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
@@ -263,5 +263,50 @@ export class SignalControl {
         return false;
     }
     return true;
+  }
+  /** A signal's explicit stop may lie before the junction's geometric admission line. */
+  atStoppingLine(m: Mover, movement: Movement): boolean {
+    const progress = this.along[m.from]! + m.dir * m.d;
+    return (
+      this.stops.get(m.line)?.some((stop) => {
+        if (
+          (stop.dir !== undefined && stop.dir !== m.dir) ||
+          (stop.signal.key && stop.signal.key !== movement.key)
+        )
+          return false;
+        const ahead =
+          m.dir * (stop.along - progress) -
+          ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
+            (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
+            this.perMeter;
+        return Math.abs(ahead) <= 0.5 * this.perMeter;
+      }) ?? false
+    );
+  }
+  /** Older archives lack layout keys; match only the controller at the admitted box. */
+  controllerKeys(movement: Movement): string[] {
+    return this.signals
+      .filter(
+        (s) =>
+          s.key === movement.key ||
+          (!s.key &&
+            Math.hypot(s.x - movement.junction.x, s.y - movement.junction.y) <=
+              (s.radius + 2) * this.perMeter),
+      )
+      .map((s) => s.key ?? `legacy:${s.x}/${s.y}`);
+  }
+  controllerRadius(movement: Movement): number {
+    return Math.max(
+      0,
+      ...this.signals
+        .filter(
+          (s) =>
+            s.key === movement.key ||
+            (!s.key &&
+              Math.hypot(s.x - movement.junction.x, s.y - movement.junction.y) <=
+                (s.radius + 2) * this.perMeter),
+        )
+        .map((s) => s.radius),
+    );
   }
 }

@@ -2,6 +2,8 @@ import type { SimulationSeason } from './seasonal-simulation';
 import * as Comlink from 'comlink';
 import type {
   CameraState,
+  EmergencyConfig,
+  EmergencyData,
   EventTiming,
   ProcessionRoute,
   ShopSchedule,
@@ -54,6 +56,8 @@ export type FrameResult = {
 };
 export type LifeInit = {
   folklore?: RuntimeFolklore;
+  emergencyConfig?: EmergencyConfig;
+  emergency?: EmergencyData;
   seasons?: readonly SimulationSeason[];
   shopSchedule?: ShopSchedule;
   itemInspection?: boolean;
@@ -69,12 +73,16 @@ export type SyncTile = Omit<LifeTile, 'life'> & { life?: LifeGeometry };
 
 export function configureLifeWorld(
   world: LifeWorld,
-  options: Pick<LifeInit, 'processions' | 'seasons' | 'shopSchedule' | 'folklore'>,
+  options: Pick<
+    LifeInit,
+    'processions' | 'seasons' | 'shopSchedule' | 'folklore' | 'emergencyConfig' | 'emergency'
+  >,
 ) {
   world.setProcessions(options.processions);
   world.setSeasons(options.seasons ?? []);
   world.setShopSchedule(options.shopSchedule);
   world.setFolklore(options.folklore);
+  world.configureEmergency(options.emergencyConfig, options.emergency);
 }
 
 /** Shared synchronous execution keeps the fallback's order and arguments identical. */
@@ -209,6 +217,9 @@ export function createLifeWorkerApi(
     },
     setProcessions(routes: readonly ProcessionRoute[]) {
       world.setProcessions(routes);
+    },
+    setEmergency(data?: EmergencyData) {
+      world.setEmergency(data);
     },
     setLive(id: string | undefined, progress?: number, occurrence?: string) {
       world.setLive(id, progress, occurrence);

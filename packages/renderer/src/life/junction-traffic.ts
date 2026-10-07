@@ -1,6 +1,7 @@
 import { metricFrame } from './frames';
 import { VEHICLES } from './vehicles';
 import { COS20, JUNCTION, kinematicsOf } from './config';
+import { cruise } from './driving';
 import type { JunctionTable, Movement } from './junctions';
 import type { Mover, TileLife } from './simulate';
 
@@ -150,7 +151,8 @@ export class JunctionTraffic {
             VEHICLES[m.vehicle!].length / 2,
         ),
         v = Math.max(0, (m.v ?? m.speed) / life.perMeter),
-        speed = Math.max(v, m.speed / life.perMeter),
+        // Dry derived cruise is conservative in rain; observed velocity covers deceleration.
+        speed = Math.max(v, cruise(m, false) / life.perMeter),
         accel = kinematicsOf(m.vehicle).accel,
         accelerating = (speed - v) / accel,
         acceleratingDistance = ((v + speed) * accelerating) / 2;

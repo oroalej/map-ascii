@@ -5,6 +5,7 @@ import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
   type RuntimeCityLife,
+  type EmergencyData,
   type RuntimeDialogueCatalog,
   type CityMeta,
   type ClimateConfig,
@@ -12,7 +13,7 @@ import {
   type TrafficMix,
 } from '@atlas/shared';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { isCityMeta, isCityProcessions } from '@/lib/guards';
+import { isCityMeta, isCityProcessions, isCityEmergency } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { SMALL_SCREEN } from '@/lib/screen';
@@ -67,6 +68,25 @@ async function loadProcessions(slug: string): Promise<readonly ProcessionRoute[]
 }
 
 const EMPTY_PROCESSIONS: readonly ProcessionRoute[] = [];
+function useCityEmergency(slug: string, configured: boolean): EmergencyData | undefined {
+  const [state, setState] = useState<{ slug: string; data?: EmergencyData }>({ slug });
+  useEffect(() => {
+    if (!configured) return;
+    const abort = new AbortController();
+    void fetch(`/tiles/${slug}.emergency.json`, { signal: abort.signal })
+      .then(async (response) => {
+        if (!response.ok) return undefined;
+        const value: unknown = await response.json();
+        return isCityEmergency(value) ? value : undefined;
+      })
+      .catch(() => undefined)
+      .then((data) => {
+        if (!abort.signal.aborted) setState({ slug, data });
+      });
+    return () => abort.abort();
+  }, [slug, configured]);
+  return configured && state.slug === slug ? state.data : undefined;
+}
 function useCityProcessions(slug: string): readonly ProcessionRoute[] {
   const [state, setState] = useState({ slug, routes: EMPTY_PROCESSIONS });
   useEffect(() => {
@@ -136,6 +156,19 @@ export function AtlasCanvas({
   const metaState = useCityMeta(slug);
   const meta = metaState.status === 'ready' ? metaState.meta : null;
   const processions = useCityProcessions(slug);
+  const emergencyConfig = cityLife?.emergency;
+  const emergency = useCityEmergency(
+    slug,
+    !!(
+      emergencyConfig?.ambulance?.max ||
+      emergencyConfig?.police?.max ||
+      emergencyConfig?.fire?.max
+    ),
+  );
+  const emergencyRef = useRef(emergency);
+  useEffect(() => {
+    emergencyRef.current = emergency;
+  }, [emergency]);
   const atlasInstance = useAtlasInstance((state) => state.atlas);
   const level = useAtlasStore((s) => (s.camera ? zoomLevel(s.camera.zoom) : null));
   const subdivision = useUiStore((s) => s.subdivision);
@@ -147,6 +180,9 @@ export function AtlasCanvas({
   useEffect(() => {
     atlasInstance?.setProcessions(processions);
   }, [atlasInstance, processions]);
+  useEffect(() => {
+    atlasInstance?.setEmergency(emergency);
+  }, [atlasInstance, emergency]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -175,6 +211,7 @@ export function AtlasCanvas({
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     const atlas = createAtlas(canvas, {
+      emergency: emergencyRef.current,
       lifeHoverPause,
       quality,
       utilities: { derive: utilitiesDerived },
