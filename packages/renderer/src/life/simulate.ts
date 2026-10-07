@@ -952,6 +952,7 @@ export class TileLife {
   private readonly carriedReady = (movement: Movement) =>
     this.junctionAllowed(movement, this.junctionRoom);
   private readonly trafficGroups = new Map<number, number[]>();
+  private roadRearReachM = 0;
   private urgentCount = 0;
   private readonly emergencyYielders = new Map<
     Mover,
@@ -1412,6 +1413,8 @@ export class TileLife {
   private readonly followingEnvelopes: { length: number; width: number }[] = [];
   private readonly followingEnvelopeEpochs: number[] = [];
   private followingEnvelopeEpoch = 0;
+  private readonly followingManeuverOffsets: number[] = [];
+  private readonly followingManeuverEpochs: number[] = [];
   /** Borrowed only by the synchronous physical query; generator/cache results remain detached. */
   private readonly straightSegments: PedestrianSegment[] = [
     { x: 0, y: 0, hx: 1, hy: 0, length: 0, ahead: 0, line: 0 },
@@ -4842,12 +4845,24 @@ export class TileLife {
       this.followTargets = new Float64Array(size);
     }
     for (const group of this.trafficGroups.values()) group.length = 0;
+    this.roadRearReachM = 0;
     this.urgentCount = 0;
     this.emergencyYielders.clear();
     this.emergencyOffsets.clear();
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       if (!m.vehicle || !active(m)) continue;
+      if (m.kind === 'vehicle') {
+        // Include a possible burst/call start and residual accepted speed before later movers step.
+        const velocity = Math.max(m.speed * DRIVE.rush.pace[1], m.v ?? m.speed) / pm;
+        const spec = VEHICLES[m.vehicle];
+        this.roadRearReachM = Math.max(
+          this.roadRearReachM,
+          FOLLOW.minGap +
+            velocity ** 2 / (2 * kinematicsOf(m.vehicle).brake) +
+            (spec.length + spec.width) / 2,
+        );
+      }
       if (isUrgent(m)) this.urgentCount++;
       this.prepareTurn(m, i);
       if (this.junctionIndex.hasLinked) this.prepareSignalRoute(m);
@@ -5087,7 +5102,7 @@ export class TileLife {
     const cursor = { ...m, chosenLane: state.target, lat: undefined, maneuver: undefined };
     const normal = this.offsetOf(cursor, m);
     if (state.kind !== 'filter' || state.corridor === undefined) return normal;
-    const layout = laneLayout(this.roadWidth(m.line), this.geo.oneway?.[m.line] ?? 0);
+    const layout = this.directionalLanes(m.line);
     return normal + layout.start + layout.span * state.corridor - this.mergeLane(cursor);
   }
 
@@ -5136,7 +5151,8 @@ export class TileLife {
     const state = m.maneuver;
     if (!state) return;
     if (state.kind === 'filter') return;
-    if (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 || m.latYaw !== undefined)
+    // Completion and retained displacement share the continuity numerical-noise tolerance.
+    if (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-8 || m.latYaw !== undefined)
       return;
     const accepted = this.offsetOf(m);
     m.chosenLane = state.target;
@@ -5166,7 +5182,7 @@ export class TileLife {
   }
 
   /** Project the accepted physical body onto its current travel axes. */
-  private roadEnvelope(m: Mover, out = { length: 0, width: 0 }) {
+  private roadEnvelope(m: Mover, out = { length: 0, width: 0 }, future?: number) {
     const spec = VEHICLES[m.vehicle!],
       pose = this.pose(m, this.envelopePose);
     const length = spec.length;
@@ -5174,7 +5190,8 @@ export class TileLife {
     const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
     const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
     const lateral =
-      !!m.maneuver && (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
+      !!m.maneuver &&
+      (Math.abs((future ?? this.maneuverOffset(m)) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
     out.length = Math.max(
       (along * length + across * width) / 2,
       lateral ? (Math.cos(Math.PI / 12) * length + Math.sin(Math.PI / 12) * width) / 2 : 0,
@@ -5196,51 +5213,123 @@ export class TileLife {
       const other = this.movers[index]!;
       if (other === m || other.line !== m.line || other.dir !== m.dir) continue;
       const separation = (other.dir * this.along[other.from]! + other.d) / this.perMeter - progress;
-      const peerVelocity =
-        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
-      const required =
-        FOLLOW.minGap +
-        (separation >= 0
-          ? continuing
-            ? Math.max(0, (velocity ** 2 - peerVelocity ** 2) / (2 * kinematicsOf(m.vehicle).brake))
-            : FOLLOW.headway * velocity
-          : Math.max(
-              0,
-              (peerVelocity ** 2 - velocity ** 2) / (2 * kinematicsOf(other.vehicle).brake),
-            ));
-      const spec = VEHICLES[other.vehicle!];
-      // A projected half-length cannot exceed half the sum of the physical sides at any yaw.
-      // This bounds the exact gap inequalities before constructing a distant actor's pose.
-      if (Math.abs(separation) > required + body.length + (spec.length + spec.width) / 2 + 1e-6)
-        continue;
-      const offset = this.offsetOf(other),
-        peer = this.roadEnvelope(other);
-      const future = other.maneuver ? this.maneuverOffset(other) : offset;
-      const lateral = Math.max(
-        Math.min(at, target) - Math.max(offset, future),
-        Math.min(offset, future) - Math.max(at, target),
-      );
-      if (lateral >= body.width + peer.width + FOLLOW.roadGap) continue;
-      const gap = Math.abs(separation) - body.length - peer.length;
-      if (gap < FOLLOW.minGap) return false;
-      if (separation >= 0) {
-        if (!continuing && gap + 1e-8 < FOLLOW.minGap + FOLLOW.headway * velocity) return false;
-        const lead =
-          this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
-        if (
-          continuing &&
-          approach(gap - FOLLOW.minGap, lead, kinematicsOf(m.vehicle).brake) + 1e-8 < velocity
-        )
-          return false;
-      } else {
-        const rearSpeed =
-          this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
-        if (
-          approach(gap - FOLLOW.minGap, velocity, kinematicsOf(other.vehicle).brake) + 1e-8 <
-          rearSpeed
-        )
-          return false;
+      if (!this.roadGapClear(m, other, separation, at, target, body, velocity, continuing))
+        return false;
+    }
+    // All passed junctions matter, including interior vertices and routes the mover did not take.
+    // The road population's stopping/body bound excludes distant approaches before pose queries.
+    const exit = m.line * 2 + (m.dir === 1 ? 0 : 1);
+    const start = m.dir === 1 ? this.first(m.line) : this.last(m.line);
+    for (let vertex = m.from; m.dir === 1 ? vertex >= start : vertex <= start; vertex -= m.dir) {
+      const travelled = (m.dir * (this.along[m.from]! - this.along[vertex]!) + m.d) / this.perMeter;
+      if (travelled > body.length + this.roadRearReachM + 1e-6) break;
+      for (const arm of this.roadVertices.get(this.endKey(vertex)) ?? []) {
+        if (arm.code >> 1 === m.line) continue;
+        for (const index of this.trafficGroups.get(arm.code) ?? []) {
+          const other = this.movers[index]!;
+          if ((other.routing?.plan?.exit ?? other.next) !== exit) continue;
+          const remaining =
+            (other.dir * (this.along[arm.vertex]! - this.along[other.from]!) - other.d) /
+            this.perMeter;
+          if (remaining < -JUNCTION.insideToleranceM) continue;
+          if (
+            !this.roadGapClear(
+              m,
+              other,
+              -remaining - travelled,
+              at,
+              target,
+              body,
+              velocity,
+              continuing,
+              true,
+            )
+          )
+            return false;
+        }
       }
+    }
+    return true;
+  }
+
+  private roadGapClear(
+    m: Mover,
+    other: Mover,
+    separation: number,
+    at: number,
+    target: number,
+    body: { length: number; width: number },
+    velocity: number,
+    continuing: boolean,
+    incoming = false,
+  ): boolean {
+    const peerVelocity =
+      this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+    const required =
+      FOLLOW.minGap +
+      (separation >= 0
+        ? continuing
+          ? Math.max(0, (velocity ** 2 - peerVelocity ** 2) / (2 * kinematicsOf(m.vehicle).brake))
+          : FOLLOW.headway * velocity
+        : Math.max(
+            0,
+            (peerVelocity ** 2 - velocity ** 2) / (2 * kinematicsOf(other.vehicle).brake),
+          ));
+    const spec = VEHICLES[other.vehicle!];
+    // A projected half-length cannot exceed half the sum of the physical sides at any yaw.
+    // This bounds the exact gap inequalities before constructing a distant actor's pose.
+    if (Math.abs(separation) > required + body.length + (spec.length + spec.width) / 2 + 1e-6)
+      return true;
+    const peerPose = incoming ? this.pose(other, this.leaderPose) : undefined;
+    const offset = peerPose
+        ? ((peerPose.x - m.x) * -m.hy + (peerPose.y - m.y) * m.hx) / this.perMeter
+        : this.offsetOf(other),
+      peer = this.roadEnvelope(other);
+    let future = other.maneuver ? this.maneuverOffset(other) : offset;
+    if (incoming) {
+      const state = other.maneuver;
+      future = state
+        ? this.vehicleLane({ ...other, chosenLane: state.target }, m.line)
+        : this.vehicleLane(other, m.line) + (other.lat ?? 0);
+      if (state?.kind === 'filter' && state.corridor !== undefined) {
+        const layout = this.directionalLanes(m.line);
+        future =
+          layout.count === 1
+            ? layout.start + layout.span - spec.width / 2 - ROAD_MARGIN_M
+            : layout.start + layout.span * state.corridor;
+      }
+      future += other.roadShift ?? 0;
+      const along = Math.abs(other.hx * m.hx + other.hy * m.hy),
+        across = Math.abs(other.hy * m.hx - other.hx * m.hy);
+      const length = peer.length,
+        width = peer.width;
+      peer.length = Math.max(length, along * length + across * width);
+      peer.width = Math.max(width, along * width + across * length);
+    }
+    const lateral = Math.max(
+      Math.min(at, target) - Math.max(offset, future),
+      Math.min(offset, future) - Math.max(at, target),
+    );
+    if (lateral >= body.width + peer.width + FOLLOW.roadGap) return true;
+    const gap = Math.abs(separation) - body.length - peer.length;
+    if (gap < FOLLOW.minGap) return false;
+    if (separation >= 0) {
+      if (!continuing && gap + 1e-8 < FOLLOW.minGap + FOLLOW.headway * velocity) return false;
+      const lead =
+        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+      if (
+        continuing &&
+        approach(gap - FOLLOW.minGap, lead, kinematicsOf(m.vehicle).brake) + 1e-8 < velocity
+      )
+        return false;
+    } else {
+      const rearSpeed =
+        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+      if (
+        approach(gap - FOLLOW.minGap, velocity, kinematicsOf(other.vehicle).brake) + 1e-8 <
+        rearSpeed
+      )
+        return false;
     }
     return true;
   }
@@ -5365,7 +5454,7 @@ export class TileLife {
             target: m.chosenLane ?? m.lane,
             returning: true,
           };
-          m.laneSignal = original < at ? 'left' : 'right';
+          if (Math.abs(original - at) > 1e-6) m.laneSignal = original < at ? 'left' : 'right';
         } else if (!state.returning) m.maneuver = { ...state, returning: true };
       } else if (state.kind === 'return' && !this.roadGapSafe(m, original, true)) {
         m.maneuver = { ...state, kind: 'filter', returning: true };
@@ -5530,6 +5619,7 @@ export class TileLife {
     j: number,
     lane: number,
     envelope: (index: number) => { length: number; width: number },
+    futureOffset: (index: number) => number,
   ): boolean {
     const { movers, offsets } = this;
     const a = movers[i]!,
@@ -5538,8 +5628,8 @@ export class TileLife {
     // Keep a following gap throughout that maneuver, including both lateral directions.
     if (a.roadShift !== undefined || b.roadShift !== undefined) return true;
     if (a.maneuver || b.maneuver) {
-      const futureA = a.maneuver ? this.maneuverOffset(a) : lane;
-      const futureB = b.maneuver ? this.maneuverOffset(b) : offsets[j]!;
+      const futureA = a.maneuver ? futureOffset(i) : lane;
+      const futureB = b.maneuver ? futureOffset(j) : offsets[j]!;
       const gap = Math.max(
         Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
         Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
@@ -5590,10 +5680,18 @@ export class TileLife {
   ): Float64Array {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
     const epoch = ++this.followingEnvelopeEpoch;
+    const futureOffset = (index: number) => {
+      if (this.followingManeuverEpochs[index] !== epoch) {
+        this.followingManeuverOffsets[index] = this.maneuverOffset(movers[index]!);
+        this.followingManeuverEpochs[index] = epoch;
+      }
+      return this.followingManeuverOffsets[index]!;
+    };
     const envelope = (index: number) => {
       const out = (this.followingEnvelopes[index] ??= { length: 0, width: 0 });
       if (this.followingEnvelopeEpochs[index] !== epoch) {
-        this.roadEnvelope(movers[index]!, out);
+        const m = movers[index]!;
+        this.roadEnvelope(m, out, m.maneuver ? futureOffset(index) : undefined);
         this.followingEnvelopeEpochs[index] = epoch;
       }
       return out;
@@ -5713,7 +5811,7 @@ export class TileLife {
             ((isUrgent(a) && this.emergencyYielders.get(b)?.source === a) ||
               (isUrgent(b) && this.emergencyYielders.get(a)?.source === b))
           ) &&
-          this.mergingOverlap(i, j, lane, envelope))
+          this.mergingOverlap(i, j, lane, envelope, futureOffset))
       );
     };
     for (const group of this.trafficGroups.values())
@@ -7034,6 +7132,8 @@ export class TileLife {
         }
         if (
           m.kind === 'vehicle' &&
+          // An unsafe lateral return holds its accepted body until the sweep opens;
+          // ordinary give-up recovery would abandon that reserved pose mid-maneuver.
           !m.maneuver &&
           m.waiting >= JUNCTION.giveUp &&
           !intentionalHold &&

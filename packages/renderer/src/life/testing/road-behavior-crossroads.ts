@@ -32,6 +32,7 @@ export type CrossroadsMetrics = {
   stopViolations: number;
   gapViolations: number;
   windows: number[][];
+  partialWindow: number[];
   errors: string[];
 };
 export type CrossroadsObserver = (life: TileLife, before: readonly Mover[]) => void;
@@ -182,6 +183,7 @@ export function* crossroadsSteps(
     stopViolations: 0,
     gapViolations: 0,
     windows: [],
+    partialWindow: [],
     errors: [],
   };
   const guarded = world as unknown as {
@@ -307,7 +309,10 @@ export function* crossroadsSteps(
       crossed.clear();
     }
     // Thirty-second chunks keep each unit test cheap without restarting the continuous 180 s run.
-    if ((frame + 1) % 900 === 0) yield result;
+    if ((frame + 1) % 900 === 0) {
+      result.partialWindow = [...crossed].sort();
+      yield result;
+    }
   }
   return result;
 }

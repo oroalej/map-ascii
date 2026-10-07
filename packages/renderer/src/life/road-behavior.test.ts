@@ -3,7 +3,7 @@ import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, TileLife, type Mover, type GroundGuard } from './simulate';
 import { worldTiles } from './testing/scenarios';
 import { activityLevels, laneOffset } from './config';
-import { FOLLOW, LANE } from './config';
+import { FOLLOW, LANE, kinematicsOf } from './config';
 import { VEHICLES } from './vehicles';
 import { bodiesOverlap } from './occupancy';
 import { JunctionTable } from './junctions';
@@ -53,6 +53,62 @@ function road(dir: 1 | -1 = 1, width = 9.6, oneway: 0 | 1 | -1 = dir) {
 }
 
 describe('accepted road lateral state', () => {
+  it('keeps a partially refused tiny return active until its accepted residual is cleared', () => {
+    const { life, m } = road();
+    m.lat = 8e-7;
+    m.maneuver = { kind: 'return', target: m.lane, returning: true };
+    m.laneSignal = 'left';
+    const guard: GroundGuard = (owner, previous) =>
+      !('kind' in owner && previous && 'kind' in previous) ||
+      Math.abs((owner.lat ?? 0) - (previous.lat ?? 0)) <= 4.01e-7;
+    life.step(0.1, undefined, undefined, undefined, undefined, guard);
+    expect(Math.abs(m.lat ?? 0)).toBeGreaterThan(1e-8);
+    expect(m.maneuver?.kind).toBe('return');
+    const preview = life.projectFrom(m, life)!;
+    expect(Math.abs(preview.lat ?? 0)).toBeGreaterThan(1e-8);
+    expect(preview.maneuver?.kind).toBe('return');
+    expect(life.offsetOf(preview)).toBeCloseTo(life.offsetOf(m), 8);
+    for (let frame = 0; frame < 20 && m.maneuver; frame++)
+      life.step(0.1, undefined, undefined, undefined, undefined, () => true);
+    expect(m.maneuver).toBeUndefined();
+    expect(m.lat).toBeUndefined();
+    expect(m.latYaw).toBeUndefined();
+    expect(m.laneSignal).toBeUndefined();
+  });
+
+  it('computes each prospective maneuver offset once per following pass and refreshes movement queries', () => {
+    const { life, m } = road();
+    m.vehicle = 'motorcycle';
+    m.lat = -1.6;
+    m.maneuver = { kind: 'filter', target: m.lane, corridor: 2 / 3, queueSpeed: 0 };
+    for (let n = 1; n < 20; n++)
+      life.movers.push({
+        ...m,
+        vehicle: 'car',
+        d: m.d + 10 * n * pm,
+        x: m.x + 10 * n * pm,
+        maneuver: undefined,
+        lat: undefined,
+      });
+    life.prepareTraffic(() => true);
+    const queries = life as unknown as {
+      maneuverOffset(m: Mover): number;
+      followLimits(dt: number, table: JunctionTable): Float64Array;
+      roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+    };
+    const sampled = vi.spyOn(queries, 'maneuverOffset');
+    queries.followLimits(1 / 30, new JunctionTable());
+    expect(sampled.mock.calls.filter(([owner]) => owner === m)).toHaveLength(1);
+    sampled.mockClear();
+    m.maneuver = { ...m.maneuver, corridor: 1 / 3 };
+    queries.followLimits(1 / 30, new JunctionTable());
+    expect(sampled.mock.calls.filter(([owner]) => owner === m)).toHaveLength(1);
+    sampled.mockClear();
+    queries.roadGapSafe(m, life.offsetOf(m), true);
+    expect(sampled.mock.calls.some(([owner]) => owner === m)).toBe(true);
+    sampled.mockRestore();
+  });
+
   it('samples each following envelope once and leaves movement-time sweep queries fresh', () => {
     const { life, m } = road();
     m.chosenLane = 0.5;
@@ -320,6 +376,166 @@ describe('accepted road lateral state', () => {
     expect(m.maneuver?.returning).toBe(true);
     expect(m.lat).toBe(-3.2);
   });
+
+  it('rejects a strictly mid-sweep peer with physically clear source and destination', () => {
+    const { life, m } = road();
+    m.lat = -6.4;
+    m.maneuver = { kind: 'return', target: m.lane, returning: true };
+    const peer = { ...m, lane: 0.5, lat: undefined, maneuver: undefined };
+    life.movers.push(peer);
+    life.prepareTraffic(() => true);
+    const queries = life as unknown as {
+      roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+      maneuverOffset(m: Mover): number;
+    };
+    const source = life.offsetOf(m),
+      target = queries.maneuverOffset(m),
+      middle = life.offsetOf(peer);
+    const clearance = VEHICLES.car.width + FOLLOW.roadGap;
+    expect(Math.abs(source - middle)).toBeGreaterThan(clearance);
+    expect(Math.abs(target - middle)).toBeGreaterThan(clearance);
+    expect(queries.roadGapSafe(m, target, true)).toBe(false);
+    life.movers.pop();
+    life.prepareTraffic(() => true);
+    expect(queries.roadGapSafe(m, target, true)).toBe(true);
+  });
+});
+
+function splitTraffic(dir: 1 | -1, rearDistance = 82, differentIncoming = false, interior = false) {
+  const split = dir === 1 ? 200 * pm : 4095 - 200 * pm;
+  const incoming =
+    dir === 1
+      ? [
+          { x: 0, y: 2000 },
+          { x: split, y: 2000 },
+        ]
+      : [
+          { x: split, y: 2000 },
+          { x: 4095, y: 2000 },
+        ];
+  const outgoing = interior
+    ? [
+        { x: 0, y: 2000 },
+        { x: split, y: 2000 },
+        { x: 4095, y: 2000 },
+      ]
+    : dir === 1
+      ? [
+          { x: split, y: 2000 },
+          { x: 4095, y: 2000 },
+        ]
+      : [
+          { x: 0, y: 2000 },
+          { x: split, y: 2000 },
+        ];
+  const b = new LifeBuilder();
+  b.line(incoming, LifeLine.roadMajor, 6.4, 1, dir);
+  b.line(outgoing, LifeLine.roadMajor, 6.4, 2, dir);
+  if (differentIncoming) b.line(incoming, LifeLine.roadMajor, 6.4, 3, dir);
+  const life = new TileLife(tile, b.finish(), 42);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  (life as unknown as { rushRng: () => number }).rushRng = () => 1;
+  const m = road(dir).m;
+  Object.assign(m, {
+    line: 1,
+    from: interior ? 3 : dir === 1 ? 2 : 3,
+    d: pm,
+    x: split + dir * pm,
+    came: interior ? undefined : dir === 1 ? 1 : 0,
+    speed: 8 * pm,
+    v: 0,
+  });
+  const rear: Mover = {
+    ...m,
+    line: differentIncoming ? 2 : 0,
+    from: (differentIncoming ? 4 : 0) + (dir === 1 ? 0 : 1),
+    d: rearDistance * pm,
+    x: dir === 1 ? rearDistance * pm : 4095 - rearDistance * pm,
+    lane: 0.1,
+    speed: 10 * pm,
+    v: 10 * pm,
+    came: undefined,
+    next: dir === 1 ? 2 : 3,
+    routing: { seed: 123, turns: 0 },
+  };
+  const lead: Mover = { ...m, vehicle: 'truck', speed: 0, v: 0 };
+  lead.d = (1 + (VEHICLES.car.length + VEHICLES.truck.length) / 2 + FOLLOW.minGap + 0.005) * pm;
+  lead.x = split + dir * lead.d;
+  life.movers.push(m, rear, lead);
+  return { life, m, rear };
+}
+
+describe('prospective gaps across a road split', () => {
+  it.each([1, -1] as const)(
+    'checks incoming traffic at a passed interior vertex in direction %s',
+    (dir) => {
+      const { life, m, rear } = splitTraffic(dir, 198, false, true);
+      life.prepareTraffic(() => true);
+      const queries = life as unknown as {
+        roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+        laneTargetOffset(m: Mover, target: number): number;
+      };
+      const target = queries.laneTargetOffset(m, 0.25);
+      expect(queries.roadGapSafe(m, target, false)).toBe(false);
+      expect(queries.roadGapSafe(m, target, true)).toBe(false);
+      rear.d = 140 * pm;
+      rear.x = dir === 1 ? rear.d : 4095 - rear.d;
+      life.prepareTraffic(() => true);
+      expect(queries.roadGapSafe(m, target, false)).toBe(true);
+    },
+  );
+
+  it("reserves an incoming peer's destination sweep while its accepted lane is clear", () => {
+    const { life, m, rear } = splitTraffic(1, 193, true);
+    life.movers.pop();
+    life.prepareTraffic(() => true);
+    const queries = life as unknown as {
+      roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+    };
+    const target = life.offsetOf(m);
+    expect(queries.roadGapSafe(m, target, true)).toBe(true);
+    rear.maneuver = { kind: 'lane', target: 0.75 };
+    expect(queries.roadGapSafe(m, target, true)).toBe(false);
+  });
+
+  it.each([1, -1] as const)(
+    'checks all incoming routes for entry and return in direction %s',
+    (dir) => {
+      const { life, m, rear } = splitTraffic(dir, 198, true);
+      life.prepareTraffic(() => true);
+      const queries = life as unknown as {
+        roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+        laneTargetOffset(m: Mover, target: number): number;
+      };
+      const target = queries.laneTargetOffset(m, 0.25);
+      expect(queries.roadGapSafe(m, target, false)).toBe(false);
+      expect(queries.roadGapSafe(m, target, true)).toBe(false);
+      rear.d = 140 * pm;
+      rear.x = dir === 1 ? rear.d : 4095 - rear.d;
+      life.prepareTraffic(() => true);
+      expect(queries.roadGapSafe(m, target, false)).toBe(true);
+      expect(queries.roadGapSafe(m, target, true)).toBe(true);
+    },
+  );
+
+  it.each([1, -1] as const)(
+    'admits a normally stepped pass without hard braking at a split in direction %s',
+    (dir) => {
+      const { life, m, rear } = splitTraffic(dir);
+      let entered = false;
+      for (let frame = 0; frame < 600; frame++) {
+        const before = rear.v!;
+        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+        expect(before - rear.v!).toBeLessThanOrEqual(
+          (kinematicsOf('car').maxBrake * pm) / 30 + 1e-8,
+        );
+        entered ||= m.maneuver?.kind === 'lane';
+      }
+      expect(entered).toBe(true);
+      expect(life.motionStats.hardCaps).toBe(0);
+    },
+  );
 });
 
 function passing(dir: 1 | -1 = 1) {

@@ -232,7 +232,7 @@ export const JUNCTION = {
 export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
 
 /**
- * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of the roads at least
+ * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of secondary/minor roads at least
  * `minWidth` m wide, in a strip `strip` m wide, one every vehicle length plus `gap` m with
  * `taken` of the places filled; and on `lotTaken` of parking lots' stalls.
  */

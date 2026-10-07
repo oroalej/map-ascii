@@ -72,6 +72,8 @@ export function checkCrossroads(variant: CrossroadsVariant, minimum: number, dur
         expect(result.gapViolations, result.errors.join('\n')).toBe(0);
         expect(result.maxWait).toBeLessThanOrEqual(50);
         expect(result.hardCapFraction).toBeLessThanOrEqual(0.01);
+        // Healthy short fixtures cross some arms before all can complete a full minute.
+        if (result.seconds < 60) expect(result.partialWindow.length).toBeGreaterThan(0);
         for (const arms of result.windows)
           expect(arms).toEqual(variant === 'original' ? [0, 1, 2, 3] : [2, 3]);
         // PRE's movement-only guard wrapper measured 0 original and 1 mixed rejection per minimum.

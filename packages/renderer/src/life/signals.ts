@@ -206,11 +206,7 @@ export class SignalControl {
     for (const stop of stops) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
       if (clearing?.has(stop.signal.key ?? `legacy:${stop.signal.x}/${stop.signal.y}`)) continue;
-      const ahead =
-        m.dir * (stop.along - progress) -
-        ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
-          (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
-          this.perMeter;
+      const ahead = this.stopAhead(m, stop, progress);
       if (ahead < -0.5 * this.perMeter || ahead >= SIGNAL.lookahead * this.perMeter) continue;
       const state = signalState(stop.signal.seed, clock, stop.signal.a < 0)[stop.group];
       const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
@@ -232,14 +228,18 @@ export class SignalControl {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const stop of this.stops.get(m.line) ?? []) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
-      const ahead =
-        m.dir * (stop.along - progress) -
-        ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
-          (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
-          this.perMeter;
+      const ahead = this.stopAhead(m, stop, progress);
       if (ahead >= -0.5 * this.perMeter) room = Math.min(room, Math.max(0, ahead));
     }
     return room;
+  }
+  private stopAhead(m: Mover, stop: Stop, progress: number): number {
+    return (
+      m.dir * (stop.along - progress) -
+      ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
+        (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
+        this.perMeter
+    );
   }
   allows(
     m: Mover,
