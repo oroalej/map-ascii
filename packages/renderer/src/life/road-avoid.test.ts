@@ -69,6 +69,60 @@ function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
 }
 
 describe('terrain-blocked road vehicles', () => {
+  it('steers equivalent seeded and completed-lane actors from the same physical offset', () => {
+    const shifts: number[] = [];
+    for (const chosen of [false, true]) {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 2000 },
+          { x: 4095, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        9.6,
+        1,
+        1,
+      );
+      const { life } = bareRoad(b);
+      life.setLaneTerrain(undefined);
+      const m: Mover = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 50 * pm,
+        x: 50 * pm,
+        y: 2000,
+        hx: 1,
+        hy: 0,
+        speed: 4 * pm,
+        v: 4 * pm,
+        lane: chosen ? 0.9 : 0.5,
+        chosenLane: chosen ? 0.5 : undefined,
+        lat: 0.25,
+        paint: 0,
+        pause: 0,
+        rank: 0,
+        routing: { seed: 123, turns: 0 },
+      };
+      life.movers.push(m);
+      const initial = life.offsetOf(m);
+      let lateralTrials = 0;
+      life.step(0.1, undefined, undefined, undefined, undefined, (owner, before) => {
+        if (!('kind' in owner) || !before || !('kind' in before)) return true;
+        if (owner.roadShift === undefined) return false;
+        lateralTrials++;
+        return owner.roadShift < 0;
+      });
+      expect(lateralTrials).toBeGreaterThan(0);
+      expect(m.roadShift).toBeLessThan(0);
+      expect(initial - life.offsetOf(m)).toBeLessThanOrEqual(ROAD_AVOID.steer * 0.1 + 1e-8);
+      shifts.push(m.roadShift!);
+    }
+    expect(shifts[1]).toBeCloseTo(shifts[0]!);
+  });
+
   it.each([0, 1] as const)('plans around a parked footprint on a road with oneway %s', (oneway) => {
     const point = (x: number, y = 0) => ({ x: 1000 + x * pm, y: 2000 + y * pm });
     const builder = new LifeBuilder();

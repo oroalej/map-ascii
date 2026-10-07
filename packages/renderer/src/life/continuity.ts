@@ -395,24 +395,47 @@ export function projectMover(
       layout.count - 1,
       Math.floor((preview.chosenLane ?? preview.lane) * layout.count),
     );
-    if (
-      preview.maneuver &&
+    const state = preview.maneuver;
+    if (!state) {
+      if (Math.abs(preview.lat) <= 1e-8) preview.lat = undefined;
+      if (preview.lat !== undefined || preview.latYaw !== undefined) {
+        preview.maneuver = {
+          kind: 'return',
+          target: preview.chosenLane ?? preview.lane,
+          returning: true,
+        };
+        if (preview.lat !== undefined) preview.laneSignal = preview.lat > 0 ? 'left' : 'right';
+      }
+    } else if (state.corridor !== undefined) {
+      const boundary =
+        layout.count === 1
+          ? 1
+          : Math.max(1, Math.min(layout.count - 1, Math.round(state.corridor * layout.count)));
+      const fit = target.filterCorridor(preview, {
+        ...state,
+        kind: 'filter',
+        corridor: boundary / layout.count,
+      });
+      preview.maneuver = fit
+        ? { ...fit.maneuver, kind: state.kind }
+        : {
+            ...state,
+            kind: 'return',
+            target: preview.chosenLane ?? preview.lane,
+            corridor: undefined,
+            returning: true,
+          };
+    } else if (
+      state.kind === 'lane' &&
       (layout.count === 1 ||
-        (preview.maneuver.kind === 'lane' &&
-          Math.min(layout.count - 1, Math.floor(preview.maneuver.target * layout.count)) ===
-            chosen))
-    )
+        Math.min(layout.count - 1, Math.floor(state.target * layout.count)) === chosen)
+    ) {
       preview.maneuver = {
-        ...preview.maneuver,
+        ...state,
         kind: 'return',
         target: preview.chosenLane ?? preview.lane,
+        returning: true,
       };
-    else if (preview.maneuver?.kind === 'filter' && preview.maneuver.corridor !== undefined) {
-      const boundary = Math.max(
-        1,
-        Math.min(layout.count - 1, Math.round(preview.maneuver.corridor * layout.count)),
-      );
-      preview.maneuver = { ...preview.maneuver, corridor: boundary / layout.count };
     }
   }
   const pose = target.pose(preview);

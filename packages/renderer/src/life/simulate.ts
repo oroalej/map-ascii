@@ -1303,6 +1303,10 @@ export class TileLife {
   private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly followingPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly leaderPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly envelopePose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly followingEnvelopes: { length: number; width: number }[] = [];
+  private readonly followingEnvelopeEpochs: number[] = [];
+  private followingEnvelopeEpoch = 0;
   /** Borrowed only by the synchronous physical query; generator/cache results remain detached. */
   private readonly straightSegments: PedestrianSegment[] = [
     { x: 0, y: 0, hx: 1, hy: 0, length: 0, ahead: 0, line: 0 },
@@ -4910,6 +4914,27 @@ export class TileLife {
     return normal + layout.start + layout.span * state.corridor - this.mergeLane(cursor);
   }
 
+  /** Complete-rider corridor fit shared by entry and detached continuity previews. */
+  filterCorridor(m: Mover, candidate: RoadManeuver) {
+    if (!m.vehicle || candidate.corridor === undefined) return;
+    const layout = this.directionalLanes(m.line);
+    const target = this.maneuverOffset({ ...m, maneuver: candidate });
+    const half = VEHICLES[m.vehicle].width / 2;
+    const offset = layout.count === 1 ? layout.start + layout.span - half - ROAD_MARGIN_M : target;
+    if (
+      offset - half < layout.start + ROAD_MARGIN_M ||
+      offset + half > layout.start + layout.span - ROAD_MARGIN_M
+    )
+      return;
+    return {
+      offset,
+      maneuver:
+        layout.count === 1
+          ? { ...candidate, corridor: candidate.corridor + (offset - target) / layout.span }
+          : candidate,
+    };
+  }
+
   private tickRoadTimers(m: Mover, dt: number) {
     if (m.laneCooldown !== undefined) m.laneCooldown = Math.max(0, m.laneCooldown - dt);
     if (m.filterRetry !== undefined) m.filterRetry = Math.max(0, m.filterRetry - dt);
@@ -4934,10 +4959,7 @@ export class TileLife {
     const state = m.maneuver;
     if (!state) return;
     if (state.kind === 'filter') return;
-    if (
-      Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 ||
-      Math.abs(m.latYaw ?? 0) > 1e-3
-    )
+    if (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 || m.latYaw !== undefined)
       return;
     const accepted = this.offsetOf(m);
     m.chosenLane = state.target;
@@ -4967,25 +4989,24 @@ export class TileLife {
   }
 
   /** Project the accepted physical body onto its current travel axes. */
-  private roadEnvelope(m: Mover) {
+  private roadEnvelope(m: Mover, out = { length: 0, width: 0 }) {
     const spec = VEHICLES[m.vehicle!],
-      pose = this.pose(m);
+      pose = this.pose(m, this.envelopePose);
     const length = spec.length;
     const width = spec.width;
     const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
     const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
     const lateral =
       !!m.maneuver && (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
-    return {
-      length: Math.max(
-        (along * length + across * width) / 2,
-        lateral ? (Math.cos(Math.PI / 12) * length + Math.sin(Math.PI / 12) * width) / 2 : 0,
-      ),
-      width: Math.max(
-        (along * width + across * length) / 2,
-        lateral ? (Math.cos(Math.PI / 12) * width + Math.sin(Math.PI / 12) * length) / 2 : 0,
-      ),
-    };
+    out.length = Math.max(
+      (along * length + across * width) / 2,
+      lateral ? (Math.cos(Math.PI / 12) * length + Math.sin(Math.PI / 12) * width) / 2 : 0,
+    );
+    out.width = Math.max(
+      (along * width + across * length) / 2,
+      lateral ? (Math.cos(Math.PI / 12) * width + Math.sin(Math.PI / 12) * length) / 2 : 0,
+    );
+    return out;
   }
 
   /** Full lateral sweep plus both longitudinal gaps, in metres and m/s. */
@@ -5205,20 +5226,10 @@ export class TileLife {
         corridor,
         queueSpeed: velocity,
       };
-      const target = this.maneuverOffset({ ...m, maneuver: candidate });
+      const fit = this.filterCorridor(m, candidate);
+      if (!fit) continue;
       const half = VEHICLES[m.vehicle].width / 2;
-      // A single-lane edge needs enough road around the complete rider, not just its centre.
-      const offset =
-        layout.count === 1 ? layout.start + layout.span - half - ROAD_MARGIN_M : target;
-      const chosen =
-        layout.count === 1
-          ? { ...candidate, corridor: 1 + (offset - target) / layout.span }
-          : candidate;
-      if (
-        offset - half < layout.start + ROAD_MARGIN_M ||
-        offset + half > layout.start + layout.span - ROAD_MARGIN_M
-      )
-        continue;
+      const { offset, maneuver: chosen } = fit;
       let clear = true;
       for (const j of group) {
         const peer = this.movers[j]!;
@@ -5273,9 +5284,11 @@ export class TileLife {
       )
         return;
       const preference = m.chosenLane ?? m.lane;
-      if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true))
+      if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true)) {
         m.maneuver = { ...state, kind: 'return', target: preference, returning: true };
-      else if (!state.returning) m.maneuver = { ...state, returning: true };
+        m.laneSignal = this.laneTargetOffset(m, preference) < this.offsetOf(m) ? 'left' : 'right';
+      } else if (state.kind === 'return' || !state.returning)
+        m.maneuver = { ...state, kind: 'lane', returning: true };
       return;
     }
     if (this.roadSourceBlocked(index)) {
@@ -5333,7 +5346,12 @@ export class TileLife {
     }
   }
 
-  private mergingOverlap(i: number, j: number, lane: number): boolean {
+  private mergingOverlap(
+    i: number,
+    j: number,
+    lane: number,
+    envelope: (index: number) => { length: number; width: number },
+  ): boolean {
     const { movers, offsets } = this;
     const a = movers[i]!,
       b = movers[j]!;
@@ -5347,8 +5365,7 @@ export class TileLife {
         Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
         Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
       );
-      if (gap < this.roadEnvelope(a).width + this.roadEnvelope(b).width + FOLLOW.roadGap)
-        return true;
+      if (gap < envelope(i).width + envelope(j).width + FOLLOW.roadGap) return true;
     }
     const mergingA = this.scenes.merging(a),
       mergingB = this.scenes.merging(b);
@@ -5393,6 +5410,15 @@ export class TileLife {
     diagnostics?: LifeDiagnostics,
   ): Float64Array {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
+    const epoch = ++this.followingEnvelopeEpoch;
+    const envelope = (index: number) => {
+      const out = (this.followingEnvelopes[index] ??= { length: 0, width: 0 });
+      if (this.followingEnvelopeEpochs[index] !== epoch) {
+        this.roadEnvelope(movers[index]!, out);
+        this.followingEnvelopeEpochs[index] = epoch;
+      }
+      return out;
+    };
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = m.speed;
@@ -5421,10 +5447,7 @@ export class TileLife {
         m.lat !== undefined ||
         leader.lat !== undefined
       )
-        gap = Math.min(
-          gap,
-          separation - this.roadEnvelope(m).length - this.roadEnvelope(leader).length,
-        );
+        gap = Math.min(gap, separation - envelope(i).length - envelope(j).length);
       if (
         m.roadShift !== undefined ||
         leader.roadShift !== undefined ||
@@ -5475,13 +5498,13 @@ export class TileLife {
           b.maneuver ||
           a.lat !== undefined ||
           b.lat !== undefined)
-          ? this.roadEnvelope(a).width + this.roadEnvelope(b).width
+          ? envelope(i).width + envelope(j).width
           : (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
       return (
         Math.abs(lane - offsets[j]!) <
           width +
             (a.kind === 'vehicle' && b.kind === 'vehicle' ? FOLLOW.roadGap : -FOLLOW.squeeze) ||
-        (curbScenes && this.mergingOverlap(i, j, lane))
+        (curbScenes && this.mergingOverlap(i, j, lane, envelope))
       );
     };
     for (const group of this.trafficGroups.values())
@@ -6162,12 +6185,17 @@ export class TileLife {
         m.roadShift -= Math.sign(m.roadShift) * change;
         if (Math.abs(m.roadShift) < 1e-8) m.roadShift = undefined;
       }
-      // A stopped queue permits a guarded sideways step within the rider's speed budget.
-      // Its longitudinal following/signal cap still determines forwardDistance below.
+      // A safe return can straighten at a stop without advancing past its forward cap.
+      // Unsafe returning lanes retain their accepted pose until the full sweep opens.
       const lateralBudget =
         before.maneuver?.corridor !== undefined
           ? Math.max(distance, this.filterCap(before) * dt)
-          : distance;
+          : before.maneuver?.kind === 'return' ||
+              (before.maneuver?.kind === 'lane' &&
+                !before.maneuver.returning &&
+                Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8)
+            ? Math.max(distance, before.speed * dt)
+            : distance;
       const lateral = this.proposeLateral(m, before, lateralBudget, dt);
       if (walking) {
         if (m.momentFacing) faceGroup(m, m.hx, m.hy);
@@ -6208,7 +6236,7 @@ export class TileLife {
       terrainRejected = false;
 
       if (m.kind === 'vehicle' || walking) {
-        this.trialYaw(m, before, moved);
+        this.trialYaw(m, before, moved, lateralBudget, dt);
         let fits = this.motionFits(
           m,
           before,
@@ -6380,10 +6408,11 @@ export class TileLife {
               laneOffset(
                 this.roadWidth(before.line),
                 spec.width,
-                before.lane,
+                before.chosenLane ?? before.lane,
                 spec.curb,
                 this.geo.oneway?.[before.line] ?? 0,
-              );
+              ) -
+              (before.lat ?? 0);
             if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
               const behind = this.cornerWithin(before, before.from, before.d, m);
               const remaining = this.segment(before.from, before.from + before.dir) - before.d;
@@ -6442,7 +6471,13 @@ export class TileLife {
                 true,
                 this.enteredExits,
               );
-            this.trialYaw(m, before, moved);
+            this.trialYaw(
+              m,
+              before,
+              moved,
+              lateralBudget * Math.max(0, share!),
+              dt * Math.max(0, share!),
+            );
             if (side && !walking && !this.bodyCentresOwned(m, pass?.owns)) continue;
             if (
               (fits = this.motionFits(
@@ -6735,14 +6770,44 @@ export class TileLife {
   }
 
   /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
-  private trialYaw(m: Mover, before: Mover, moved: number) {
+  private trialYaw(m: Mover, before: Mover, moved: number, lateralBudget = 0, lateralDt = 0) {
     if (m.kind === 'vehicle' && (m.maneuver || before.latYaw !== undefined)) {
       const forward = Math.abs(moved) / this.perMeter;
       const sideways = (m.lat ?? 0) - (before.lat ?? 0);
       const bound = Math.tan(Math.PI / 12);
       const target = forward > 1e-8 ? Math.max(-bound, Math.min(bound, sideways / forward)) : 0;
-      const yaw =
-        (before.latYaw ?? 0) + (target - (before.latYaw ?? 0)) * Math.min(1, forward * 1.5);
+      let yaw = (before.latYaw ?? 0) + (target - (before.latYaw ?? 0)) * Math.min(1, forward * 1.5);
+      if (
+        Math.abs(yaw) <= 1e-3 &&
+        m.maneuver?.kind !== 'filter' &&
+        Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) <= 1e-6 &&
+        m.vehicle
+      ) {
+        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
+        const remaining = Math.max(
+          0,
+          (before.speed * lateralDt) / this.perMeter - Math.hypot(forward, sideways),
+        );
+        if (radius * Math.abs(Math.atan(yaw)) <= remaining) yaw = 0;
+      }
+      if (
+        forward <= 1e-8 &&
+        m.vehicle &&
+        (before.maneuver?.kind === 'return' ||
+          (before.maneuver?.kind === 'lane' &&
+            !before.maneuver.returning &&
+            Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8))
+      ) {
+        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
+        const remaining = Math.max(0, lateralBudget / this.perMeter - Math.abs(sideways));
+        const angle = Math.atan(before.latYaw ?? 0);
+        const change = Math.min(
+          Math.abs(angle),
+          remaining / radius,
+          (LANE.lateral * lateralDt) / radius,
+        );
+        yaw = Math.tan(angle - Math.sign(angle) * change);
+      }
       m.latYaw = Math.abs(yaw) > 1e-6 ? yaw : undefined;
     }
     m.roadYaw = before.roadYaw;

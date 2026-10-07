@@ -6,6 +6,7 @@ import { activityLevels, laneOffset } from './config';
 import { FOLLOW, LANE } from './config';
 import { VEHICLES } from './vehicles';
 import { bodiesOverlap } from './occupancy';
+import { JunctionTable } from './junctions';
 import { visibleTurnSignal, blinkOn } from './turn-signals';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
@@ -52,6 +53,29 @@ function road(dir: 1 | -1 = 1, width = 9.6, oneway: 0 | 1 | -1 = dir) {
 }
 
 describe('accepted road lateral state', () => {
+  it('samples each following envelope once and leaves movement-time sweep queries fresh', () => {
+    const { life, m } = road();
+    m.chosenLane = 0.5;
+    const peers = [10, 20].map((ahead) => ({ ...m, d: m.d + ahead * pm, x: m.x + ahead * pm }));
+    life.movers.push(...peers);
+    life.prepareTraffic(() => true);
+    const queries = life as unknown as {
+      roadEnvelope(m: Mover): { length: number; width: number };
+      followLimits(dt: number, table: JunctionTable): Float64Array;
+      roadGapSafe(m: Mover, target: number, continuing: boolean): boolean;
+    };
+    const sampled = vi.spyOn(queries, 'roadEnvelope');
+    queries.followLimits(0.1, new JunctionTable());
+    for (const owner of life.movers)
+      expect(sampled.mock.calls.filter(([actor]) => actor === owner)).toHaveLength(1);
+    sampled.mockClear();
+    expect(queries.roadGapSafe(m, 0, true)).toBe(true);
+    expect(sampled).toHaveBeenCalled();
+    peers[0]!.d = peers[0]!.x = m.d + 5 * pm;
+    expect(queries.roadGapSafe(m, 0, true)).toBe(false);
+    sampled.mockRestore();
+  });
+
   it.each([1, -1] as const)(
     'composes displacement with the travel-relative lane in direction %s',
     (dir) => {
@@ -160,6 +184,106 @@ describe('accepted road lateral state', () => {
     expect(life.offsetOf(m)).toBeCloseTo(0);
     expect(m.laneSignal).toBeUndefined();
   });
+
+  it('completes a swept return and heading alignment after its protected-stop gap opens', () => {
+    const { life, m } = road();
+    m.d = m.x = 4095 - 31 * pm;
+    m.speed = 8 * pm;
+    m.v = pm;
+    m.lat = -3.2;
+    m.latYaw = 0.15;
+    m.maneuver = { kind: 'lane', target: 0.5, returning: true };
+    m.laneSignal = 'left';
+    const peer = { ...m, lat: undefined, latYaw: undefined, maneuver: undefined };
+    life.movers.push(peer);
+    for (let frame = 0; frame < 3 * 30; frame++) {
+      peer.d = peer.x = m.d;
+      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+    }
+    expect((4095 - m.d) / pm).toBeCloseTo(LANE.clear);
+    expect(m.maneuver?.kind).toBe('lane');
+    expect(m.maneuver?.returning).toBe(true);
+    expect(m.lat).toBe(-3.2);
+    expect(m.latYaw).not.toBeUndefined();
+    life.movers.pop();
+    const stopped = m.d;
+    let completed = false;
+    for (let frame = 0; frame < 8 * 30; frame++) {
+      const previous = life.pose(m);
+      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+      const current = life.pose(m);
+      const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
+      const travel =
+        Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
+        radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy);
+      expect(travel).toBeLessThanOrEqual(m.speed / pm / 30 + 1e-8);
+      expect(m.d).toBeCloseTo(stopped);
+      if (!m.maneuver) {
+        completed = true;
+        break;
+      }
+      expect(m.laneSignal).toBe('right');
+    }
+    expect(completed).toBe(true);
+    expect(m.lat).toBeUndefined();
+    expect(m.latYaw).toBeUndefined();
+    expect(m.laneSignal).toBeUndefined();
+    expect(life.offsetOf(m)).toBeCloseTo(3.2);
+  });
+
+  it.each([1 / 30, 0.1])('retries a proportional standstill return at dt=%s', (dt) => {
+    const { life, m } = road();
+    m.d = m.x = 4095 - LANE.clear * pm;
+    m.v = 0;
+    m.lat = -0.43;
+    m.latYaw = 0.15;
+    m.maneuver = { kind: 'return', target: m.lane, returning: true };
+    const previous = life.pose(m);
+    const guard: GroundGuard = (owner, before) =>
+      !('kind' in owner && before && 'kind' in before) ||
+      Math.abs((owner.lat ?? 0) - (before.lat ?? 0)) <= LANE.lateral * dt * 0.6;
+    life.step(dt, undefined, undefined, undefined, undefined, guard);
+    expect(m.lat).toBeCloseTo(-0.43 + (LANE.lateral * dt) / 2);
+    const current = life.pose(m);
+    const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
+    expect(
+      Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
+        radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy),
+    ).toBeLessThanOrEqual(((m.speed / pm) * dt) / 2 + 1e-8);
+    expect(m.latYaw).toBeLessThan(0.15);
+    expect(m.d).toBeCloseTo(4095 - LANE.clear * pm);
+  });
+
+  it('rolls back refused standstill returns and freezes them under inspection', () => {
+    const { life, m } = road();
+    m.d = m.x = 4095 - LANE.clear * pm;
+    m.v = 0;
+    m.lat = -0.43;
+    m.latYaw = 0.15;
+    m.maneuver = { kind: 'return', target: m.lane, returning: true };
+    m.laneSignal = 'right';
+    const pose = life.pose(m);
+    for (let frame = 0; frame < 5; frame++)
+      life.step(1 / 30, undefined, undefined, undefined, undefined, () => false);
+    expect(life.pose(m)).toEqual(pose);
+    expect(m.lat).toBe(-0.43);
+    expect(m.latYaw).toBe(0.15);
+    const held = structuredClone(m);
+    life.step(0.1, undefined, undefined, undefined, { rain: 0, inspecting: m }, () => true);
+    expect(m).toEqual(held);
+  });
+
+  it('holds a return when another vehicle closes its complete source-to-target sweep', () => {
+    const { life, m } = road();
+    m.lat = -3.2;
+    m.maneuver = { kind: 'return', target: m.lane, returning: true };
+    const peer = { ...m, lat: undefined, maneuver: undefined };
+    life.movers.push(peer);
+    life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+    expect(m.maneuver?.kind).toBe('lane');
+    expect(m.maneuver?.returning).toBe(true);
+    expect(m.lat).toBe(-3.2);
+  });
 });
 
 function passing(dir: 1 | -1 = 1) {
@@ -261,20 +385,29 @@ describe('deterministic passing', () => {
   });
 
   it('does not start at a fast protected approach or for tricycles', () => {
-    for (const vehicle of ['car', 'tricycle'] as const) {
+    for (const speed of [8, 30]) {
       const { life, m, leader } = passing();
-      m.vehicle = vehicle;
-      if (vehicle === 'car') {
-        m.speed = 30 * pm;
-        m.d = 4095 - 50 * pm;
-        m.x = m.d;
-        leader.d = m.d + 12 * pm;
-        leader.x = leader.d;
+      m.speed = speed * pm;
+      m.v = 8 * pm;
+      m.d = m.x = 4095 - 80 * pm;
+      leader.d = leader.x = m.d + 12 * pm;
+      let entered = false;
+      for (let frame = 0; frame < 5 * 30; frame++) {
+        life.step(1 / 30);
+        entered ||= m.maneuver?.kind === 'lane';
       }
-      for (let frame = 0; frame < 5 * 30; frame++) life.step(1 / 30);
-      expect(m.maneuver).toBeUndefined();
-      expect(m.chosenLane).toBeUndefined();
+      expect(entered).toBe(speed === 8);
+      if (speed === 8) expect(m.laneSignal).toBe('left');
+      else {
+        expect(m.maneuver).toBeUndefined();
+        expect(m.chosenLane).toBeUndefined();
+      }
     }
+    const { life, m } = passing();
+    m.vehicle = 'tricycle';
+    for (let frame = 0; frame < 5 * 30; frame++) life.step(1 / 30);
+    expect(m.maneuver).toBeUndefined();
+    expect(m.chosenLane).toBeUndefined();
   });
 
   it('reserves the destination envelope before a simultaneous competing change', () => {

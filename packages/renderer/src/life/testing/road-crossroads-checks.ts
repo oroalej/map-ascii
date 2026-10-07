@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from '../geometry';
 import { LifeWorld } from '../simulate';
 import { worldTiles } from './scenarios';
@@ -6,9 +6,13 @@ import { compatible } from '../junctions';
 import { FOLLOW, JUNCTION } from '../config';
 import { VEHICLES } from '../vehicles';
 import { metersPerUnit } from '../../raster/geometry';
-import { crossroadsSteps, type CrossroadsVariant } from './road-behavior-crossroads';
+import {
+  crossroadsSteps,
+  type CrossroadsMetrics,
+  type CrossroadsVariant,
+} from './road-behavior-crossroads';
 
-export function checkCrossroads(variant: CrossroadsVariant, minimum: number) {
+export function checkCrossroads(variant: CrossroadsVariant, minimum: number, duration = 180) {
   describe(`${variant} crossroads, minimum ${minimum}`, () => {
     let completed = 0,
       filtering = 0;
@@ -27,7 +31,7 @@ export function checkCrossroads(variant: CrossroadsVariant, minimum: number) {
       },
       variant,
       minimum,
-      180,
+      duration,
       (life, before) => {
         for (let i = 0; i < life.movers.length; i++) {
           const m = life.movers[i]!,
@@ -46,9 +50,22 @@ export function checkCrossroads(variant: CrossroadsVariant, minimum: number) {
         }
       },
     );
-    for (let period = 1; period <= 6; period++)
+    const snapshots: { result: CrossroadsMetrics; completed: number; filtering: number }[] = [];
+    const advance = () => {
+      snapshots.push({ result: structuredClone(steps.next().value), completed, filtering });
+    };
+    const periods = duration / 30;
+    // Each hook advances at most one window. A selected later test still gets the same
+    // continuous world, with the same per-hook work budget as a normal 30-second test.
+    for (let preceding = 1; preceding < periods; preceding++)
+      beforeEach(({ task }) => {
+        const selected = Number(task.name.match(/through (\d+) continuous seconds/)![1]) / 30;
+        if (preceding < selected && snapshots.length < preceding) advance();
+      });
+    for (let period = 1; period <= periods; period++)
       it(`retains safety and progress through ${period * 30} continuous seconds`, () => {
-        const result = steps.next().value;
+        if (snapshots.length < period) advance();
+        const { result, completed, filtering } = snapshots[period - 1]!;
         expect(result.seconds).toBe(period * 30);
         expect(result.grantViolations, result.errors.join('\n')).toBe(0);
         expect(result.stopViolations, result.errors.join('\n')).toBe(0);

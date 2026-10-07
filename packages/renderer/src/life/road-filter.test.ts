@@ -13,7 +13,7 @@ const pm = 1 / metersPerUnit(tile);
 const red = Array.from({ length: 120 }, (_, n) => n).find(
   (t) => signalState(0, t, true).a === 'red',
 )!;
-function queue(vehicle: 'motorcycle' | 'bicycle' = 'motorcycle', width = 9.6) {
+function queue(vehicle: 'motorcycle' | 'bicycle' = 'motorcycle', width = 9.6, signal = true) {
   const b = new LifeBuilder();
   b.line(
     [
@@ -25,7 +25,18 @@ function queue(vehicle: 'motorcycle' | 'bicycle' = 'motorcycle', width = 9.6) {
     1,
     1,
   );
-  b.signal({ x: 150 * pm, y: 2000 }, 6, -1, 90, true, undefined, { seed: 0 });
+  if (signal) b.signal({ x: 150 * pm, y: 2000 }, 6, -1, 90, true, undefined, { seed: 0 });
+  else
+    b.line(
+      [
+        { x: 0, y: 2000 + 50 * pm },
+        { x: 4095, y: 2000 + 50 * pm },
+      ],
+      LifeLine.roadMajor,
+      width,
+      2,
+      1,
+    );
   const life = new TileLife(tile, b.finish(), 42);
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
   life.scenes.sites.length = 0;
@@ -82,6 +93,102 @@ function queue(vehicle: 'motorcycle' | 'bicycle' = 'motorcycle', width = 9.6) {
 }
 
 describe('physically clear queue filtering', () => {
+  it.each(['changed line', 'more than sixty metres behind'] as const)(
+    'completes a requested safe return after the queue is %s',
+    (reason) => {
+      const { life, m, cars, guard } = queue('motorcycle', 9.6, false);
+      const oldQueue = cars[0]!;
+      if (reason === 'changed line') {
+        oldQueue.line = 1;
+        oldQueue.from = 2;
+        oldQueue.y = life.geo.coords[5]!;
+      } else oldQueue.d = oldQueue.x = m.d - 70 * pm;
+      oldQueue.speed = oldQueue.v = 0;
+      life.movers.splice(0, life.movers.length, m, oldQueue);
+      m.lat = -1.6;
+      m.latYaw = 0.1;
+      m.v = 3 * pm;
+      m.maneuver = {
+        kind: 'filter',
+        target: m.lane,
+        corridor: 2 / 3,
+        queueSpeed: 0,
+        returning: true,
+      };
+      m.laneSignal = 'left';
+      m.roadScan = 0;
+      for (let frame = 0; frame < 10 * 30 && m.maneuver; frame++)
+        life.step(1 / 30, undefined, undefined, undefined, undefined, guard);
+      expect(m.maneuver).toBeUndefined();
+      expect(m.lat).toBeUndefined();
+      expect(m.latYaw).toBeUndefined();
+      expect(m.laneSignal).toBeUndefined();
+      expect(life.offsetOf(m)).toBeCloseTo(3.2);
+      for (let frame = 0; frame < 4 * 30; frame++)
+        life.step(1 / 30, undefined, undefined, undefined, undefined, guard);
+      expect(m.v / pm).toBeCloseTo(8);
+    },
+  );
+
+  it('retains its queue reference between refreshes and waits for the full return sweep', () => {
+    const { life, m, cars } = queue('motorcycle', 9.6, false);
+    const oldQueue = cars[0]!;
+    oldQueue.d = oldQueue.x = m.d - 70 * pm;
+    oldQueue.speed = oldQueue.v = 0;
+    life.movers.splice(0, life.movers.length, m, oldQueue);
+    m.lat = -1.6;
+    m.v = 3 * pm;
+    m.maneuver = { kind: 'filter', target: m.lane, corridor: 2 / 3, queueSpeed: 0 };
+    m.roadScan = 0.25;
+    const update = life as unknown as { updateFilter(index: number, table: unknown): void };
+    const table = { holds: () => [] };
+    life.prepareTraffic(() => true);
+    update.updateFilter(0, table);
+    expect(m.maneuver.kind).toBe('filter');
+    const blocker: Mover = {
+      ...cars[1]!,
+      vehicle: 'motorcycle',
+      d: m.d,
+      x: m.x,
+      speed: 0,
+      v: 0,
+    };
+    life.movers.push(blocker);
+    m.roadScan = 0;
+    life.prepareTraffic(() => true);
+    // Another rider does not establish a queue reference.
+    blocker.line = 1;
+    blocker.from = 2;
+    blocker.y = life.geo.coords[5]!;
+    life.prepareTraffic(() => true);
+    m.maneuver = { ...m.maneuver, returning: true };
+    update.updateFilter(0, table);
+    expect(m.maneuver.kind).toBe('return');
+    // Once a body occupies the original lane, the complete source-to-target sweep closes.
+    blocker.line = 0;
+    blocker.from = 0;
+    blocker.y = m.y;
+    m.maneuver = {
+      kind: 'filter',
+      target: m.lane,
+      corridor: 2 / 3,
+      queueSpeed: 0,
+      returning: true,
+    };
+    m.roadScan = 0;
+    life.prepareTraffic(() => true);
+    const at = life.offsetOf(m);
+    update.updateFilter(0, table);
+    expect(m.maneuver.kind).toBe('filter');
+    expect(m.maneuver.returning).toBe(true);
+    expect(life.offsetOf(m)).toBe(at);
+    life.movers.pop();
+    m.roadScan = 0;
+    life.prepareTraffic(() => true);
+    update.updateFilter(0, table);
+    expect(m.maneuver.kind).toBe('return');
+  });
+
   it('keeps pedestrian braking on the accepted filtering path', () => {
     const { life, m } = queue();
     m.maneuver = { kind: 'filter', target: m.lane, corridor: 2 / 3, queueSpeed: 0 };
