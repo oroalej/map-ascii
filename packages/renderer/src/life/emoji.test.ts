@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { epochDay } from '@atlas/shared';
+import { epochDay, emojiGlyph, expandSeasons, type RuntimeSeasonConfig } from '@atlas/shared';
 import {
   EmojiObserver,
   EmojiMemory,
+  EMOJI,
   ambientPool,
   eveningDate,
   seasonalPool,
@@ -17,6 +18,7 @@ import type { Visit } from './interactions';
 import { SceneSpeech } from './scene-speech';
 import { activityLevels } from './config';
 import { LifeBuilder } from './geometry';
+import { simulationSeasons } from './seasonal-simulation';
 
 function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = () => 0) {
   const entry = continuityTile(left);
@@ -113,8 +115,8 @@ describe('read-only emoji observer', () => {
       [{ mover: f.m, stall, key: {} }],
     );
     f.observer.step(0.3, 19, { rain: 0, clock: 0.5 }, [f.o, vendor]);
-    expect(f.observer.cue(f.m)?.mood).toBe('yummy');
-    expect(f.observer.cue(stall)?.mood).toBe('happy');
+    expect(f.observer.cue(f.m)?.mood).toBe('drooling');
+    expect(f.observer.cue(stall)?.mood).toBe('profit');
     expect(f.observer.cue(stall)?.pair).toBe(f.observer.cue(f.m)?.pair);
     const canceled = fixture();
     canceled.step(0.1);
@@ -399,7 +401,9 @@ describe('read-only emoji observer', () => {
       f.step(0.5, { rain: 1 });
       set(true);
       f.step(0.5, { rain: 1 });
-      expect(f.observer.cue(f.m)?.mood).toBe(event === 'shelter' ? 'rained' : 'happy');
+      expect(f.observer.cue(f.m)?.mood).toBe(
+        event === 'shelter' ? 'rained' : event === 'grooming' ? 'beauty' : 'happy',
+      );
     },
   );
   it('pairs the nearest pedestrian ahead, preserving observation order for ties', () => {
@@ -438,7 +442,7 @@ describe('read-only emoji observer', () => {
     f.o.still = true;
     f.m.grooming = true;
     f.step();
-    expect(f.observer.cue(f.m)?.mood).toBe('happy');
+    expect(f.observer.cue(f.m)?.mood).toBe('beauty');
     f.observer.dispose();
     f.m.grooming = false;
     for (let i = 0; i < 10; i++) f.step(0.5);
@@ -466,7 +470,7 @@ describe('read-only emoji observer', () => {
     const a = f.observer.cue(f.m)!,
       b = f.observer.cue(c)!;
     expect(a.mood).toBe('angry');
-    expect(b.mood).toBe('angry');
+    expect(b.mood).toBe('sideeye');
     expect(a.pair).toBe(b.pair);
     expect(a.id).not.toBe(b.id);
     expect(f.observer.size).toBe(1);
@@ -569,7 +573,7 @@ describe('read-only emoji observer', () => {
     f.observer.step(0.5, 19, { rain: 0, clock: 1 }, [f.o], [], [{ token, owners: [f.m] }]);
     expect(f.observer.cue(f.m)).toBeUndefined();
     f.observer.step(0.5, 19, { rain: 0, clock: 1.5 }, [f.o], [], [{ token: {}, owners: [f.m] }]);
-    expect(f.observer.cue(f.m)?.mood).toBe('playful');
+    expect(f.observer.cue(f.m)?.mood).toBe('gossip');
   });
   it('follows a normally voiced purchase for the buyer without a solo vendor reaction', () => {
     const f = fixture();
@@ -622,7 +626,7 @@ describe('read-only emoji observer', () => {
     scenes.step(1.5, true);
     expect(scenes.voiceCompletions).toHaveLength(1);
     f.observer.step(3, 19, { rain: 0, clock: 3.1 }, [f.o, vendor], [], scenes.voiceCompletions);
-    expect(f.observer.cue(f.m)?.mood).toBe('playful');
+    expect(f.observer.cue(f.m)?.mood).toBe('gossip');
     expect(f.observer.cue(stall)).toBeUndefined();
     expect(f.observer.memory.get(stall)!.followups).toHaveLength(0);
   });
@@ -673,7 +677,638 @@ describe('read-only emoji observer', () => {
     expect(completeScenarioState(a)).toEqual(completeScenarioState(b));
   });
 });
+describe('funny emoji events', () => {
+  const quiet = (f: ReturnType<typeof fixture>) => {
+    f.observer.memory.get(f.m)!.attemptAt = Infinity;
+  };
+  const vendorFor = (f: ReturnType<typeof fixture>): EmojiObservation => ({
+    owner: { x: f.m.x, y: f.m.y, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 },
+    subject: 'person',
+    figure: 'adult',
+    eligible: true,
+    speaking: false,
+    vendor: true,
+  });
+  it('latches fast-driver and running-person onsets, baselines gaps, and consumes failed chances', () => {
+    for (const kind of ['vehicle', 'person'] as const) {
+      const f = fixture(kind);
+      f.m.v = 9 * f.tile.perMeter;
+      f.step(0);
+      quiet(f);
+      f.step();
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      if (kind === 'vehicle') f.m.v = EMOJI.driver.rushSpeed * f.tile.perMeter;
+      else f.m.run = 1;
+      f.step(0.1);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      f.step(0.4);
+      expect(f.observer.cue(f.m)?.mood).toBe('rushing');
+      f.observer.release(f.m);
+      f.observer.memory.get(f.m)!.cooldownUntil = 0;
+      const rng = vi.fn(() => 0);
+      f.observer.memory.get(f.m)!.rng = rng;
+      f.step(3);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      expect(rng).not.toHaveBeenCalled();
+      f.observer.freeze();
+      f.step();
+      f.step();
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      if (kind === 'vehicle') f.m.v = 9 * f.tile.perMeter;
+      else f.m.run = 0;
+      f.step();
+      if (kind === 'vehicle') f.m.v = 10 * f.tile.perMeter;
+      else f.m.run = 1;
+      rng.mockReturnValue(0.99);
+      f.step();
+      const rolls = rng.mock.calls.length;
+      f.step();
+      expect(rng.mock.calls).toHaveLength(rolls);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+    }
+  });
+  it('smokes only on an exhaust vehicle pulling away after an observed stop', () => {
+    for (const [vehicle, seconds, smoke] of [
+      ['jeepney', 1, true],
+      ['car', 1, false],
+      ['jeepney', 0.5, false],
+    ] as const) {
+      const f = fixture('vehicle');
+      f.m.vehicle = vehicle;
+      f.m.v = 0;
+      f.step(0);
+      quiet(f);
+      f.step(seconds);
+      f.m.v = f.tile.perMeter;
+      f.step();
+      expect(f.observer.cue(f.m)?.mood).toBe(smoke ? 'smoke' : undefined);
+      f.observer.release(f.m);
+      f.observer.memory.get(f.m)!.cooldownUntil = 0;
+      f.step();
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      f.m.v = 0;
+      f.step();
+      f.step(1);
+      f.observer.freeze();
+      f.m.v = f.tile.perMeter;
+      f.step();
+      expect(f.observer.cue(f.m)).toBeUndefined();
+    }
+  });
+  it('honks with a pedestrian sorry reply only after the usual driver chance', () => {
+    for (const [chance, variant, mood] of [
+      [0, 0, 'honk'],
+      [0, 0.9, 'impatient'],
+      [0.99, 0, undefined],
+    ] as const) {
+      const f = fixture('vehicle');
+      const person = fixture().o;
+      person.owner.x = f.m.x + f.tile.perMeter;
+      person.owner.y = f.m.y;
+      f.m.hx = 1;
+      f.m.hy = 0;
+      const observations = [f.o, person];
+      f.step(0, {}, observations);
+      quiet(f);
+      const rng = vi.fn((): number => variant).mockReturnValueOnce(chance);
+      f.observer.memory.get(f.m)!.rng = rng;
+      f.m.waiting = EMOJI.driver.impatientWait;
+      f.step(0.5, {}, observations);
+      expect(f.observer.cue(f.m)?.mood).toBe(mood);
+      expect(f.observer.cue(person.owner)?.mood).toBe(mood ? 'sorry' : undefined);
+      if (mood) expect(f.observer.cue(f.m)?.pair).toBe(f.observer.cue(person.owner)?.pair);
+      else expect(rng).toHaveBeenCalledTimes(1);
+    }
+  });
+  it('honks alone at a distant pedestrian and stays impatient when nobody is ahead', () => {
+    for (const distance of [5, null]) {
+      const f = fixture('vehicle');
+      const person = fixture().o;
+      person.owner.x = f.m.x + (distance ?? 0) * f.tile.perMeter;
+      person.owner.y = f.m.y;
+      f.m.hx = 1;
+      f.m.hy = 0;
+      const observations = distance === null ? [f.o] : [f.o, person];
+      f.step(0, {}, observations);
+      quiet(f);
+      const rng = vi.fn(() => 0);
+      f.observer.memory.get(f.m)!.rng = rng;
+      f.m.waiting = EMOJI.driver.impatientWait;
+      f.step(0.5, {}, observations);
+      expect(f.observer.cue(f.m)?.mood).toBe(distance === null ? 'impatient' : 'honk');
+      expect(f.observer.cue(f.m)?.pair).toBeUndefined();
+      expect(f.observer.cue(person.owner)).toBeUndefined();
+      expect(rng).toHaveBeenCalledTimes(distance === null ? 1 : 2);
+    }
+  });
+  it('gossips only for adult completion follow-ups and keeps both original outcomes', () => {
+    for (const [figure, share, split, mood] of [
+      ['adult', 0, 0, 'gossip'],
+      ['adult', 0.9, 0, 'playful'],
+      ['adult', 0.9, 0.9, 'thumbs'],
+      ['child', 0, 0, 'playful'],
+    ] as const) {
+      const f = fixture();
+      f.o.figure = figure;
+      f.step(0);
+      quiet(f);
+      const rng = vi.fn(() => split).mockReturnValueOnce(0);
+      if (figure === 'adult') rng.mockReturnValueOnce(share);
+      f.observer.memory.get(f.m)!.rng = rng;
+      const token = {};
+      f.observer.step(0.5, 19, { rain: 0, clock: 0.5 }, [f.o], [], [{ token, owners: [f.m] }]);
+      expect(f.observer.cue(f.m)?.mood).toBe(mood);
+      f.observer.release(f.m);
+      f.observer.memory.get(f.m)!.cooldownUntil = 0;
+      const rolls = rng.mock.calls.length;
+      f.observer.step(0.5, 19, { rain: 0, clock: 1 }, [f.o], [], [{ token, owners: [f.m] }]);
+      expect(rng.mock.calls).toHaveLength(rolls);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+    }
+  });
+  it('varies grooming happy cues without changing unrelated happiness or rerolling rejected cues', () => {
+    for (const [kind, action, variant, mood] of [
+      ['cat', 'grooming', 0, 'beauty'],
+      ['cat', 'grooming', 0.9, 'happy'],
+      ['cat', 'trot', 0, 'happy'],
+      ['dog', 'grooming', 0, 'happy'],
+      ['cat', 'rest', 0, 'happy'],
+    ] as const) {
+      const f = fixture(kind);
+      f.step(0);
+      quiet(f);
+      f.observer.memory.get(f.m)!.rng = vi.fn(() => variant).mockReturnValueOnce(0);
+      if (action === 'grooming') f.m.grooming = true;
+      else if (action === 'trot') f.m.trot = 1;
+      else f.o.visit = { state: 'rest', time: 1, site: {} } as Visit;
+      f.step(0.1);
+      f.step(0.4);
+      expect(f.observer.cue(f.m)?.mood).toBe(mood);
+    }
+    const f = fixture('cat');
+    f.step(0);
+    quiet(f);
+    const rng = vi.fn(() => 0.99);
+    f.observer.memory.get(f.m)!.rng = rng;
+    f.m.grooming = true;
+    f.step();
+    f.step();
+    expect(rng).toHaveBeenCalledTimes(1);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+  });
+  it('varies paired and solo cat standoffs while retaining dog anger and one group', () => {
+    for (const paired of [true, false])
+      for (const variant of [0, 0.9]) {
+        const f = fixture('dog');
+        const c = continuityMover(f.tile, f.m.x + 2 * f.tile.perMeter, 'cat');
+        c.y = f.m.y;
+        const cat: EmojiObservation = {
+          owner: c,
+          mover: c,
+          subject: 'cat',
+          eligible: true,
+          speaking: false,
+        };
+        c.x += 10 * f.tile.perMeter;
+        f.step(0, {}, [f.o, cat]);
+        quiet(f);
+        f.observer.memory.get(c)!.attemptAt = Infinity;
+        f.observer.memory.get(c)!.rng = paired
+          ? () => variant
+          : vi.fn(() => variant).mockReturnValueOnce(0);
+        if (!paired) f.observer.memory.get(f.m)!.cooldownUntil = 100;
+        c.x -= 10 * f.tile.perMeter;
+        f.step(0.5, {}, [f.o, cat]);
+        expect(f.observer.cue(c)?.mood).toBe(variant === 0 ? 'sideeye' : 'angry');
+        expect(f.observer.cue(f.m)?.mood).toBe(paired ? 'angry' : undefined);
+        expect(f.observer.size).toBe(1);
+        if (paired) expect(f.observer.cue(c)?.pair).toBe(f.observer.cue(f.m)?.pair);
+      }
+  });
+  it('keeps purchase variants together and never blocks a solo buyer on an unavailable vendor', () => {
+    for (const available of [true, false])
+      for (const variant of [0, 0.9]) {
+        const f = fixture();
+        const vendor = vendorFor(f);
+        vendor.speaking = !available;
+        f.step(0, {}, [f.o, vendor]);
+        quiet(f);
+        f.observer.memory.get(f.m)!.rng = vi.fn(() => variant).mockReturnValueOnce(0);
+        f.observer.step(
+          0.5,
+          19,
+          { rain: 0, clock: 0.5 },
+          [f.o, vendor],
+          [{ mover: f.m, stall: vendor.owner as Stall, key: {} }],
+        );
+        expect(f.observer.cue(f.m)?.mood).toBe(variant === 0 ? 'drooling' : 'yummy');
+        expect(f.observer.cue(vendor.owner)?.mood).toBe(
+          available ? (variant === 0 ? 'profit' : 'happy') : undefined,
+        );
+        expect(f.observer.size).toBe(1);
+        if (available) expect(f.observer.cue(f.m)?.pair).toBe(f.observer.cue(vendor.owner)?.pair);
+      }
+  });
+  it('processes buyers before begging dogs in either observation order, including latched purchases', () => {
+    for (const dogFirst of [true, false])
+      for (const variant of [0, 0.9]) {
+        const f = fixture();
+        const vendor = vendorFor(f);
+        const dog = fixture('dog').o;
+        dog.owner.x = f.m.x + 2 * f.tile.perMeter;
+        dog.owner.y = f.m.y;
+        const observations = dogFirst ? [dog, f.o, vendor] : [f.o, vendor, dog];
+        f.step(0, {}, observations);
+        quiet(f);
+        f.observer.memory.get(f.m)!.rng = vi.fn(() => variant).mockReturnValueOnce(0);
+        const purchase = { mover: f.m, stall: vendor.owner as Stall, key: {} };
+        f.observer.step(0.1, 19, { rain: 0, clock: 0.1 }, observations, [purchase]);
+        f.observer.step(0.4, 19, { rain: 0, clock: 0.5 }, observations);
+        expect(f.observer.cue(f.m)?.mood).toBe(variant === 0 ? 'drooling' : 'yummy');
+        expect(f.observer.cue(vendor.owner)?.mood).toBe(variant === 0 ? 'profit' : 'happy');
+        expect(f.observer.cue(dog.owner)?.mood).toBe('beg');
+        expect(f.observer.cue(dog.owner)?.pair).toBeUndefined();
+        for (const o of observations) {
+          f.observer.release(o.owner);
+          const t = f.observer.memory.get(o.owner)!;
+          t.cooldownUntil = 0;
+          t.attemptAt = Infinity;
+        }
+        f.observer.step(0.5, 19, { rain: 0, clock: 1 }, observations, [purchase]);
+        expect(observations.every((o) => !f.observer.cue(o.owner))).toBe(true);
+      }
+  });
+  it('pairs begging only within pair reach after a failed purchase, excludes distant dogs and cats', () => {
+    for (const [kind, distance, mood, paired] of [
+      ['dog', 2, 'beg', true],
+      ['dog', 3.5, 'beg', false],
+      ['dog', 4, 'beg', false],
+      ['dog', 4.1, undefined, false],
+      ['cat', 2, undefined, false],
+    ] as const) {
+      const f = fixture();
+      const vendor = vendorFor(f);
+      const pet = fixture(kind).o;
+      pet.owner.x = f.m.x + distance * f.tile.perMeter;
+      pet.owner.y = f.m.y;
+      const observations = [pet, f.o, vendor];
+      f.step(0, {}, observations);
+      quiet(f);
+      f.observer.memory.get(f.m)!.rng = () => 0.99;
+      f.observer.step(0.5, 19, { rain: 0, clock: 0.5 }, observations, [
+        { mover: f.m, stall: vendor.owner as Stall, key: {} },
+      ]);
+      expect(f.observer.cue(pet.owner)?.mood, `${kind} at ${distance} m`).toBe(mood);
+      expect(f.observer.cue(f.m)?.mood).toBe(paired ? 'sorry' : undefined);
+      if (paired) expect(f.observer.cue(pet.owner)?.pair).toBe(f.observer.cue(f.m)?.pair);
+    }
+  });
+  it('cries at person and driver wait thresholds once, excludes held owners and baselines gaps', () => {
+    for (const kind of ['person', 'vehicle'] as const)
+      for (const held of [false, true]) {
+        const f = fixture(kind);
+        f.o.held = held;
+        const threshold = kind === 'person' ? EMOJI.person.impatientWait : EMOJI.driver.angryStop;
+        f.step(0);
+        quiet(f);
+        f.observer.memory.get(f.m)!.rng = () => 0.99;
+        f.m.waiting = threshold - 0.5;
+        f.step();
+        expect(f.observer.cue(f.m)).toBeUndefined();
+        f.observer.memory.get(f.m)!.rng = () => 0;
+        f.m.waiting = threshold;
+        f.step();
+        expect(f.observer.cue(f.m)?.mood).toBe(held ? undefined : 'crying');
+        f.observer.release(f.m);
+        f.observer.memory.get(f.m)!.cooldownUntil = 0;
+        const rng = vi.fn(() => 0);
+        f.observer.memory.get(f.m)!.rng = rng;
+        f.step();
+        f.step();
+        expect(rng).not.toHaveBeenCalled();
+        f.observer.freeze();
+        f.step();
+        f.step();
+        expect(f.observer.cue(f.m)).toBeUndefined();
+        f.observer.memory.reset();
+        f.step();
+        f.step();
+        quiet(f);
+        expect(f.observer.cue(f.m)).toBeUndefined();
+      }
+  });
+  it('uses observed queue and stop duration without inventing elapsed time after a gap', () => {
+    for (const kind of ['person', 'vehicle'] as const) {
+      const f = fixture(kind, () => 0.99);
+      if (kind === 'person') f.o.visit = { state: 'wait', time: 100, site: {} } as Visit;
+      else f.m.v = 0;
+      f.step(0);
+      quiet(f);
+      const threshold = kind === 'person' ? EMOJI.person.impatientWait : EMOJI.driver.angryStop;
+      for (let i = 0; i < (threshold - 0.5) * 2; i++) f.step();
+      expect(f.observer.cue(f.m)).toBeUndefined();
+      f.observer.memory.get(f.m)!.rng = () => 0;
+      f.step();
+      expect(f.observer.cue(f.m)?.mood).toBe('crying');
+      f.observer.release(f.m);
+      f.observer.memory.get(f.m)!.cooldownUntil = 0;
+      f.observer.freeze();
+      f.step(100);
+      expect(f.observer.memory.get(f.m)![kind === 'person' ? 'wait' : 'stop']).toBe(0);
+      expect(f.observer.cue(f.m)).toBeUndefined();
+    }
+  });
+  it('confuses only fresh blocked-turn markers, latches zero, and rebaselines observation gaps', () => {
+    const f = fixture();
+    f.step(0);
+    quiet(f);
+    f.m.turning = { hx: 1, hy: 0, left: 1 };
+    f.step();
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.m.turnedAt = 0;
+    f.step(0.1);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.step(0.4);
+    expect(f.observer.cue(f.m)?.mood).toBe('confused');
+    f.observer.release(f.m);
+    f.observer.memory.get(f.m)!.cooldownUntil = 0;
+    f.m.turning = undefined;
+    f.step();
+    f.m.turning = { hx: -1, hy: 0, left: 1 };
+    f.step();
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.observer.freeze();
+    f.m.turnedAt = 5;
+    f.step();
+    f.step();
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.m.turnedAt = 6;
+    f.step();
+    expect(f.observer.cue(f.m)?.mood).toBe('confused');
+  });
+});
 describe('emoji ambient eligibility', () => {
+  const worshipper = () => {
+    const builder = new LifeBuilder();
+    builder.place({ x: 2000, y: 2000 }, 'worship', 80);
+    const tile = new TileLife(left, builder.finish(), 123);
+    const g = tile.gatherers[0]!;
+    g.pause = 2;
+    g.rank = 0;
+    tile.gatherers.splice(0, tile.gatherers.length, g);
+    tile.movers.length = tile.stalls.length = 0;
+    const read = tile as unknown as { emojiObservations(env: LifeEnv): EmojiObservation[] };
+    const o = read.emojiObservations({ rain: 0, levels: activityLevels(1) })[0]!;
+    expect(o.eligible).toBe(true);
+    expect(o.still).toBeUndefined();
+    return { g, o };
+  };
+  const moods = (o: EmojiObservation, env: LifeEnv) => ambientPool(o, env).map((p) => p.mood);
+  it('limits mosquitoes to still people in the dusk window, including real paused and seated gatherers', () => {
+    const { o, g } = worshipper();
+    for (const [minutes, eligible] of [
+      [1049, false],
+      [1050, true],
+      [1169, true],
+      [1170, false],
+      [undefined, false],
+    ] as const)
+      expect(moods(o, { rain: 0, minutes }).includes('mosquito')).toBe(eligible);
+    g.pause = 0;
+    expect(moods(o, { rain: 0, minutes: 1080 })).not.toContain('mosquito');
+    g.behavior = 'sit';
+    expect(moods(o, { rain: 0, minutes: 1080 })).toContain('mosquito');
+    const f = fixture();
+    f.o.still = true;
+    expect(moods(f.o, { rain: 0, minutes: 1080 })).toContain('mosquito');
+    f.o.still = false;
+    expect(moods(f.o, { rain: 0, minutes: 1080 })).not.toContain('mosquito');
+    expect(moods({ ...o, subject: 'cat' }, { rain: 0, minutes: 1080 })).not.toContain('mosquito');
+  });
+  it('offers videoke only to non-worship person gatherers during evening hours', () => {
+    const { o, g } = worshipper();
+    g.place = 'monument';
+    for (const [minutes, eligible] of [
+      [1139, false],
+      [1140, true],
+      [1379, true],
+      [1380, false],
+      [undefined, false],
+    ] as const)
+      expect(moods(o, { rain: 0, minutes }).includes('karaoke')).toBe(eligible);
+    g.place = 'worship';
+    expect(moods(o, { rain: 0, minutes: 1200 })).not.toContain('karaoke');
+    expect(moods(o, { rain: 0, minutes: 1200 })).toContain('music');
+    g.place = 'monument';
+    g.behavior = 'sit';
+    expect(moods(o, { rain: 0, minutes: 1200 })).not.toContain('karaoke');
+    g.behavior = 'gather';
+    expect(moods({ ...o, subject: 'dog' }, { rain: 0, minutes: 1200 })).not.toContain('karaoke');
+    expect(moods(fixture().o, { rain: 0, minutes: 1200 })).not.toContain('karaoke');
+  });
+  it('sneezes in exposed rain or resolved storm, without a time restriction', () => {
+    const f = fixture();
+    expect(
+      ambientPool(f.o, { rain: EMOJI.rainThreshold }).find((p) => p.mood === 'sneeze')?.weight,
+    ).toBe(1);
+    expect(moods(f.o, { rain: EMOJI.rainThreshold - 0.01 })).not.toContain('sneeze');
+    f.o.visit = { state: 'shelter', time: 1, site: {} } as Visit;
+    expect(moods(f.o, { rain: 1 })).not.toContain('sneeze');
+    expect(moods(f.o, { rain: 0, windPreset: 'storm' })).toContain('sneeze');
+    expect(moods(f.o, { rain: 0, windPreset: 'gusty' })).not.toContain('sneeze');
+    for (const kind of ['vehicle', 'dog', 'cat'] as const)
+      expect(moods(fixture(kind).o, { rain: 1, windPreset: 'storm' })).not.toContain('sneeze');
+  });
+  it('melts only hot-eligible people and open drivers, keeping pet heat and excluding wet or low sun', () => {
+    const hot = { rain: 0, minutes: 720, sunAltitude: EMOJI.hotAltitude };
+    const person = fixture();
+    expect(ambientPool(person.o, hot).find((p) => p.mood === 'melting')?.weight).toBe(0.5);
+    for (const env of [
+      { ...hot, rain: 0.01 },
+      { ...hot, sunAltitude: EMOJI.hotAltitude - 1 },
+      { ...hot, sunAltitude: undefined },
+      { ...hot, minutes: 659 },
+      { ...hot, minutes: 870 },
+    ]) {
+      expect(moods(person.o, env)).not.toContain('melting');
+      expect(moods(person.o, env)).not.toContain('hot');
+    }
+    for (const vehicle of [
+      'car',
+      'bus',
+      'truck',
+      'motorcycle',
+      'bicycle',
+      'tricycle',
+      'jeepney',
+    ] as const) {
+      const f = fixture('vehicle');
+      f.m.vehicle = vehicle;
+      expect(moods(f.o, hot).includes('melting')).toBe(
+        ['motorcycle', 'bicycle', 'tricycle', 'jeepney'].includes(vehicle),
+      );
+    }
+    for (const kind of ['cat', 'dog'] as const) {
+      const f = fixture(kind);
+      f.o.still = true;
+      expect(moods(f.o, hot)).toContain('hot');
+      expect(moods(f.o, hot)).not.toContain('melting');
+    }
+  });
+  it('reserves silly for children playing at a place', () => {
+    const { o, g } = worshipper();
+    g.behavior = 'play';
+    o.figure = 'child';
+    expect(ambientPool(o, { rain: 0 }).find((p) => p.mood === 'silly')?.weight).toBe(1);
+    o.figure = 'adult';
+    expect(moods(o, { rain: 0 })).not.toContain('silly');
+    o.figure = 'child';
+    g.behavior = 'gather';
+    expect(moods(o, { rain: 0 })).not.toContain('silly');
+    g.behavior = 'play';
+    expect(moods({ ...o, subject: 'cat' }, { rain: 0 })).not.toContain('silly');
+    expect(moods({ ...fixture().o, figure: 'child' }, { rain: 0 })).not.toContain('silly');
+  });
+  it('reads paused worship eligibility from the real projection while keeping prayer dominant', () => {
+    const { o, g } = worshipper();
+    const env: LifeEnv = {
+      rain: 0,
+      minutes: 480,
+      date: { epochDay: 1, weekday: 0, preview: false },
+    };
+    const paused = ['moved', 'crying', 'angelic', 'hush', 'yawn'] as const;
+    for (const mood of [...paused, 'music'] as const)
+      expect(ambientPool(o, env).find((p) => p.mood === mood)?.weight).toBe(EMOJI.churchWeight);
+    expect(ambientPool(o, env).find((p) => p.mood === 'pray')?.weight).toBe(4.5);
+    expect(emojiGlyph('person', 'crying')).toBe('😭');
+    g.pause = 0;
+    o.still = true;
+    for (const mood of paused) expect(moods(o, env)).not.toContain(mood);
+    expect(moods(o, env)).toContain('music');
+    g.pause = 2;
+    for (const subject of ['driver', 'dog', 'cat'] as const)
+      for (const mood of [...paused, 'music'] as const)
+        expect(moods({ ...o, subject }, env)).not.toContain(mood);
+    g.place = 'monument';
+    for (const mood of [...paused, 'music'] as const) expect(moods(o, env)).not.toContain(mood);
+    g.place = 'worship';
+    g.behavior = 'sit';
+    for (const mood of [...paused, 'music'] as const) expect(moods(o, env)).not.toContain(mood);
+  });
+  it('yawns only for a paused worship gatherer in the city morning window', () => {
+    const { o, g } = worshipper();
+    for (const [minutes, eligible] of [
+      [299, false],
+      [300, true],
+      [539, true],
+      [540, false],
+      [undefined, false],
+    ] as const)
+      expect(moods(o, { rain: 0, minutes }).includes('yawn')).toBe(eligible);
+    g.pause = 0;
+    expect(moods(o, { rain: 0, minutes: 330 })).not.toContain('yawn');
+  });
+  it('remembers only a selected grave-visitation season, including a composed season and preview', () => {
+    const { o, g } = worshipper();
+    const calendar: RuntimeSeasonConfig = {
+      id: 'remembrance',
+      title: { en: 'Remembrance' },
+      window: { from: { month: 3, day: 1 }, to: { month: 3, day: 2 } },
+      visitors: {
+        label: 'Families',
+        share: 1,
+        per_grave_family: [2, 3],
+        max_per_tile: 10,
+        hours: [
+          [0, 1],
+          [23, 1],
+        ],
+      },
+    };
+    const included: RuntimeSeasonConfig = {
+      id: 'combined',
+      title: { en: 'Combined' },
+      window: calendar.window,
+      includes: ['remembrance'],
+    };
+    const table = simulationSeasons(expandSeasons([calendar, included]));
+    for (const season of [undefined, null, 'absent'])
+      expect(moods(o, { rain: 0, season, emojiSeasons: table })).not.toContain('candle');
+    expect(moods(o, { rain: 0, season: calendar.id })).not.toContain('candle');
+    expect(
+      moods(o, { rain: 0, season: calendar.id, emojiSeasons: [{ id: calendar.id }] }),
+    ).not.toContain('candle');
+    for (const season of ['remembrance', 'combined'])
+      for (const preview of [false, true]) {
+        const env: LifeEnv = {
+          rain: 0,
+          season,
+          emojiSeasons: table,
+          date: { epochDay: 1, weekday: 1, preview },
+        };
+        const pool = ambientPool(o, env);
+        expect(pool.find((p) => p.mood === 'candle')?.weight).toBe(EMOJI.churchWeight);
+        expect(pool.find((p) => p.mood === 'pray')?.weight).toBe(1.5);
+        expect(
+          pool
+            .filter((p) =>
+              ['moved', 'crying', 'angelic', 'hush', 'music', 'candle'].includes(p.mood),
+            )
+            .every((p) => p.weight < 1.5),
+        ).toBe(true);
+      }
+    // Exercise the observer's cached selection through real ambient admissions.
+    g.pause = 0;
+    const observer = new EmojiObserver(123, 1, { rng: () => 0 });
+    observer.step(0, 19, { rain: 0, clock: 0 }, [o]);
+    const track = observer.memory.get(o.owner)!;
+    let clock = 0;
+    for (const [emojiSeasons, season, mood] of [
+      [table, 'remembrance', 'candle'],
+      [table, 'absent', 'happy'],
+      [table, 'remembrance', 'candle'],
+      [[{ id: 'remembrance' }], 'remembrance', 'happy'],
+      [table, 'remembrance', 'candle'],
+      [table, null, 'happy'],
+      [table, 'combined', 'candle'],
+      [undefined, 'combined', 'happy'],
+    ] as const) {
+      observer.release(o.owner);
+      track.cooldownUntil = 0;
+      track.attemptAt = clock += 0.5;
+      // With no stationary choices, this selects candle when present, else happy.
+      track.rng = vi.fn(() => 0.08).mockReturnValueOnce(0);
+      observer.step(0.5, 19, { rain: 0, clock, emojiSeasons, season }, [o]);
+      expect(observer.cue(o.owner)?.mood).toBe(mood);
+    }
+    g.place = 'monument';
+    expect(moods(o, { rain: 0, season: calendar.id, emojiSeasons: table })).not.toContain('candle');
+  });
+  it('retains normal temperament weighting for new weather and music choices', () => {
+    const { o, g } = worshipper();
+    g.place = 'monument';
+    const rankFor = (kind: ReturnType<typeof temperament>) =>
+      Array.from({ length: 100 }, (_, i) => i / 100).find((rank) => temperament(rank) === kind)!;
+    for (const [kind, weight] of [
+      ['neutral', 1.5],
+      ['cheerful', 3],
+      ['sleepy', 0.75],
+    ] as const) {
+      g.rank = rankFor(kind);
+      expect(
+        ambientPool(o, { rain: 0, minutes: 1200 }).find((p) => p.mood === 'karaoke')?.weight,
+      ).toBe(weight);
+    }
+    g.rank = rankFor('grumpy');
+    const pool = ambientPool(o, { rain: 1, minutes: 1080 });
+    expect(pool.find((p) => p.mood === 'mosquito')?.weight).toBe(3);
+    expect(pool.find((p) => p.mood === 'sneeze')?.weight).toBe(2);
+    g.rank = rankFor('cheerful');
+    g.place = 'worship';
+    expect(ambientPool(o, { rain: 0 }).find((p) => p.mood === 'music')?.weight).toBe(
+      EMOJI.churchWeight * 2,
+    );
+  });
   it('gates place moods by weekday, daylight and behavior without enabling excluded moods', () => {
     const f = fixture();
     const g = {
