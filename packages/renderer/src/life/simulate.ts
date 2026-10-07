@@ -7671,7 +7671,6 @@ export class LifeWorld {
   private pruneRetired(cap = true) {
     for (const [key, entry] of this.retired)
       if (this.clock - entry.at >= RETIRE.seconds) {
-        this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
         for (const owner of [...entry.life.movers, ...entry.life.gatherers])
           entry.life.crossingWaits.release(owner);
@@ -7682,18 +7681,11 @@ export class LifeWorld {
       while (this.retired.size > RETIRE.max) {
         const key = this.retired.keys().next().value!;
         const life = this.retired.get(key)!.life;
-        this.forgetBirds(life);
         life.momentHost.clear();
         for (const owner of [...life.movers, ...life.gatherers]) life.crossingWaits.release(owner);
         life.emoji.dispose();
         this.retired.delete(key);
       }
-  }
-
-  private forgetBirds(life: TileLife) {
-    if (!this.inspection?.birds && !this.inspection?.recoveringBirds) return;
-    for (const flock of life.flocks)
-      for (const bird of flock.birds) this.inspection.forgetBird(bird);
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
@@ -10365,18 +10357,17 @@ export class LifeWorld {
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const normalPush: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number =
-      inspection
-        ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
-        : (_owner, agent) => out.push(agent);
+    const normalPush: (owner: object, agent: VisibleAgent) => number = inspection
+      ? (owner, agent) => out.push(inspection.present(owner, agent))
+      : (_owner, agent) => out.push(agent);
     const present = diagnostics
-      ? (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
-          const n = normalPush(owner, agent, birdSpeed);
+      ? (owner: object, agent: VisibleAgent) => {
+          const n = normalPush(owner, agent);
           diagnostics.view(owner, out[n - 1]!);
           return n;
         }
       : normalPush;
-    const push = (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+    const push = (owner: object, agent: VisibleAgent) => {
       const cue = this.emojiMemory.cue(owner);
       if (
         cue &&
@@ -10388,7 +10379,7 @@ export class LifeWorld {
         agent.vehicle !== 'carabao'
       )
         agent.emoji = cue;
-      return present(owner, agent, birdSpeed);
+      return present(owner, agent);
     };
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
@@ -10718,12 +10709,7 @@ export class LifeWorld {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
         const out_ = spec.nocturnal ? levels.night : levels.bird;
-        if (
-          flock.rank >= out_ * crowd ||
-          (!inView(flock.x, flock.y) &&
-            !(inspection?.recoveringBirds && flock.birds.some((bird) => inspection.hasBird(bird))))
-        )
-          continue;
+        if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
@@ -10751,7 +10737,7 @@ export class LifeWorld {
           x += flock.x;
           y += flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
+          const birdTime = life.elapsed;
           const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
@@ -10770,11 +10756,14 @@ export class LifeWorld {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          push(
-            bird,
-            { kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } },
-            spec.speed,
-          );
+          push(bird, {
+            kind: 'bird',
+            lng,
+            lat,
+            ahead,
+            flap,
+            bird: { species: flock.species, pose },
+          });
         }
       }
     }
