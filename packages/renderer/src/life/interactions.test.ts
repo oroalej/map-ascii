@@ -6,6 +6,8 @@ import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 import type { WalkingGraph } from './navigation';
 import { Occupancy, memberSize, sweptBodyOverlap, type Body } from './occupancy';
+import { makeScenario, worldTiles } from './testing/scenarios';
+import { valid } from './testing/scenario-checks';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -1276,25 +1278,35 @@ describe('local interaction scenes', () => {
       m.group = kind === 'person' ? [{ ...walker }, { ...walker, back: 2 }] : undefined;
       expect(scene.reserve(m, 0)).toBe(true);
       const visit = scene.visits.get(m)!;
+      const { world } = makeScenario('rain', 1);
+      const tile = [...worldTiles(world).values()][0]!;
+      tile.scenes = scene;
+      tile.movers.splice(0, tile.movers.length, m);
+      tile.gatherers.length = 0;
+      valid(world);
       while (m.x < 80) scene.step(0.1, [m], { rain: 1 });
       const x = m.x;
       scene.step(0.1, [m], { rain: 0 });
       expect(visit.site.queue).toHaveLength(0);
       expect(visit.returnPending).toBe(true);
       expect(visit.state).toBe('approach');
+      valid(world);
       expect(m.x).toBeGreaterThan(x);
       expect(m.hx).toBe(1);
       for (let i = 0; visit.returnPending && i < 100; i++) {
         const x = m.x;
         scene.step(0.1, [m], { rain: 0 });
+        valid(world);
         expect(m.x).toBeGreaterThan(x);
       }
       expect(visit.returnPending).toBe(false);
       expect(visit.state).toBe('return');
+      valid(world);
       expect(m.x).toBeGreaterThan(83 + (kind === 'person' ? 2.45 : kind === 'dog' ? 0.45 : 0.325));
       run(scene, [m], 60);
       expect(scene.visits.has(m)).toBe(false);
       expect(visit.site.queue).toHaveLength(0);
+      valid(world);
     }
   });
 
