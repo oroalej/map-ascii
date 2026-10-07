@@ -513,6 +513,14 @@ export const BIRD_POINTER = { cells: 3, flee: 2 } as const;
 /** Individual mouse-flush reaction delays and acceleration into flight, in seconds. */
 export const BIRD_TAKEOFF = { stagger: 0.18, seconds: [0.4, 0.7] } as const;
 
+/** Airborne escape: radians/s of turning, acceleration in cruise speeds/s, regroup speed. */
+export const BIRD_FLIGHT = {
+  flee: BIRD_POINTER.flee,
+  turn: 5,
+  accelerate: 3,
+  regroup: 1.4,
+} as const;
+
 /**
  * Birds and the weather: from `shelter` rain (0–1) flocks that perch head for the trees and sit
  * it out; a flock's circle drifts `drift` m downwind at full wind strength, and circling it

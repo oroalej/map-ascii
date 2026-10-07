@@ -7,6 +7,12 @@ import {
 import type { SimulationSeason } from './seasonal-simulation';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
+import {
+  birdFlightMargin,
+  stepBirdFlight,
+  type BirdFlight,
+  type BirdFlightStep,
+} from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import {
@@ -79,6 +85,7 @@ import {
   PERCH,
   BIRD_POINTER,
   BIRD_TAKEOFF,
+  BIRD_FLIGHT,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   frontClearance,
@@ -722,6 +729,8 @@ export type Bird = {
   departure?: Point;
   /** Mouse-flushed birds retain their own position until their reaction begins. */
   takeoff?: Point & { delay: number; seconds: number; face: number };
+  /** Independent airborne cursor avoidance, retaining position, heading and speed. */
+  flight?: BirdFlight;
 } & Partial<GroundForager>;
 
 export type Flock = {
@@ -758,6 +767,8 @@ export type Flock = {
   departureBlend?: number;
   /** Individual mouse-flush transitions share an elapsed clock, not a displacement. */
   takeoff?: Point & { age: number; seconds: number; extent: number };
+  /** Bounds of independently flying members; absent during ordinary flock flight. */
+  flightBounds?: { minX: number; minY: number; maxX: number; maxY: number };
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -793,6 +804,16 @@ function birdTurn(flock: Flock, bird: Bird, wobble: number) {
 
 /** One bird's rendered offset from its flock centre, written into caller-owned storage. */
 function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
+  if (bird.flight) {
+    out.x = bird.flight.x - flock.x;
+    out.y = bird.flight.y - flock.y;
+    return;
+  }
+  birdFormationOffset(flock, bird, turn, spread, out);
+}
+
+/** Navigation and regrouping retain the normal formation while members fly independently. */
+function birdFormationOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
   const cos = Math.cos(turn) * spread;
   const sin = Math.sin(turn) * spread;
   const ground = isForager(bird) && flock.landed;
@@ -812,6 +833,14 @@ function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out:
   }
   out.x = x;
   out.y = y;
+}
+
+function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
+  if (flock.flightBounds)
+    for (const bird of flock.birds) {
+      if (bird.flight && near(bird.flight.x, bird.flight.y)) return true;
+    }
+  return false;
 }
 
 /** The agents of one tile. */
@@ -951,6 +980,8 @@ export class TileLife {
   private readonly flockPointer: FlockPointer = { x: 0, y: 0, cellMeters: 0 };
   private readonly flockDetour: Point = { x: 0, y: 0 };
   private readonly birdOffset: Point = { x: 0, y: 0 };
+  private readonly birdFlightStep: BirdFlightStep = { dt: 0, targetX: 0, targetY: 0, speed: 0 };
+  private readonly birdFlightPointer = { x: 0, y: 0, reach: 0 };
   readonly parked: Parked[] = [];
   /** Trains standing by on sidings: one entry per car (`spawnStandby`). */
   readonly standby: Parked[] = [];
@@ -6810,6 +6841,7 @@ export class TileLife {
     const wx = wind ? wind.dir[0] * wind.strength : 0;
     const wy = wind ? wind.dir[1] * wind.strength : 0;
     let pointer: FlockPointer | undefined;
+    this.birdFlightStep.dt = dt;
     if (env?.pointer) {
       pointer = this.flockPointer;
       const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
@@ -6820,7 +6852,7 @@ export class TileLife {
     }
     for (const flock of this.flocks) {
       if (pointer) pointer.radius = undefined;
-      if (near && !near(flock.x, flock.y)) continue;
+      if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
       if (flock.takeoff) {
         flock.takeoff.age += dt;
@@ -6834,6 +6866,7 @@ export class TileLife {
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
+      if (pointer && !sitting && !flock.takeoff) this.beginBirdFlights(flock, pointer, observing);
       flock.scatter = Math.max(0, flock.scatter - dt);
       // Sitting out the rain, a flock doesn't count down its stay.
       const committed = flock.landing || (flock.home >= 0 && flock.perch >= 0 && !flock.perched);
@@ -6851,6 +6884,7 @@ export class TileLife {
               this.prepareLanding(flock, { x: flock.lx, y: flock.ly })
             ) {
               flock.home = -1;
+              if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
               continue;
             }
           }
@@ -6870,6 +6904,7 @@ export class TileLife {
         } else if (flock.landed && !sheltering) {
           this.stepGroundFlock(flock, dt);
         }
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
       if (
@@ -6951,10 +6986,12 @@ export class TileLife {
         }
         if (distance > 0 && !detour) [flock.hx, flock.hy] = [dx / distance, dy / distance];
         if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
       if (count === 0) {
         if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
       // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
@@ -6983,7 +7020,82 @@ export class TileLife {
         [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
       if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+      if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
     }
+  }
+
+  /** Nearby airborne birds retain their velocity and respond individually, without RNG draws. */
+  private beginBirdFlights(flock: Flock, pointer: FlockPointer, observing: boolean) {
+    const spec = BIRD_SPECIES[flock.species];
+    const speed = spec.speed * this.perMeter * 1.4;
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin = birdFlightMargin(speed, this.birdFlightStep.dt, BIRD_FLIGHT);
+    const bound = this.flockBound(flock);
+    const bounds = flock.flightBounds;
+    if (
+      (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2 > (reach + margin + bound) ** 2 &&
+      (!bounds ||
+        pointer.x < bounds.minX - reach - margin ||
+        pointer.x > bounds.maxX + reach + margin ||
+        pointer.y < bounds.minY - reach - margin ||
+        pointer.y > bounds.maxY + reach + margin)
+    )
+      return;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      if (bird.flight) continue;
+      birdOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      const x = flock.x + this.birdOffset.x;
+      const y = flock.y + this.birdOffset.y;
+      const distance2 = (x - pointer.x) ** 2 + (y - pointer.y) ** 2;
+      if (distance2 >= (reach + margin) ** 2) continue;
+      bird.flight = {
+        x,
+        y,
+        hx: flock.hx,
+        hy: flock.hy,
+        speed,
+        phase: (bird.phase + i * 0.61803398875) % 1,
+      };
+      flock.flightBounds ??= { minX: x, minY: y, maxX: x, maxY: y };
+      if (distance2 < reach * reach) this.recordStartle(flock, observing);
+    }
+  }
+
+  /** Follow independent escape curves, then rejoin the moving formation when the route is clear. */
+  private stepBirdFlights(flock: Flock, pointer?: FlockPointer) {
+    const step = this.birdFlightStep;
+    const spec = BIRD_SPECIES[flock.species];
+    step.speed = spec.speed * this.perMeter * 1.4;
+    if (pointer) {
+      step.pointer = this.birdFlightPointer;
+      step.pointer.x = pointer.x;
+      step.pointer.y = pointer.y;
+      step.pointer.reach =
+        Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    } else step.pointer = undefined;
+    const bounds = flock.flightBounds!;
+    bounds.minX = bounds.minY = Infinity;
+    bounds.maxX = bounds.maxY = -Infinity;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (const bird of flock.birds) {
+      if (!bird.flight) continue;
+      birdFormationOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      step.targetX = flock.x + this.birdOffset.x;
+      step.targetY = flock.y + this.birdOffset.y;
+      if (stepBirdFlight(bird.flight, step, BIRD_FLIGHT)) {
+        delete bird.flight;
+        continue;
+      }
+      bounds.minX = Math.min(bounds.minX, bird.flight.x);
+      bounds.minY = Math.min(bounds.minY, bird.flight.y);
+      bounds.maxX = Math.max(bounds.maxX, bird.flight.x);
+      bounds.maxY = Math.max(bounds.maxY, bird.flight.y);
+    }
+    if (bounds.minX === Infinity) delete flock.flightBounds;
   }
 
   /** Preserve each bird's position through a staggered, smoothly accelerated mouse flush. */
@@ -6994,6 +7106,7 @@ export class TileLife {
     let extent = 0;
     for (let i = 0; i < flock.birds.length; i++) {
       const bird = flock.birds[i]!;
+      if (bird.flight) continue;
       const turn = birdTurn(flock, bird, wobble);
       birdOffset(flock, bird, turn, spread, this.birdOffset);
       // Existing phase plus slot identity separates even coincident birds without RNG draws.
@@ -7016,21 +7129,22 @@ export class TileLife {
   }
 
   /** Rendered offsets are evaluated only near the mouse or its target. */
-  private flockExtent(flock: Flock) {
+  private flockExtent(flock: Flock, formation = false) {
     const spread = birdSpread(flock);
     const wobble = this.time * 0.8;
     let extent = 0;
     for (const bird of flock.birds) {
       const turn = birdTurn(flock, bird, wobble);
-      birdOffset(flock, bird, turn, spread, this.birdOffset);
+      if (formation) birdFormationOffset(flock, bird, turn, spread, this.birdOffset);
+      else birdOffset(flock, bird, turn, spread, this.birdOffset);
       extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
     }
     return extent;
   }
 
-  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point) {
+  /** Conservative formation envelope, including resting birds still waiting to take off. */
+  private flockBound(flock: Flock) {
     const spec = BIRD_SPECIES[flock.species];
-    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
     let bound =
       Math.max(4 * spec.spread[1], 2 * (FORAGE_SPECIES[flock.species]?.patch ?? 0), PERCH.spread) *
       this.perMeter;
@@ -7039,18 +7153,34 @@ export class TileLife {
         bound,
         Math.hypot(flock.x - flock.takeoff.x, flock.y - flock.takeoff.y) + flock.takeoff.extent,
       );
+    return bound;
+  }
+
+  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point) {
+    const spec = BIRD_SPECIES[flock.species];
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin =
+      flock.flightBounds && !target
+        ? birdFlightMargin(spec.speed * this.perMeter * 1.4, this.birdFlightStep.dt, BIRD_FLIGHT)
+        : 0;
+    const bound = this.flockBound(flock);
     const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
     if (
-      distance2 > (reach + bound) ** 2 &&
+      distance2 > (reach + margin + bound) ** 2 &&
       (!target || (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + bound) ** 2)
     )
       return 0;
-    return (pointer.radius ??= reach + this.flockExtent(flock));
+    // The navigation anchor stays clear, while each independent bird steers around the mouse.
+    return (
+      (pointer.radius ??= reach + this.flockExtent(flock, flock.flightBounds !== undefined)) +
+      margin
+    );
   }
 
-  private pointerNear(flock: Flock, pointer: FlockPointer, target: Point = flock) {
+  private pointerNear(flock: Flock, pointer: FlockPointer, target?: Point) {
     const radius = this.pointerRadius(flock, pointer, target);
-    return radius > 0 && (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 < radius ** 2;
+    const at = target ?? flock;
+    return radius > 0 && (at.x - pointer.x) ** 2 + (at.y - pointer.y) ** 2 < radius ** 2;
   }
 
   private recordStartle(flock: Flock, observing: boolean) {
@@ -7096,11 +7226,11 @@ export class TileLife {
     const dx = flock.x - pointer.x;
     const dy = flock.y - pointer.y;
     const distance2 = dx * dx + dy * dy;
-    if (
-      distance2 < radius * radius ||
-      (dx + hx * step) ** 2 + (dy + hy * step) ** 2 >= radius * radius
-    )
-      return;
+    if (distance2 < radius * radius) {
+      // Independent flyers need room to bank, even before the navigation anchor clears that margin.
+      const physical = this.pointerRadius(flock, pointer, flock);
+      if (!flock.flightBounds || distance2 < physical * physical || dx * hx + dy * hy >= 0) return;
+    } else if ((dx + hx * step) ** 2 + (dy + hy * step) ** 2 >= radius * radius) return;
     const distance = Math.sqrt(distance2);
     const cross = dx * hy - dy * hx;
     const side = Math.abs(cross) > 1e-8 ? Math.sign(cross) : flock.rank < 0.5 ? 1 : -1;
@@ -10852,7 +10982,11 @@ export class LifeWorld {
         const spec = BIRD_SPECIES[flock.species];
         const flockCue = this.emojiMemory.cue(flock);
         const out_ = spec.nocturnal ? levels.night : levels.bird;
-        if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
+        if (
+          flock.rank >= out_ * crowd ||
+          (!inView(flock.x, flock.y) && !flyingBirdNear(flock, inView))
+        )
+          continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
@@ -10860,14 +10994,14 @@ export class LifeWorld {
         const spread = birdSpread(flock);
         for (const bird of flock.birds) {
           const turn = birdTurn(flock, bird, wobble);
-          const ground = isForager(bird) && flock.landed;
+          const ground = isForager(bird) && flock.landed && !bird.flight;
           birdOffset(flock, bird, turn, spread, this.birdOffset);
           const x = this.birdOffset.x + flock.x;
           const y = this.birdOffset.y + flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
           const birdTime = life.elapsed;
           const waiting = bird.takeoff !== undefined && takeoffProgress(flock, bird) === 0;
-          const resting = sitting || waiting;
+          const resting = (sitting && !bird.flight) || waiting;
           const flap = resting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
           const pose = resting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
@@ -10877,8 +11011,9 @@ export class LifeWorld {
                 ? 0.25
                 : -0.25
               : 0;
-          const face =
-            bird.takeoff && flock.takeoff
+          const face = bird.flight
+            ? Math.atan2(bird.flight.hy, bird.flight.hx)
+            : bird.takeoff && flock.takeoff
               ? takeoffProgress(flock, bird) === 0
                 ? bird.takeoff.face
                 : Math.atan2(y - bird.takeoff.y, x - bird.takeoff.x)
