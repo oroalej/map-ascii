@@ -647,7 +647,7 @@ describe('live motion preference', () => {
     const createInline = Hosts.createInlineHost;
     vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
       const host = createInline(...args);
-      const request = host.request;
+      const request = host.request.bind(host);
       host.request = (frame) => {
         frames.push(frame);
         return request(frame);
