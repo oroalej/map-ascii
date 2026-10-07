@@ -260,7 +260,7 @@ export function removeVoid<F extends Feature>(feature: F, t: Territory): F | und
   const result = { ...feature, geometry };
   if (feature.bbox) result.bbox = turfBbox(result);
   // All callers use the Geometry union; subtraction may promote a single geometry to a multi.
-  return result as F;
+  return result;
 }
 
 export const geometryOutsideVoid = (geometry: Geometry, t: Territory) => {

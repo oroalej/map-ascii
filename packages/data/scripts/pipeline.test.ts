@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
 import { SiteDetail, OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
-import type { Polygon } from 'geojson';
+import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
@@ -131,10 +131,8 @@ describe('pipeline (02–04) on the fixture extract', () => {
       };
       try {
         await convert.run(local);
-        const converted = await readJson<import('geojson').FeatureCollection>(
-          join(buildDir, files.osm),
-        );
-        const extra: import('geojson').Feature[] = [
+        const converted = await readJson<FeatureCollection>(join(buildDir, files.osm));
+        const extra: Feature[] = [
           {
             type: 'Feature',
             id: 'way/extension',
@@ -178,6 +176,25 @@ describe('pipeline (02–04) on the fixture extract', () => {
           features: [...converted.features, ...extra],
         });
         await normalize.run(local);
+        if (enabled)
+          await expect(
+            mergeContent.run({
+              ...local,
+              city: {
+                ...local.city,
+                life: {
+                  sites: [
+                    {
+                      id: 'void',
+                      kind: 'shelter',
+                      position: [-0.004, 0.008],
+                      source: 'Fixture source',
+                    },
+                  ],
+                },
+              },
+            }),
+          ).rejects.toThrow('outside the territory');
         await mergeContent.run(local);
         await searchStep.run(local);
         const t = Territory.parse(await readJson(join(buildDir, files.territory)));
