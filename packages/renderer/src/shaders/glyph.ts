@@ -81,6 +81,10 @@ uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
 uniform float u_lifeTime;
+uniform vec3 u_haunts[8];
+uniform int u_hauntCount;
+uniform vec2 u_hauntOrigin;
+uniform vec2 u_hauntCell;
 uniform int u_pulse;
 uniform sampler2D u_overlay;
 uniform sampler2D u_labelAtlas;
@@ -176,9 +180,19 @@ float effectTime(ivec2 cell, int channel) {
   return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
 }
 
-float lampOn(int g, float time) {
+float lampOn(int g, float time, vec2 sampleCell) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
+  if(u_shimmer && u_hauntCount>0 && (state==${LampState.working} || state==${LampState.flicker} || state==${LampState.candle})) {
+    vec2 world=u_hauntOrigin+sampleCell*u_hauntCell;
+    for(int i=0;i<8;i++) {
+      if(i>=u_hauntCount)break;
+      if(distance(world,u_haunts[i].xy)<u_haunts[i].z) {
+        uint tick=cellHash(ivec2(int(floor(time*17.0)),g+407));
+        return (tick&255u)<100u?0.08:0.9+0.1*sin(time*29.0+float(g));
+      }
+    }
+  }
   if (state == ${LampState.candle}) {
     float beat = 5.0 + float(g >> 3) * 0.23;
     return u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
@@ -241,7 +255,7 @@ float reflection(vec2 at, ivec2 cell) {
     if ((g & 7) == ${LampState.beam}) continue;
     ivec2 candleCell = clamp(ivec2(floor(p)), ivec2(0), size - 1);
     float clock = (g & 7) == ${LampState.candle} ? effectTime(candleCell, 1) : u_lifeTime;
-    float s = texture(u_light, p / vec2(size)).r * lampOn(g, clock) * switchedOn(g);
+    float s = texture(u_light, p / vec2(size)).r * lampOn(g, clock, p) * switchedOn(g);
     best = max(best, s * (1.0 - float(k) / 12.0));
   }
   float ripple = u_shimmer ? 0.55 + 0.45 * sin(row * 2.1 + u_time * 2.3) : 0.8;
@@ -445,7 +459,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   if (part == ${FixturePart.flagFoot}) color = daylit(vec3(0.43, 0.39, 0.33));
   if (part == ${FixturePart.casing}) color = daylit(u_fixturePaints[1]);
   if (part == ${FixturePart.lamp}) {
-    float lit = lampOn(info, u_lifeTime) * switchedOn(info);
+    float lit = lampOn(info, u_lifeTime, vec2(cell)+0.5) * switchedOn(info);
     color = mix(color, u_fixturePaints[2], lit);
   }
   if (part >= ${FixturePart.red} && part <= ${FixturePart.green}) {
@@ -467,11 +481,11 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   ${
     seasonal
       ? /* glsl */ `if (part == ${FixturePart.lantern}) {
-    float lit = lampOn(info, u_time) * switchedOn(info);
+    float lit = lampOn(info, u_time, vec2(cell)+0.5) * switchedOn(info);
     color = mix(lampLit(daylit(u_fixturePaints[9]), rainLight), u_fixturePaints[2], lit);
   }
   if (part == ${FixturePart.candle}) {
-    float lit = lampOn(info, u_time) * switchedOn(info);
+    float lit = lampOn(info, u_time, vec2(cell)+0.5) * switchedOn(info);
     bool flame = float(inCell.y) / u_cell.y < 0.4;
     vec3 wax = lampLit(daylit(vec3(0.95, 0.88, 0.69)), rainLight);
     vec3 amber = vec3(1.0, 0.64, 0.16);
@@ -653,7 +667,7 @@ void main() {
   int lampG = int(light.g * 255.0 + 0.5);
   bool brakeGlow = (lampG & 7) == ${LampState.beam} && (lampG >> 3) == ${BRAKE_GLOW.seed};
   float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
-  float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock) * switchedOn(lampG) * u_lampShow : 0.0;
+  float lampLight = lampsNow > 0.0 ? lampOn(lampG, lampClock, vec2(cell)+0.5) * switchedOn(lampG) * u_lampShow : 0.0;
   bool ground = (u_cellBits[cls] & ${CellBit.person}) != 0;
   bool flood = (lampG & 7) == ${LampState.flood};
   // Floodlights and candles light wherever they are; streetlights light the ground.

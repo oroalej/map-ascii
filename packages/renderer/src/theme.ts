@@ -1,5 +1,6 @@
 import { PEDESTRIAN_GLYPHS } from './life/pedestrian-glyphs';
 import { PROCESSION_GLYPHS } from './life/procession-glyphs';
+import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
@@ -583,6 +584,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...CANDLE_GLYPHS,
     ...PEDESTRIAN_GLYPHS,
     ...PROCESSION_GLYPHS,
+    ...FOLKLORE_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];

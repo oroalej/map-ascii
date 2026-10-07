@@ -415,6 +415,37 @@ for (const city of cities) {
         await expect.poll(agents, { timeout: 20_000 }).toBeGreaterThan(0);
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
+        if (city.folklore && city.cemeteryAnchor) {
+          // Date stays fixed while performance/animation clocks continue normally.
+          const instant = await page.evaluate((timezone) => {
+            const guess = new Date('2026-07-01T22:00:00Z');
+            const parts = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone ?? 'UTC',
+              hour: 'numeric',
+              hourCycle: 'h23',
+            }).formatToParts(guess);
+            const hour = Number(parts.find((p) => p.type === 'hour')!.value);
+            return guess.getTime() + (22 - hour) * 3600000;
+          }, city.timezone);
+          await page.clock.setFixedTime(instant);
+          await page.goto(
+            `/${city.slug}?debug=1&z=17&lat=${city.cemeteryAnchor.lat}&lng=${city.cemeteryAnchor.lng}`,
+          );
+          await mapReady(page);
+          await page.getByRole('button', { name: 'Time: 12:00', exact: true }).press('Enter');
+          await page.getByRole('button', { name: 'Time: 18:00', exact: true }).press('Enter');
+          const folklore = page.getByText('Folklore (simulated)', { exact: true });
+          await expect(folklore).toBeVisible({ timeout: 20000 });
+          const toggle = page.getByRole('button', { name: 'Life', exact: true });
+          await toggle.press('Enter');
+          await expect(folklore).toHaveCount(0);
+          await toggle.press('Enter');
+          await expect(folklore).toBeVisible({ timeout: 20000 });
+          await page.emulateMedia({ reducedMotion: 'reduce' });
+          await expect(folklore).toHaveCount(0);
+          await page.emulateMedia({ reducedMotion: 'no-preference' });
+          await expect(folklore).toBeVisible({ timeout: 20000 });
+        }
         expect(errors).toEqual([]);
       });
 

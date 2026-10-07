@@ -1558,141 +1558,181 @@ export const Season = z
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
-export const CityLife = z.strictObject({
-  seasons: z
-    .array(Season)
-    .refine(
-      (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
-      'duplicate season id',
-    )
-    .superRefine((seasons, ctx) => {
-      const byId = new Map(seasons.map((season) => [season.id, season]));
-      for (const [index, season] of seasons.entries()) {
-        if (!season.includes) continue;
-        const seen = new Set<string>();
-        const includedInstallations: (typeof season.installations)[] = [];
-        for (const [includeIndex, id] of season.includes.entries()) {
-          const included = byId.get(id);
-          const message = !included
-            ? 'included season must exist'
-            : id === season.id
-              ? 'a season cannot include itself'
-              : seen.has(id)
-                ? 'duplicate included season'
-                : included.includes
-                  ? 'included seasons cannot include another season'
-                  : undefined;
-          if (message)
+const FolkloreCounts = z
+  .tuple([z.int().min(1).max(16), z.int().min(1).max(16)])
+  .refine(([low, high]) => low <= high, 'counts must be ascending');
+export const Folklore = z.strictObject({
+  hours: z
+    .strictObject({ from: z.int().min(0).max(1439), to: z.int().min(0).max(1439) })
+    .refine((hours) => hours.from !== hours.to, 'hours must describe a nonempty window'),
+  ghosts: z.strictObject({
+    sites: z
+      .array(z.enum(['cemetery', 'worship', 'hospital']))
+      .min(1)
+      .refine((sites) => new Set(sites).size === sites.length, 'duplicate folklore site'),
+    per_cemetery: FolkloreCounts,
+    undas_per_cemetery: FolkloreCounts,
+    undas_season: z.string().min(1),
+    site_share: z.number().min(0).max(1),
+    range_m: z
+      .tuple([z.number().positive().max(200), z.number().positive().max(200)])
+      .refine(([low, high]) => low <= high, 'range must be ascending'),
+  }),
+  manananggal: z.strictObject({
+    window: SeasonWindowSchema,
+    night_chance: z.number().min(0).max(1),
+  }),
+  sources: Sources,
+});
+
+export const CityLife = z
+  .strictObject({
+    folklore: Folklore.optional(),
+    seasons: z
+      .array(Season)
+      .refine(
+        (seasons) => new Set(seasons.map((s) => s.id)).size === seasons.length,
+        'duplicate season id',
+      )
+      .superRefine((seasons, ctx) => {
+        const byId = new Map(seasons.map((season) => [season.id, season]));
+        for (const [index, season] of seasons.entries()) {
+          if (!season.includes) continue;
+          const seen = new Set<string>();
+          const includedInstallations: (typeof season.installations)[] = [];
+          for (const [includeIndex, id] of season.includes.entries()) {
+            const included = byId.get(id);
+            const message = !included
+              ? 'included season must exist'
+              : id === season.id
+                ? 'a season cannot include itself'
+                : seen.has(id)
+                  ? 'duplicate included season'
+                  : included.includes
+                    ? 'included seasons cannot include another season'
+                    : undefined;
+            if (message)
+              ctx.addIssue({
+                code: 'custom',
+                path: [index, 'includes', includeIndex],
+                message,
+              });
+            else if (included) includedInstallations.push(included.installations);
+            seen.add(id);
+          }
+          const installations = composeSeasonInstallations(
+            season.installations,
+            includedInstallations,
+          );
+          const emojiCount =
+            (season.emoji?.length ?? 0) +
+            [...seen].reduce((count, id) => count + (byId.get(id)?.emoji?.length ?? 0), 0);
+          if (emojiCount > 20)
             ctx.addIssue({
               code: 'custom',
-              path: [index, 'includes', includeIndex],
-              message,
+              path: [index, 'includes'],
+              message: 'a composed season accepts at most 20 emoji entries',
             });
-          else if (included) includedInstallations.push(included.installations);
-          seen.add(id);
+          if (new Set(installations.map((i) => i.id)).size !== installations.length)
+            ctx.addIssue({
+              code: 'custom',
+              path: [index, 'includes'],
+              message: 'composed installations must have unique ids',
+            });
+          if (installations.length > MAX_SEASON_INSTALLATIONS)
+            ctx.addIssue({
+              code: 'custom',
+              path: [index, 'includes'],
+              message: `a composed season accepts at most ${MAX_SEASON_INSTALLATIONS} installations`,
+            });
         }
-        const installations = composeSeasonInstallations(
-          season.installations,
-          includedInstallations,
-        );
-        const emojiCount =
-          (season.emoji?.length ?? 0) +
-          [...seen].reduce((count, id) => count + (byId.get(id)?.emoji?.length ?? 0), 0);
-        if (emojiCount > 20)
-          ctx.addIssue({
-            code: 'custom',
-            path: [index, 'includes'],
-            message: 'a composed season accepts at most 20 emoji entries',
-          });
-        if (new Set(installations.map((i) => i.id)).size !== installations.length)
-          ctx.addIssue({
-            code: 'custom',
-            path: [index, 'includes'],
-            message: 'composed installations must have unique ids',
-          });
-        if (installations.length > MAX_SEASON_INSTALLATIONS)
-          ctx.addIssue({
-            code: 'custom',
-            path: [index, 'includes'],
-            message: `a composed season accepts at most ${MAX_SEASON_INSTALLATIONS} installations`,
-          });
-      }
-    })
-    .optional(),
-  signals: z
-    .strictObject({
-      derive: z.boolean().optional(),
-      add: z
-        .array(
-          z.strictObject({
-            id: z.string().min(1),
-            position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
-            linked_junctions: z
-              .array(SignalPosition)
-              .min(1)
-              .refine(
-                (points) => new Set(points.map((p) => p.join(','))).size === points.length,
-                'duplicate linked junction',
-              )
-              .optional(),
-            source: z.string().min(1),
-          }),
-        )
-        .refine(
-          (items) => new Set(items.map((i) => i.id)).size === items.length,
-          'duplicate signal id',
-        )
-        .optional(),
-      remove: z
-        .array(
-          z
-            .strictObject({
+      })
+      .optional(),
+    signals: z
+      .strictObject({
+        derive: z.boolean().optional(),
+        add: z
+          .array(
+            z.strictObject({
               id: z.string().min(1),
-              osm_id: z.int().positive().optional(),
-              position: z
-                .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+              position: z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]),
+              linked_junctions: z
+                .array(SignalPosition)
+                .min(1)
+                .refine(
+                  (points) => new Set(points.map((p) => p.join(','))).size === points.length,
+                  'duplicate linked junction',
+                )
                 .optional(),
               source: z.string().min(1),
-            })
-            .refine(
-              (item) => !!item.osm_id !== !!item.position,
-              'provide either osm_id or position',
-            ),
-        )
-        .optional(),
-    })
-    .optional(),
-  sites: z
-    .array(LifeSite)
-    .refine((sites) => new Set(sites.map((s) => s.id)).size === sites.length, {
-      message: 'duplicate life site id',
-    })
-    .refine(
-      (sites) => {
-        const ids = sites.flatMap((s) => (s.osm_id ? [s.osm_id] : []));
-        return new Set(ids).size === ids.length;
-      },
-      { message: 'duplicate life site osm_id' },
+            }),
+          )
+          .refine(
+            (items) => new Set(items.map((i) => i.id)).size === items.length,
+            'duplicate signal id',
+          )
+          .optional(),
+        remove: z
+          .array(
+            z
+              .strictObject({
+                id: z.string().min(1),
+                osm_id: z.int().positive().optional(),
+                position: z
+                  .tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)])
+                  .optional(),
+                source: z.string().min(1),
+              })
+              .refine(
+                (item) => !!item.osm_id !== !!item.position,
+                'provide either osm_id or position',
+              ),
+          )
+          .optional(),
+      })
+      .optional(),
+    sites: z
+      .array(LifeSite)
+      .refine((sites) => new Set(sites.map((s) => s.id)).size === sites.length, {
+        message: 'duplicate life site id',
+      })
+      .refine(
+        (sites) => {
+          const ids = sites.flatMap((s) => (s.osm_id ? [s.osm_id] : []));
+          return new Set(ids).size === ids.length;
+        },
+        { message: 'duplicate life site osm_id' },
+      )
+      .optional(),
+    rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
+    schedules: z
+      .strictObject({
+        /** Services at places of worship: weekdays (0 = Sunday) and local start times. */
+        worship: z
+          .array(z.strictObject({ weekdays: Weekdays, times: z.array(ClockTime).min(1) }))
+          .optional(),
+        /** School days and hours. */
+        school: z
+          .strictObject({ weekdays: Weekdays, in: ClockTime, out: ClockTime })
+          .refine((s) => s.in < s.out, { message: 'classes must end after they start' })
+          .optional(),
+        /** Shops' typical opening and closing times (each keeps its own around them). */
+        shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
+      })
+      .optional(),
+    source: z.string().min(1),
+  })
+  .superRefine((life, ctx) => {
+    if (
+      life.folklore &&
+      !life.seasons?.some((season) => season.id === life.folklore!.ghosts.undas_season)
     )
-    .optional(),
-  rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
-  schedules: z
-    .strictObject({
-      /** Services at places of worship: weekdays (0 = Sunday) and local start times. */
-      worship: z
-        .array(z.strictObject({ weekdays: Weekdays, times: z.array(ClockTime).min(1) }))
-        .optional(),
-      /** School days and hours. */
-      school: z
-        .strictObject({ weekdays: Weekdays, in: ClockTime, out: ClockTime })
-        .refine((s) => s.in < s.out, { message: 'classes must end after they start' })
-        .optional(),
-      /** Shops' typical opening and closing times (each keeps its own around them). */
-      shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
-    })
-    .optional(),
-  source: z.string().min(1),
-}) satisfies z.ZodType<CityLifeConfig>;
+      ctx.addIssue({
+        code: 'custom',
+        path: ['folklore', 'ghosts', 'undas_season'],
+        message: 'Undas season must exist',
+      });
+  }) satisfies z.ZodType<CityLifeConfig>;
 export type CityLife = z.infer<typeof CityLife>;
 export const RuntimeCityLifeSchema = CityLife.transform(
   runtimeCityLife,

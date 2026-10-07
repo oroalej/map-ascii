@@ -5,6 +5,7 @@
  * deleted as a unit, so a lost WebGL context can be rebuilt from scratch (index.ts).
  */
 import type * as twgl from 'twgl.js';
+import { deleteFolklore, type FolkloreResources } from './folklore-pass';
 import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
@@ -30,6 +31,7 @@ export type StreetTextMesh = {
 };
 
 export type Programs = {
+  folklore?: FolkloreResources;
   /** Lazy seasonal effect; recreated normally after context loss. */
   fireworks?: FireworksResources;
   /** An idle-linked program is consumed once when the effect creates its buffers. */
@@ -220,6 +222,7 @@ export function prewarmGlyphPrograms(
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
+  if (p.folklore) deleteFolklore(gl, p.folklore);
   p.glyphWarmup?.cancel();
   if (p.fireworks) deleteFireworks(gl, p.fireworks);
   if (p.fireworksProgram) gl.deleteProgram(p.fireworksProgram.program);

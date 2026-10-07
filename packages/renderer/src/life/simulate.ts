@@ -5,6 +5,9 @@ import {
   type CrossingCursor,
 } from './crossing-wait';
 import type { SimulationSeason } from './seasonal-simulation';
+import { FolkloreObserver, type FolkloreCalendar, type FolkloreBody } from './folklore';
+import type { RuntimeFolklore } from './folklore-config';
+import { FOLKLORE } from './folklore-config';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
 import { DEFAULT_CELLS } from '../density';
@@ -529,6 +532,8 @@ export type LifeEnv = {
   emojiSeasons?: readonly SimulationSeason[];
   /** Observer-only city calendar and same-frame lighting/weather choice. */
   date?: { epochDay: number; weekday: number; preview: boolean };
+  folkloreDate?: FolkloreCalendar;
+  folkloreDisturber?: { lng: number; lat: number };
   sunAltitude?: number;
   windPreset?: 'calm' | 'breeze' | 'gusty' | 'storm';
   emojiView?: { levels: Activity; crowd: number; bounds?: LngLatBounds };
@@ -6652,7 +6657,12 @@ export class TileLife {
    * `wary` distance (life/birds.ts): walking or driving by, a dog twice as far. People standing
    * still, sitting, and dogs lying down leave it be.
    */
-  private disturbed(flock: Flock, levels?: Activity): boolean {
+  private disturbed(flock: Flock, levels?: Activity, folklore?: { x: number; y: number }): boolean {
+    if (
+      folklore &&
+      Math.hypot(folklore.x - flock.x, folklore.y - flock.y) < FOLKLORE.flockRadius * this.perMeter
+    )
+      return true;
     const { wary } = BIRD_SPECIES[flock.species];
     if (wary <= 0) return false;
     const reach = wary * this.perMeter;
@@ -6711,6 +6721,9 @@ export class TileLife {
     const wind = env?.wind;
     const wx = wind ? wind.dir[0] * wind.strength : 0;
     const wy = wind ? wind.dir[1] * wind.strength : 0;
+    const folklore =
+      env?.folkloreDisturber &&
+      lngLatToTile(this.tile, env.folkloreDisturber.lng, env.folkloreDisturber.lat);
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
@@ -6725,7 +6738,7 @@ export class TileLife {
       if (!(sheltering && sitting) && !committed) flock.stay -= dt;
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
-        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels);
+        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels, folklore);
         if (flushed || (!sheltering && flock.stay <= 0)) {
           if (!flushed && flock.perched && flock.home >= 0) {
             flock.roost = flock.home;
@@ -6970,6 +6983,55 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private readonly folklore: FolkloreObserver;
+  setFolklore(config: RuntimeFolklore | undefined) {
+    this.folklore.setConfig(config);
+  }
+  visibleFolklore(zoom: number, center: readonly [number, number]) {
+    return this.folklore.packet(zoom, center);
+  }
+  private sampleFolklore(
+    weather: Pick<LifeEnv, 'minutes' | 'folkloreDate'> | undefined,
+    dt: number,
+  ) {
+    if (!this.folklore.configured) return;
+    const sources = [...this.tiles].map(([key, life]) => ({
+      key,
+      tile: life.tile,
+      geo: life.geo,
+      perMeter: life.perMeter,
+      owns: (p: { x: number; y: number }) => this.owns(life, p),
+    }));
+    this.folklore.step(
+      sources,
+      { minutes: weather?.minutes, calendar: weather?.folkloreDate, clock: this.emojiClock, dt },
+      (geometry) => {
+        const bodies: FolkloreBody[] = [];
+        for (const life of this.tiles.values())
+          for (const m of life.movers) {
+            if (
+              (m.kind !== 'person' && m.kind !== 'vehicle') ||
+              !inTile(m) ||
+              !this.owns(life, m) ||
+              (this.lastLevels && m.rank >= this.lastLevels[m.kind])
+            )
+              continue;
+            const p = life.pose(m),
+              at = geometry.world(life, p),
+              size = m.vehicle ? VEHICLES[m.vehicle] : undefined;
+            bodies.push({
+              ...at,
+              hx: p.hx,
+              hy: p.hy,
+              length: size?.length ?? 0.6,
+              width: size?.width ?? 0.5,
+              walker: m.kind === 'person',
+            });
+          }
+        return bodies;
+      },
+    );
+  }
   readonly crossingReservations = new CrossingReservations();
   private crossingCellMeters = 0;
   private retainCrossingClaims() {
@@ -7483,7 +7545,9 @@ export class LifeWorld {
     private readonly momentOptions?: MomentOptions,
     itemInspection = false,
     private readonly emojiObserver = true,
+    folklore = true,
   ) {
+    this.folklore = new FolkloreObserver(folklore);
     this.traffic = resolveTraffic(traffic);
     if (itemInspection) this.inspection = new LifeInspection();
     this.momentOptions = { ...momentOptions, memory: new DialogueMemory() };
@@ -7497,6 +7561,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.folklore.clear();
     this.releaseEventActors(false, true);
     for (const tile of this.tiles.values()) tile.emoji.dispose();
     for (const { life } of this.retired.values()) life.emoji.dispose();
@@ -7583,6 +7648,7 @@ export class LifeWorld {
     prepared?: ReadonlyMap<string, TileLife>,
     bootstrap = false,
   ) {
+    if (!tiles.length) this.folklore.clear();
     if (view) this.viewContext = view;
     const gradual = !!this.viewContext && this.bootstrapped && !bootstrap;
     const start = this.profiler?.time();
@@ -9408,7 +9474,10 @@ export class LifeWorld {
     zoom?: number,
     bounds?: LngLatBounds,
     wind?: LifeEnv['wind'],
-    weather?: Pick<LifeEnv, 'rain' | 'minutes' | 'season' | 'date' | 'sunAltitude' | 'windPreset'>,
+    weather?: Pick<
+      LifeEnv,
+      'rain' | 'minutes' | 'season' | 'date' | 'folkloreDate' | 'sunAltitude' | 'windPreset'
+    >,
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
@@ -9421,12 +9490,16 @@ export class LifeWorld {
     if (this.played?.timing) this.played.elapsed += Math.max(0, dt);
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
-    if (clamped === 0) return;
+    if (clamped === 0) {
+      this.sampleFolklore(weather, 0);
+      return;
+    }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
     this.pruneRetired();
     if (!this.tiles.size) {
+      this.folklore.clear();
       this.arrivals.clear();
       return;
     }
@@ -9449,6 +9522,9 @@ export class LifeWorld {
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
     };
+    this.sampleFolklore(weather, Math.max(0, dt));
+    const folklore = this.folklore.manananggal;
+    if (folklore && folklore.alpha > 0.001) env.folkloreDisturber = folklore;
     const event = this.procession();
     const eventScene = event && this.scenes.get(event.id);
     const groundEvent = eventScene instanceof GroundProcessionScene;
@@ -10322,7 +10398,19 @@ export class LifeWorld {
         // points down).
         const { x, y, hx, hy } = life.pose(m);
         const [lng, lat] = tileToLngLat(tile, { x, y });
-        const ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
+        let ahead = tileToLngLat(tile, { x: x + hx * perMeter, y: y + hy * perMeter });
+        const creature = this.folklore.manananggal;
+        if (m.kind === 'dog' && creature && creature.alpha > 0.001) {
+          const at = lngLatToTile(tile, creature.lng, creature.lat),
+            dx = at.x - x,
+            dy = at.y - y,
+            distance = Math.hypot(dx, dy);
+          if (distance > 1e-9 && distance <= FOLKLORE.dogRadius * perMeter)
+            ahead = tileToLngLat(tile, {
+              x: x + (dx / distance) * perMeter,
+              y: y + (dy / distance) * perMeter,
+            });
+        }
         if (m.vehicle) {
           const side = tileToLngLat(tile, { x: x - hy * perMeter, y: y + hx * perMeter });
           const motor =

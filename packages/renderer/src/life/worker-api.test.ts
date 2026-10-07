@@ -17,6 +17,43 @@ import { ensureVehicleEffects } from './vehicle-effects';
 import { emitter } from './exhaust';
 import { BRAKE } from './lamps';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
+import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+it('transports independent active folklore identically without detaching observer storage', () => {
+  const t = folkloreTile(),
+    entry = { key: t.key, tile: t.tile, life: t.geo },
+    direct = new LifeWorld(),
+    api = createLifeWorkerApi(() => 0);
+  direct.setFolklore(folkloreConfig);
+  direct.sync([entry]);
+  api.init({ processions: [], folklore: folkloreConfig });
+  api.sync([structuredClone(entry)]);
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: folkloreCenter[0], lat: folkloreCenter[1], zoom: 18 },
+      size: { width: 800, height: 600 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: {
+      dt: 6,
+      zoom: 18,
+      bounds: undefined,
+      wind: undefined,
+      weather: { rain: 0, minutes: 1320, folkloreDate: calendar() },
+      cellMeters: 0.9,
+    },
+    visible: [18, 1, folkloreCenter],
+  };
+  for (let i = 0; i < 3; i++) {
+    const a = runLifeFrame(direct, input),
+      b = api.frame(input);
+    expect(structuredClone(b.folklore)).toEqual(a.folklore);
+    if (i > 0) expect(b.folklore.sprites.length).toBeGreaterThan(0);
+  }
+  api.clearTiles();
+  expect(api.frame(input).folklore.sprites).toEqual([]);
+});
 
 vi.mock('./moments', async (load) => {
   const actual = await load<typeof MomentsModule>();

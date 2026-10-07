@@ -259,7 +259,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       14 +
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
-      PROCESSION_GLYPHS.length,
+      PROCESSION_GLYPHS.length +
+      FOLKLORE_GLYPHS.length,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
     385 +
@@ -268,7 +269,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       14 +
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
-      PROCESSION_GLYPHS.length,
+      PROCESSION_GLYPHS.length +
+      FOLKLORE_GLYPHS.length,
   );
   for (const theme of Object.values(themes)) {
     const glyphs = mapGlyphs(theme);
@@ -325,3 +327,4 @@ it('dispatches balls before figures, uses the correct byte, and never displaces 
     packLife(out, { ...grid, allowsGroundCell: () => false }, [ball], themes.dark, index),
   ).toBe(0);
 });
+import { FOLKLORE_GLYPHS } from './folklore-glyphs';

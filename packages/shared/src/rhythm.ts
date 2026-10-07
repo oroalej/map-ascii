@@ -4,7 +4,9 @@ import {
   runtimeSeason,
   type SeasonConfig,
   type RuntimeSeasonConfig,
+  type SeasonWindow,
 } from './seasons';
+import type { Source } from './schemas';
 
 /**
  * A city's daily rhythm, as far as the map shows it (SPEC.md §4 "Life layer"): how much of each
@@ -58,7 +60,23 @@ export type LifeSchedules = {
   shops?: ShopSchedule;
 };
 
+/** Illustrative night folklore; schedules describe the simulation, not reported hauntings. */
+export type FolkloreConfig = {
+  hours: { from: number; to: number };
+  ghosts: {
+    sites: ('cemetery' | 'worship' | 'hospital')[];
+    per_cemetery: [number, number];
+    undas_per_cemetery: [number, number];
+    undas_season: string;
+    site_share: number;
+    range_m: [number, number];
+  };
+  manananggal: { window: SeasonWindow; night_chance: number };
+  sources: Source[];
+};
+
 export type CityLifeConfig = {
+  folklore?: FolkloreConfig;
   /** Sourced annual calendars and their illustrative map decorations. */
   seasons?: SeasonConfig[];
   signals?: {

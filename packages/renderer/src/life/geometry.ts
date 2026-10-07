@@ -182,7 +182,16 @@ export type ControlledCrossingAnchor = {
   sides?: [CrossingSide, CrossingSide];
 };
 
+/** Observer-only mapped footprints; ordinary obstacle and place arrays stay unchanged. */
+export type LifeFootprint = { id: string; rings: TilePoint[][] };
+export type LifeRoof = LifeFootprint & { anchor: TilePoint };
+export type LifeField = LifeFootprint & { kind: 'farmland' | 'grass' };
+
 export type LifeGeometry = {
+  hospitals?: { id: string; x: number; y: number; radius: number }[];
+  worshipIds?: [number, string][];
+  fields?: LifeField[];
+  roofs?: LifeRoof[];
   seasonalPayload?: SeasonalPayload;
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
   seasonalTrees?: readonly SeasonalDisplayRecord[];
@@ -348,6 +357,24 @@ export class LifeBuilder {
   private cemeteryAreas: { id: string; rings: TilePoint[][] }[] = [];
   private burialParents = new Set<string>();
   private placeLandmarks: [number, string][] = [];
+  private worshipIds: [number, string][] = [];
+  private hospitals: NonNullable<LifeGeometry['hospitals']> = [];
+  private fields: LifeField[] = [];
+  private roofs: LifeRoof[] = [];
+
+  hospital(id: string, p: TilePoint, radius: number) {
+    this.hospitals.push({ id, x: p.x, y: p.y, radius });
+  }
+  field(id: string, kind: LifeField['kind'], rings: readonly (readonly TilePoint[])[]) {
+    this.fields.push({ id, kind, rings: rings.map((ring) => ring.map((p) => ({ ...p }))) });
+  }
+  roof(id: string, rings: readonly (readonly TilePoint[])[], anchor: TilePoint) {
+    this.roofs.push({
+      id,
+      anchor: { ...anchor },
+      rings: rings.map((ring) => ring.map((p) => ({ ...p }))),
+    });
+  }
 
   grave(p: TilePoint, feature: string, seed: number, world = [Math.round(p.x), Math.round(p.y)]) {
     if (!inTile(p)) return;
@@ -801,10 +828,13 @@ export class LifeBuilder {
     building = false,
     bearing = NaN,
     landmarkId?: string,
+    featureId?: string,
   ) {
     if (this.places.length / PLACE_STRIDE >= MAX_TILE_PLACES) return;
     if (kind === 'worship' && landmarkId)
       this.placeLandmarks.push([this.places.length / PLACE_STRIDE, landmarkId]);
+    if (kind === 'worship' && featureId)
+      this.worshipIds.push([this.places.length / PLACE_STRIDE, featureId]);
     this.places.push(p.x, p.y, placeCode(kind), radius, building ? 1 : 0);
     this.seatBearings.push(bearing);
   }
@@ -865,6 +895,10 @@ export class LifeBuilder {
         })),
       }),
       ...(this.placeLandmarks.length && { placeLandmarks: this.placeLandmarks }),
+      ...(this.worshipIds.length && { worshipIds: this.worshipIds }),
+      ...(this.hospitals.length && { hospitals: this.hospitals }),
+      ...(this.fields.length && { fields: this.fields }),
+      ...(this.roofs.length && { roofs: this.roofs }),
     };
   }
 }

@@ -26,6 +26,7 @@ import {
   streetLabel,
   tileToLngLat,
   ringCentroid,
+  insidePolygon,
   sidewalkLine,
   unpackId,
   type TileFeatureLike,
@@ -58,6 +59,39 @@ const square = (x: number, y: number, s: number): [number, number][] => [
   [x, y],
 ];
 const reversed = (ring: [number, number][]) => [...ring].reverse();
+
+it('extracts mapped hospital identities, field holes and solid roof anchors as sidecars', () => {
+  const roof = [square(300, 300, 200), reversed(square(350, 350, 100))];
+  const input = [
+    feature(1, { id: 'hospital/point', class: 'building_hospital' }, [[[100, 100]]]),
+    feature(3, { id: 'hospital/roof', class: 'building_hospital', height: 8 }, roof),
+    feature(3, { id: 'church', class: 'building_religious', height: 5 }, [square(700, 700, 100)]),
+    feature(3, { id: 'field', class: 'farmland' }, [
+      square(1000, 1000, 300),
+      reversed(square(1100, 1100, 50)),
+    ]),
+    feature(3, { id: 'ground', class: 'building', height: 0 }, [square(1500, 1500, 50)]),
+    feature(3, { id: 'burial', class: 'building_part', kind: 'burial=flush', height: 0.1 }, [
+      square(1600, 1600, 20),
+    ]),
+  ];
+  const geo = buildTileGeometry(
+    { map: layer(input) },
+    createIdRegistry(),
+    { z: 16, x: 55192, y: 30266 },
+    16,
+  ).life;
+  expect(geo.hospitals!.map((site) => site.id)).toEqual(['hospital/point', 'hospital/roof']);
+  expect(geo.places).toHaveLength(2 * PLACE_STRIDE); // worship and the existing farmland population
+  expect(geo.worshipIds).toEqual([[0, 'church']]);
+  expect(geo.fields![0]!.rings).toHaveLength(2);
+  expect(geo.roofs!.map((r) => r.id)).toEqual(['hospital/roof', 'church']);
+  for (const r of geo.roofs!) expect(insidePolygon(r.rings, r.anchor)).toBe(true);
+  expect(insidePolygon(geo.roofs![0]!.rings, ringCentroid(geo.roofs![0]!.rings[0]!))).toBe(false);
+  const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
+  expect(copy.roofs).toEqual(geo.roofs);
+  expect(copy.fields).toEqual(geo.fields);
+});
 
 describe('seasonal cemetery and worship sidecars', () => {
   const tile = { z: 16, x: 55192, y: 30266 };

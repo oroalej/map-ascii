@@ -4,6 +4,48 @@ import nodeEndpoint from 'comlink/dist/umd/node-adapter.js';
 import { expect, it } from 'vitest';
 import { LifeWorld } from './simulate';
 import { makeScenario } from './testing/scenarios';
+import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+it('clones active folklore through real Comlink messages and retains subsequent frames', async () => {
+  const { port1, port2 } = new MessageChannel(),
+    remote = wrap<LifeWorkerApi>(nodeEndpoint(port2)),
+    t = folkloreTile();
+  expose(
+    createLifeWorkerApi(() => 0),
+    nodeEndpoint(port1),
+  );
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: folkloreCenter[0], lat: folkloreCenter[1], zoom: 18 },
+      size: { width: 800, height: 600 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: {
+      dt: 6,
+      zoom: 18,
+      bounds: undefined,
+      wind: undefined,
+      weather: { rain: 0, minutes: 1320, folkloreDate: calendar() },
+      cellMeters: 0.9,
+    },
+    visible: [18, 1, folkloreCenter],
+  };
+  try {
+    await remote.init({ processions: [], folklore: folkloreConfig });
+    await remote.sync([{ key: t.key, tile: t.tile, life: t.geo }]);
+    await remote.frame(input);
+    const a = await remote.frame(input);
+    expect(a.folklore.sprites.length).toBeGreaterThan(0);
+    expect((await remote.frame(input)).folklore.sprites.length).toBeGreaterThan(0);
+    await remote.clearTiles();
+    expect((await remote.frame(input)).folklore.haunts).toEqual([]);
+  } finally {
+    remote[releaseProxy]();
+    port1.close();
+    port2.close();
+  }
+});
 import {
   createLifeWorkerApi,
   runLifeFrame,

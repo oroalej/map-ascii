@@ -87,3 +87,9 @@ export function agentAt(
   const owner = owners[row * cols + col] ?? 0;
   return owner > 0 ? (agents[owner - 1] ?? null) : null;
 }
+import type { FolkloreSprite } from './folklore';
+export function describeFolklore(sprite: Pick<FolkloreSprite, 'kind'>) {
+  return sprite.kind === 'ghost'
+    ? 'Ghost (folklore, simulated)'
+    : 'Manananggal (folklore, simulated)';
+}

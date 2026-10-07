@@ -1170,6 +1170,7 @@ export function buildTileGeometry(
             if (isTree && inTile) life.perch(p);
             if (className === 'building_station' && !isRegion) life.station(p);
             if (className === 'building_market' && !isRegion) life.market(p);
+            if (className === 'building_hospital' && !isRegion) life.hospital(featureId, p, 0);
             if (
               !isRegion &&
               className === 'furniture' &&
@@ -1192,6 +1193,7 @@ export function buildTileGeometry(
                 typeof feature.properties.landmark_id === 'string'
                   ? feature.properties.landmark_id
                   : undefined,
+                featureId,
               );
           }
         }
@@ -1456,6 +1458,28 @@ export function buildTileGeometry(
             for (const i of triangles) fills.indices.push(base + i);
           }
           const outer = polygon[0]!;
+          // These footprints are read-only folklore inputs, never population or obstacles.
+          if (!isRegion && (className === 'grass' || className === 'farmland'))
+            life.field(featureId, className, polygon);
+          if (!isRegion && className === 'building_hospital') {
+            const center = ringCentroid(outer);
+            life.hospital(featureId, center, Math.sqrt(Math.abs(signedArea(outer)) / 2 / Math.PI));
+          }
+          if (!isRegion && isBuilding(className) && className !== 'building_part' && height > 0) {
+            let anchor = ringCentroid(outer);
+            if (!insidePolygon(polygon, anchor))
+              for (let t = 0; t < triangles.length; t += 3) {
+                const a = points[triangles[t]!]!,
+                  b = points[triangles[t + 1]!]!,
+                  c = points[triangles[t + 2]!]!;
+                const p = { x: (a.x + b.x + c.x) / 3, y: (a.y + b.y + c.y) / 3 };
+                if (insidePolygon(polygon, p)) {
+                  anchor = p;
+                  break;
+                }
+              }
+            if (insidePolygon(polygon, anchor)) life.roof(featureId, polygon, anchor);
+          }
           if (!isRegion && memorials) {
             if (
               className === 'grass' &&
@@ -1529,6 +1553,7 @@ export function buildTileGeometry(
               typeof feature.properties.landmark_id === 'string'
                 ? feature.properties.landmark_id
                 : undefined,
+              featureId,
             );
           }
         }

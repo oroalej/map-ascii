@@ -45,6 +45,8 @@ import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
+import { folklorePass } from './folklore-pass';
+import type * as FolklorePassModule from './folklore-pass';
 import { solarPosition } from './life/sun';
 
 const vehicleBuffers = () => ({
@@ -75,6 +77,10 @@ vi.mock('./gpu-context', () => ({
   deleteLabelGlyphs: vi.fn(),
 }));
 vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
+vi.mock('./folklore-pass', async (load) => ({
+  ...(await load<typeof FolklorePassModule>()),
+  folklorePass: vi.fn(),
+}));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
   createCellTargets: (
@@ -217,6 +223,39 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('draws a folklore-only packet and clears visibility and haunts on inactive lifecycle gates', () => {
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([]);
+    vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue({
+      sprites: [
+        {
+          id: 'g',
+          kind: 'ghost',
+          lng: 0,
+          lat: 0,
+          heading: 0,
+          pose: 'breath',
+          alpha: 0.5,
+          phase: 0,
+          wisp: 0,
+        },
+      ],
+      haunts: [{ id: 'g', lng: 0, lat: 0, radius: 8 }],
+    });
+    const changed = vi.fn();
+    atlas.on('folklorechange', changed);
+    draw(100);
+    expect(changed).toHaveBeenCalledWith(true);
+    expect(vi.mocked(folklorePass).mock.calls.at(-1)![6]).toHaveLength(1);
+    atlas.setLife({ enabled: false });
+    expect(changed).toHaveBeenLastCalledWith(false);
+    draw(200);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![17]?.haunts ?? []).toEqual([]);
+    atlas.setLife({ enabled: true });
+    draw(300);
+    expect(changed).toHaveBeenLastCalledWith(true);
+    atlas.setReducedMotion(true);
+    expect(changed).toHaveBeenLastCalledWith(false);
+  });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
     atlas.on('fixtureschange', changed);
@@ -438,6 +477,10 @@ describe('live motion preference', () => {
       weekday: cityTime(date, zone).weekday,
       preview: true,
     });
+    expect(weather().folkloreDate).toEqual({
+      epochDay: cityTime(atCityMinutes(date, zone, 720), zone).day,
+      preview: 'preview',
+    });
     expect(weather().sunAltitude).toBe(
       solarPosition(atCityMinutes(date, zone, 720), 0, 0).altitude,
     );
@@ -655,6 +698,7 @@ describe('live motion preference', () => {
       latest = {
         generation,
         puffs: new Float64Array(0),
+        folklore: { sprites: [], haunts: [] },
         signalClock: clock,
         procession: undefined,
         cellGuard: () => undefined,
@@ -817,6 +861,7 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 1,
       cellGuard: () => undefined,
     };
@@ -847,6 +892,7 @@ describe('live motion preference', () => {
     latest = {
       ...original,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 2,
       agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
       cellGuard: () => undefined,
@@ -875,6 +921,7 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 0,
       cellGuard: () => undefined,
     };

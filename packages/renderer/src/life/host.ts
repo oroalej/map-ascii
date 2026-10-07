@@ -25,6 +25,8 @@ import { EMPTY_PUFFS } from './exhaust';
 import { groundsForRoutes, routeRings } from './ground-events';
 import { PolygonIndex } from './occupancy';
 import { eventBodySize } from './event-actors';
+import { runtimeFolklore } from './folklore-config';
+import { EMPTY_FOLKLORE, type FolklorePacket } from './folklore';
 let nextGeneration = 0;
 
 /** Commands retain the previous ordinary snapshot while a fresh event frame is produced. */
@@ -46,6 +48,7 @@ function retainOrdinary(
       ]);
   return {
     ...view,
+    folklore: EMPTY_FOLKLORE,
     puffs: EMPTY_PUFFS,
     procession: undefined,
     agents: view.agents.filter((agent) => {
@@ -73,6 +76,7 @@ function retainOrdinary(
 }
 
 export type FrameView = {
+  folklore: FolklorePacket;
   generation?: number;
   agents: VisibleAgent[];
   puffs: Float64Array;
@@ -108,7 +112,7 @@ export function createInlineHost(
   let generation = ++nextGeneration;
   return {
     invalidateFrame() {
-      if (view) view = { ...view, agents: [] };
+      if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
       acceptedPost = undefined;
     },
     sync: (tiles, focus, context) => {
@@ -154,6 +158,7 @@ export function createInlineHost(
       if (acceptedPost !== undefined)
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
       return {
+        folklore: EMPTY_FOLKLORE,
         agents: [],
         puffs: EMPTY_PUFFS,
         signalClock: world.signalClock,
@@ -213,6 +218,7 @@ export function createWorkerHost(
       processions,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      folklore: runtimeFolklore(options.cityLife),
     });
     return createInlineHost(world, profiler);
   };
@@ -264,6 +270,7 @@ export function createWorkerHost(
       profiling: !!profiler,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      folklore: runtimeFolklore(options.cityLife),
       itemInspection: options.itemInspection,
       emojiObserver: options.emojiObserver,
       dialogue: options.moments?.dialogue,
@@ -277,7 +284,7 @@ export function createWorkerHost(
       agentEpoch++;
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
-      if (view) view = { ...view, agents: [] };
+      if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
     },
     sync(next, nextFocus, nextView) {
       if (disposed) return;
@@ -297,7 +304,13 @@ export function createWorkerHost(
         // Keep the last complete frame while nonempty geometry loads. It is never combined
         // with a different generation; the next valid reply replaces agents and guard together.
         if (!keep.size && view)
-          view = { ...view, agents: [], puffs: EMPTY_PUFFS, cellGuard: () => undefined };
+          view = {
+            ...view,
+            agents: [],
+            folklore: EMPTY_FOLKLORE,
+            puffs: EMPTY_PUFFS,
+            cellGuard: () => undefined,
+          };
       }
       const payload = next.map(({ key, tile, life }) => {
         const entry = sent.has(key) ? { key, tile } : { key, tile, life };
@@ -320,7 +333,14 @@ export function createWorkerHost(
       profiler?.clearContinuity();
       terrain = undefined;
       sent.clear();
-      if (view) view = { ...view, agents: [], puffs: EMPTY_PUFFS, cellGuard: () => undefined };
+      if (view)
+        view = {
+          ...view,
+          agents: [],
+          folklore: EMPTY_FOLKLORE,
+          puffs: EMPTY_PUFFS,
+          cellGuard: () => undefined,
+        };
       if (fallback) fallback.clearTiles();
       else void remote.clearTiles().catch(fail);
     },
@@ -347,6 +367,7 @@ export function createWorkerHost(
             if (view || result.terrain !== undefined)
               view = {
                 agents: view?.agents ?? [],
+                folklore: EMPTY_FOLKLORE,
                 puffs: EMPTY_PUFFS,
                 generation,
                 procession: view?.procession,
@@ -373,6 +394,7 @@ export function createWorkerHost(
           const cellTerrain = terrain;
           view = {
             agents: result.agents,
+            folklore: result.folklore ?? EMPTY_FOLKLORE,
             puffs: result.puffs,
             generation,
             procession: result.procession,
@@ -441,6 +463,7 @@ export function createWorkerHost(
         ...retained,
         generation,
         agents: retained?.agents ?? [],
+        folklore: EMPTY_FOLKLORE,
         puffs: EMPTY_PUFFS,
         signalClock: view?.signalClock ?? 0,
         cellGuard: retained?.cellGuard ?? (() => undefined),

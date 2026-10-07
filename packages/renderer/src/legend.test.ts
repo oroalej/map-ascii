@@ -391,3 +391,12 @@ it('describes memorial candles with Life off and gates informational seasonal cr
     legendEntries('dark', 19, [], { life: true }).some((e) => e.id.startsWith('info:season-')),
   ).toBe(false);
 });
+it('shows eligible folklore at neighborhood zoom only while Life and viewport visibility are active', () => {
+  for (const zoom of [15, 16, 17, 18])
+    for (const life of [false, true])
+      for (const folklore of [false, true]) {
+        expect(
+          legendEntries('dark', zoom, [], { life, folklore }).some((e) => e.id === 'info:folklore'),
+        ).toBe(life && folklore);
+      }
+});

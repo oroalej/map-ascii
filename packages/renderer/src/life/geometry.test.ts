@@ -6,6 +6,31 @@ import { VEHICLES } from './vehicles';
 
 const clearance = ROAD_SPLIT_CLEARANCE_M;
 
+it('clones folklore footprints and retains identities without changing place admission', () => {
+  const b = new LifeBuilder();
+  const ring = [
+    { x: 10, y: 10 },
+    { x: 100, y: 10 },
+    { x: 100, y: 100 },
+    { x: 10, y: 100 },
+    { x: 10, y: 10 },
+  ];
+  b.hospital('hospital', { x: 30, y: 40 }, 20);
+  b.field('field', 'farmland', [ring]);
+  b.roof('roof', [ring], { x: 50, y: 50 });
+  for (let i = 0; i < 41; i++)
+    b.place({ x: i, y: i }, 'worship', 0, false, NaN, undefined, `church/${i}`);
+  ring[0]!.x = -999;
+  const geo = b.finish();
+  expect(geo.places).toHaveLength(40 * 5);
+  expect(geo.worshipIds).toHaveLength(40);
+  expect(geo.worshipIds!.at(-1)).toEqual([39, 'church/39']);
+  const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
+  expect(copy.hospitals).toEqual([{ id: 'hospital', x: 30, y: 40, radius: 20 }]);
+  expect(copy.fields![0]!.rings[0]![0]!.x).toBe(10);
+  expect(copy.roofs![0]!.anchor).toEqual({ x: 50, y: 50 });
+});
+
 it('deduplicates full marker identities without dropping compact-seed collisions', () => {
   const entries = [
     { x: 10, y: 30, feature: 'row/a', world: [100, 300] as const },

@@ -6,6 +6,7 @@ import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
 import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
+import { folkloreConfig, folkloreTile, calendar, folkloreCenter } from './testing/folklore';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
 ];
@@ -30,6 +31,7 @@ const flush = async () => {
   for (let i = 0; i < 6; i++) await Promise.resolve();
 };
 const result = (clock: number): FrameResult => ({
+  folklore: { sprites: [], haunts: [] },
   agents: [],
   puffs: new Float64Array(0),
   procession: undefined,
@@ -80,17 +82,66 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('keeps folklore configuration after worker startup falls back inline', async () => {
+    mock.init.mockRejectedValueOnce(new Error('startup'));
+    const t = folkloreTile(),
+      host = createWorkerHost(
+        {
+          cityLife: {
+            source: 'test',
+            seasons: [
+              { id: 'all-saints', title: { en: 'Undas' }, window: folkloreConfig.undasWindow },
+            ],
+            folklore: { ...folkloreConfig, sources: [{ title: 'test' }] },
+          },
+        },
+        [],
+      ),
+      s = fixture();
+    host.sync([{ key: t.key, tile: t.tile, life: t.geo }]);
+    await flush();
+    s.input.step.dt = 6;
+    s.input.step.weather = { rain: 0, minutes: 1320, folkloreDate: calendar() };
+    s.input.visible[2] = folkloreCenter;
+    host.request(s.input);
+    host.request(s.input);
+    expect(host.latest()?.folklore.sprites.length).toBeGreaterThan(0);
+    host.invalidateFrame();
+    expect(host.latest()?.folklore.haunts).toEqual([]);
+    host.dispose();
+  });
+
   it('keeps provenance on an accepted frame and drops marked stale replies', async () => {
     const s = fixture(),
       host = createWorkerHost({}, []);
     host.sync(s.tiles);
     await flush();
     const marked = { kind: 'person' as const, lng: 123, lat: 13, flap: 0, mappedPersonMover: true };
-    const accepted = { ...result(1), agents: [marked] };
+    const accepted: FrameResult = {
+      ...result(1),
+      agents: [marked],
+      folklore: {
+        sprites: [
+          {
+            id: 'g',
+            kind: 'ghost',
+            lng: 123,
+            lat: 13,
+            heading: 0,
+            pose: 'breath',
+            alpha: 0.5,
+            phase: 0,
+            wisp: 0,
+          },
+        ],
+        haunts: [{ id: 'g', lng: 123, lat: 13, radius: 8 }],
+      },
+    };
     mock.frame.mockResolvedValueOnce(accepted);
     host.request(s.input);
     await flush();
     expect(host.latest()?.agents).toEqual([marked]);
+    expect(host.latest()?.folklore).toEqual(accepted.folklore);
     const saved = structuredClone(host.latest()?.agents);
     let resolve!: (reply: FrameResult) => void;
     mock.frame.mockImplementationOnce(
@@ -101,6 +152,7 @@ describe('pipelined Life host', () => {
     );
     host.request(s.input);
     host.invalidateFrame();
+    expect(host.latest()?.folklore.sprites).toEqual([]);
     resolve({ ...result(2), agents: [{ ...marked, lng: 124 }] });
     await flush();
     expect(host.latest()?.agents).toEqual([]);

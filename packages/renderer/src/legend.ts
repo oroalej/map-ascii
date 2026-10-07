@@ -44,6 +44,7 @@ import {
 
 export type LegendEntryId =
   | 'info:emoji'
+  | 'info:folklore'
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
@@ -252,6 +253,7 @@ export function legendEntries(
   {
     life = false,
     emoji = false,
+    folklore = false,
     lights = false,
     sidewalksDerived = true,
     fixtures,
@@ -259,6 +261,7 @@ export function legendEntries(
   }: {
     life?: boolean;
     emoji?: boolean;
+    folklore?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
     fixtures?: Pick<
@@ -273,6 +276,14 @@ export function legendEntries(
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
   const byId = new Map<LegendEntryId, LegendEntry>();
+  if (life && folklore)
+    byId.set('info:folklore', {
+      id: 'info:folklore',
+      classes: [],
+      label: 'Folklore (simulated)',
+      glyphs: '◌',
+      color: '#b9efff',
+    });
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
     if (!life && (lifeClasses as readonly string[]).includes(cls)) continue;
     if (!visibleAt(cls, zoom)) continue;
