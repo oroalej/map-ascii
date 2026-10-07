@@ -101,7 +101,7 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 **Tasks**
 - [ ] Georeferenced historic map underlays (`cities/<slug>/historic-maps`) with year ranges.
 - [ ] Standalone geometry for demolished landmarks.
-- [ ] "Then/now" photo pairs in the info panel.
+- [ ] "Then/now" photo pairs in the facts dialog.
 - [ ] UI string translations keyed by language code, loaded per city's declared languages.
 - [ ] **(Naga)** Street renaming data for the Centro.
 - [ ] **(Naga)** "Traslación route" and "Campus belt" tours, including year-setting steps.

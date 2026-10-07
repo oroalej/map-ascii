@@ -1,6 +1,5 @@
 /*
- * Bottom center, above the attribution (Attribution.tsx publishes its height); beside the info
- * panel when it is open.
+ * Bottom center, above the attribution (Attribution.tsx publishes its height).
  */
 .card {
   position: fixed;
@@ -14,13 +13,6 @@
   font-size: 14px;
   line-height: 1.5;
   z-index: 13;
-}
-
-@media (min-width: 641px) {
-  .card[data-panel='true'] {
-    left: calc((100vw - 404px) / 2);
-    width: min(560px, calc(100vw - 428px));
-  }
 }
 
 .chip {
@@ -157,7 +149,7 @@
 }
 
 /*
- * Phones: a bottom sheet in place of the info panel. It sits under the attribution, which stays
+ * Phones: a bottom sheet for programmatic tour steps. It sits under the attribution, which stays
  * readable over its bottom edge, padded to the attribution's height so the controls stay clear.
  */
 @media (max-width: 640px) {

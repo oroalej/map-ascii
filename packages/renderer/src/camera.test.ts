@@ -13,6 +13,7 @@ import {
   project,
   TILE_SIZE,
   unproject,
+  viewportFor,
   zoomAround,
   zoomAroundClamped,
   type CameraLimits,
@@ -28,6 +29,20 @@ const groundAt = (c: CameraState, [ax, ay]: [number, number]) => {
 };
 
 describe('project / unproject', () => {
+  it.each([
+    { width: 800, height: 600 },
+    { width: 320, height: 700 },
+  ])('round-trips canvas screen coordinates at $width x $height', (size) => {
+    const viewport = viewportFor(camera, size);
+    const point = [camera.lng + 0.001, camera.lat - 0.001];
+    const screen = viewport.project(point);
+    const ground = viewport.unproject(screen);
+    expect(ground[0]).toBeCloseTo(point[0]!, 9);
+    expect(ground[1]).toBeCloseTo(point[1]!, 9);
+    const center = viewport.project([camera.lng, camera.lat]);
+    expect(center[0]).toBeCloseTo(size.width / 2);
+    expect(center[1]).toBeCloseTo(size.height / 2);
+  });
   it('uses 512-px tiles with y pointing south', () => {
     expect(project(-180, 0, 0)[0]).toBeCloseTo(0);
     expect(project(0, 0, 0)).toEqual([TILE_SIZE / 2, TILE_SIZE / 2]);

@@ -103,6 +103,30 @@ export function bodiesOverlap(a: Body, b: Body, gap = 0.15): boolean {
   return overlapDepth(a, b, gap) > 0;
 }
 
+/** Exact linear sweep of a fixed-orientation rectangle; touching edges are allowed. */
+export function sweptBodyOverlap(a: Body, target: Point, b: Body, gap = 0.15): boolean {
+  let enter = 0,
+    leave = 1;
+  for (let i = 0; i < 4; i++) {
+    const p = i < 2 ? a : b;
+    const x = i % 2 ? -p.hy : p.hx,
+      y = i % 2 ? p.hx : p.hy;
+    const radius = reach(a, x, y) + reach(b, x, y) + gap,
+      separation = (a.x - b.x) * x + (a.y - b.y) * y,
+      velocity = (target.x - a.x) * x + (target.y - a.y) * y;
+    if (Math.abs(velocity) < 1e-12) {
+      if (Math.abs(separation) >= radius) return false;
+      continue;
+    }
+    const first = (-radius - separation) / velocity,
+      last = (radius - separation) / velocity;
+    enter = Math.max(enter, Math.min(first, last));
+    leave = Math.min(leave, Math.max(first, last));
+    if (enter >= leave) return false;
+  }
+  return enter < leave;
+}
+
 function overlapDepth(a: Body, b: Body, gap = 0.15): number {
   let depth = Infinity;
   for (let i = 0; i < 4; i++) {
@@ -116,6 +140,8 @@ function overlapDepth(a: Body, b: Body, gap = 0.15): number {
   }
   return depth;
 }
+/** Half the footprint's extent projected onto an axis. */
+
 export function reach(p: Body, x: number, y: number) {
   return (
     (Math.abs(p.hx * x + p.hy * y) * p.length) / 2 + (Math.abs(-p.hy * x + p.hx * y) * p.width) / 2
@@ -425,7 +451,13 @@ export class Occupancy {
       owners.clear();
     }
   }
-  conflicts(owner: object, bodies: readonly Body[], ignore?: object): number {
+  conflicts(
+    owner: object,
+    bodies: readonly Body[],
+    ignore?: object,
+    project?: (owner: object, body: Body, index: number) => Body,
+    previous?: readonly Body[],
+  ): number {
     const neighbors = this.neighbors;
     neighbors.clear();
     try {
@@ -436,13 +468,43 @@ export class Occupancy {
         }
       let hits = 0;
       for (const other of neighbors) {
-        for (const a of bodies)
-          for (const b of this.entries.get(other)!.bodies) hits += overlapDepth(a, b);
+        const otherBodies = this.entries.get(other)!.bodies;
+        for (let index = 0; index < bodies.length; index++) {
+          const a = bodies[index]!;
+          for (let i = 0; i < otherBodies.length; i++) {
+            const b = otherBodies[i]!;
+            const body = project ? project(other, b, i) : b;
+            const depth = overlapDepth(a, body);
+            hits += previous
+              ? Math.max(0, depth - overlapDepth(previous[index]!, body) - 1e-6)
+              : depth;
+          }
+        }
       }
       return hits;
     } finally {
       neighbors.clear();
     }
+  }
+  /** Reject-only first blocker, with the same exclusions and optional physical projection. */
+  firstConflict(
+    owner: object,
+    bodies: readonly Body[],
+    ignore?: object,
+    project?: (owner: object, body: Body, index: number) => Body,
+  ): object | undefined {
+    for (const a of bodies)
+      for (const key of this.keys(a))
+        for (const other of this.bins.get(key) ?? []) {
+          if (other === owner || other === ignore) continue;
+          if (
+            this.entries
+              .get(other)!
+              .bodies.some((b, i) => bodiesOverlap(a, project ? project(other, b, i) : b))
+          )
+            return other;
+        }
+    return undefined;
   }
 }
 
@@ -554,6 +616,18 @@ export class PolygonIndex {
       }
     return false;
   }
+  /** Exact translated footprint, used only to prove rejected holding corridors. */
+  sweptHits(body: Body, target: Point): boolean {
+    const hull = bodyTranslationHull(body, target);
+    const tested = new Set<Polygon>();
+    for (const key of binKeys(hull))
+      for (const polygon of this.bins.get(key) ?? []) {
+        if (tested.has(polygon)) continue;
+        tested.add(polygon);
+        if (bodyHitsPolygon(body, polygon, hull)) return true;
+      }
+    return false;
+  }
   hits(bodies: readonly Body[]): boolean {
     const tested = this.tested;
     try {
@@ -581,6 +655,25 @@ export class PolygonIndex {
       tested.clear();
     }
   }
+}
+
+/** Exact swept convex footprint of a fixed-orientation translation. */
+function bodyTranslationHull(body: Body, target: Point): Point[] {
+  const points = [...bodyCorners(body), ...bodyCorners({ ...body, ...target })].sort(
+    (a, b) => a.x - b.x || a.y - b.y,
+  );
+  const cross = (a: Point, b: Point, c: Point) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  const half = (ordered: readonly Point[]) => {
+    const hull: Point[] = [];
+    for (const point of ordered) {
+      while (hull.length >= 2 && cross(hull.at(-2)!, hull.at(-1)!, point) <= 0) hull.pop();
+      hull.push(point);
+    }
+    hull.pop();
+    return hull;
+  };
+  return [...half(points), ...half([...points].reverse())];
 }
 
 export type FlatPolygonIndex = {

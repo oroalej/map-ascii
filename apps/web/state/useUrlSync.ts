@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from './store';
 import { tourControls } from './tour';
 import { parseViewParams, serializeViewParams } from './url';
+import { selectPlace } from './selection';
 
 /** Camera changes settle this long before the URL follows (ARCHITECTURE.md §6). */
 const REPLACE_DELAY_MS = 250;
@@ -39,7 +40,7 @@ const here = () => `${window.location.pathname}${window.location.search}${window
 export function attachUrlSync() {
   const initial = parseViewParams(window.location.search);
   const store = useAtlasStore.getState();
-  if (initial.sel) store.setSelected(initial.sel);
+  selectPlace(initial.sel ?? null);
   if (initial.year !== undefined) store.setYear(initial.year);
 
   let timer: number | undefined;
@@ -88,7 +89,7 @@ export function attachUrlSync() {
         tourControls.exit();
       }
       const store = useAtlasStore.getState();
-      store.setSelected(params.sel ?? null);
+      selectPlace(params.sel ?? null);
       store.setYear(year);
       atlas?.setYear(year, { animate: false });
     } finally {

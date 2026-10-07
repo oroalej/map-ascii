@@ -48,7 +48,12 @@ export const MAX_STEP_S = 0.1;
 /** Frozen out-of-view tiles, bounded by simulated time and count. */
 export const RETIRE = { seconds: 8, max: 24 } as const;
 /** Maximum rendered-pose discontinuity for a cross-zoom vehicle or boat. */
-export const ADOPT = { snap: 4, bearing: 35 } as const;
+export const ADOPT = {
+  snap: 4,
+  bearing: 35,
+  /** Quantized vertex matching tolerance in the destination tile's units. */
+  vertexSnap: 2,
+} as const;
 /** A lane's width, m (the pipeline's, for roads tagged with lanes but no width). */
 export const LANE_WIDTH_M = 3.2;
 /** The width of a road line without one, m. */
@@ -78,12 +83,13 @@ export function laneOffset(
 /**
  * Following: a vehicle or boat slows behind the one ahead in its lane, keeping this gap (m)
  * plus this many seconds of the gap beyond it, so queues form instead of overlaps. Two side by
- * side may overlap this much (m) and still pass.
+ * side on water may overlap by `squeeze` (m); road vehicles retain the physical 0.15 m gap.
  */
 export const FOLLOW = {
   minGap: 1.5,
   headway: 1.2,
   squeeze: 0.3,
+  roadGap: 0.15,
   lateralPad: 0.3,
   /** Where a lane moves sideways, following compares lanes this far ahead too, m. */
   laneAheadM: 10,
@@ -93,10 +99,10 @@ export const frontClearance = (length: number): number => length / 2 + FOLLOW.mi
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
 /**
- * Terrain recovery for vehicles: sideways metres per metre travelled while shifting or returning
- * (no sideways move while stopped); clear road edge allowance for inferred widths, m.
+ * Vehicle terrain recovery: lane slope in m/m; bounded steering and restoring speeds in m/s.
+ * Recovery steering can retreat while stopped; road edge allowance for inferred widths is in m.
  */
-export const ROAD_AVOID = { slope: 0.25, shoulder: 0.5 } as const;
+export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
 /**
  * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
  * or the movement guard has refused it for any reason this long.
@@ -106,7 +112,7 @@ export const STALL = { terrainSeconds: 8, anySeconds: 20 } as const;
  * Turn back after this many active seconds attempting a blocked walking route; from fixed
  * obstacles at once, once at least `terrainMinWalkM` has been walked since the last turn back.
  */
-export const WALK_RECOVERY = { seconds: 3, terrainMinWalkM: 1 } as const;
+export const WALK_RECOVERY = { blockedTurnSeconds: 4, terrainMinWalkM: 1 } as const;
 /**
  * People wait at the curb while a vehicle moving faster than `movingMs` (m/s) couldn't stop
  * `marginM` short of the crossing.
@@ -131,6 +137,25 @@ export const PEDESTRIAN = {
   curbReach: 2,
   holdMax: 20,
   holdMatch: 2,
+} as const;
+/** Active seconds and ordered metre offsets for checked recovery. */
+export const RECOVERY = {
+  yieldSeconds: 20,
+  returnReplanSeconds: 16,
+  visitReturnSeconds: 8,
+  vehicleApproachSeconds: 8,
+  contactRetrySeconds: 0.5,
+  reciprocalSeconds: 0.25,
+  walkerRetreats: [0, 0.05, 0.15, 0.3, 0.5],
+  bypassOffsets: [1.2, 1, 0.8, 0.65],
+  holdingOffsets: [0.65, 1, 1.2, 1.5],
+  /** Wider formations need more room than the ordinary one-person holding corridor. */
+  holdingFormationOffsets: [2, 2.5, 3, 3.5],
+  bypassReachM: 1.5,
+  bypassSpanM: 4,
+  bypassRetreatMinM: 0.75,
+  bypassRetreatMaxM: 2,
+  retreats: [0, 0.5, 1, 2, 3, 4],
 } as const;
 
 export const COS20 = Math.cos(Math.PI / 9),

@@ -31,6 +31,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it('renders emoji without a dialogue catalog, reads current label footprints and removes disabled nodes', async () => {
+  const hiddenDialog = document.createElement('div');
+  hiddenDialog.hidden = true;
+  hiddenDialog.setAttribute('data-speech-obstacle', '');
+  hiddenDialog.setAttribute('role', 'dialog');
+  vi.spyOn(hiddenDialog, 'getClientRects').mockReturnValue([
+    new DOMRect(0, 0, 100, 100),
+  ] as unknown as DOMRectList);
+  const hiddenMeasure = vi
+    .spyOn(hiddenDialog, 'getBoundingClientRect')
+    .mockReturnValue(new DOMRect(0, 0, 100, 100));
+  document.body.append(hiddenDialog);
   let listener: ((cues: EmojiInView[]) => void) | undefined;
   let labels = [{ left: 360, top: 210, width: 80, height: 78 }];
   const on: Atlas['on'] = (event, handler) => {
@@ -56,10 +67,12 @@ it('renders emoji without a dialogue catalog, reads current label footprints and
   await flushCues();
   expect(node.dataset.below).toBe('false');
   expect(getLabelObstacles).toHaveBeenCalledTimes(2);
+  expect(hiddenMeasure).not.toHaveBeenCalled();
   act(() => useEmojiStore.setState({ enabled: false }));
   expect(container.querySelector('[data-emoji-bubble]')).toBeNull();
   act(() => root.unmount());
   container.remove();
+  hiddenDialog.remove();
 });
 it('coalesces both cue channels before the next frame, follows moving anchors and cancels queued work', async () => {
   let speech: ((cues: SpeechInView[]) => void) | undefined;

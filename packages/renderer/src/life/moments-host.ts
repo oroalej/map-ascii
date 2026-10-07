@@ -30,12 +30,8 @@ export class MomentHost {
     return this.sceneHost.speech;
   }
   speaking(owner: object) {
-    return (
-      this.moments.busy(owner) ||
-      this.scenes.busy(owner) ||
-      this.moments.voiceActive(owner) ||
-      this.scenes.voiceActive(owner)
-    );
+    if (!this.moments.size && !this.scenes.size) return false;
+    return this.moments.busy(owner) || this.scenes.busy(owner) || this.scenes.voiceActive(owner);
   }
   get voiceCompletions() {
     return [...this.moments.voiceCompletions, ...this.scenes.voiceCompletions];

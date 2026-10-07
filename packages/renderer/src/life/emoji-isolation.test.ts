@@ -93,6 +93,89 @@ it('reuses borrowed inputs without keeping actor references or stale passenger a
   for (const input of borrowed[0]!) expect(input.owner).toBeUndefined();
 });
 
+it('reuses observer records across vendor, mover and gatherer roles without stale flags', () => {
+  const { life, car, human } = pedestrianWorld();
+  const read = life as unknown as {
+    emojiObservations: (env: { rain: number }) => EmojiObservation[];
+  };
+  life.movers.length = 0;
+  const stall = {
+    x: human.x,
+    y: human.y,
+    hx: 1,
+    hy: 0,
+    paint: 0,
+    shirt: 0,
+    side: 1 as const,
+    rank: 0,
+  };
+  life.stalls.push(stall);
+  const pooled = read.emojiObservations({ rain: 0 })[0]!;
+  expect(pooled).toMatchObject({ owner: stall, vendor: true, figure: 'adult' });
+
+  life.stalls.length = 0;
+  car.pause = 1;
+  life.movers.push(car);
+  const moving = read.emojiObservations({ rain: 0 })[0]!;
+  expect(moving).toBe(pooled);
+  expect(moving).toMatchObject({
+    owner: car,
+    vendor: undefined,
+    figure: undefined,
+    held: false,
+    arrival: false,
+    still: true,
+  });
+
+  life.movers.length = 0;
+  const gatherer = {
+    place: 'fountain' as const,
+    behavior: 'gather' as const,
+    cx: human.x,
+    cy: human.y,
+    inner: 0,
+    outer: 1,
+    x: human.x,
+    y: human.y,
+    hx: human.hx,
+    hy: human.hy,
+    tx: human.x,
+    ty: human.y,
+    speed: 0,
+    pause: 0,
+    walked: 0,
+    rank: 0,
+    walker: { ...human.group![0]!, figure: 'child' as const },
+    rx: 1,
+    ry: 0,
+    sign: 1 as const,
+  };
+  life.gatherers.push(gatherer);
+  const gathered = read.emojiObservations({ rain: 0 })[0]!;
+  expect(gathered).toBe(pooled);
+  expect(gathered).toMatchObject({
+    owner: gatherer,
+    gatherer,
+    mover: undefined,
+    figure: 'child',
+    vendor: undefined,
+    held: undefined,
+    arrival: undefined,
+    still: undefined,
+  });
+
+  life.gatherers.length = 0;
+  life.stalls.push(stall);
+  const vendor = read.emojiObservations({ rain: 0 })[0]!;
+  expect(vendor).toBe(pooled);
+  expect(vendor).toMatchObject({
+    owner: stall,
+    gatherer: undefined,
+    vendor: true,
+    figure: 'adult',
+  });
+});
+
 function speechState(tile: TileLife) {
   const owners = [...tile.movers, ...tile.gatherers, ...tile.stalls];
   const memory = tile.momentHost.moments.selector.memory;

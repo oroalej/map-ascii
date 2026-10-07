@@ -4,6 +4,7 @@
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
 import { classId } from '../classes';
+import { PackingOutcome } from './diagnostics';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { drawProcedural, sextantSplits } from '../glyphs/atlas';
@@ -40,6 +41,13 @@ import { BRAKE_LAMP } from './lamps';
 import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
 import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
+  placeCoarseGroup,
+  placeCoarseLone,
+  placeFirstRingGroup,
+  type GroupPlacement,
+  type LonePlacement,
+} from './group-placement';
+import {
   LINE_GLYPHS,
   PART_GLYPHS,
   planPart,
@@ -62,6 +70,10 @@ export type LifeGrid = {
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
+  /** Diagnostic-only final outcome, one byte per supplied agent. */
+  outcomes?: Uint8Array;
+  /** Diagnostic attempt denial flags: collision 1, terrain 2 (both may be set). */
+  denials?: Uint8Array;
   /** Successful detailed vehicle stamps, indexed by this frame's final agent array. */
   stampedVehicles?: Uint8Array;
 };
@@ -106,11 +118,74 @@ export type LifeGlyphs = { parts: Uint16Array };
  * whether one of them was already another ground agent's. A whole ground agent is omitted if
  * coarse ASCII cells would merge it with another. Drawing is synchronous, so one is enough.
  */
+type MemberRaster = {
+  expected: number;
+  cells: { col: number; row: number; bytes: readonly number[] }[];
+  point?: [number, number];
+};
+// Coarse draws capture into fixed scratch; rejected draws alone materialize payload objects.
+const memberCells = new Float64Array(4 * 4 * 6);
+const memberCounts = new Uint8Array(4);
+const memberExpected = new Uint8Array(4);
+const memberPoints = new Float64Array(8);
+function capturedMembers(count: number): MemberRaster[] {
+  return Array.from({ length: count }, (_, member) => ({
+    expected: memberExpected[member]!,
+    cells: Array.from({ length: memberCounts[member]! }, (_, cell) => {
+      const at = (member * 4 + cell) * 6;
+      return {
+        col: memberCells[at]!,
+        row: memberCells[at + 1]!,
+        bytes: Array.from(memberCells.subarray(at + 2, at + 6)),
+      };
+    }),
+    point: Number.isNaN(memberPoints[member * 2]!)
+      ? undefined
+      : ([memberPoints[member * 2]!, memberPoints[member * 2 + 1]!] as [number, number]),
+  }));
+}
+function commitMembers(
+  out: Uint8Array,
+  cols: number,
+  members: readonly MemberRaster[],
+  offsets: readonly (readonly [number, number])[],
+) {
+  members.forEach((member, i) => {
+    const [dx, dy] = offsets[i]!;
+    for (const { col, row, bytes } of member.cells) {
+      const cell = (row + dy) * cols + col + dx;
+      out.set(bytes, cell * 4);
+      groundCells[cell] = 1;
+      if (drawingOwners) drawingOwners[cell] = drawingOwner;
+      if (drawingSpeakers) drawingSpeakers.members[cell] = i + 1;
+      drawingClockCells?.push(cell);
+    }
+    if (member.point)
+      drawingSpeakers?.points.set(drawingOwner, [member.point[0] + dx, member.point[1] + dy]);
+  });
+}
+const adjacentCells = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+  [1, 1],
+  [1, -1],
+  [-1, 1],
+  [-1, -1],
+] as const;
 let journal:
-  | { before: Map<number, [number, number, number, number, number, number?]>; denied: boolean }
+  | {
+      before: Map<number, [number, number, number, number, number, number?]>;
+      denied: boolean;
+      incomplete?: boolean;
+      memberCount?: number;
+      members?: MemberRaster[];
+    }
   | undefined;
 let fallbackStampedVehicles = new Uint8Array(0);
 let detailedStamp = false;
+let detailedPeopleStamp = false;
 let drawingOwners: Uint32Array | undefined;
 let drawingOwner = 0;
 let drawingFocus = 0;
@@ -118,6 +193,9 @@ let drawingClockCells: number[] | undefined;
 let clockCells: number[] | undefined;
 
 export type LifePackMetadata = {
+  /** Observe only the new rejection tier; never used to select a placement. */
+  groupRetry?: (result: GroupPlacement) => void;
+  loneRetry?: (result: LonePlacement) => void;
   owners?: Uint32Array;
   focus?: ReadonlySet<LifeFocus>;
   /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
@@ -143,6 +221,7 @@ function writeCell(
 let groundCells = new Uint8Array(0);
 let drawingSpeakers: SpeakerGrid | undefined;
 let drawingMember = 0;
+let drawingMini = false;
 /** Reused while one transitioning person's underlying figure is drawn synchronously. */
 const figureCoverage = new Map<number, number>();
 const figureMasks = new Map<string, number>();
@@ -225,6 +304,12 @@ export function packLife(
   puffs: Float64Array = EMPTY_PUFFS,
 ): number {
   const cells = grid.cols * grid.rows;
+  if (grid.outcomes && grid.outcomes.length !== agents.length)
+    throw new RangeError('Packing outcomes must match agents');
+  grid.outcomes?.fill(PackingOutcome.outside);
+  if (grid.denials && grid.denials.length !== agents.length)
+    throw new RangeError('Packing denials must match agents');
+  grid.denials?.fill(0);
   drawingOwners = metadata.owners ?? grid.owners;
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
@@ -252,37 +337,201 @@ export function packLife(
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
-    // Parked cars reserve their cells before passing traffic or walkers.
-    for (const parked of [true, false])
+    // Fixed obstacles keep their cells as movers pass: parked cars, then vendors.
+    // Owner indices still refer to the caller's original array.
+    for (const priority of [0, 1, 2])
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
-        if (!!agent.parked !== parked) continue;
+        if ((agent.parked ? 0 : agent.vehicle === 'cart' ? 1 : 2) !== priority) continue;
         drawingOwner = index + 1;
         drawingClockCells =
           agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
         drawingFocus = metadata.focus?.has(lifeFocusOf(agent)) ? LIFE_FOCUS_BIT : 0;
         drawingMember = 0;
+        drawingMini = false;
+        const clockStart = clockCells?.length ?? 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
         journal = ground ? { before: new Map(), denied: false } : undefined;
         detailedStamp = false;
+        detailedPeopleStamp = false;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
+        const collision = journal?.denied ?? false;
+        let cellDenied = false;
         if (journal && grid.allowsGroundCell)
           for (const at of journal.before.keys())
             if (
               !grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
             ) {
               journal.denied = true;
+              cellDenied = true;
               break;
             }
+        if (grid.outcomes)
+          grid.outcomes[index] = collision
+            ? PackingOutcome.collision
+            : cellDenied
+              ? PackingOutcome.cellGuard
+              : n > 0
+                ? PackingOutcome.drawn
+                : PackingOutcome.outside;
+        if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
-        else if (journal.denied)
+        else if (journal.denied) {
+          if (journal.memberCount !== undefined)
+            journal.members = capturedMembers(journal.memberCount);
+          const eligible =
+            (n > 0 || !!journal.members?.length) &&
+            !detailedPeopleStamp &&
+            !agent.parked &&
+            !agent.aboard &&
+            agent.vehicle !== 'cart' &&
+            !agent.prop &&
+            !agent.line &&
+            !agent.people?.some((look) => look.figure === 'seated') &&
+            ((agent.kind === 'vehicle' && drawingMini) ||
+              (agent.kind === 'person' && !agent.vehicle) ||
+              agent.kind === 'cat' ||
+              agent.kind === 'dog');
+          const retry =
+            eligible &&
+            !journal.incomplete &&
+            journal.before.size <= (agent.kind === 'person' ? 16 : 4);
+          // Save the already projected raster; retrying drawAgent would change its scale
+          // and heading under an anisotropic projection.
+          const payload = retry
+            ? [...journal.before.keys()].map((at) => ({
+                at,
+                bytes: out.slice(at, at + 4),
+                member: drawingSpeakers?.members[at / 4] ?? 0,
+              }))
+            : undefined;
+          const point = drawingSpeakers?.points.get(drawingOwner);
+          const clocked = retry ? clockCells?.slice(clockStart) : undefined;
+          if (clockCells) clockCells.length = clockStart;
+          drawingSpeakers?.points.delete(drawingOwner);
           for (const [at, previous] of journal.before) {
             // The fifth journal value is CPU ownership, never a fifth texture byte.
             for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
             if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
             if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
           }
-        else {
+          let placed = false;
+          if (payload) {
+            const [col, row] = grid.toCell(agent.lng, agent.lat);
+            const distance = ([dx, dy]: readonly [number, number]) =>
+              (Math.floor(col) + dx + 0.5 - col) ** 2 + (Math.floor(row) + dy + 0.5 - row) ** 2;
+            for (const [dx, dy] of [...adjacentCells].sort((a, b) => distance(a) - distance(b))) {
+              if (
+                !payload.every(({ at }) => {
+                  const c = ((at / 4) % grid.cols) + dx,
+                    r = Math.floor(at / 4 / grid.cols) + dy;
+                  return (
+                    c >= 0 &&
+                    r >= 0 &&
+                    c < grid.cols &&
+                    r < grid.rows &&
+                    !groundCells[r * grid.cols + c] &&
+                    (!grid.allowsGroundCell || grid.allowsGroundCell(agent, c, r))
+                  );
+                })
+              )
+                continue;
+              for (const { at, bytes, member } of payload) {
+                const shifted = at + (dy * grid.cols + dx) * 4;
+                out.set(bytes, shifted);
+                groundCells[shifted / 4] = 1;
+                if (drawingOwners) drawingOwners[shifted / 4] = drawingOwner;
+                if (drawingSpeakers) drawingSpeakers.members[shifted / 4] = member;
+              }
+              if (point) drawingSpeakers?.points.set(drawingOwner, [point[0] + dx, point[1] + dy]);
+              if (clocked) for (const cell of clocked) clockCells!.push(cell + dy * grid.cols + dx);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += n;
+              placed = true;
+              break;
+            }
+          }
+          const completeLonePayload =
+            payload &&
+            journal.members?.length === 1 &&
+            journal.members[0]!.cells.length === journal.members[0]!.expected &&
+            payload.length === journal.members[0]!.cells.length &&
+            journal.members[0]!.cells.every((cell) =>
+              payload.some(
+                ({ at, bytes }) =>
+                  at === (cell.row * grid.cols + cell.col) * 4 &&
+                  cell.bytes.every((byte, i) => byte === bytes[i]),
+              ),
+            );
+          if (
+            !placed &&
+            eligible &&
+            !completeLonePayload &&
+            journal.members &&
+            journal.members.length <= 4 &&
+            journal.members.reduce((sum, m) => sum + m.cells.length, 0) <= 16
+          ) {
+            // Reconstruct from each original member, never from overwritten texels.
+            // Search only on rejection; every member stays within one cell of its anchor.
+            const members = journal.members;
+            const offsets = [[0, 0], ...adjacentCells] as const;
+            const selected = placeFirstRingGroup(
+              members,
+              grid,
+              offsets,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
+            );
+            if (selected) {
+              commitMembers(out, grid.cols, members, selected);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += members.length;
+              placed = true;
+            }
+          }
+          if (
+            !placed &&
+            eligible &&
+            agent.kind === 'person' &&
+            agent.mappedPersonMover === true &&
+            (agent.people?.length ?? 1) === 1 &&
+            !agent.people?.some((look) => look.figure === 'rower') &&
+            journal.members?.length === 1
+          ) {
+            const member = journal.members[0]!;
+            const result = placeCoarseLone(
+              member,
+              grid,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
+            );
+            if (result.offset) {
+              commitMembers(out, grid.cols, [member], [result.offset]);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn++;
+              placed = true;
+            }
+            if (result.rigidAttempts) metadata.loneRetry?.(result);
+          }
+          if (!placed && eligible && journal.members && journal.members.length >= 2) {
+            const members = journal.members;
+            const result = placeCoarseGroup(
+              members,
+              grid,
+              (col, row) =>
+                !groundCells[row * grid.cols + col] &&
+                (!grid.allowsGroundCell || grid.allowsGroundCell(agent, col, row)),
+            );
+            if (result.offsets) {
+              commitMembers(out, grid.cols, members, result.offsets);
+              if (grid.outcomes) grid.outcomes[index] = PackingOutcome.drawn;
+              drawn += members.length;
+            }
+            metadata.groupRetry?.(result);
+          }
+        } else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
           if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
@@ -300,6 +549,7 @@ export function packLife(
     drawingFocus = 0;
     drawingSpeakers = undefined;
     drawingMember = 0;
+    drawingMini = false;
   }
 }
 
@@ -445,13 +695,14 @@ function drawAgent(
   const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
   if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
+  drawingMini = agent.kind === 'vehicle';
   rememberGroundCell(out, at);
   writeCell(
     out,
     at,
     index,
     classId(cls),
-    agentBit[agent.kind],
+    agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind],
     spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
   );
   if (agent.emoji && agent.kind !== 'person')
@@ -529,10 +780,33 @@ function drawPeople(
         : PersonPart.figure;
     return personByte(look.paint, part, agent.candle);
   };
+  let captured = -1;
   const put = (c: number, r: number, glyph: string, byte: number) => {
     const index = glyphIndex(glyph);
-    if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return false;
+    if (!Number.isInteger(c) || !Number.isInteger(r) || index <= 0 || index > MAX_GLYPHS) {
+      if (captured >= 0 && journal) journal.denied = journal.incomplete = true;
+      return false;
+    }
+    if (captured >= 0) {
+      const cell = memberCounts[captured]!;
+      if (cell >= 4) journal!.denied = journal!.incomplete = true;
+      else {
+        const at = (captured * 4 + cell) * 6;
+        memberCells[at] = c;
+        memberCells[at + 1] = r;
+        memberCells[at + 2] = index & 255;
+        memberCells[at + 3] = (cls & 63) | ((index >> 8) << 6);
+        memberCells[at + 4] = bits | drawingFocus;
+        memberCells[at + 5] = byte;
+        memberCounts[captured] = cell + 1;
+      }
+    }
+    if (c < 0 || r < 0 || c >= cols || r >= rows) {
+      if (captured >= 0 && journal) journal.incomplete = true;
+      return false;
+    }
     const at = (r * cols + c) * 4;
+    if (captured >= 0 && journal?.before.has(at)) journal.denied = journal.incomplete = true;
     rememberGroundCell(out, at);
     writeCell(out, at, index, cls, bits, byte);
     coverage?.set(at, figureCellMask(glyph, cellWidth, cellHeight));
@@ -589,6 +863,7 @@ function drawPeople(
   let drawn = 0;
 
   if (fits.includes('stamp')) {
+    detailedPeopleStamp = true;
     // Laid out in meters, around the agent's own point.
     const spacing = Math.max(...looks.map((look) => FIGURE_SIZE_M[look.figure]));
     looks.forEach((look, i) => {
@@ -649,18 +924,42 @@ function drawPeople(
     size === 2 ? [Math.round(col) - 1, Math.round(row) - 1] : [Math.floor(col), Math.floor(row)];
   // The cart's half-width in cells, across its heading.
   const clear = clearance * Math.hypot(...right);
+  if (
+    journal &&
+    !agent.vehicle &&
+    looks.length <= 4 &&
+    c0 >= 0 &&
+    r0 >= 0 &&
+    c0 < cols &&
+    r0 < rows
+  ) {
+    journal.memberCount = looks.length;
+    memberCounts.fill(0);
+    memberPoints.fill(NaN);
+  }
   looks.forEach((look, i) => {
     drawingMember = i + 1;
+    captured = journal?.memberCount !== undefined ? i : -1;
+    if (captured >= 0) memberExpected[captured] = fits[i] === 'big' ? 4 : 1;
     const lateral =
       clearance > 0 && look.lateral !== 0
         ? Math.sign(look.lateral) * Math.max(size, Math.ceil(clear + size / 2))
         : look.lateral * size;
     const back = look.back * size;
-    const c = c0 + rx * lateral - fx * back;
-    const r = r0 + ry * lateral - fy * back;
-    if ((agent.speech || agent.emoji) && (agent.speech?.member ?? 0) === i)
-      drawingSpeakers?.points.set(drawingOwner, [c + size / 2, r + size / 2]);
+    // Physical group rotations leave fractional slots (including tiny roundoff).
+    // Typed-array addresses must be integer cells; keep those physical slots intact.
+    const c = c0 + Math.round(rx * lateral - fx * back);
+    const r = r0 + Math.round(ry * lateral - fy * back);
     const fit = fits[i]!;
+    const [dc, dr] = fit !== 'big' && size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
+    if ((agent.speech || agent.emoji) && (agent.speech?.member ?? 0) === i) {
+      const point: [number, number] = fit === 'big' ? [c + 1, r + 1] : [c + dc + 0.5, r + dr + 0.5];
+      drawingSpeakers?.points.set(drawingOwner, point);
+      if (captured >= 0) {
+        memberPoints[captured * 2] = point[0];
+        memberPoints[captured * 2 + 1] = point[1];
+      }
+    }
     let any: boolean;
     if (fit === 'big') {
       any = putBig(look, c, r);
@@ -676,7 +975,6 @@ function drawPeople(
         stageOf(look),
       );
       // In a 2×2 slot: its cell nearest the first of the group.
-      const [dc, dr] = size === 2 ? [c0 < c ? 0 : 1, r0 < r ? 0 : 1] : [0, 0];
       any = put(c + dc, r + dr, glyph, byteOf(look));
     }
     if (any) drawn++;

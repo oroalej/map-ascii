@@ -15,6 +15,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { isCityMeta, isCityProcessions } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
+import { SMALL_SCREEN } from '@/lib/screen';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
 import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
@@ -29,7 +30,6 @@ const detectWebGL2 = () =>
   (webgl2Supported ??= document.createElement('canvas').getContext('webgl2') !== null);
 const subscribeNoop = () => () => {};
 /** Small screens keep map cells a little larger (SPEC.md §8), so glyphs stay legible. */
-const SMALL_SCREEN = '(max-width: 640px)';
 const SMALL_SCREEN_MIN_CELL = 6;
 const lifeHoverPause = parseLifeHoverPause(process.env.NEXT_PUBLIC_LIFE_HOVER_PAUSE);
 
@@ -187,7 +187,7 @@ export function AtlasCanvas({
       reducedMotion: prefersReducedMotion(),
       gpuTiming: isDebugRequested(),
       profiling: isDebugRequested(),
-      interactive: isPickable,
+      interactive: (feature) => isPickable(feature, useUiStore.getState().clickable),
       life: lifeSettings(lifePrefs),
       traffic,
       climate,
@@ -199,7 +199,7 @@ export function AtlasCanvas({
     });
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
-    useAtlasInstance.setState({ atlas });
+    useAtlasInstance.setState({ atlas, canvas });
     const offs = [
       useQualityStore.subscribe(({ choice }) => {
         atlas.setQuality(choice);
@@ -227,7 +227,7 @@ export function AtlasCanvas({
       for (const off of offs) off();
       setContextLost(false);
       useUiStore.setState({ procession: null });
-      useAtlasInstance.setState({ atlas: null });
+      useAtlasInstance.setState({ atlas: null, canvas: null });
       atlas.destroy();
     };
   }, [supported, meta, slug, traffic, climate, timezone, cityLife, dialogue, utilitiesDerived]);

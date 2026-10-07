@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JunctionTable, compatible, type Movement } from './junctions';
-import { LifeBuilder } from './geometry';
+import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, type Mover } from './simulate';
 import { continuityMover, continuityTile, left, right } from './testing/continuity';
 
@@ -21,6 +21,64 @@ const movement = (ix: number, iy: number, ox: number, oy: number): Movement => (
 });
 const east = movement(1, 0, 1, 0),
   south = movement(0, 1, 0, 1);
+it('keeps initial traffic outside ordinary junction reservation zones', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 100, y: 2048 },
+      { x: 2048, y: 2048 },
+      { x: 3996, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    8,
+  );
+  b.line(
+    [
+      { x: 2048, y: 100 },
+      { x: 2048, y: 2048 },
+      { x: 2048, y: 3996 },
+    ],
+    LifeLine.roadMinor,
+    6,
+  );
+  const tile = new TileLife(left, b.finish(), 1);
+  const car: Mover = {
+    kind: 'vehicle',
+    vehicle: 'car',
+    line: 0,
+    from: 0,
+    dir: 1,
+    d: 1947,
+    x: 2047,
+    y: 2048,
+    hx: 1,
+    hy: 0,
+    speed: 5 * tile.perMeter,
+    paint: 0,
+    lane: 0,
+    pause: 0,
+    rank: 0,
+  };
+  expect(tile.junctionIndex.hasLinked).toBe(false);
+  expect(tile.junctionIndex.movement(car, 60 * tile.perMeter)!.ahead).toBeLessThan(0);
+  expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(false);
+  car.d -= 30 * tile.perMeter;
+  car.x -= 30 * tile.perMeter;
+  expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(true);
+  car.d += 30 * tile.perMeter;
+  car.x += 30 * tile.perMeter;
+  tile.movers.splice(0, tile.movers.length, car);
+  let checked = 0;
+  tile.settleGround((owner) => {
+    if (owner !== car) return true;
+    checked++;
+    expect(tile.junctionIndex.canSpawnVehicle(car)).toBe(true);
+    return true;
+  });
+  expect(checked).toBeGreaterThan(0);
+  expect(tile.movers).toContain(car);
+});
+
 describe('junction arbitration', () => {
   it('rebinds a seam hold without releasing its physical box or waiting age', () => {
     const a = continuityTile(left),

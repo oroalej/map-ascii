@@ -389,6 +389,8 @@ export type Atlas = {
   /** Fly to a camera (SPEC.md §3): zoom out, travel, zoom in. Any input cancels it. */
   flyTo(target: Partial<CameraState>, opts?: FlyOptions): void;
   getCamera(): CameraState;
+  /** Project a ground point into current canvas CSS pixels, including before the first frame. */
+  project(lngLat: readonly [number, number]): [number, number];
   /** Apply a changed motion preference without recreating the map or changing Life settings. */
   setReducedMotion(enabled: boolean): void;
   setYear(year: number, opts?: { animate?: boolean }): void;
@@ -1986,6 +1988,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     flyTo,
     getCamera: () => ({ ...camera }),
+    project: (lngLat) =>
+      viewportFor(camera, {
+        width: Math.max(1, canvas.clientWidth),
+        height: Math.max(1, canvas.clientHeight),
+      }).project([...lngLat]) as [number, number],
     setReducedMotion(enabled) {
       speech.clear();
       emoji.clear();

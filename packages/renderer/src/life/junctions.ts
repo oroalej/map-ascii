@@ -126,7 +126,15 @@ export class JunctionIndex {
             dy = geo.coords[next * 2 + 1]! - y;
           const length = Math.hypot(dx, dy);
           if (length)
-            j.arms.push({ line, along: along[v]!, out, hx: dx / length, hy: dy / length });
+            j.arms.push({
+              line,
+              along: along[v]!,
+              out,
+              hx: dx / length,
+              hy: dy / length,
+              inbound: !geo.oneway?.[line] || geo.oneway[line] === -out,
+              outbound: !geo.oneway?.[line] || geo.oneway[line] === out,
+            });
         }
         vertices.set(key, j);
       }
@@ -324,7 +332,10 @@ export class JunctionIndex {
             a.outbound !== false,
         );
       }
-      if (!exit) exit = incoming; // Dead-end fallback is still a movement to protect.
+      if (!exit) {
+        if (incoming.outbound === false) continue;
+        exit = incoming; // A legal two-way dead-end fallback remains protected.
+      }
       const ahead =
         incoming.stopAlong !== undefined
           ? m.dir * (incoming.stopAlong - progress) - length / 2
@@ -777,6 +788,64 @@ export class JunctionTable {
       }
     }
   }
+  /** Withdraw only reciprocal provisional reservations; occupied boxes keep their claims. */
+  private clearReservationCycles(groups: ReadonlyMap<string, readonly Hold[]>): void {
+    if (groups.size < 2) return;
+    for (const records of this.records.values()) {
+      for (const front of records.values()) {
+        if (
+          front.inside ||
+          front.since === undefined ||
+          front.atLine !== true ||
+          !front.ready ||
+          !this.over(front) ||
+          front.followingKey === undefined ||
+          this.admission(front, records, records.size)
+        )
+          continue;
+        const next = records.get(front.followingKey);
+        if (!next || next.since !== undefined || !next.ready) continue;
+        for (const other of groups.get(next.movement.key) ?? NO_RECORDS) {
+          if (
+            other.m === front.m ||
+            other.inside ||
+            other.since === undefined ||
+            other.atLine !== true ||
+            !other.ready ||
+            other.followingKey !== front.movement.key ||
+            compatible(next.movement, other.movement)
+          )
+            continue;
+          const opposite = this.records.get(other.m)!;
+          const otherNext = opposite.get(other.followingKey);
+          if (
+            !otherNext ||
+            otherNext.since !== undefined ||
+            !otherNext.ready ||
+            compatible(otherNext.movement, front.movement) ||
+            this.admission(other, opposite, opposite.size)
+          )
+            continue;
+          // Neither route may withdraw a physical occupant, including a carried box.
+          if ([...records.values(), ...opposite.values()].some((r) => r.inside)) continue;
+          const admissible = (a: Hold, b: Hold) =>
+            this.eligible(a) && this.eligible(b) && !this.yielded.has(a) && !this.yielded.has(b);
+          const ownReady = admissible(front, next);
+          const otherReady = admissible(other, otherNext);
+          if (!ownReady && !otherReady) continue;
+          const loser =
+            ownReady && (!otherReady || this.compare(front, other) <= 0) ? opposite : records;
+          for (const r of loser.values()) {
+            this.revoke(r);
+            // Fresh requests restore readiness next step. This arbitration lets the
+            // existing precedence rules reserve the winner's complete route first.
+            r.ready = false;
+          }
+          break;
+        }
+      }
+    }
+  }
   resolve(clock: number): void {
     this.clock = clock;
     const groups = new Map<string, Hold[]>();
@@ -830,6 +899,7 @@ export class JunctionTable {
           this.yielded.add(r);
         }
     this.revalidateRoutes();
+    this.clearReservationCycles(groups);
     for (const group of groups.values()) {
       group.sort(this.compare);
       const ordered = this.ordered;

@@ -11,6 +11,31 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/201276956",
       "note": "Location and name only."
+    },
+    {
+      "title": "Naga City Tourism: Plaza Rizal",
+      "url": "https://tourism.naga.gov.ph/attractions/plaza-rizal/",
+      "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The park and its monument honor national hero José Rizal."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "The plaza is known locally as a gathering place for public debates and discussions."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Families use this downtown park for picnics and recreation."
+      },
+      "source": 1
     }
   ]
 }

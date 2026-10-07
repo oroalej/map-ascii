@@ -294,7 +294,10 @@ describe('live motion preference', () => {
       },
     );
     canvas = document.createElement('canvas');
-    Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
+    Object.defineProperties(canvas, {
+      clientWidth: { value: 400, configurable: true },
+      clientHeight: { value: 300, configurable: true },
+    });
     gl = {
       COLOR_ATTACHMENT0: 100,
       getExtension: defaultGetExtension,
@@ -314,6 +317,18 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+  it('projects current camera and CSS size before rendering, independently of DPR', () => {
+    expect(atlas.project([0, 0])).toEqual([200, 150]);
+    vi.stubGlobal('devicePixelRatio', 2);
+    draw(100);
+    expect(atlas.project([0, 0])).toEqual([200, 150]);
+    Object.defineProperties(canvas, { clientWidth: { value: 600 }, clientHeight: { value: 200 } });
+    expect(atlas.project([0, 0])).toEqual([300, 100]);
+    atlas.setCamera({ lng: 0.0001, lat: 0.0001 });
+    const center = atlas.project([0.0001, 0.0001]);
+    expect(center[0]).toBeCloseTo(300);
+    expect(center[1]).toBeCloseTo(100);
   });
   it('advances the event clock and lighting in renderer frames, restores preferences and cancels on Life off/reduced motion', () => {
     atlas.destroy();

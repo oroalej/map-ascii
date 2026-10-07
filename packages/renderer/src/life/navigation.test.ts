@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine, lifeTransferables } from './geometry';
 import { WalkingGraph } from './navigation';
 import { stripRing } from './terrain';
+import { complete } from './cooperate';
 
 const line = (b: LifeBuilder, points: [number, number][]) =>
   b.line(
@@ -9,6 +10,71 @@ const line = (b: LifeBuilder, points: [number, number][]) =>
     LifeLine.path,
   );
 describe('local walking routes', () => {
+  it('uses a mapped alternate corridor when directed footprint clearance rejects the shortcut', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [10, 20],
+      [50, 20],
+    ]);
+    line(b, [
+      [10, 20],
+      [10, 40],
+      [50, 40],
+      [50, 20],
+    ]);
+    const graph = new WalkingGraph(b.finish(), 1),
+      from = { x: 12, y: 20 },
+      to = { x: 48, y: 20 };
+    const permits = (a: { x: number; y: number }, c: { x: number; y: number }) =>
+      !(a.y === 20 && c.y === 20 && Math.min(a.x, c.x) < 30 && Math.max(a.x, c.x) > 30);
+    const ordinary = graph.route(from, to)!;
+    expect(ordinary.every((p) => p.y === 20)).toBe(true);
+    const alternate = graph.route(from, to, permits)!;
+    expect(alternate.some((p) => p.y === 40)).toBe(true);
+    expect(alternate.slice(1).every((p, i) => permits(alternate[i]!, p))).toBe(true);
+    expect(graph.route(from, to)).toEqual(ordinary);
+    expect(graph.route(from, to, () => false)).toBeUndefined();
+    expect(graph.route(from, to)).toEqual(ordinary);
+  });
+
+  it('resets consecutive searches, grows scratch with the graph, and preserves returned arrays', () => {
+    const b = new LifeBuilder();
+    line(b, [
+      [10, 10],
+      [10, 40],
+      [50, 40],
+      [50, 10],
+    ]);
+    line(b, [
+      [100, 10],
+      [100, 40],
+      [140, 40],
+      [140, 10],
+    ]);
+    const graph = new WalkingGraph(b.finish(), 1);
+    const start = { x: 10, y: 15 },
+      end = { x: 50, y: 15 };
+    const first = graph.route(start, end)!;
+    expect(first).toBeDefined();
+    const saved = structuredClone(first);
+    expect(graph.route(start, { x: 140, y: 15 })).toBeUndefined();
+    const back = graph.route(end, start)!;
+    expect(back[0]).toEqual(end);
+    expect(back.at(-1)).toEqual(start);
+    expect(graph.route(start, end)).toEqual(saved);
+    const growth = new LifeBuilder();
+    line(growth, [
+      [200, 10],
+      [200, 40],
+      [240, 40],
+      [240, 10],
+    ]);
+    complete(graph.prepare(growth.finish()));
+    expect(graph.route({ x: 200, y: 15 }, { x: 240, y: 15 })).toBeDefined();
+    expect(first).toEqual(saved);
+    expect(graph.route(start, end)).toEqual(saved);
+  });
+
   it('does not invent roadside routes when a road has no mapped sidewalk', () => {
     const b = new LifeBuilder();
     b.line(

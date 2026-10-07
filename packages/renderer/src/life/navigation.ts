@@ -34,6 +34,12 @@ export class WalkingGraph {
   private readonly edgeBins = new Map<string, number[]>();
   private readonly bin: number;
   private roadAccess!: RoadAccess;
+  private search?: {
+    costs: Float64Array;
+    previous: Int32Array;
+    done: Uint8Array;
+    open: Set<number>;
+  };
 
   constructor(
     geo: LifeGeometry,
@@ -259,7 +265,11 @@ export class WalkingGraph {
     return found;
   }
 
-  private attach(p: WalkPoint): { point: WalkPoint; edge: Edge; t: number } | undefined {
+  private attach(
+    p: WalkPoint,
+    permits?: (from: WalkPoint, to: WalkPoint) => boolean,
+    arriving = false,
+  ): { point: WalkPoint; edge: Edge; t: number } | undefined {
     const reach = 8 * this.perMeter;
     let best = reach;
     let attachment: { point: WalkPoint; edge: Edge; t: number } | undefined;
@@ -277,7 +287,11 @@ export class WalkingGraph {
       );
       const point = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
       const d = distance(p, point);
-      if (d <= best && this.clear(p, point)) {
+      if (
+        d <= best &&
+        this.clear(p, point) &&
+        (!permits || (arriving ? permits(point, p) : permits(p, point)))
+      ) {
         best = d;
         attachment = { point, edge, t };
       }
@@ -285,21 +299,42 @@ export class WalkingGraph {
     return attachment;
   }
 
-  route(from: WalkPoint, to: WalkPoint): WalkPoint[] | undefined {
-    const start = this.attach(from);
-    const end = this.attach(to);
+  route(
+    from: WalkPoint,
+    to: WalkPoint,
+    permits?: (from: WalkPoint, to: WalkPoint) => boolean,
+  ): WalkPoint[] | undefined {
+    const start = this.attach(from, permits);
+    const end = this.attach(to, permits, true);
     if (!start || !end) return undefined;
-    if (start.edge === end.edge) return [from, start.point, end.point, to];
+    if (start.edge === end.edge && (!permits || permits(start.point, end.point)))
+      return [from, start.point, end.point, to];
     // Short clear connections let a walker reach a neighboring curb without walking to
     // the ends of two long parallel edges. This uses the graph's same 3 m join limit.
-    if (distance(start.point, end.point) <= 3 * this.perMeter && this.clear(start.point, end.point))
+    if (
+      distance(start.point, end.point) <= 3 * this.perMeter &&
+      this.clear(start.point, end.point) &&
+      (!permits || permits(start.point, end.point))
+    )
       return [from, start.point, end.point, to];
-    const costs = new Float64Array(this.points.length).fill(Infinity);
-    const previous = new Int32Array(this.points.length).fill(-1);
-    const done = new Uint8Array(this.points.length);
-    const open = new Set<number>([start.edge.a, start.edge.b]);
-    costs[start.edge.a] = distance(start.point, this.points[start.edge.a]!);
-    costs[start.edge.b] = distance(start.point, this.points[start.edge.b]!);
+    if (!this.search || this.search.costs.length < this.points.length) {
+      this.search = {
+        costs: new Float64Array(this.points.length),
+        previous: new Int32Array(this.points.length),
+        done: new Uint8Array(this.points.length),
+        open: new Set(),
+      };
+    }
+    const { costs, previous, done, open } = this.search;
+    costs.fill(Infinity);
+    previous.fill(-1);
+    done.fill(0);
+    open.clear();
+    for (const first of [start.edge.a, start.edge.b])
+      if (!permits || permits(start.point, this.points[first]!)) {
+        open.add(first);
+        costs[first] = distance(start.point, this.points[first]!);
+      }
     let found = -1;
     // Local trips only; bounded searches cannot stall a frame on a sprawling graph.
     for (let visit = 0; open.size && visit < 512; visit++) {
@@ -315,13 +350,20 @@ export class WalkingGraph {
       if (current < 0 || costs[current]! > 100 * this.perMeter) break;
       open.delete(current);
       done[current] = 1;
-      if (current === end.edge.a || current === end.edge.b) {
+      if (
+        (current === end.edge.a || current === end.edge.b) &&
+        (!permits || permits(this.points[current]!, end.point))
+      ) {
         found = current;
         break;
       }
       for (const { to: next, length } of this.adjacent[current]!) {
         const cost = costs[current]! + length;
-        if (!done[next] && cost < costs[next]!) {
+        if (
+          !done[next] &&
+          cost < costs[next]! &&
+          (!permits || permits(this.points[current]!, this.points[next]!))
+        ) {
           costs[next] = cost;
           previous[next] = current;
           open.add(next);

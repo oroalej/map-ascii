@@ -13,6 +13,7 @@ import { placeSeed } from './lights';
 import type { Mover } from './simulate';
 import { VEHICLES } from './vehicles';
 import { complete } from './cooperate';
+import type { LifeDiagnostics } from './diagnostics';
 import type { Movement } from './junctions';
 
 export type SignalColor = 'green' | 'amber' | 'red';
@@ -195,9 +196,14 @@ export class SignalControl {
     clock: number,
     out: MotionLimit,
     clearing?: ReadonlySet<string>,
-  ): void {
+    diagnostics?: LifeDiagnostics,
+  ): boolean {
+    const stops = this.stops.get(m.line);
+    if (!stops) return false;
+    let held = false;
+
     const progress = this.along[m.from]! + m.dir * m.d;
-    for (const stop of this.stops.get(m.line) ?? []) {
+    for (const stop of stops) {
       if (stop.dir !== undefined && stop.dir !== m.dir) continue;
       if (stop.signal.key && clearing?.has(stop.signal.key)) continue;
       const ahead =
@@ -210,10 +216,15 @@ export class SignalControl {
       const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
       const v = m.v ?? m.speed;
       if (state === 'red' || (state === 'amber' && (v * v) / (2 * brake) <= ahead)) {
+        if (ahead <= 0.5 * this.perMeter) {
+          held = true;
+          diagnostics?.hold(m, 'signal');
+        }
         out.target = Math.min(out.target, approach(ahead, 0, brake));
         out.cap = Math.min(out.cap, Math.max(0, ahead) / dt);
       }
     }
+    return held;
   }
   allows(
     m: Mover,

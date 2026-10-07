@@ -92,15 +92,25 @@ for (const [seed, remoteEvent] of [
     world.visible(18, s.levels, s.center, undefined, s.bounds);
     const states = new Set<string>();
     const vendorStates = new Set<string>();
+    const expectedStates = ['wait', 'purchase', 'board', 'aboard', 'return'];
+    const originalVisits = new Map(people.map((p) => [p, tile.scenes.visits.get(p)!]));
+    const returning = new Set<(typeof people)[number]>();
+    const completed = new Set<(typeof people)[number]>();
     let services = 0;
-    for (let frame = 0; frame < (remoteEvent ? 20 : 180) * 30; frame++) {
+    for (let frame = 0; frame < 30 * 30; frame++) {
       world.step(1 / 30, undefined, 18, s.bounds, undefined, { rain: 0 }, 0.9);
       world.visible(18, s.levels, s.center, undefined, s.bounds);
       for (const visit of tile.scenes.visits.values()) states.add(visit.state);
-      const visit = tile.scenes.visits.get(people[1]!);
-      if (visit) vendorStates.add(visit.state);
+      const vendorVisit = tile.scenes.visits.get(people[1]!);
+      if (vendorVisit) vendorStates.add(vendorVisit.state);
+      for (const p of people) {
+        const visit = tile.scenes.visits.get(p);
+        if (visit === originalVisits.get(p) && visit?.state === 'return') returning.add(p);
+        if (returning.has(p) && visit !== originalVisits.get(p)) completed.add(p);
+      }
       services = Math.max(services, tile.scenes.services.size);
       if (frame % 60 === 0) valid(world);
+      if (completed.size === people.length) break;
     }
     valid(world);
     if (remoteEvent) {
@@ -109,7 +119,8 @@ for (const [seed, remoteEvent] of [
         expect(vendorStates.has(state)).toBe(true);
     }
     expect(services).toBeGreaterThan(0);
-    for (const state of ['wait', 'purchase', 'board', 'aboard', 'return'])
+    expect(completed.size).toBe(people.length);
+    for (const state of expectedStates)
       expect(states.has(state), `missing ${state}; observed ${[...states].join(', ')}`).toBe(true);
   });
 }

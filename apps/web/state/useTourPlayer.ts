@@ -6,6 +6,7 @@ import { typingInField } from '@/lib/dom';
 import { useAtlasInstance, useAtlasStore } from './store';
 import { setTourRunner, tourControls, useTourStore } from './tour';
 import { parseViewParams } from './url';
+import { selectPlace } from './selection';
 
 /**
  * Run the city's tours (SPEC.md §6) against the live atlas:
@@ -39,7 +40,7 @@ export function useTourPlayer(tours: readonly Tour[]) {
         const store = useAtlasStore.getState();
         applying = true;
         try {
-          store.setSelected(step.select ?? null);
+          selectPlace(step.select ?? null);
         } finally {
           applying = false;
         }

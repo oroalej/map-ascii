@@ -12,7 +12,7 @@ The pipeline and schemas are city-agnostic. Each city gives its inputs through a
 | Esri World Imagery Wayback | Satellite snapshots by year (~2014+) | Esri terms — verify that deriving ASCII underlays is allowed before shipping; otherwise use Sentinel-2 | Timeline underlay; tracing curated trees and land cover that OSM lacks (`landcover/`, credited in the attribution; same terms check) |
 | Sentinel-2 (Copernicus) | Satellite underlay 2015+ | Free with attribution | 10 m resolution; district-level only |
 | Landsat (USGS) | Urban growth 1980s+ | Public domain | 30 m; City/Region level only |
-| Mapillary / KartaView | Street-level photos in the info panel | CC BY-SA | Link out or embed per their terms |
+| Mapillary / KartaView | Street-level photos in the facts dialog | CC BY-SA | Link out or embed per their terms |
 | Archival maps, photos, records (local libraries, universities, parish archives, private collections) | Historical layers, stories, then/now photos | Per item — record permission in content | Must have written permission for anything not public domain |
 
 Do not use Google Maps or Street View imagery or tiles to author new geographic content, or embed or serve them. At the owner's request, the existing `landmark-details` draft content and source records are retained. Their recorded Google references leave the provenance finding unresolved; preservation does not grant permission for new imagery use. Reference bitmaps remain in ignored handoff material and are not distributed. Keep truthful provider credits and distinguish the initial independent-reference authoring from later owner-reference adjustments in source notes.
@@ -43,7 +43,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Apply sourced `city.streets.exclusions` to exact OSM road ways before merging content or deriving traffic, utilities and site details. Each entry supplies `osm_id` and `source`; duplicate, missing detail-data and non-road/non-LineString targets fail the build. Remove matching region copies too. Saved OSM downloads and normalized inputs remain intact. Exclusions are display corrections, not historical demolition dates or edits to OSM.
    - Join curated records to features by `osm_id`, or add standalone features for demolished or historical things that OSM doesn't have.
    - Add the pack's curated `landcover/` (trees, tree rows, and grass, parking, woods, shrub, or planting-bed areas that OSM doesn't map yet) as features of their class (`tree`; areas as `grass`, `parking`, `trees`, `shrubs`, `planting`) with ids `cover:<slug>/<tree|row|area>-<n>`, trees sized and kinded by the same rules as OSM trees. A curated tree with an OSM tree within 3 m is dropped with a warning to remove it from the pack; OSM areas of a curated area's class inside it are flagged.
-   - Merge sourced `cemeteries/` burial rows onto existing `landuse=cemetery` or `amenity=grave_yard` areas. Retain grass, boundary geometry, drives, facilities and monuments; cemetery identity takes precedence over incidental park/garden tags. Explicit flush plaques, raised slabs and vaults use flat stone `building_part` polygons with stable `cemetery:<slug>/<row-id>-<n>` ids and the cemetery's name/selection. Add a matching curated landmark record to enable pointer selection; its identity travels with each burial part for cold tile loads. Whole markers outside the boundary, in holes, on standing roofs/water, in full road/path widths or at tree/monument trunks are omitted. Reject missing/wrong/duplicate parents, overlapping rows and layouts with no surviving markers. Credits join map attribution. Positions and row counts may be draft estimates; never infer burial identities, dates or a surveyed grave inventory from a representative layout.
+   - Merge sourced `cemeteries/` burial rows onto existing `landuse=cemetery` or `amenity=grave_yard` areas. Retain grass, boundary geometry, drives, facilities and monuments; cemetery identity takes precedence over incidental park/garden tags. Explicit flush plaques, raised slabs and vaults use flat stone `building_part` polygons with stable `cemetery:<slug>/<row-id>-<n>` ids and the cemetery's name/selection. Add a matching curated landmark record with facts to enable pointer selection; its identity travels with each burial part for cold tile loads. Whole markers outside the boundary, in holes, on standing roofs/water, in full road/path widths or at tree/monument trunks are omitted. Reject missing/wrong/duplicate parents, overlapping rows and layouts with no surviving markers. Credits join map attribution. Positions and row counts may be draft estimates; never infer burial identities, dates or a surveyed grave inventory from a representative layout.
    - Write `start_year`, `end_year`, `certainty`, `name_history`, `landmark: true`, and `story_id` into properties.
    - Merge sourced outdoor `details/` (`SiteDetail`) onto an existing OSM area. Without curated grounds, `surface: "paving"` changes the area's ground class while retaining its id, labels, and landmark metadata. `surface: "keep"` retains its fill and tile range. A simple `grounds` ring must contain the complete standing building or point anchor and may not overlap another detail site; paving then adds separate unoutlined grounds without replacing the parent. Authored `walks` are simulation routes, not painted lines; `seating` becomes rounded, real-width `seating` footprints (closed lines make continuous planter edges) and sparse bench pause anchors on their accessible side. Optional `bench_spans` select named sections by inclusive start/end vertex indices and widen them to the specified `width_m`. Spans must have unique ids, non-overlapping ranges within the line (shared endpoints are allowed), and widths at least the base rim width. Omission seats the entire line as before; `[]` creates a rim without pause anchors. Rim and bench sections are unioned in a common meter frame into one footprint, preserving the planted hole and avoiding internal seams; anchors use only the bench sections and their widths; `lamps` becomes static multi-head hardware, with `style` defaulting to `streetlight`; `lantern` selects compact lantern clusters. Shrub polygons are blocked ground cover without tree trunks or bird roosts. Stable item ids survive record reordering. Reject missing/duplicate parents, building parents without grounds, out-of-bounds geometry, and routes across raised beds, monument parts or standing buildings (overhead roofs remain walkable); mapped benches and lamps within 3 m suppress curated duplicates. Optional `flagpoles` relocate existing OSM flagpole points by id, preserving their identity and refreshing label anchors and subdivision membership. Reject missing or non-flagpole targets, duplicate targets across detail packs, and positions outside the parent or inside raised obstacles. Omitted overrides default to an empty array. Optional `flag: "PH"` explicitly selects a Philippine flag marker at the mapped pole; omitted designs retain the generic pole glyph. The code is carried through tiles and worker fixture geometry, independent of Life. Credits join the generated meta attribution.
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
@@ -200,11 +200,24 @@ Landmark {
   start_year?: number;
   end_year?: number;
   certainty: 'exact' | 'circa' | 'unknown';
+  facts?: LandmarkFact[];        // 3–5 sourced facts; presence enables pointer hover/click
   story?: LocalizedText;         // markdown
   photos?: { src: string; year?: number; caption?: string; credit: string; license: string }[];
   sources: { title: string; url?: string; note?: string }[];   // required, min 1
 }
 
+LandmarkFact {
+  text: LocalizedText;            // English ≤240 characters; declared city languages only
+  year?: number;                 // integer Year when dated
+  certainty?: 'exact' | 'circa'; // only with year; unknown is invalid for facts
+  source: number;                // nonnegative integer index into Landmark.sources
+}
+
+```
+
+Every fact source index must be less than the landmark’s sources length. Invalid references identify the fact index and `facts[index].source`. Facts may be undated without certainty, or dated with certainty omitted, exact or circa. These constraints are separate from landmark-level certainty, which still permits unknown. Fact dates do not establish a construction date for the current mapped footprint.
+
+```ts
 NameHistory {
   osm_id: string;
   names: { name: string; from?: number; to?: number; certainty: 'exact' | 'circa' }[];
@@ -404,7 +417,7 @@ identity. Its connected outlines show from z18. Adjacent treads use non-overlapp
   wholly enclosed by the court. Content guards also check full-width carriageway clearance.
   Ordinary terraces and existing plaza packs retain their previous draw behavior.
 
-LandmarkArt {                    // cities/<slug>/art/*.json — front views for the info panel, not the map
+LandmarkArt {                    // cities/<slug>/art/*.json — front views in the facts dialog’s Drawing disclosure
   id: string;                    // "art/<slug>"
   osm_id: string;                // the landmark or monument it draws
   title: string;
@@ -466,7 +479,7 @@ Installations extend the same optional `seasons` layer with strict version-1 `ch
 
 Credits for optional underlays and displayed media accompany that content:
 - Satellite underlays: "Esri Wayback" or "Copernicus Sentinel-2" while the underlay is active
-- Each photo and historic map: its own credit in the info panel while displayed
+- Each photo and historic map: its own credit in the facts dialog while displayed
 
 ## 7. Research backlog
 

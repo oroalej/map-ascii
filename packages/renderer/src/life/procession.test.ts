@@ -204,6 +204,7 @@ describe('ProcessionScene', () => {
   it('lines the banks with crowds, thickest around the pagoda, some with candles', () => {
     const people = scene.agents(0.5, 0, { boats: false });
     expect(people.every((p) => p.kind === 'person')).toBe(true);
+    expect(people.every((p) => p.mappedPersonMover === undefined)).toBe(true);
     // From the default banks back into the town.
     const bank = PROCESSION.defaultBank;
     const offsets = people.map((p) => Math.abs(right(p.lat)));

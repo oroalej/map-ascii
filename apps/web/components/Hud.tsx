@@ -29,6 +29,7 @@ import {
 import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { isSubdivisionAreas } from '@/lib/guards';
+import { useSmallScreen } from '@/lib/screen';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
 import { QUALITY_CHOICES, useQualityStore } from '@/state/quality';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
@@ -69,15 +70,6 @@ function QualityControl() {
     </button>
   );
 }
-
-// Match the CSS compact query, then negate it: fractional widths have no gap.
-const COMPACT = '(max-width: 640px)';
-const isWide = () => !window.matchMedia(COMPACT).matches;
-const subscribeWide = (onChange: () => void) => {
-  const query = window.matchMedia(COMPACT);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-};
 
 /** A camera value rounded to `step`, so a component re-renders only when what it shows moves. */
 const round = (value: number, step: number) => Math.round(value / step) * step;
@@ -232,7 +224,7 @@ function LegendControls({
     target?.focus({ preventScroll: true });
   };
   // Open on wide screens and collapsed on phones (SPEC.md §8), until the visitor toggles it.
-  const wide = useSyncExternalStore(subscribeWide, isWide, () => true);
+  const wide = !useSmallScreen();
   const [toggled, setToggled] = useState<boolean | null>(null);
   const open = toggled ?? wide;
 
@@ -537,7 +529,7 @@ export function Hud({
   seasons?: readonly RuntimeSeasonConfig[] | undefined;
 }) {
   const hasCamera = useAtlasStore((s) => s.camera !== null);
-  const panelOpen = useAtlasStore((s) => s.selectedId !== null);
+  const factsVisible = useUiStore((s) => s.factsVisible);
   const touring = useAtlasStore((s) => s.tour !== null);
   const subdivision = useUiStore((s) => s.subdivision);
   if (!hasCamera) return <SubdivisionTracker city={city} />;
@@ -549,10 +541,14 @@ export function Hud({
         <LegendControls
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
-          hidden={panelOpen}
+          hidden={factsVisible}
         />
       </div>
-      <div className={styles.bottomLeft} data-touring={touring} data-speech-obstacle>
+      <div
+        className={styles.bottomLeft}
+        data-touring={touring || factsVisible}
+        data-speech-obstacle
+      >
         <ScaleBar />
         {subdivision && (
           <p className={styles.line}>

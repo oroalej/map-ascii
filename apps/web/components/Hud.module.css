@@ -245,7 +245,7 @@
     bottom: calc(var(--attribution-height, 52px) + 12px);
   }
 
-  /* The tour's sheet takes the bottom of the screen. */
+  /* Tour and landmark-facts sheets take the bottom of the screen. */
   .bottomLeft[data-touring='true'] {
     display: none;
   }
