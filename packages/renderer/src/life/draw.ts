@@ -1,9 +1,9 @@
-import type { ThrongPayload } from './throng';
 /**
  * Agents → the life layer's texels (RGBA8 per cell: low glyph byte, packed glyph/class byte, agent kind bits,
  * and for vehicles their paint and part, for people their paint, part, and candle), which the
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
+import type { ThrongPayload } from './throng';
 import { classId } from '../classes';
 import { PackingOutcome } from './diagnostics';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
@@ -184,6 +184,31 @@ let journal:
       members?: MemberRaster[];
     }
   | undefined;
+const crowdJournal: NonNullable<typeof journal> = { before: new Map(), denied: false };
+const CROWD_PREVIOUS: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+let crowdRollbackCells = new Uint32Array(16);
+let crowdRollbackBytes = new Uint8Array(64);
+let crowdRollbackOwners = new Uint32Array(16);
+let crowdRollbackSize = 0;
+function rememberCrowdCell(out: Uint8Array, at: number) {
+  if (crowdRollbackSize === crowdRollbackCells.length) {
+    const capacity = crowdRollbackCells.length * 2;
+    const cells = new Uint32Array(capacity),
+      bytes = new Uint8Array(capacity * 4),
+      owners = new Uint32Array(capacity);
+    cells.set(crowdRollbackCells);
+    bytes.set(crowdRollbackBytes);
+    owners.set(crowdRollbackOwners);
+    crowdRollbackCells = cells;
+    crowdRollbackBytes = bytes;
+    crowdRollbackOwners = owners;
+  }
+  const slot = crowdRollbackSize++;
+  crowdRollbackCells[slot] = at;
+  for (let b = 0; b < 4; b++) crowdRollbackBytes[slot * 4 + b] = out[at + b]!;
+  crowdRollbackOwners[slot] = drawingOwners?.[at / 4] ?? 0;
+  crowdJournal.before.set(at, CROWD_PREVIOUS);
+}
 let fallbackStampedVehicles = new Uint8Array(0);
 let detailedStamp = false;
 let detailedPeopleStamp = false;
@@ -262,19 +287,21 @@ function rememberGroundCell(out: Uint8Array, at: number) {
     if (groundCells[at / 4]) journal.denied = true;
     // Preserve the ordinary five-value owner journal; speech adds its member
     // only when enabled, avoiding an unused slot in every painted-cell array.
-    journal.before.set(
-      at,
-      drawingSpeakers
-        ? [
-            out[at]!,
-            out[at + 1]!,
-            out[at + 2]!,
-            out[at + 3]!,
-            drawingOwners?.[at / 4] ?? 0,
-            drawingSpeakers.members[at / 4]!,
-          ]
-        : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
-    );
+    if (journal === crowdJournal) rememberCrowdCell(out, at);
+    else
+      journal.before.set(
+        at,
+        drawingSpeakers
+          ? [
+              out[at]!,
+              out[at + 1]!,
+              out[at + 2]!,
+              out[at + 3]!,
+              drawingOwners?.[at / 4] ?? 0,
+              drawingSpeakers.members[at / 4]!,
+            ]
+          : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
+      );
   }
   if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
@@ -318,7 +345,11 @@ export function packLife(
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
-  metadata.throngMask?.fill(0);
+  if (metadata.throngMask) {
+    if (metadata.throngCells)
+      for (const cell of metadata.throngCells) metadata.throngMask.fill(0, cell * 8, cell * 8 + 8);
+    else metadata.throngMask.fill(0);
+  }
   if (metadata.throngCells) metadata.throngCells.length = 0;
   if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
     throw new RangeError('Wrong stamped vehicle mask size');
@@ -343,7 +374,8 @@ export function packLife(
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
-    // Fixed obstacles keep their cells as movers pass: parked cars, then vendors.
+    // Reserve event scenery, then event actors, then ownerless crowds; parked cars,
+    // vendor carts and ordinary movers follow in that order.
     // Owner indices still refer to the caller's original array.
     for (const priority of [-2, -1, 0, 1, 2, 3]) {
       if (priority === 0 && metadata.throng)
@@ -588,11 +620,14 @@ function packThrong(
   drawingOwner = 0;
   drawingFocus = 0;
   drawingClockCells = undefined;
-  const reusable: NonNullable<typeof journal> = { before: new Map(), denied: false };
+  const reusable = crowdJournal;
   for (const cell of payload.cells) {
     reusable.before.clear();
     reusable.denied = false;
     reusable.incomplete = false;
+    reusable.memberCount = undefined;
+    reusable.members = undefined;
+    crowdRollbackSize = 0;
     journal = reusable;
     const n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
     const attempt = journal;
@@ -606,9 +641,10 @@ function packThrong(
         }
     const overCapacity = used + attempt.before.size > payload.cap;
     if (!n || attempt.denied || attempt.incomplete || overCapacity) {
-      for (const [at, previous] of attempt.before) {
-        for (let b = 0; b < 4; b++) out[at + b] = previous[b]!;
-        if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
+      for (let slot = 0; slot < crowdRollbackSize; slot++) {
+        const at = crowdRollbackCells[slot]!;
+        for (let b = 0; b < 4; b++) out[at + b] = crowdRollbackBytes[slot * 4 + b]!;
+        if (drawingOwners) drawingOwners[at / 4] = crowdRollbackOwners[slot]!;
       }
       if (overCapacity) break;
       continue;

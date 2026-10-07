@@ -6,6 +6,7 @@ import {
   eventOccurrence,
   processionFormationWidth,
   localMetricProjection,
+  processionAltarRadius,
   type StreetRoute,
   type MassRoute,
   type FluvialRoute,
@@ -71,6 +72,51 @@ const mass: MassRoute = {
     roads: [{ line: routePoints, width_m: 8 }],
   },
 };
+it.each([0, 1, 2, 3])(
+  'admits all fixed altar actors for %s images and exposes the platform rim',
+  (images) => {
+    const at = mass.site.anchor,
+      projection = localMetricProjection(at),
+      radius = processionAltarRadius(1, images);
+    const route: MassRoute = {
+      ...mass,
+      site: {
+        ...mass.site,
+        altar: { at, radius_m: 1, images },
+        altar_ground: [
+          Array.from({ length: 33 }, (_, i) =>
+            projection.from([
+              Math.cos((i * Math.PI) / 16) * radius,
+              Math.sin((i * Math.PI) / 16) * radius,
+            ]),
+          ),
+        ],
+      },
+    };
+    const scene = new GroundProcessionScene(route);
+    expect(scene.actors.length).toBeLessThanOrEqual(300);
+    const actors = scene.agents(0.5, 0).filter((a) => a.eventRole === 'altar');
+    expect(actors).toHaveLength(13 + images);
+    expect(actors.filter((a) => a.glyph === ProcessionGlyph.andas)).toHaveLength(images);
+    const toCell = (lng: number, lat: number): [number, number] => {
+      const [x, y] = projection.to([lng, lat]);
+      return [x / 0.25 + 60, -y / 0.25 + 60];
+    };
+    const glyphs = mapGlyphs(themes.dark);
+    const pack = (withPlatform: boolean) => {
+      const out = new Uint8Array(120 * 120 * 4);
+      packLife(
+        out,
+        { cols: 120, rows: 120, cellWidth: 10, cellHeight: 18, toCell },
+        actors.filter((a) => withPlatform || a.glyph !== ProcessionGlyph.platform),
+        themes.dark,
+        (g) => glyphs.indexOf(g),
+      );
+      return out;
+    };
+    expect(pack(true)).not.toEqual(pack(false));
+  },
+);
 function ordinaryPerson(x: number, y = 2000, rank = 0): Mover {
   return {
     kind: 'person',

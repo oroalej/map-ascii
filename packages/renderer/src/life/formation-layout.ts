@@ -95,7 +95,7 @@ function build(route: StreetRoute) {
     );
     row(f.ranks * f.columns, lastBack + PROCESSION.street.devoteeGap + g.person.length / 2, 3);
     leading = Math.max(
-      3,
+      PROCESSION.street.leading,
       ...actors.map(
         (a) =>
           -a.back +
@@ -104,7 +104,9 @@ function build(route: StreetRoute) {
       ),
     );
     tail = Math.max(
-      route.crowd_grounds !== undefined || route.segments.some((s) => s.verge_m) ? 500 : 0,
+      route.crowd_grounds !== undefined || route.segments.some((s) => s.verge_m)
+        ? PROCESSION.street.crowdTail
+        : 0,
       ...actors.map((a) => a.back + PROCESSION.street.tailPadding),
     );
   } else {
@@ -133,7 +135,7 @@ function build(route: StreetRoute) {
       back += length + PROCESSION.street.vehicleGap;
     }
     tail = back + PROCESSION.street.tailPadding;
-    leading = 3;
+    leading = PROCESSION.street.leading;
   }
   const profile = motionProfile(hashString(route.id), route.length_m);
   return {

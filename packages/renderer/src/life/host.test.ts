@@ -80,6 +80,69 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it.each(['inline', 'worker'] as const)(
+    'invalidates same-ID live occurrence replacements in the %s host',
+    async (kind) => {
+      const s = fixture();
+      const event = {
+        ...route,
+        route: [s.center, [s.center[0] + 0.001, s.center[1]]] as [number, number][],
+      };
+      const world = new LifeWorld();
+      world.setProcessions([event]);
+      const host = kind === 'inline' ? createInlineHost(world) : createWorkerHost({}, [event]);
+      host.sync(s.tiles);
+      await flush();
+      host.setLive(event.id, 0.4, 'first');
+      const actor: VisibleAgent = {
+        kind: 'person',
+        lng: s.center[0],
+        lat: s.center[1],
+        flap: 0,
+        event: true,
+        eventGround: event.id,
+      };
+      if (kind === 'worker')
+        mock.frame.mockResolvedValueOnce({
+          ...result(1),
+          agents: [actor],
+          procession: { id: event.id, progress: 0.4, live: true },
+        });
+      host.request(s.input);
+      await flush();
+      expect(host.latest()?.agents.some((agent) => agent.event)).toBe(true);
+      expect(host.latest()?.throngRun?.live).toBe(true);
+      host.setLive(event.id, 0.45, 'first');
+      expect(host.latest()?.agents.some((agent) => agent.event)).toBe(true);
+      host.setLive(event.id, 0.2, 'second');
+      expect(host.latest()?.agents.some((agent) => agent.event)).toBe(false);
+      expect(host.latest()?.throngRun).toBeUndefined();
+      if (kind === 'worker')
+        mock.frame.mockResolvedValueOnce({
+          ...result(2),
+          agents: [actor],
+          procession: { id: event.id, progress: 0.2, live: true },
+        });
+      host.request(s.input);
+      await flush();
+      expect(host.latest()?.throngRun?.progress).toBe(0.2);
+      host.play(event.id);
+      if (kind === 'worker')
+        mock.frame.mockResolvedValueOnce({
+          ...result(3),
+          agents: [actor],
+          procession: { id: event.id, progress: 0.4, live: false },
+        });
+      host.request(s.input);
+      await flush();
+      const played = host.latest()!;
+      expect(played.throngRun?.live).toBe(false);
+      host.setLive(event.id, 0.6, 'third');
+      expect(host.latest()!.agents).toBe(played.agents);
+      expect(host.latest()!.throngRun).toBe(played.throngRun);
+      host.dispose();
+    },
+  );
   it('retains played actors and accepts in-flight playback across live schedule updates', async () => {
     const s = fixture(),
       other = { ...route, id: 'other' },

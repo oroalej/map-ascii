@@ -41,7 +41,9 @@ describe('transferred polygon indexes', () => {
   it('matches mutable terrain for seeded bodies, bin edges, degenerate and distant bodies', () => {
     const terrain = makeScenario('crossroads', 4).world.cellTerrain()!;
     const { snapshot, transferables } = snapshotOf(terrain);
-    expect(transferables).toHaveLength(35);
+    expect(snapshot.hardBlocked).toBe(snapshot.blocked);
+    expect(transferables).toHaveLength(28);
+    expect(new Set(transferables).size).toBe(transferables.length);
     const received = structuredClone(snapshot, { transfer: transferables });
     expect(transferables.every((buffer) => buffer.byteLength === 0)).toBe(true);
     let seed = 12345;

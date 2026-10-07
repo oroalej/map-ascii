@@ -7,7 +7,7 @@ import { localFrame } from './geo';
 import { intersection } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
 import { deriveSidewalks } from './streets';
-import type { AtlasFeature } from '../03-normalize';
+import { normalize, type AtlasFeature } from '../03-normalize';
 
 type F = Feature<Geometry, Record<string, unknown>>;
 const point = (id: string, at: number[]): F => ({
@@ -112,24 +112,35 @@ describe('street event routing', () => {
       expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
     },
   );
-  it('routes across an accessible gate and preserves restricted and solid barriers', () => {
+  it.each([
+    [{ barrier: 'gate' }, true],
+    [{ barrier: 'gate', foot: 'no' }, false],
+    [{ barrier: 'gate', access: 'private' }, false],
+    [{ barrier: 'gate', access: 'private', foot: 'yes' }, true],
+    [{ barrier: 'wall' }, false],
+  ] as const)('routes according to normalized gate access %j', (tags, allowed) => {
     const way = road('osm:way/3', [
       [0, 0],
       [0.002, 0],
     ]);
-    const gate: F = {
-      ...point('osm:node/9', [0.001, 0]),
-      properties: { id: 'osm:node/9', class: 'barrier', variant: 'gate' },
-    };
+    const boundary = area('boundary', 'park', -0.01, -0.01, 0.01, 0.01);
+    if (boundary.geometry.type !== 'Polygon') throw Error();
+    const gate = normalize(
+      {
+        type: 'FeatureCollection',
+        features: [{ ...point('unused', [0.001, 0]), id: 'node/9', properties: tags }],
+      },
+      { type: 'Feature', geometry: boundary.geometry, properties: { name: 'Fixture' } },
+      10,
+    ).features.find((f) => f.properties.id === 'osm:node/9')!;
+    expect(gate).toBeDefined();
     const source = [features[0]!, features[1]!, way, gate];
-    const route = routeProcessions(source, [Procession.parse(base)]).routes[0]!;
-    if (route.kind !== 'procession') throw Error();
-    expect(route.blocked.some((ring) => pointInPolygon([0.001, 0], [ring]))).toBe(false);
-    gate.properties.foot = 'no';
-    expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
-    delete gate.properties.foot;
-    gate.properties.variant = 'wall';
-    expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
+    if (!allowed) expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
+    else {
+      const route = routeProcessions(source, [Procession.parse(base)]).routes[0]!;
+      if (route.kind !== 'procession') throw Error();
+      expect(route.blocked.some((ring) => pointInPolygon([0.001, 0], [ring]))).toBe(false);
+    }
   });
   it.each(['road_major', 'road_mid'])('excludes default-derived sidewalk bands on %s', (cls) => {
     const source = [

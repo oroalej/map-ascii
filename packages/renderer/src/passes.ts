@@ -552,6 +552,7 @@ type Texels = {
   life: Uint8Array;
   crowdMask?: Uint32Array;
   crowdCells?: number[];
+  crowdPending?: boolean;
   owners: Uint32Array;
   revision: number;
   light: Uint8Array;
@@ -661,6 +662,7 @@ export function lifePass(
     : undefined;
   if (
     heldFrame &&
+    !buffers.crowdPending &&
     buffers.held?.frame === heldFrame &&
     inputs!.every((value, i) => value === buffers.held!.inputs[i])
   )
@@ -679,6 +681,7 @@ export function lifePass(
         crowd.subGuard,
       )
     : undefined;
+  buffers.crowdPending = crowdPayload?.pending;
   if (crowdPayload?.cells.length) {
     buffers.crowdMask ??= new Uint32Array(cols * rows * 8);
     buffers.crowdCells ??= [];
@@ -730,9 +733,8 @@ export function lifePass(
   );
   // Birds may overwrite crowd texels; their real owner clears the crowd permission mask.
   if (buffers.crowdMask)
-    for (let i = 0; i < buffers.owners.length; i++)
+    for (const i of buffers.crowdCells ?? [])
       if (buffers.owners[i]) buffers.crowdMask.fill(0, i * 8, i * 8 + 8);
-  uploadCrowdMask(gl, targets, buffers.crowdCells?.length ? buffers.crowdMask : undefined);
   buffers.stampedAgents = agents;
   buffers.revision++;
   if (buffers.clocks) {
@@ -748,6 +750,14 @@ export function lifePass(
   }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
+  let crowdFirst = rows,
+    crowdEnd = 0;
+  for (const cell of buffers.crowdCells ?? []) {
+    const row = Math.floor(cell / cols);
+    crowdFirst = Math.min(crowdFirst, row);
+    crowdEnd = Math.max(crowdEnd, row + 1);
+  }
+  uploadCrowdMask(gl, targets, crowdEnd ? buffers.crowdMask : undefined, [crowdFirst, crowdEnd]);
   uploadLife(gl, targets, lifeTexels);
   if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);

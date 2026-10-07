@@ -16,7 +16,10 @@ type Edge = {
 };
 type RingIndex = { bins: Map<number, Edge[]>; large: Edge[]; epoch: number };
 const BIN = 0.00025;
-const SIDE = 16;
+export const THRONG_MASK_SIDE = 16;
+export const THRONG_MASK_BITS = THRONG_MASK_SIDE * THRONG_MASK_SIDE;
+export const THRONG_MASK_WORDS = THRONG_MASK_BITS / 32;
+const SIDE = THRONG_MASK_SIDE;
 const MAX_ROWS = 4096;
 const EMPTY: Point[][] = [];
 const indexes = new WeakMap<Point[][], RingIndex>();
@@ -145,14 +148,17 @@ type Row = {
   water: Span[];
 };
 
-function insideCell(spans: Row['regions'], a: number, b: number, centre: number) {
-  return (
-    contains(spans[0], a) &&
-    contains(spans[0], b) &&
-    contains(spans[1], centre) &&
-    contains(spans[2], a) &&
-    contains(spans[2], b)
-  );
+function insideCell(spans: Row['regions'], west: number, east: number) {
+  return spans.every((line) => {
+    let lo = 0,
+      hi = line.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (line[mid]![1] <= west) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo < line.length && line[lo]![0] < west && east < line[lo]![1];
+  });
 }
 function lines(source: RingIndex, top: number, lat: number, bottom: number): Row['regions'] {
   return [scan(source, top), scan(source, lat), scan(source, bottom)];
@@ -214,7 +220,7 @@ export class CrowdMaskRaster {
       this.longitude + (col * SIDE + (bit % SIDE) + 0.5) * this.step,
     );
   }
-  mask(col: number, row: number, allows?: (col: number, row: number) => boolean) {
+  covers(col: number, row: number) {
     let cover = this.coverage.get(row);
     if (!cover) {
       const spans: Span[] = [];
@@ -225,12 +231,17 @@ export class CrowdMaskRaster {
         this.coverage.delete(this.coverage.keys().next().value!);
       this.coverage.set(row, cover);
     }
+    const x0 = col * SIDE;
+    const wholeWest = this.longitude + x0 * this.step;
+    const wholeEast = wholeWest + SIDE * this.step;
+    return overlaps(cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast));
+  }
+  mask(col: number, row: number, allows?: (col: number, row: number) => boolean) {
+    if (!this.covers(col, row)) return undefined;
     let words: Uint32Array | undefined;
     const x0 = col * SIDE;
     const wholeWest = this.longitude + x0 * this.step;
     const wholeEast = wholeWest + SIDE * this.step;
-    if (!overlaps(cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast)))
-      return undefined;
     for (let y = 0; y < SIDE; y++) {
       const line = this.row(row * SIDE + y);
       if (!overlaps(line.cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast)))
@@ -239,16 +250,15 @@ export class CrowdMaskRaster {
         const a = this.longitude + (x0 + x) * this.step,
           b = a + this.step;
         const west = Math.min(a, b),
-          east = Math.max(a, b),
-          centre = (a + b) / 2;
+          east = Math.max(a, b);
         if (
-          !insideCell(line.regions, a, b, centre) ||
+          !insideCell(line.regions, west, east) ||
           overlaps(line.blocked, west, east) ||
-          (overlaps(line.water, west, east) && !insideCell(line.bridges, a, b, centre)) ||
+          (overlaps(line.water, west, east) && !insideCell(line.bridges, west, east)) ||
           (allows && !allows(col * SIDE + x, row * SIDE + y))
         )
           continue;
-        words ??= new Uint32Array(8);
+        words ??= new Uint32Array(THRONG_MASK_WORDS);
         const bit = y * SIDE + x;
         words[bit >>> 5]! |= (1 << (bit & 31)) >>> 0;
       }

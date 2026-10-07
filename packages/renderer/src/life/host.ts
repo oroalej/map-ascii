@@ -111,6 +111,7 @@ export function createInlineHost(
   let disposed = false;
   let acceptedPost: number | undefined;
   let generation = ++nextGeneration;
+  let liveIdentity: { id?: string; occurrence?: string } = {};
   return {
     invalidateFrame() {
       if (view) view = { ...view, agents: [], throngRun: undefined };
@@ -178,10 +179,18 @@ export function createInlineHost(
     },
     setLive: (id, progress, occurrence) => {
       const previous = world.procession();
+      const occurrenceChanged = liveIdentity.id !== id || liveIdentity.occurrence !== occurrence;
+      liveIdentity = { id, occurrence };
       world.setLive(id, progress, occurrence);
       const next = world.procession();
-      if (previous?.id !== next?.id || previous?.live !== next?.live)
+      if (
+        previous?.id !== next?.id ||
+        previous?.live !== next?.live ||
+        (next?.live && occurrenceChanged)
+      ) {
         view = retainOrdinary(view, world.processionRoute(next?.id));
+        acceptedPost = undefined;
+      }
     },
     play: (id, timing) => {
       if (!world.play(id, timing)) return false;

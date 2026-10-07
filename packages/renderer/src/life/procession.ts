@@ -33,6 +33,7 @@ export const PROCESSION = {
   playSpeed: 10,
   eventActors: PROCESSION_LIMITS.actors,
   throng: {
+    streamLength: 300,
     stream: 0.9,
     tail: 0.6,
     verge: 0.7,
@@ -42,6 +43,8 @@ export const PROCESSION = {
   },
   mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },
   street: {
+    crowdTail: 500,
+    leading: 3,
     andasGap: 4,
     imageGap: 8,
     marshalGap: 8,
@@ -62,7 +65,7 @@ export const PROCESSION = {
   /** Poles along the pagoda's sides, leaning out: how many, and how long seen from above, m. */
   poles: 10,
   poleLength: 4.5,
-  followers: 14,
+  followers: PROCESSION_DEFAULTS.fluvial.followers,
   /** Between ranks and between columns of voyadores, m (columns close up where it's narrow). */
   rankGap: 19,
   columnGap: 5,

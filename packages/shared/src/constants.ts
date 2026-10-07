@@ -203,6 +203,53 @@ export const PROCESSION_GEOMETRY = {
   clearanceMargin: 0.5,
   massCell: 2,
 } as const;
+export const ALTAR_IMAGE_SPACING_M = 10;
+export type ProcessionAltarMember = {
+  x: number;
+  y: number;
+  paint: number;
+  prop?: 'platform' | 'table' | 'canopy' | 'support' | 'andas';
+  footprint?: { length: number; width: number };
+  scenery?: boolean;
+};
+/** Shared fixed composition supplies actor reservations and complete permission extents. */
+export function processionAltarLayout(images: number): ProcessionAltarMember[] {
+  const members: ProcessionAltarMember[] = Array.from({ length: 8 }, (_, i) => ({
+    x: ((i % 4) - 1.5) * 1.2,
+    y: -2 + Math.floor(i / 4) * 1.5,
+    paint: i < 5 ? 0 : 7,
+  }));
+  members.push(
+    { x: 0, y: 0, paint: 6, prop: 'platform', footprint: { length: 5, width: 7 }, scenery: true },
+    { x: 0, y: 2, paint: 3, prop: 'table', footprint: { length: 1.2, width: 2.4 } },
+    { x: 0, y: 0, paint: 3, prop: 'canopy', footprint: { length: 5, width: 6 }, scenery: true },
+    { x: -3, y: 2, paint: 6, prop: 'support', footprint: { length: 0.4, width: 0.4 } },
+    { x: 3, y: 2, paint: 6, prop: 'support', footprint: { length: 0.4, width: 0.4 } },
+  );
+  for (let i = 0; i < images; i++)
+    members.push({
+      x: (i - (images - 1) / 2) * ALTAR_IMAGE_SPACING_M,
+      y: -0.5,
+      paint: 4,
+      prop: 'andas',
+      footprint: PROCESSION_GEOMETRY.andas,
+    });
+  return members;
+}
+/** A padded radial envelope contains complete members at any heading, plus the audience apron. */
+export function processionAltarRadius(radius: number, images: number): number {
+  let extent = radius;
+  for (const member of processionAltarLayout(images)) {
+    const size = member.footprint ?? PROCESSION_GEOMETRY.person;
+    extent = Math.max(
+      extent,
+      Math.hypot(member.x, member.y) +
+        Math.hypot(size.length, size.width) / 2 +
+        Math.SQRT2 * PROCESSION_GEOMETRY.probePadding,
+    );
+  }
+  return extent + PROCESSION_LIMITS.altar.apron;
+}
 export function processionFormationWidth(
   kind: 'procession' | 'parade',
   vehicles: readonly (typeof PROCESSION_VEHICLES)[number][] = [],

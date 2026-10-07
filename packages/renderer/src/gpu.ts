@@ -124,6 +124,7 @@ export type CellTargets = {
   crowdMaskCols: number;
   crowdMaskRows: number;
   crowdMaskActive?: boolean;
+  crowdMaskBand?: readonly [number, number];
   /** Lazy RG32F per-item candle clock tokens; never a render attachment. */
   effectClockTex?: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
@@ -333,7 +334,12 @@ export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
 }
 
 /** Eight words per cell encode conservative 16×16 permitted crowd coverage. */
-export function uploadCrowdMask(gl: GL, t: CellTargets, values?: Uint32Array) {
+export function uploadCrowdMask(
+  gl: GL,
+  t: CellTargets,
+  values?: Uint32Array,
+  band: readonly [number, number] = [0, t.rows],
+) {
   t.crowdMaskActive = !!values;
   if (!values) return;
   gl.bindTexture(gl.TEXTURE_2D, t.crowdMaskTex);
@@ -351,18 +357,23 @@ export function uploadCrowdMask(gl: GL, t: CellTargets, values?: Uint32Array) {
     );
     t.crowdMaskCols = t.cols * 2;
     t.crowdMaskRows = t.rows;
-  } else
+  } else {
+    // Inactive frames retain GPU coverage. Reactivation clears those old rows too.
+    const first = Math.min(band[0], t.crowdMaskBand?.[0] ?? band[0]);
+    const end = Math.max(band[1], t.crowdMaskBand?.[1] ?? band[1]);
     gl.texSubImage2D(
       gl.TEXTURE_2D,
       0,
       0,
-      0,
+      first,
       t.crowdMaskCols,
-      t.crowdMaskRows,
+      end - first,
       gl.RGBA_INTEGER,
       gl.UNSIGNED_INT,
-      values,
+      values.subarray(first * t.cols * 8, end * t.cols * 8),
     );
+  }
+  t.crowdMaskBand = band;
 }
 
 /** Replace the streetlights' contents (RGBA8 texels from passes.ts `lightPass`). */

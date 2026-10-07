@@ -4,6 +4,7 @@ import {
   localMetricProjection,
   PROCESSION_LIMITS,
   PROCESSION_GEOMETRY,
+  processionAltarRadius,
   processionFormationWidth,
   type Procession,
   type ProcessionRoute,
@@ -16,9 +17,9 @@ import { roadGraph } from './road-graph';
 import { featurePoint, ROUTE_STEP_M } from './procession';
 import { isStandingBuilding } from './obstacles';
 import { intersection, union } from 'polyclip-ts';
-import { seatingFootprint } from './footprints';
+import { seatingFootprint, balancedUnion } from './footprints';
 import { safeLattice, compactLattice, bakeCrowdAreas } from './crowd-ground';
-export const VERGE_MAX_M = PROCESSION_LIMITS.verge;
+const VERGE_MAX_M = PROCESSION_LIMITS.verge;
 
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
@@ -34,6 +35,7 @@ const isExclusion = (f: F) =>
   isStandingBuilding(f as AtlasFeature) ||
   String(f.properties.class).startsWith('water') ||
   f.properties.class === 'barrier' ||
+  f.properties.class === 'seating' ||
   !!f.properties.detail_blocked ||
   (f.properties.class === 'building_part' && f.properties.variant === 'pedestal');
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
@@ -457,9 +459,6 @@ export function bakeMassSite(
     hardSource = features.filter((f) => f.properties.class !== 'seating');
     hardSources.set(features, hardSource);
   }
-  const domain = p.crowd_boundary ? [[p.crowd_boundary]] : square;
-  const hardBlocked = obstacles(hardSource, frame, [a[0], a[1], b[0], b[1]], domain);
-  const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]], domain);
   const circle = (at: Point, radius: number) => {
     const c = frame.toMeters(at);
     return Array.from({ length: 33 }, (_, i) =>
@@ -469,7 +468,20 @@ export function bakeMassSite(
       ]),
     );
   };
-  if (p.altar) blocked.push(circle(p.altar.at, p.altar.radius_m + PROCESSION_LIMITS.altar.apron));
+  const domain = p.crowd_boundary ? [[p.crowd_boundary]] : square;
+  const altarRing = p.altar && circle(p.altar.at, processionAltarRadius(p.altar.radius_m, images));
+  const obstacleDomain = altarRing ? union(domain, [[altarRing]]) : domain;
+  const obstacleBounds: [number, number, number, number] = [a[0], a[1], b[0], b[1]];
+  if (altarRing)
+    for (const [lng, lat] of altarRing) {
+      obstacleBounds[0] = Math.min(obstacleBounds[0], lng);
+      obstacleBounds[1] = Math.min(obstacleBounds[1], lat);
+      obstacleBounds[2] = Math.max(obstacleBounds[2], lng);
+      obstacleBounds[3] = Math.max(obstacleBounds[3], lat);
+    }
+  const hardBlocked = obstacles(hardSource, frame, obstacleBounds, obstacleDomain);
+  const blocked = obstacles(features, frame, obstacleBounds, obstacleDomain);
+  if (altarRing) blocked.push(altarRing);
   for (const poly of groundPolys)
     for (const hole of poly.slice(1))
       for (const part of intersection([hole], square)) blocked.push(asPoints(part[0]!));
@@ -645,15 +657,10 @@ export function bakeMassSite(
     seated_grounds,
     ...(p.altar && {
       altar: { ...p.altar, images },
-      altar_ground: bakeCrowdAreas(
-        frame,
-        [[circle(p.altar.at, p.altar.radius_m + PROCESSION_LIMITS.altar.apron)]],
-        hardBlocked,
-        0.5,
-      ),
+      altar_ground: bakeCrowdAreas(frame, [[altarRing!]], hardBlocked, 0.5),
     }),
     grounds,
-    blocked: p.crowd_boundary ? hardBlocked : blocked,
+    blocked: hardBlocked,
     approaches,
     roads: p.crowd_boundary ? [] : roads,
   };
@@ -714,10 +721,9 @@ export function bakeFluvialCrowd(
         );
       }),
     );
-  let envelope: ReturnType<typeof union> = [];
   const pieces = [...strips, ...bridges.map((r) => [r])];
   // Balanced union keeps source precision and avoids a sequential growing sweep.
-  let groups = pieces.map(
+  const groups = pieces.map(
     (p) =>
       [
         p.map((r) =>
@@ -725,13 +731,8 @@ export function bakeFluvialCrowd(
         ),
       ] as ReturnType<typeof union>,
   );
-  while (groups.length > 1) {
-    const next: typeof groups = [];
-    for (let i = 0; i < groups.length; i += 2)
-      next.push(i + 1 < groups.length ? union(groups[i]!, groups[i + 1]!) : groups[i]!);
-    groups = next;
-  }
-  envelope = groups[0] ?? [];
+  const envelope = balancedUnion(groups);
   const { blocked, water } = assembleExclusions(features, frame, bounds, pieces, true);
+  for (const polygon of envelope) for (const hole of polygon.slice(1)) blocked.push(asPoints(hole));
   return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges };
 }

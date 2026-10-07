@@ -1,4 +1,4 @@
-/** Safe, complete lattice cells and row compaction, independent of walker connectivity. */
+/** Safe, complete lattice cells and rectangle compaction, independent of walker connectivity. */
 import { pointInPolygon } from '@atlas/shared';
 import { intersection } from 'polyclip-ts';
 import type { localFrame } from './geo';
@@ -59,25 +59,38 @@ export function compactLattice(
     if (!xs) rows.set(row, (xs = []));
     xs.push(Math.round(x / step));
   }
-  const rings: Point[][] = [];
+  type Rectangle = { start: number; end: number; south: number; north: number };
+  const rectangles: Rectangle[] = [];
+  let active = new Map<string, Rectangle>(),
+    next = new Map<string, Rectangle>();
   for (const [y, xs] of [...rows].sort((a, b) => a[0] - b[0])) {
+    next.clear();
     xs.sort((a, b) => a - b);
     for (let i = 0; i < xs.length; i++) {
       const start = xs[i]!;
       let end = start;
       while (xs[i + 1] === end + 1) end = xs[++i]!;
-      rings.push(
-        [
-          [start - 0.5, y - 0.5],
-          [end + 0.5, y - 0.5],
-          [end + 0.5, y + 0.5],
-          [start - 0.5, y + 0.5],
-          [start - 0.5, y - 0.5],
-        ].map(([x, y]) => frame.toLngLat([x! * step, y! * step])),
-      );
+      const key = `${start}/${end}`,
+        previous = active.get(key);
+      const rectangle =
+        previous && previous.north === y - 0.5
+          ? previous
+          : { start, end, south: y - 0.5, north: y + 0.5 };
+      if (rectangle === previous) rectangle.north = y + 0.5;
+      else rectangles.push(rectangle);
+      next.set(key, rectangle);
     }
+    [active, next] = [next, active];
   }
-  return rings;
+  return rectangles.map(({ start, end, south, north }) =>
+    [
+      [start - 0.5, south],
+      [end + 0.5, south],
+      [end + 0.5, north],
+      [start - 0.5, north],
+      [start - 0.5, south],
+    ].map(([x, y]) => frame.toLngLat([x! * step, y! * step])),
+  );
 }
 export function bakeCrowdAreas(
   frame: ReturnType<typeof localFrame>,

@@ -1,9 +1,17 @@
 import { expect, it } from 'vitest';
-import { pointInPolygon, Procession, localMetricProjection } from '@atlas/shared';
+import {
+  pointInPolygon,
+  Procession,
+  localMetricProjection,
+  processionAltarLayout,
+  PROCESSION_GEOMETRY,
+} from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
 import { localFrame } from './geo';
-import { bakeCrowdAreas } from './crowd-ground';
+import { bakeCrowdAreas, compactLattice } from './crowd-ground';
+import { difference } from 'polyclip-ts';
 import { routeStreet, bakeMassSite, bakeFluvialCrowd } from './procession-ground';
+import { measureBanks } from './procession';
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
 const frame = localFrame([0, 0]);
@@ -58,6 +66,66 @@ it('clips boundary-free seating before and after expansion', () => {
     expect(Math.max(...frame.toMeters(point).map(Math.abs))).toBeLessThanOrEqual(20 + 1e-6);
   expect(site.seated_grounds!.some((ring) => pointInPolygon(q(102, 0), [ring]))).toBe(false);
 });
+it.each([false, true])(
+  'uses hard-only role exclusions with an authored boundary: %s',
+  (boundary) => {
+    const event = mass({
+      radius_m: 40,
+      ...(boundary && { crowd_boundary: box(-40, -40, 40, 40) }),
+      altar: { at: q(25, 0), radius_m: 1 },
+    });
+    if (event.kind !== 'mass') throw Error();
+    const site = bakeMassSite(
+      [
+        feature('osm:way/1', 'building_worship', box(-1, -1, 1, 1), { height: 5 }),
+        feature('osm:way/2', 'park', box(-40, -40, 40, 40)),
+        feature('osm:way/3', 'seating', box(-25, 3, -15, 6)),
+        feature('osm:way/4', 'building', box(-21, 4, -19, 6), { height: 5 }),
+        feature('osm:way/5', 'building', box(34, -2, 36, 0), { height: 5 }),
+      ],
+      event,
+      3,
+    );
+    const inRings = (rings: Point[][], point: Point) =>
+      rings.some((ring) => pointInPolygon(point, [ring]));
+    expect(inRings(site.seated_grounds!, q(-23, 4))).toBe(true);
+    expect(inRings(site.blocked, q(-23, 4))).toBe(false);
+    expect(inRings(site.grounds, q(-23, 4))).toBe(false);
+    expect(inRings(site.seated_grounds!, q(-20, 5))).toBe(false);
+    expect(inRings(site.blocked, q(-20, 5))).toBe(true);
+    expect(inRings(site.altar_ground!, q(25, 0))).toBe(true);
+    expect(inRings(site.blocked, q(25, 0))).toBe(false);
+    expect(inRings(site.grounds, q(25, 0))).toBe(false);
+    expect(inRings(site.altar_ground!, q(35, -0.5))).toBe(false);
+    expect(inRings(site.blocked, q(35, -0.5))).toBe(true);
+  },
+);
+it.each([0, 1, 2, 3])(
+  'covers complete fixed altar members for %s images at the minimum radius',
+  (images) => {
+    const event = mass({ radius_m: 40, altar: { at: q(25, 0), radius_m: 1 } });
+    if (event.kind !== 'mass') throw Error();
+    const site = bakeMassSite(
+      [
+        feature('osm:way/1', 'building_worship', box(-1, -1, 1, 1), { height: 5 }),
+        feature('osm:way/2', 'park', box(-40, -40, 40, 40)),
+      ],
+      event,
+      images,
+    );
+    for (const member of processionAltarLayout(images)) {
+      const size = member.footprint ?? PROCESSION_GEOMETRY.person;
+      for (const sx of [-1, 1])
+        for (const sy of [-1, 1]) {
+          const point = q(
+            25 + member.x + sx * (size.width / 2 + PROCESSION_GEOMETRY.probePadding),
+            member.y + sy * (size.length / 2 + PROCESSION_GEOMETRY.probePadding),
+          );
+          expect(site.altar_ground!.some((ring) => pointInPolygon(point, [ring]))).toBe(true);
+        }
+    }
+  },
+);
 it('derives the Mass extent around the displaced altar and rejects unsupported extents', () => {
   const source = [
     feature('osm:way/1', 'building_worship', box(-1, -1, 1, 1), { height: 5 }),
@@ -102,6 +170,52 @@ it('admits only accessible decks within the river and bank envelope', () => {
   expect(onDeck(40, 90)).toBe(false);
   expect(onDeck(-40, 0)).toBe(false);
   expect(onDeck(60, 0)).toBe(false);
+});
+it('excludes a fluvial permission hole enclosed by two decks despite a mapped-water gap', () => {
+  const water = [
+    feature('osm:way/1', 'water', box(-101, -5, -10, 5)),
+    feature('osm:way/2', 'water', box(10, -5, 101, 5)),
+  ];
+  const route = Array.from({ length: 21 }, (_, i) => q(-100 + i * 10, 0));
+  const waterPolygons = water.map((f) => {
+    if (f.geometry.type !== 'Polygon') throw Error();
+    return f.geometry.coordinates.map((r) => r.map((p) => frame.toMeters([p[0]!, p[1]!])));
+  });
+  const banks = measureBanks(route.map(frame.toMeters), waterPolygons)!;
+  expect(banks).toHaveLength(route.length);
+  expect(banks[10]).toEqual(banks[9]);
+  const decks = [-60, 60].map((x, i): F => ({
+    type: 'Feature',
+    properties: { id: `osm:way/${i + 3}`, class: 'road_minor', width: 4, bridge: 'yes' },
+    geometry: { type: 'LineString', coordinates: [q(x, -40), q(x, 40)] },
+  }));
+  const crowd = bakeFluvialCrowd([...water, ...decks], route, banks);
+  const allows = (x: number, y: number) => {
+    const point = q(x, y);
+    return (
+      crowd.grounds.some((ring) => pointInPolygon(point, [ring])) &&
+      !crowd.blocked.some((ring) => pointInPolygon(point, [ring])) &&
+      (!crowd.water.some((ring) => pointInPolygon(point, [ring])) ||
+        crowd.bridges.some((ring) => pointInPolygon(point, [ring])))
+    );
+  };
+  expect(allows(0, 0)).toBe(false);
+  expect(allows(0, 20)).toBe(true);
+  expect(allows(-60, 0)).toBe(true);
+  expect(allows(60, 0)).toBe(true);
+});
+it('losslessly compacts adjacent lattice rows while retaining holes and disconnected pieces', () => {
+  const cells = new Map<string, Point>();
+  for (let y = 0; y < 4; y++)
+    for (const x of [0, 1, 2, 3, 4, 7])
+      if (x !== 2 || y !== 1) cells.set(`${x}/${y}`, [x * 2, y * 2]);
+  const rings = compactLattice(frame, cells);
+  const expected = [[box(-1, -1, 9, 7), box(3, 1, 5, 3)], [box(13, -1, 15, 7)]];
+  const actual = rings.map((ring) => [ring]);
+  expect(rings).toHaveLength(5);
+  expect(difference(expected, actual)).toHaveLength(0);
+  expect(difference(actual, expected)).toHaveLength(0);
+  expect(rings.some((ring) => pointInPolygon(q(4, 2), [ring]))).toBe(false);
 });
 it('retains safe disconnected components and removes the complete separator', () => {
   const separator = box(-1, -20, 1, 20);

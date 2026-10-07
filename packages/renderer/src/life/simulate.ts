@@ -7931,6 +7931,10 @@ export class LifeWorld {
     const ref = lives[0];
     const config = this.seasonalConfig;
     const seasonalKey = this.physicalSeasonKey(lives, config);
+    const blocked = new PolygonIndex();
+    const hasSeating = lives.some((life) =>
+      life.geo.areas?.some((area) => area.kind === 'blocked' && !area.water && area.seating),
+    );
     const terrain: GroundTerrain = {
       key: this.terrainKey(
         entries.map(([key]) => key),
@@ -7938,8 +7942,8 @@ export class LifeWorld {
       ),
       seasonalKey,
       ref,
-      blocked: new PolygonIndex(),
-      hardBlocked: new PolygonIndex(),
+      blocked,
+      hardBlocked: hasSeating ? new PolygonIndex() : blocked,
       vehicleBlocked: new PolygonIndex(),
       seasonal: new PolygonIndex(),
       water: new PolygonIndex(),
@@ -8034,7 +8038,7 @@ export class LifeWorld {
                   y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
                 }));
           yield* terrain.blocked.addSteps([ring]);
-          yield* terrain.hardBlocked.addSteps([ring]);
+          if (terrain.hardBlocked !== terrain.blocked) yield* terrain.hardBlocked.addSteps([ring]);
           yield* terrain.seasonal.addSteps([ring]);
           yield* terrain.trees.addSteps([ring]);
         }
@@ -8046,7 +8050,8 @@ export class LifeWorld {
     for (const life of lives) {
       const cached = this.metricTerrain.get(life)!;
       for (const polygon of cached.blocked) yield* terrain.blocked.addSteps(polygon);
-      for (const polygon of cached.hardBlocked) yield* terrain.hardBlocked.addSteps(polygon);
+      if (terrain.hardBlocked !== terrain.blocked)
+        for (const polygon of cached.hardBlocked) yield* terrain.hardBlocked.addSteps(polygon);
       for (const polygon of cached.vehicleBlocked) yield* terrain.vehicleBlocked.addSteps(polygon);
       for (const polygon of cached.water) yield* terrain.water.addSteps(polygon);
     }
@@ -8119,7 +8124,7 @@ export class LifeWorld {
     }
     // Serialization buffers are prepared privately too; the worker transfers them once.
     yield* terrain.blocked.toFlatSteps();
-    yield* terrain.hardBlocked.toFlatSteps();
+    if (terrain.hardBlocked !== terrain.blocked) yield* terrain.hardBlocked.toFlatSteps();
     yield* terrain.roadAccess.roads.toFlatSteps();
     yield* terrain.roadAccess.forbidden.toFlatSteps();
     yield* terrain.trees.toFlatSteps();

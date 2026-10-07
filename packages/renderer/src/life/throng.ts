@@ -9,13 +9,15 @@ import {
   type EventGround,
   streetSidewalks,
 } from './ground-events';
-import { CrowdMaskRaster } from './crowd-mask';
+import { CrowdMaskRaster, THRONG_MASK_SIDE, THRONG_MASK_BITS } from './crowd-mask';
+export { THRONG_MASK_SIDE } from './crowd-mask';
 import { formationLayout } from './formation-layout';
 import { PROCESSION, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
 import { figureFit } from './people';
 export const MAX_THRONG_CELLS = 16000;
-export const THRONG_MASK_SIDE = 16;
+/** At most this many 256-subcell classifications run in one animation frame. */
+export const MAX_COLD_THRONG_CELLS = 8;
 export type ThrongCell = {
   col: number;
   row: number;
@@ -23,7 +25,7 @@ export type ThrongCell = {
   mask?: Uint32Array;
   hash: number;
 };
-export type ThrongPayload = { cells: ThrongCell[]; cap: number };
+export type ThrongPayload = { cells: ThrongCell[]; cap: number; pending?: boolean };
 type Point = [number, number];
 type RouteIndex = {
   frame: ReturnType<typeof localMetricProjection>;
@@ -160,16 +162,6 @@ function nearest(index: RouteIndex, point: Point, geographicTarget = true) {
   }
   return result;
 }
-/** Raster subcells must have their entire outline inside permissions and outside hard geometry. */
-export function crowdMask(
-  ground: EventGround,
-  col: number,
-  row: number,
-  fromCell: (col: number, row: number) => Point,
-  allows?: (col: number, row: number) => boolean,
-) {
-  return new CrowdMaskRaster(ground, fromCell).mask(col, row, allows);
-}
 type SubGuard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
   terrainKey?: object;
   hardTerrainKey?: object;
@@ -194,6 +186,21 @@ type Cache = {
   size: number;
 };
 const caches = new WeakMap<EventGround, Cache[]>();
+const areaGrounds = new WeakMap<ProcessionRoute, EventGround>();
+function areaFor(event: ProcessionRoute, ground: EventGround) {
+  if (event.kind !== 'procession' && event.kind !== 'parade') return undefined;
+  let area = areaGrounds.get(event);
+  if (!area) {
+    area = {
+      regions: event.crowd_grounds ?? [],
+      blocked: ground.blocked,
+      water: ground.water,
+      bridges: ground.bridges,
+    };
+    areaGrounds.set(event, area);
+  }
+  return area;
+}
 function cacheFor(
   ground: EventGround,
   event: ProcessionRoute,
@@ -223,7 +230,7 @@ function cacheFor(
     seated: ground.seated && raster(ground.seated),
     area:
       (event.kind === 'procession' || event.kind === 'parade') && event.crowd_grounds?.length
-        ? raster({ regions: event.crowd_grounds, blocked: [] })
+        ? raster(areaFor(event, ground)!)
         : undefined,
     columns: new Map(),
     size: 0,
@@ -250,6 +257,10 @@ function classify(
   );
 }
 const densityScratch: [number, number] = [0, 0];
+const weights = new Float64Array(16);
+const bucketCounts = new Uint32Array(256);
+const bucketOffsets = new Uint32Array(256);
+const sortedCells: ThrongCell[] = [];
 function movingDensity(
   event: ProcessionRoute,
   back: number,
@@ -261,7 +272,9 @@ function movingDensity(
   if (flags & 2) {
     if (event.kind === 'procession' && back >= -layout!.leading && back <= layout!.tail)
       density =
-        back <= Math.min(300, layout!.tail) ? PROCESSION.throng.stream : PROCESSION.throng.tail;
+        back <= Math.min(PROCESSION.throng.streamLength, layout!.tail)
+          ? PROCESSION.throng.stream
+          : PROCESSION.throng.tail;
     if (event.kind === 'parade' && flags & 4) {
       let lo = 0,
         hi = layout!.blocks.length;
@@ -325,15 +338,7 @@ export function throng(
       PROCESSION_GEOMETRY.person.width / 2
     : 0;
   const cache = zoom < 17 ? cacheFor(ground, event, grid, allowsSubcell) : undefined;
-  const areaGround: EventGround | undefined =
-    event.kind === 'procession' || event.kind === 'parade'
-      ? {
-          regions: event.crowd_grounds ?? [],
-          blocked: ground.blocked,
-          water: ground.water,
-          bridges: ground.bridges,
-        }
-      : undefined;
+  const areaGround = areaFor(event, ground);
   const massFrame =
     event.kind === 'mass'
       ? localMetricProjection(event.site.altar?.at ?? event.site.location)
@@ -346,7 +351,7 @@ export function throng(
           (1 - progress) / (1 - PROCESSION.mass.disperseStart),
         )
       : 1;
-  const weights = new Float64Array(16);
+  let coldCells = 0;
   for (
     let row = minR + ((stride - ((minR + origin.originRow) % stride)) % stride);
     row < maxR;
@@ -361,6 +366,10 @@ export function throng(
         ar = row + origin.originRow;
       const cached = cache?.columns.get(ac)?.get(ar);
       if (cached === null) continue;
+      if (cache && cached === undefined && coldCells >= MAX_COLD_THRONG_CELLS) {
+        result.pending = true;
+        continue;
+      }
       let point = cached?.point ?? fromCell(col + 0.5, row + 0.5);
       const hash = mix(col + origin.originCol, row + origin.originRow),
         share = (hash & 0xffff) / 65536;
@@ -373,6 +382,8 @@ export function throng(
       if (cache) {
         let cell: StaticCell | null | undefined = cached;
         if (cell === undefined) {
+          const intersects = cache.raster.covers(ac, ar) || cache.seated?.covers(ac, ar);
+          if (intersects) coldCells++;
           const candidate: VisibleAgent = {
             kind: 'person',
             lng: point[0],
@@ -383,32 +394,43 @@ export function throng(
           const guard =
             allowsSubcell &&
             ((c: number, r: number) =>
-              allowsSubcell(candidate, c - origin.originCol * 16, r - origin.originRow * 16));
-          let raster = cache.raster,
-            seated = false;
-          mask = raster.mask(ac, ar, guard);
-          if (!mask && cache.seated) {
+              allowsSubcell(
+                candidate,
+                c - origin.originCol * THRONG_MASK_SIDE,
+                r - origin.originRow * THRONG_MASK_SIDE,
+              ));
+          const raster = cache.raster;
+          let seatedMask: Uint32Array | undefined;
+          mask = intersects ? raster.mask(ac, ar, guard) : undefined;
+          if (intersects && cache.seated) {
             candidate.eventRole = 'seated';
-            seated = true;
-            raster = cache.seated;
-            mask = raster.mask(ac, ar, guard);
+            seatedMask = cache.seated.mask(ac, ar, guard);
+            if (seatedMask) {
+              if (!mask) mask = seatedMask.slice();
+              else for (let word = 0; word < mask.length; word++) mask[word]! |= seatedMask[word]!;
+            }
           }
           cell = null;
           if (mask) {
-            const along = new Float64Array(256),
-              flags = new Uint8Array(256);
+            const along = new Float64Array(THRONG_MASK_BITS),
+              flags = new Uint8Array(THRONG_MASK_BITS);
             let count = 0,
-              closest = Infinity;
+              closest = Infinity,
+              seated = false;
             const representative: Point = [0, 0],
               sample: Point = [0, 0];
-            for (let bit = 0; bit < 256; bit++)
+            for (let bit = 0; bit < THRONG_MASK_BITS; bit++)
               if ((mask[bit >>> 5]! >>> (bit & 31)) & 1) {
                 raster.point(ac, ar, bit, sample);
-                const distance = ((bit % 16) - 7.5) ** 2 + (Math.floor(bit / 16) - 7.5) ** 2;
+                const middle = (THRONG_MASK_SIDE - 1) / 2;
+                const distance =
+                  ((bit % THRONG_MASK_SIDE) - middle) ** 2 +
+                  (Math.floor(bit / THRONG_MASK_SIDE) - middle) ** 2;
                 if (distance < closest) {
                   closest = distance;
                   representative[0] = sample[0];
                   representative[1] = sample[1];
+                  seated = !!seatedMask && !!((seatedMask[bit >>> 5]! >>> (bit & 31)) & 1);
                 }
                 if (event.kind === 'procession' || event.kind === 'parade') {
                   const at = nearest(index!, sample, false),
@@ -426,9 +448,13 @@ export function throng(
             cell = { mask, seated, point: representative, along, flags, count };
           }
           if (cache.size >= 16384) {
-            const oldest = cache.columns.keys().next().value!;
-            cache.size -= cache.columns.get(oldest)!.size;
-            cache.columns.delete(oldest);
+            // Never evict the current viewport while its bounded construction is unfinished.
+            for (const [column, cells] of cache.columns)
+              if (column < minC + origin.originCol || column >= maxC + origin.originCol) {
+                cache.size -= cells.size;
+                cache.columns.delete(column);
+                break;
+              }
           }
           let column = cache.columns.get(ac);
           if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
@@ -506,8 +532,9 @@ export function throng(
         }),
       };
       if (zoom < 17) {
-        agent.lng = fromCell(col + 0.5, row + 0.5)[0];
-        agent.lat = fromCell(col + 0.5, row + 0.5)[1];
+        const centre = fromCell(col + 0.5, row + 0.5);
+        agent.lng = centre[0];
+        agent.lat = centre[1];
         agent.prop = 'event';
         agent.glyph = String.fromCharCode(ProcessionGlyph.crowd0.charCodeAt(0) + (hash % 4));
       } else {
@@ -525,8 +552,15 @@ export function throng(
       result.cells.push({ col, row, agent, mask, hash });
     }
   // Stable linear buckets spread cap thinning across the viewport without a full sort.
-  const buckets: ThrongCell[][] = Array.from({ length: 256 }, () => []);
-  for (const cell of result.cells) buckets[cell.hash >>> 24]!.push(cell);
-  result.cells = buckets.flat();
+  bucketCounts.fill(0);
+  for (const cell of result.cells) bucketCounts[cell.hash >>> 24]!++;
+  let offset = 0;
+  for (let i = 0; i < bucketCounts.length; i++) {
+    bucketOffsets[i] = offset;
+    offset += bucketCounts[i]!;
+  }
+  for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
+  for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
+  sortedCells.length = 0;
   return result;
 }

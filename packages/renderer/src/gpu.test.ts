@@ -59,6 +59,68 @@ it('keeps crowd texture storage across active updates, Stop and later reactivati
   expect(gl.createTexture).not.toHaveBeenCalled();
 });
 
+it('uploads moved crowd row unions, retains pending clearing through Stop, and fully initializes resize', () => {
+  let stored = new Uint32Array();
+  const gl = {
+    TEXTURE_2D: 3553,
+    RGBA32UI: 36208,
+    RGBA_INTEGER: 36249,
+    UNSIGNED_INT: 5125,
+    bindTexture: vi.fn(),
+    texImage2D: vi.fn(
+      (_target, _level, _format, _width, _height, _border, _layout, _type, data: Uint32Array) => {
+        stored = data.slice();
+      },
+    ),
+    texSubImage2D: vi.fn(
+      (
+        _target,
+        _level,
+        _x,
+        y: number,
+        width: number,
+        _height,
+        _format,
+        _type,
+        data: Uint32Array,
+      ) => {
+        stored.set(data, y * width * 4);
+      },
+    ),
+  };
+  const targets = {
+    cols: 2,
+    rows: 6,
+    crowdMaskTex: {},
+    crowdMaskCols: 1,
+    crowdMaskRows: 1,
+  } as CellTargets;
+  const values = new Uint32Array(96);
+  values.fill(9, 16, 32);
+  uploadCrowdMask(gl as unknown as GL, targets, values, [1, 2]);
+  values.fill(0);
+  values.fill(7, 64, 80);
+  uploadCrowdMask(gl as unknown as GL, targets, values, [4, 5]);
+  expect(gl.texSubImage2D.mock.calls.at(-1)!.slice(2, 6)).toEqual([0, 1, 4, 4]);
+  expect([...stored]).toEqual([...values]);
+  uploadCrowdMask(gl as unknown as GL, targets, values, [4, 5]);
+  expect(gl.texSubImage2D.mock.calls.at(-1)!.slice(2, 6)).toEqual([0, 4, 4, 1]);
+  uploadCrowdMask(gl as unknown as GL, targets);
+  const count = gl.texSubImage2D.mock.calls.length;
+  uploadCrowdMask(gl as unknown as GL, targets);
+  expect(gl.texSubImage2D).toHaveBeenCalledTimes(count);
+  values.fill(0);
+  values.fill(5, 0, 16);
+  uploadCrowdMask(gl as unknown as GL, targets, values, [0, 1]);
+  expect([...stored]).toEqual([...values]);
+  targets.cols = 3;
+  const resized = new Uint32Array(144);
+  resized.fill(3, 120, 144);
+  uploadCrowdMask(gl as unknown as GL, targets, resized, [5, 6]);
+  expect(gl.texImage2D).toHaveBeenCalledTimes(2);
+  expect([...stored]).toEqual([...resized]);
+});
+
 it('allocates an exact float clock texture lazily, reuses it, and releases it when unused', () => {
   const texture = {};
   const gl = {

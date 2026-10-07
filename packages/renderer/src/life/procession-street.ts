@@ -1,8 +1,9 @@
-import { formationLayout } from './formation-layout';
 /** Deterministic street formations and connected arrival gatherings, independent of the camera. */
+import { formationLayout } from './formation-layout';
 import {
   localMetricProjection,
   PROCESSION_GEOMETRY,
+  processionAltarLayout,
   LEGACY_LOCAL_METERS_PER_DEGREE,
   type StreetRoute,
   type MassRoute,
@@ -192,7 +193,8 @@ export class GroundProcessionScene {
       this.massParents = parents;
       this.massOrder = new Map(queue.map((id, i) => [id, i]));
       // Closest church-facing destinations fill first; paths follow the connected outdoor grid.
-      const reserved = r.site.altar ? 8 + r.site.altar.images + 5 : 0;
+      const altarLayout = r.site.altar ? processionAltarLayout(r.site.altar.images) : [];
+      const reserved = altarLayout.length;
       for (const id of queue.slice(0, PROCESSION.eventActors - reserved)) {
         add(0, 0, 3 + Math.floor(rng() * 5));
         const a = this.actors.at(-1)!,
@@ -223,20 +225,14 @@ export class GroundProcessionScene {
           a.eventFootprint = size;
           a.eventScenery = scenery;
         };
-        for (let i = 0; i < 8; i++)
-          fixed(((i % 4) - 1.5) * 1.2, -2 + Math.floor(i / 4) * 1.5, i < 5 ? 0 : 7);
-        fixed(0, 0, 6, ProcessionGlyph.platform, { length: 5, width: 5 }, true);
-        fixed(0, 2, 3, ProcessionGlyph.table, { length: 1.2, width: 2.4 });
-        fixed(0, 0, 3, ProcessionGlyph.canopy, { length: 5, width: 6 }, true);
-        fixed(-3, 2, 6, ProcessionGlyph.support, { length: 0.4, width: 0.4 });
-        fixed(3, 2, 6, ProcessionGlyph.support, { length: 0.4, width: 0.4 });
-        for (let i = 0; i < r.site.altar.images; i++)
+        for (const member of altarLayout)
           fixed(
-            (i - (r.site.altar.images - 1) / 2) * 10,
-            -0.5,
-            4,
-            ProcessionGlyph.andas,
-            PROCESSION_GEOMETRY.andas,
+            member.x,
+            member.y,
+            member.paint,
+            member.prop && ProcessionGlyph[member.prop],
+            member.footprint,
+            member.scenery,
           );
       }
       return;

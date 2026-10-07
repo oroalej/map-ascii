@@ -12,8 +12,7 @@ it.each([
 ])('packs all 72 contingent blocks at zoom %s and row offset %s', (zoom, offset) => {
   const frame = localMetricProjection([0, 0]),
     q = (x: number, y: number) => frame.from([x, y]),
-    cols = 1400,
-    rows = 12;
+    rows = 4;
   const route: StreetRoute = {
     id: 'parade',
     kind: 'parade',
@@ -42,18 +41,25 @@ it.each([
       vehicles: [],
     },
   };
+  const layout = formationLayout(route),
+    cols = 2 * Math.ceil((layout.tail / 8 + 4) / 2),
+    centre = Math.round((layout.head(0.7) - 6000 - layout.tail / 2) / 8) * 8;
   const grid: GridPlacement = {
     grid: { originCol: -cols / 2, originRow: -rows / 2, shiftX: 0, shiftY: 0 },
     toCell: (lng, lat) => {
       const [x, y] = frame.to([lng, lat]);
-      return [x / 8 + cols / 2, -y / 2 + rows / 2 + offset];
+      return [(x - centre) / 8 + cols / 2, -y / 2 + rows / 2 + offset];
     },
-    fromCell: (c, r) => q((c - cols / 2) * 8, -(r - rows / 2 - offset) * 2),
+    fromCell: (c, r) => q((c - cols / 2) * 8 + centre, -(r - rows / 2 - offset) * 2),
     tileMatrix: () => [],
   };
-  const layout = formationLayout(route),
-    payload = throng(route, 0.7, grid, cols, rows, zoom),
-    out = new Uint8Array(cols * rows * 4),
+  let payload = throng(route, 0.7, grid, cols, rows, zoom);
+  let frames = 0;
+  while (payload.pending) {
+    expect(++frames).toBeLessThan(1000);
+    payload = throng(route, 0.7, grid, cols, rows, zoom);
+  }
+  const out = new Uint8Array(cols * rows * 4),
     cells: number[] = [],
     glyphs = mapGlyphs(themes.dark);
   packLife(

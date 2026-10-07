@@ -54,6 +54,8 @@ it('transfers selected seating permission without losing hard roofs or ordinary 
   world.sync([{ key: 'test', tile, life: b.finish() }]);
   const terrain = world.cellTerrain()!,
     received = cellTerrainFrom(structuredClone(snapshotOf(terrain).snapshot));
+  expect(terrain.hardBlocked).not.toBe(terrain.blocked);
+  expect(received.hardBlocked).not.toBe(received.blocked);
   const toCell = (lng: number, lat: number): [number, number] => {
     const p = lngLatToTile(tile, lng, lat);
     return [p.x / pm, p.y / pm];
@@ -86,4 +88,24 @@ it('transfers selected seating permission without losing hard roofs or ordinary 
   expect(terrain.blocked.hits([body])).toBe(true);
   expect(received.blocked.hits([body])).toBe(true);
   expect(received.hardBlocked.hits([body])).toBe(false);
+});
+it('transfers a shared no-seating obstacle index once and can serialize it again after transfer', () => {
+  const builder = new LifeBuilder();
+  builder.area('blocked', [square(1900, 2100)]);
+  const world = new LifeWorld();
+  world.sync([{ key: 'test', tile, life: builder.finish() }]);
+  const terrain = world.cellTerrain()!;
+  expect(terrain.hardBlocked).toBe(terrain.blocked);
+  const body = { x: 2000 / pm, y: 2000 / pm, hx: 1, hy: 0, length: 0.9, width: 1 };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const encoded = snapshotOf(terrain);
+    expect(encoded.snapshot.hardBlocked).toBe(encoded.snapshot.blocked);
+    expect(encoded.transferables.length).toBe(new Set(encoded.transferables).size);
+    const received = cellTerrainFrom(
+      structuredClone(encoded.snapshot, { transfer: encoded.transferables }),
+    );
+    expect(received.hardBlocked).toBe(received.blocked);
+    expect(received.blocked.hits([body])).toBe(true);
+    expect(terrain.blocked.hits([body])).toBe(true);
+  }
 });

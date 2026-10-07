@@ -1,15 +1,22 @@
-import { expect, it } from 'vitest';
+import { beforeAll, expect, it } from 'vitest';
 import {
   activeSeason,
   eventOccurrence,
   eventTime,
   resolveProcessionSchedules,
 } from '@atlas/shared';
-import { contentRoot, loadCityPacks } from './validate';
+import { contentRoot, loadCityPacks, type CityPack } from './validate';
 import.meta.glob('../cities/**/processions/*.json');
 import.meta.glob('../cities/**/city.json');
-it('keeps all five fiesta events in actual calendar order across early and late third Saturdays', async () => {
-  const pack = (await loadCityPacks(contentRoot, { only: 'naga' })).packs[0]!;
+let pack: CityPack;
+beforeAll(async () => {
+  const result = await loadCityPacks(contentRoot, { only: 'naga' });
+  expect(result.errors).toEqual([]);
+  expect(result.packs).toHaveLength(1);
+  pack = result.packs[0]!;
+});
+
+it('keeps all five fiesta events in actual calendar order across early and late third Saturdays', () => {
   const schedules = resolveProcessionSchedules(pack.content.processions);
   for (const [year, dates] of [
     [2024, [13, 20, 21]],
@@ -39,8 +46,7 @@ it('keeps all five fiesta events in actual calendar order across early and late 
   }
 });
 
-it('verifies every fiesta event without unresolved wording', async () => {
-  const pack = (await loadCityPacks(contentRoot, { only: 'naga' })).packs[0]!;
+it('verifies every fiesta event without unresolved wording', () => {
   const events = pack.content.processions.filter((p) => p.season === 'penafrancia-fiesta');
   expect(events).toHaveLength(5);
   for (const event of events) {

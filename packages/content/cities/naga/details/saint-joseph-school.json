@@ -972,7 +972,7 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. swimming-pool is fitted 29 m from the registered estimate to preserve its complete water/court footprint while clearing displaced mapped roofs and access; this is an explicitly placement."
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. Visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. The swimming-pool feature is fitted 29 m from the registered estimate to preserve its complete water/court footprint while clearing displaced mapped roofs and access; this placement is an explicit estimate."
     }
   ],
   "roof_overrides": [
