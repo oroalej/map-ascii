@@ -419,6 +419,18 @@ describe('City', () => {
     expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
   });
 
+  it('opts a bbox region into the whole boundary while retaining strict keys', () => {
+    const region = { bbox: [120, 10, 125, 15], include_boundary: true };
+    expect(City.safeParse({ ...city, region }).success).toBe(true);
+    expect(City.safeParse({ ...city, region: { ...region, typo: true } }).success).toBe(false);
+    expect(
+      City.safeParse({ ...city, region: { ...region, include_boundary: false } }).success,
+    ).toBe(false);
+    expect(
+      City.safeParse({ ...city, region: { name: 'Example', include_boundary: true } }).success,
+    ).toBe(false);
+  });
+
   it('accepts sourced sidewalk policy and defaults derivation only when configured', () => {
     expect(City.parse(city).streets).toBeUndefined();
     const policy = { sidewalks: { source: 'Project policy' } };
