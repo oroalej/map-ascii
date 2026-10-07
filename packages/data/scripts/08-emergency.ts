@@ -1,10 +1,19 @@
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { CityEmergency, encodeEmergency } from '@atlas/shared';
+import { CityEmergency, encodeEmergency, type EmergencyConfig } from '@atlas/shared';
 import type { AtlasFeature } from './03-normalize';
+import { displayFeatures } from './lib/display';
 import { buildEmergencyGraph } from './lib/emergency-graph';
-import { readFeatures, writeJson } from './lib/io';
+import { readFeatures, readJson, writeJson } from './lib/io';
+import { Territory, type Territory as TerritoryType } from './lib/territory';
 import { files, type Step } from './step';
+
+/** Emergency routes use the geometry retained for display, after full-source derivation. */
+export const emergencyNetwork = (
+  features: readonly AtlasFeature[],
+  config: EmergencyConfig,
+  territory: TerritoryType,
+) => buildEmergencyGraph(displayFeatures(features, territory), config);
 
 export const step: Step = {
   name: '08-emergency',
@@ -17,7 +26,8 @@ export const step: Step = {
     const features: AtlasFeature[] = [];
     for await (const feature of readFeatures(join(buildDir, files.merged)))
       features.push(feature as AtlasFeature);
-    const network = buildEmergencyGraph(features, config),
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const network = emergencyNetwork(features, config, territory),
       mandatory = network.targets.filter((t) => t.kind !== 'building');
     const buildings = network.targets
       .filter((t) => t.kind === 'building')
