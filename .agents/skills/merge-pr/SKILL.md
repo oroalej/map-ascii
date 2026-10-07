@@ -95,7 +95,7 @@ Exception for an **already-merged rerun**: if the command succeeds and reports `
 
 ## 5. Plans: rows and scratch
 
-Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associates them with the branch and this PR, using the handoff to resolve an unclear association. Do not infer task completion from the branch having merged. Earlier completed tasks on the same branch can be cleaned only when their association and keep inventory are established too.
+Work in `<main-checkout>/.plans/`. Find rows whose Evidence explicitly associates them with the branch and this PR with a search (`Select-String`/`grep` for the branch and `#<N>`; never read the whole 60 KB index), using the handoff to resolve an unclear association. Do not infer task completion from the branch having merged. Earlier completed tasks on the same branch can be cleaned only when their association and keep inventory are established too.
 
 1. **Move:**
    - Never move or clean `todo/` or `paused/` tasks, even when they name this PR. Set their Next step to `branch merged (PR #N); check whether this task is finished`, retaining unresolved work, and list them in the report.

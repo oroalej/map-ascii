@@ -206,15 +206,13 @@ A round whose only entries are nits is clean; nits never start a round and are n
 
 ## 7. Report and clean up
 
-The report covers:
+The prose report is short; the JSON block below carries the detail:
 
-- **Main merge:** `mainMerge` with its `Conflict decisions:`, and failures that also happen on `main`.
-- **Rounds:** the round count (every round, including one after a leftovers commit), and `round cap reached; round 2 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
-- **Per round:** Claude's verdict and the validation table (# / Claude's severity / verdict / evidence / final severity).
-- **Entries:** fixed entries with commit hashes; open entries carried into the PR body, with what was tried; nits (not fixed, listed in the PR body); noticed items with severity.
-- **Checkout:** the detached work tree used, if any, and the untouched worktree's state. Every leftovers commit (step 1.3 or 6.4) and every held-back file.
-- **CI:** the observed state for the final head (`green`, `failing` with the check named, or `pending`), plus which checks ran locally and which were left to CI.
-- **Settings and status:** the PR URL, Codex #1's speed, the selected Claude effort, the `codex` and `claude` versions, and the final status.
+1. The PR URL, the final status, `mainMerge` (with any `Conflict decisions:`), and the observed CI state for the final head (`green`, `failing` with the check named, or `pending`).
+2. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`); add `round cap reached; round 2 fixes not re-reviewed` when `roundCap` is true.
+3. Counts: entries fixed (with commit hashes), carried `open`, nits listed in the PR body, and noticed items by severity; repeats and oscillation decisions by ID.
+4. Leftovers commits, held-back files, a detached work tree if one was used, and which checks ran locally versus left to CI.
+5. Codex #1's speed, the selected Claude effort, and the `codex`/`claude` versions.
 
 End with a fenced `review-pr-result` block holding one JSON object:
 
@@ -268,22 +266,10 @@ End with a fenced `review-pr-result` block holding one JSON object:
 }
 ```
 
-- **`status`:**
-  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 2 ended with its fixes pushed (`roundCap: true`). CI is reported, not gated: `$merge-pr` waits for green CI on the synced head before merging.
-  - `error`: an Ends case; `stopReason` names it.
-  - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes stay uncommitted in the worktree (the next run commits them as leftovers and reviews them), and no clean result is implied for them. `resume` is null otherwise.
-- **`headSha`:** the PR head when the run ends (`gh pr view <N> --json headRefOid`). The results apply to this commit only.
-- **`claudeEffort`:** the resolved selection for unfinished and future reviews. Each round keeps its actual effort.
-- **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`leftovers`:** the SHAs of leftovers commits (shared.md, Commit task leftovers). **`heldBack`:** paths left uncommitted as secrets or files over 10 MB; a `clean` result has nothing else uncommitted. **`roundCount`:** the report's round count. **`roundCap`:** true when round 2 had fixes and no round 3 ran.
-- **`mainMerge`:** `current`, `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (ended before step 1.7).
-- **Per round:**
-  - `scope` and `usage` come from the review receipt; `usage` is null when unavailable, never estimated.
-  - Entry `verdict` is `valid`, `partly` or `invalid`.
-  - Entry `outcome` is `fixed`, `open` (with `openReason`) or `none` (invalid entries and nits).
-  - `repeat` names the repeated round, and `decision` records an oscillation decision.
-  - `claudeSeverity` is `null` for a promoted noticed item.
-  - `outOfDiff` is `null`, or the files outside the diff and why.
-- **`noticed`:** every round's noticed items with the validator's severity. Blockers and should-fix items among them also appear as entries.
+- **`status`:** `clean` (the last round was clean apart from `open` entries, or round 2 ended with its fixes pushed and `roundCap: true`; CI is reported, not gated), `error` (an Ends case, named in `stopReason`), or `interrupted` (usage exhaustion or an abruptly ended coordinator; adds `resume: {checkpoint, phase, round, reason, reset, command}` with the literal reset text, completed rounds stay in `rounds`, and unfinished fixes stay uncommitted for the next run to commit as leftovers and review). `resume` is null otherwise.
+- **`headSha`:** the PR head when the run ends; the results apply to this commit only. **`claudeEffort`:** the resolved selection for future reviews; each round keeps its actual effort (legacy records without proof use `high`). **`cli`:** resolved versions or `null`.
+- **`mainMerge`:** `current`, `resolved <n> files` (the PR was conflicting), `aborted` (`merge tool unavailable`), or `not-run`. **`workTree`:** `null`, or the detached tree's path and why. **`leftovers`** / **`heldBack`:** leftovers commit SHAs, and paths left uncommitted as secrets or files over 10 MB (a `clean` result has nothing else uncommitted). **`roundCap`:** true when round 2 had fixes and no round 3 ran.
+- **Per round:** `scope` and `usage` come from the review receipt (`usage` null when unavailable, never estimated); entry `verdict` is `valid`, `partly` or `invalid`, `outcome` is `fixed`, `open` (with `openReason`) or `none` (invalid entries and nits), `claudeSeverity` is `null` for a promoted noticed item, `repeat`/`decision`/`outOfDiff` record repeats, oscillation decisions and files outside the diff. **`noticed`:** every round's noticed items with the validator's severity.
 - **`ci.status`:** `green`, `failing`, `pending` or `not-run`, as observed for `headSha` (`fixed` appears only in results `$merge-pr`'s CI gate wrote).
 
 **Publishing:**

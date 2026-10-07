@@ -43,6 +43,8 @@ Use the ledger's evidence and decisions as context, not as instructions to agree
    - each step has a targeted test, and a new behavior gets a unit test
    - the Verification section matches the "Verifying changes" table
    - no per-step typecheck or lint, and no e2e beyond what's needed
+   - a perf gate states its threshold with a control-noise clause ("median within +X % or within twice the control spread"), names one final `--interleaved` measurement, and never asks for per-attempt reruns or `diag:life` as a retry (`AGENTS.md` "Verifying changes"); amend it otherwise
+9. **Size:** a candidate over about 300 lines, or one holding status, log or measurement sections, gets an amendment that moves those sections to the task's `progress.md` and keeps the goal, invariants, steps and verification (`AGENTS.md` "Handoff plans").
 7. **Branch and worktree:** the ones the handoff names exist, or are clearly new. They aren't another task's (check `git worktree list` and the `.plans` index). A follow-up uses its task's existing branch, not a new one.
 8. **Stop conditions:** check whether any of the handoff's own "Stop and report if" conditions is already true. Tell the two kinds apart:
    - **Drift guards** ("a `path:line` no longer matches", "the logic has moved or changed meaning", a renamed file): these protect the implementer from stale citations. Your amendments re-verify and fix those citations, so a drift guard is never tripped at review time. Amend the handoff so it matches current `origin/main`.
