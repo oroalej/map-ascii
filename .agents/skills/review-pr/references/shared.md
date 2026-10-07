@@ -30,7 +30,7 @@ Everything else is solved with the patterns below. Never pause, ask the user, or
 
   Reuse an existing detached tree at that path when it is clean and `git merge --ff-only origin/<branch>` succeeds; otherwise use the next free `-<k>` suffix. Report the path and the untouched worktree's state. `$merge-pr` removes the tree once the PR merges. Don't create one just in case: first confirm the worktree really is in one of those states. In `$implement-handoff`, `$review-pr` and `$sync-review`, a task worktree that is dirty, behind or diverged first gets "Commit task leftovers" instead, so a detached tree never strands its work.
 - **Commit task leftovers.** A branch's own task worktree belongs to that task (AGENTS.md: one worktree per task), so its uncommitted files are the PR's work. They are committed, pushed and reviewed, never left behind for a detached tree or a merge. This never applies to `<main-checkout>` or a folder of unknown origin.
-  1. If a saved review checkpoint has a live recorded child, await it (recovery.md). Owned WIP whose saved bytes and hashes still match stays with its coordinator; everything else is adopted below.
+  1. If a saved review has a live recorded child (its receipt's process is still alive), await it (recovery.md). Everything uncommitted is adopted below.
   2. If `git -C <wt> status --porcelain=v1 --untracked-files=all` isn't empty, review `git diff`, `git diff --cached` and the untracked files.
   3. Hold back any file that looks like a secret (`.env*`, keys, tokens, credentials) and any file over 10 MB. Leave held-back files uncommitted and untouched, report them, and continue. They are the only files allowed to stay uncommitted.
   4. Move untracked stray outputs (logs, reports, patches, probe scripts) into the caller's `<scratch>`; don't commit or delete them.
@@ -96,7 +96,7 @@ It never changes Claude, which runs at normal speed, or the coordinating session
 1. Initialize the PR identity and current head with `review:state init` ([recovery.md](recovery.md)), passing `claudeEffort` only when explicitly supplied. Initialization continues earlier verified work automatically. `<review-scratch>` is the returned invocation path.
 2. Follow the review skill from its step 1.5 (baseline) to step 7 in this session, then write its result object to `<review-scratch>/result.json` and to the caller's result path.
 3. Act on the result:
-   - `clean`: the review is clean and CI is green. Entries carried as `open` and the listed nits are in the PR body and don't block.
+   - `clean`: the review is clean; `ci.status` is what was observed, and `$merge-pr` gates CI before merging. Entries carried as `open` and the listed nits are in the PR body and don't block.
    - `error`: an Ends case; use its `stopReason`.
    - `interrupted` (a quota receipt or wrapper exit 75 from a reviewer or validator): end the caller with saved progress. Report the checkpoint, reset text and resume command, and preserve all scratch, WIP and worktrees. Never relaunch the exhausted process.
 

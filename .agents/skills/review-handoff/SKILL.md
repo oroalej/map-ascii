@@ -130,9 +130,9 @@ Before publishing, require `candidate.md` to equal the last round's `input.md` w
 
 With `--apply` and `ready`, replace the original handoff with the reviewed candidate. Verify the saved bytes match the candidate hash and set `applied: true`. If already identical, verify the hash and also set `applied: true`. Without `--apply`, or for `blocked`/`error`, leave the original unchanged. Standalone review never moves the task folder or changes its row's Status. Preserve scratch for `$merge-pr` cleanup.
 
-Once the result is written, set the **Handoff review** cell of the task's `<main-checkout>/.plans/README.md` row to `<status> <roundCount>/<1 or 2 with --two-round> · <YYYY-MM-DD> · <run folder name>` (for example `ready 1/1 · 2026-10-07 · run-20261007-113018-…`). Change no other cell. If the row is missing, add it with Status `Not started`, PR review `not run`, and the handoff's branch/worktree as Evidence.
+Once the result is written, find the task's row in `<main-checkout>/.plans/README.md` with a search (`Select-String`/`grep` for the task name; never read the whole index) and set its **Handoff review** cell to `<status> <roundCount>/<1 or 2 with --two-round> · <YYYY-MM-DD> · <run folder name>` (for example `ready 1/1 · 2026-10-07 · run-20261007-113018-…`). Change no other cell. If the row is missing, add it with Status `Not started`, PR review `not run`, and the handoff's branch/worktree as Evidence.
 
-Report the status, round count, reviewer sequence, design amendments first, other accepted/rejected entries and decisions, unplaced amendments you placed by hand, retries and restarts, checks run, artifact paths, speed and resolved CLI versions. `--apply` must report whether the original was updated.
+Report in a few lines: the status, round count and whether the original was updated; each design amendment (ID and one line); the counts of factual amendments, rejected claims and amendments placed by hand; retries and restarts; the result path, speed and resolved CLI versions. The JSON block carries the rest.
 
 Write the JSON result and end the final report with the same object in a fenced `review-handoff-result` block:
 

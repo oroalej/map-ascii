@@ -508,9 +508,6 @@ export function interruptedResult(run: string): Record<string, Json> {
     rounds: state.history,
     noticed: state.report.noticed ?? [],
     ci: {
-      reruns: 0,
-      attempts: 0,
-      fixCommits: [],
       ...(record(state.ci.data) ? state.ci.data : {}),
       status: state.ci.status,
       headSha: state.ci.headSha,

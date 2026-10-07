@@ -16,8 +16,8 @@ Other sessions may have uncommitted edits in this checkout. Read the PR's code f
 
 1. Claude's review (the file path in the prompt).
 2. `AGENTS.md`: conventions, the "Verifying changes" table, and the Don'ts.
-3. The PR: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. In a full round, also `gh pr diff <N>`. In a delta round, read `git diff <since> <headRefOid>` instead, and the ledger named in the prompt.
-4. If `.plans/README.md` in the main checkout lists the PR's branch, read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
+3. The PR's intent: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. **Do not read the whole diff.** Your job is to check Claude's cited claims, so read the cited `path:line` on the head commit (`git show <headRefOid>:<path>`) with its callers and tests; the full-diff audit made validation take 35–40 minutes on large PRs for one extra finding. In a delta round, read the ledger named in the prompt and `git log -p --first-parent --no-merges <since>..<headRefOid>` for the fix commits only.
+4. If the main checkout's `.plans/README.md` has a row for the PR's branch (search for it; don't read the whole index), read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
 
 ## Delta rounds
 
@@ -48,7 +48,7 @@ Go through every Blocker and Should-fix in Claude's review. **Skip the nits:** t
    - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
    - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness. If it's unclear whether something is a should-fix or a nit, it's a nit. Only blockers and should-fix items start another round.
 
-Don't add findings of your own. If you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with an id `N<n>`, its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. Prove it the same way. The fixer fixes a noticed blocker or should-fix in this round like any valid entry, so give each one a fix step (`**N<n> <severity>**`). Noticed nits get no fix step.
+Don't add findings of your own, and don't audit code Claude didn't cite. If, while checking the cited code and its callers, you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with an id `N<n>`, its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. Prove it the same way. The fixer fixes a noticed blocker or should-fix in this round like any valid entry, so give each one a fix step (`**N<n> <severity>**`). Noticed nits get no fix step.
 
 ## Output
 
