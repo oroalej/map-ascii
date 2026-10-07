@@ -80,6 +80,43 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('keeps provenance on an accepted frame and drops marked stale replies', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    const marked = { kind: 'person' as const, lng: 123, lat: 13, flap: 0, mappedPersonMover: true };
+    const accepted = { ...result(1), agents: [marked] };
+    mock.frame.mockResolvedValueOnce(accepted);
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.agents).toEqual([marked]);
+    const saved = structuredClone(host.latest()?.agents);
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.invalidateFrame();
+    resolve({ ...result(2), agents: [{ ...marked, lng: 124 }] });
+    await flush();
+    expect(host.latest()?.agents).toEqual([]);
+    expect(accepted.agents).toEqual(saved);
+    mock.frame.mockResolvedValueOnce({
+      ...result(3),
+      agents: [{ kind: 'person', lng: 123, lat: 13, flap: 0 }],
+    });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.agents[0]?.mappedPersonMover).toBeUndefined();
+    host.clearTiles();
+    expect(host.latest()?.agents).toEqual([]);
+    host.dispose();
+  });
+
   it.each(['worker', 'inline'] as const)(
     'retains compatible ordinary agents across %s event commands and stale replies',
     async (mode) => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
 import { packLife, type LifeGrid } from './draw';
 import type { VisibleAgent } from './simulate';
 import { themes } from '../theme';
@@ -75,14 +76,14 @@ describe('turn signal stamps', () => {
       const on = draw([car]);
       const normal = draw([{ ...car, turnSignal: undefined }]);
       const off = draw([{ ...car, turnSignal: { side: 'left', on: false } }]);
-      expect(off.out).toEqual(normal.out);
+      assert.deepEqual(off.out, normal.out);
       const restored = on.out.slice();
       for (const at of on.lamps) {
         restored[at] = normal.out[at]!;
         restored[at + 1] = normal.out[at + 1]!;
         restored[at + 2] = restored[at + 2]! & ~TURN_SIGNAL_BIT;
       }
-      expect(restored).toEqual(normal.out);
+      assert.deepEqual(restored, normal.out);
     }
   });
 
@@ -99,7 +100,7 @@ describe('turn signal stamps', () => {
     ];
     for (const car of cases) {
       expect(draw([car]).lamps).toEqual([]);
-      expect(draw([car]).out).toEqual(draw([{ ...car, turnSignal: undefined }]).out);
+      assert.deepEqual(draw([car]).out, draw([{ ...car, turnSignal: undefined }]).out);
     }
   });
 

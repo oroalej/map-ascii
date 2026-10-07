@@ -321,7 +321,7 @@ describe('whole animal drawing', () => {
   };
   for (const kind of kinds)
     for (const scale of [0.5, 12])
-      it(`omits the entire ${kind} at scale ${scale} when any drawn cell is forbidden`, () => {
+      it(`keeps the complete ${kind} at scale ${scale} within permitted cells`, () => {
         const m: VisibleAgent = {
           kind,
           lng: 20,
@@ -340,6 +340,13 @@ describe('whole animal drawing', () => {
             themes.dark,
             () => 1,
           ),
+        ).toBe(scale === 0.5 ? 1 : 0);
+        if (scale === 0.5) {
+          for (let cell = 0; cell < grid.cols * grid.rows; cell++)
+            if (out[cell * 4 + 2]) expect(cell % grid.cols).toBeLessThan(20);
+        }
+        expect(
+          packLife(out, { ...grid, allowsGroundCell: () => false }, [m], themes.dark, () => 1),
         ).toBe(0);
         expect(out.every((v) => v === 0)).toBe(true);
       });

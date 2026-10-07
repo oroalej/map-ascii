@@ -173,6 +173,7 @@ export function ambientPool(
     if (g.place === 'monument' && (env.sunAltitude ?? -90) > 0) add('photo');
     if (g.place === 'farm' && g.behavior === 'work' && (env.sunAltitude ?? -90) > 0) add('harvest');
   }
+  if (!pool.length) return pool;
   const t = TEMPERAMENT[temperament(o.owner.rank)];
   return pool.map((p) => ({
     ...p,
@@ -238,6 +239,8 @@ export class EmojiMemory {
     if (!t) {
       t = {
         cooldownUntil: 0,
+        attemptAt: undefined,
+        clock: undefined,
         epoch,
         rest: 0,
         stop: 0,
@@ -246,6 +249,8 @@ export class EmojiMemory {
         resting: false,
         stopped: false,
         cruising: false,
+        visit: undefined,
+        passenger: undefined,
         trot: false,
         grooming: false,
         lying: false,
@@ -256,6 +261,10 @@ export class EmojiMemory {
         seen: new WeakSet(),
         followups: [],
         rng: ownerRng ?? random(Math.floor(rng() * 4294967296)),
+        group: undefined,
+        eligible: undefined,
+        speaking: undefined,
+        standoff: undefined,
       };
       this.tracks.set(owner, t);
     }
@@ -526,7 +535,8 @@ export class EmojiObserver {
         if (!gap && o.arrival && o.visit?.state === 'wait') t.edges.add('happy');
       }
       const edges = conditions & ~t.triggers;
-      if (!gap) for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
+      if (!gap && edges)
+        for (const mood of CONDITION_MOODS) if (edges & CONDITIONS[mood]) t.edges.add(mood);
       t.triggers = conditions;
       t.resting = resting;
       t.stopped = stopped;
@@ -614,42 +624,43 @@ export class EmojiObserver {
     for (const o of observations) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
-      for (const mood of priorities) {
-        if (!t.edges.has(mood)) continue;
-        if (
-          !o.eligible ||
-          o.speaking ||
-          t.group ||
-          this.clock < t.cooldownUntil ||
-          this.size >= EMOJI.capacity ||
-          t.rng() >= this.chance(o, mood)
-        )
-          continue;
-        let reply = t.replies.get(mood),
-          replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
-        if (
-          o.subject === 'driver' &&
-          (mood === 'impatient' || mood === 'angry') &&
-          (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
-        ) {
-          const m = o.mover!;
-          let nearest = Infinity;
-          reply = undefined;
-          for (const p of observations) {
-            if (!p.mover?.group || !p.eligible) continue;
-            const dx = p.owner.x - m.x,
-              dy = p.owner.y - m.y;
-            if (dx * m.hx + dy * m.hy <= 0) continue;
-            const distance = dx * dx + dy * dy;
-            if (distance < nearest) {
-              nearest = distance;
-              reply = p.owner;
+      if (t.edges.size)
+        for (const mood of priorities) {
+          if (!t.edges.has(mood)) continue;
+          if (
+            !o.eligible ||
+            o.speaking ||
+            t.group ||
+            this.clock < t.cooldownUntil ||
+            this.size >= EMOJI.capacity ||
+            t.rng() >= this.chance(o, mood)
+          )
+            continue;
+          let reply = t.replies.get(mood),
+            replyMood: EmojiMood = mood === 'yummy' ? 'happy' : mood === 'happy' ? 'wave' : 'sorry';
+          if (
+            o.subject === 'driver' &&
+            (mood === 'impatient' || mood === 'angry') &&
+            (o.mover?.waiting ?? 0) >= EMOJI.driver.impatientWait
+          ) {
+            const m = o.mover!;
+            let nearest = Infinity;
+            reply = undefined;
+            for (const p of observations) {
+              if (!p.mover?.group || !p.eligible) continue;
+              const dx = p.owner.x - m.x,
+                dy = p.owner.y - m.y;
+              if (dx * m.hx + dy * m.hy <= 0) continue;
+              const distance = dx * dx + dy * dy;
+              if (distance < nearest) {
+                nearest = distance;
+                reply = p.owner;
+              }
             }
+            replyMood = 'sorry';
           }
-          replyMood = 'sorry';
+          this.admit(o, mood, observations, reply, replyMood);
         }
-        this.admit(o, mood, observations, reply, replyMood);
-      }
       t.edges.clear();
       t.replies.clear();
       if (!o.vendor)

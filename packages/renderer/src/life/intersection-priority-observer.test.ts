@@ -27,6 +27,15 @@ it.each([
     remove() {},
     reserveSeam() {},
     pedestrians: () => EMPTY_PEDESTRIANS,
+    contact() {},
+    yielding: () => undefined,
+    holding: () => true,
+    holdingCorridor: () => true,
+    passing: () => false,
+    cancelYield() {},
+    eventDenied: () => false,
+    clearSeam: () => true,
+    roadQueue: () => false,
   });
   internal.groundGuard = () => guard;
   const observer = observePriority(fixture);

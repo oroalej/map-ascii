@@ -7,6 +7,7 @@
     "node": ">=22.13"
   },
   "scripts": {
+    "diag:life": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/diag-life.ts",
     "perf:life": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-life.ts",
     "perf:world": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-world.ts",
     "perf:tiles": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-tiles.ts",

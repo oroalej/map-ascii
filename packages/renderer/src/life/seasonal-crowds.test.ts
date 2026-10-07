@@ -175,6 +175,10 @@ describe('seasonal crowds', () => {
         fresh?: unknown,
         bounds?: unknown,
         allBodies?: boolean,
+        region?: unknown,
+        admitEvents?: boolean,
+        eventBounds?: unknown,
+        shows?: (kind: string) => boolean,
       ) => unknown;
     };
     consumers.groundGuard();
@@ -196,6 +200,11 @@ describe('seasonal crowds', () => {
     bodies.mockClear();
     world.visible(20, fullHours, [0, 0]);
     consumers.groundGuard();
+    expect(bodies).toHaveBeenCalledOnce();
+    bodies.mockClear();
+    consumers.groundGuard(0, undefined, undefined, false, undefined, false, undefined, () => false);
+    expect(bodies).not.toHaveBeenCalled();
+    consumers.groundGuard(0, undefined, undefined, true, undefined, false, undefined, () => false);
     expect(bodies).toHaveBeenCalledOnce();
     delete tagged.seasonal;
     bodies.mockClear();

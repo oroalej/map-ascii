@@ -17,9 +17,9 @@ export async function archiveHash(path: string) {
     .digest('hex');
 }
 
-export async function openArchive(city: string) {
+export async function openArchive(city: string, inputRoot = root) {
   if (!/^[a-z0-9-]+$/.test(city)) throw new Error('Invalid city slug');
-  const path = resolve(root, `apps/web/public/tiles/${city}.pmtiles`);
+  const path = resolve(inputRoot, `apps/web/public/tiles/${city}.pmtiles`);
   const hash = await archiveHash(path);
   const file = await open(path, 'r');
   const source: Source = {

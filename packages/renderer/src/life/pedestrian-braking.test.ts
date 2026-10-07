@@ -683,6 +683,25 @@ describe('pedestrian braking targets', () => {
   it('retains curb-service identity while predicting the actual lane path', () => {
     const { life, car } = brakingFixture();
     const original = structuredClone(car);
+    life.scenes.services.set(car, {
+      site: {
+        x: car.x,
+        y: car.y,
+        hx: car.hx,
+        hy: car.hy,
+        kind: 'stop',
+        modes: 0,
+        covered: false,
+        queue: [],
+        capacity: 1,
+        road: car.line,
+        roadWidth: 14,
+        direction: car.dir,
+      },
+      time: 10,
+      boarded: 0,
+      arriving: false,
+    });
     const curbScene = vi.spyOn(life.scenes, 'curbSite').mockReturnValue(car);
     const offset = vi
       .spyOn(life.scenes, 'offsetAt')
@@ -713,6 +732,7 @@ describe('pedestrian braking targets', () => {
       offset.mockRestore();
       currentOffset.mockRestore();
       curbScene.mockRestore();
+      life.scenes.services.delete(car);
     }
   });
   it('queries the known curved exit using actual lane poses without changing routing', () => {
@@ -854,6 +874,124 @@ describe('pedestrian braking targets', () => {
     expect(stopped.pedestrianSegments(car, 20, 20).some((p) => p.line === 1)).toBe(true);
     car.junctionRoute = { key: 'turn', exits: [] };
     expect(stopped.pedestrianSegments(car, 20, 20).every((p) => p.line === 0)).toBe(true);
+  });
+});
+
+describe('retained pedestrian query geometry', () => {
+  function retained() {
+    const pm = 1 / metersPerUnit(tile),
+      builder = new LifeBuilder();
+    const x = 1000 + 60 * pm;
+    builder.line(
+      [
+        { x: 1000, y: 2048 },
+        { x, y: 2048 },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    builder.line(
+      [
+        { x, y: 2048 - 100 * pm },
+        { x, y: 2048 },
+        { x, y: 2048 + 100 * pm },
+      ],
+      LifeLine.roadMajor,
+      14,
+    );
+    const life = new StandaloneLife(tile, builder.finish(), 42);
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const cx = life.geo.coords[2]!;
+    const car: Mover = {
+      ...person(life),
+      kind: 'vehicle',
+      vehicle: 'car',
+      group: undefined,
+      d: cx - 1000,
+      x: cx,
+      y: 2048,
+      hx: 1,
+      hy: 0,
+      pause: 0,
+      speed: 5 * pm,
+      v: 0,
+      next: 2,
+      curveLengthM: 10,
+      curveCorner: { x: cx, y: 2048 },
+    };
+    const tracer = life as unknown as {
+      pedestrianPath(m: Mover, range: number): Iterable<PedestrianSegment>;
+      pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+    };
+    return { life, car, tracer, pm };
+  }
+  it('keeps shortened curve variants out of the permanent terrain cache', () => {
+    const { life, car } = retained();
+    life.setLaneTerrain({ near: () => true, hits: () => false });
+    const cache = life as unknown as {
+      clearCorners: Map<string, unknown>;
+      transientCorners: WeakMap<Mover, unknown>;
+    };
+    for (let i = 0; i < 100; i++) {
+      car.curveLengthM = 10 - i * 0.05;
+      const before = { ...car };
+      life.pose(before, undefined, car);
+      expect(cache.transientCorners.has(car)).toBe(true);
+      expect(cache.transientCorners.has(before)).toBe(false);
+    }
+    expect(cache.clearCorners.size).toBe(0);
+    car.curveLengthM = undefined;
+    life.pose(car);
+    expect(cache.clearCorners.size).toBeGreaterThan(0);
+  });
+  it('starts at the actual shortened pose and invalidates warm stopped paths without cursor movement', () => {
+    const { life, car, tracer, pm } = retained();
+    const before = structuredClone(car);
+    const cached = tracer.pedestrianSegments(car, 15, 15);
+    car.curveLengthM = 6;
+    const changed = tracer.pedestrianSegments(car, 15, 15);
+    const cold = [...tracer.pedestrianPath(car, 15)],
+      pose = life.pose(car);
+    expect(changed).not.toEqual(cached);
+    expect(changed).toEqual(cold);
+    expect(changed[0]!.x).toBeCloseTo(pose.x / pm, 10);
+    expect(changed[0]!.y).toBeCloseTo(pose.y / pm, 10);
+    expect(changed.some((p) => p.line === 1)).toBe(true);
+    expect(car).toEqual({ ...before, curveLengthM: 6 });
+    expect(tracer.pedestrianSegments(car, 15, 15)).toBe(changed);
+  });
+  it('copies interior entry geometry, invalidates in-place changes and clears scratch for another mover', () => {
+    const { life, car, tracer, pm } = retained();
+    car.line = 1;
+    car.from = 3;
+    car.d = 0.2 * pm;
+    car.y += car.d;
+    car.hx = 0;
+    car.hy = 1;
+    car.came = 1;
+    car.next = undefined;
+    car.curveLengthM = 6;
+    car.entered = { vertex: 3, x: 1000, y: 2048, offset: 3 };
+    const cached = tracer.pedestrianSegments(car, 15, 15);
+    car.entered.offset = 2;
+    const changed = tracer.pedestrianSegments(car, 15, 15),
+      pose = life.pose(car);
+    expect(changed).not.toEqual(cached);
+    expect(changed).toEqual([...tracer.pedestrianPath(car, 15)]);
+    expect(changed[0]!.x).toBeCloseTo(pose.x / pm, 10);
+    expect(changed[0]!.y).toBeCloseTo(pose.y / pm, 10);
+    const ordinary = {
+      ...car,
+      curveLengthM: undefined,
+      curveCorner: undefined,
+      entered: undefined,
+    };
+    const original = structuredClone(ordinary);
+    const afterReuse = [...tracer.pedestrianPath(ordinary, 15)];
+    const other = retained();
+    expect(afterReuse).toEqual([...other.tracer.pedestrianPath(ordinary, 15)]);
+    expect(ordinary).toEqual(original);
   });
 });
 
@@ -1487,4 +1625,94 @@ describe('unsignalised pedestrian crossings', () => {
     expect(result.holds?.[0]?.key).toBe(first.holds?.[0]?.key);
     expect(result.holds?.[0]?.elapsed).toBe(0.2);
   });
+});
+
+describe('pedestrian lookahead through directed interior road entries', () => {
+  it.each([
+    { sourceDir: 1, targetDir: 1 },
+    { sourceDir: 1, targetDir: -1 },
+    { sourceDir: -1, targetDir: 1 },
+    { sourceDir: -1, targetDir: -1 },
+  ] as const)(
+    'follows the actual entry from $sourceDir to $targetDir without mutation',
+    ({ sourceDir, targetDir }) => {
+      const pm = 1 / metersPerUnit(tile),
+        builder = new LifeBuilder();
+      const junction = { x: 1000, y: 2048 },
+        previous = { x: 1000 - 30 * pm, y: 2048 };
+      builder.line(
+        sourceDir === 1 ? [previous, junction] : [junction, previous],
+        LifeLine.roadMajor,
+        14,
+      );
+      builder.line(
+        [
+          { x: junction.x, y: junction.y - 50 * pm },
+          junction,
+          { x: junction.x, y: junction.y + 50 * pm },
+        ],
+        LifeLine.roadMajor,
+        14,
+      );
+      const life = new StandaloneLife(tile, builder.finish(), 42);
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+      const from = sourceDir === 1 ? 0 : 1,
+        endpoint = from + sourceDir;
+      const car: Mover = {
+        ...person(life),
+        kind: 'vehicle',
+        vehicle: 'car',
+        group: undefined,
+        from,
+        dir: sourceDir,
+        d: Math.abs(life.geo.coords[endpoint * 2]! - life.geo.coords[from * 2]!) - pm,
+        x: life.geo.coords[endpoint * 2]! - pm,
+        y: junction.y,
+        hx: 1,
+        hy: 0,
+        speed: 5 * pm,
+        v: 0,
+        pause: 0,
+        next: targetDir === 1 ? 2 : 3,
+      };
+      const tracer = life as unknown as {
+        pedestrianPath(m: Mover, range: number): Iterable<PedestrianSegment>;
+        pedestrianSegments(m: Mover, range: number, physicalRange: number): PedestrianSegment[];
+        advance(m: Mover, distance: number): number;
+        rng(): number;
+        walkerRng(): number;
+        routeRng(): number;
+      };
+      const original = structuredClone(car);
+      const randomSpies = ['rng', 'walkerRng', 'routeRng'].map((key) =>
+        vi.spyOn(tracer, key as 'rng' | 'walkerRng' | 'routeRng'),
+      );
+      const path = [...tracer.pedestrianPath(car, 15)];
+      expect(tracer.pedestrianSegments(car, 15, 15)).toEqual(path);
+      expect(tracer.pedestrianSegments(car, 15, 15)).toEqual(path);
+      expect(car).toEqual(original);
+      for (const spy of randomSpies) {
+        expect(spy).not.toHaveBeenCalled();
+        spy.mockRestore();
+      }
+      const pose = life.pose(car);
+      expect(path[0]!.x).toBeCloseTo(pose.x / pm, 10);
+      expect(path[0]!.y).toBeCloseTo(pose.y / pm, 10);
+      expect(path.some((p) => p.line === 1)).toBe(true);
+      expect(path.every((p) => Object.values(p).every(Number.isFinite))).toBe(true);
+      expect(path.every((p) => p.hy * targetDir >= -1e-6)).toBe(true);
+      const moved = structuredClone(car);
+      tracer.advance(moved, 2 * pm);
+      expect(moved.line).toBe(1);
+      expect(moved.from).toBe(3);
+      expect(moved.dir).toBe(targetDir);
+      expect(moved.entered).toMatchObject({
+        vertex: 3,
+        x: life.geo.coords[from * 2]!,
+        y: life.geo.coords[from * 2 + 1]!,
+      });
+      expect(life.pose(moved).hy * targetDir).toBeGreaterThan(0);
+    },
+  );
 });

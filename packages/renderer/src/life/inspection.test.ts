@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import assert from 'node:assert/strict';
 import type { TrafficMix } from '@atlas/shared';
 import { LifeInspection } from './inspection';
 import { LifeWorld, type VisibleAgent } from './simulate';
 import { makeScenario, worldTiles } from './testing/scenarios';
+import { bounded } from './testing/scenario-checks';
 import { createInlineHost } from './host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
 import { RETIRE, UMBRELLA_MOTION } from './config';
@@ -247,12 +249,14 @@ describe('per-item inspection', () => {
   it('keeps ordinary simulation state and packed poses equivalent when inspection is unused', () => {
     const ordinary = makeScenario('rain', 1),
       item = makeScenario('rain', 1, false, 1, ItemWorld);
+    bounded(ordinary.world);
+    bounded(item.world);
     for (let frame = 0; frame < 90; frame++) {
       const strip = (agents: VisibleAgent[]) =>
         structuredClone(agents).map(({ inspectionId: _id, candleSeed: _seed, ...agent }) => agent);
       const baseline = ordinary.step(frame);
       expect(baseline.some((agent) => Object.hasOwn(agent, 'inspectionId'))).toBe(false);
-      expect(strip(item.step(frame))).toEqual(strip(baseline));
+      assert.deepEqual(strip(item.step(frame)), strip(baseline));
     }
   });
 
