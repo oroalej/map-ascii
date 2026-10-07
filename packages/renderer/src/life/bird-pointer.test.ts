@@ -21,6 +21,16 @@ function checkClear(f: Fixture, pointer: readonly [number, number], zoom: number
 }
 
 describe('birds keep clear of the mouse', () => {
+  it('reuses the rendered extent across an unchanged target-flight layout', () => {
+    const f = birdFixture();
+    f.flock.perch = 0;
+    const extent = vi.spyOn(
+      f.life as unknown as { flockExtent(flock: Flock): number },
+      'flockExtent',
+    );
+    f.step(birdLngLat(25, 0));
+    expect(extent).toHaveBeenCalledTimes(1);
+  });
   it('passes around a resting pointer on the way to a clear perch', () => {
     const f = birdFixture();
     Object.assign(f.flock, birdPoint(0, 0), { perch: 0 });
@@ -450,5 +460,122 @@ describe('legacy flock states without a pointer (base 6645425)', () => {
         },
       ]
     `);
+  });
+});
+
+describe('pointer fear delivery and lifecycle', () => {
+  const sitting = (observer = true) => {
+    const f = birdFixture('pigeon', { observer });
+    Object.assign(f.flock, birdPoint(50, 0), { perched: true, perch: 0 });
+    return f;
+  };
+  const cued = () => {
+    const f = sitting();
+    f.flock.birds.push({ ...f.flock.birds[0]! });
+    f.step(birdLngLat(50, 0));
+    for (let i = 0; i < 5; i++) f.step();
+    return f;
+  };
+  it('queues the physical flush until the next frame and gives only one bird a fear cue', () => {
+    const f = sitting();
+    f.flock.birds.push({ ...f.flock.birds[0]! });
+    f.step(birdLngLat(50, 0));
+    expect(f.flock.perched).toBe(false);
+    expect(f.life.startled).toEqual([f.flock]);
+    expect(f.visible().some((a) => a.emoji)).toBe(false);
+    f.step();
+    expect(f.life.startled).toHaveLength(0);
+    expect(f.life.birdEmojiOwners.has(f.flock)).toBe(true);
+    for (let i = 0; i < 4; i++) f.step();
+    expect(f.visible().filter((a) => a.emoji)).toHaveLength(1);
+    expect(f.visible().find((a) => a.emoji)!.emoji).toMatchObject({
+      subject: 'bird',
+      mood: 'scared',
+    });
+    for (let i = 0; i < 30; i++) f.step();
+    expect(f.life.birdEmojiOwners.size).toBe(0);
+    const idle = sitting();
+    for (let i = 0; i < 10; i++) idle.step();
+    expect(idle.visible().some((a) => a.emoji)).toBe(false);
+    expect(idle.life.birdEmojiOwners.size).toBe(0);
+  });
+  it.each([undefined, 13])(
+    'resets flying onset on pointer-free accepted frames, including bird-suppressed zoom %s',
+    (zoom) => {
+      const f = birdFixture('swallow', { roost: false });
+      const at = () =>
+        birdLngLat((f.flock.x - 2048) / birdPerMeter, (f.flock.y - 2048) / birdPerMeter);
+      f.step(at());
+      expect(f.life.startled).toEqual([f.flock]);
+      for (let i = 0; i < 460; i++) f.step(undefined, 0.1, zoom ?? 19);
+      f.step(at());
+      expect(f.life.startled).toEqual([f.flock]);
+      for (let i = 0; i < 6; i++) f.step();
+      expect(f.visible().some((a) => a.emoji?.mood === 'scared')).toBe(true);
+    },
+  );
+  it('drops z17 events and a queued event suppressed before delivery', () => {
+    for (const queued of [false, true]) {
+      const f = sitting();
+      if (queued) f.step(birdLngLat(50, 0));
+      f.step(queued ? undefined : birdLngLat(50, 0), 0.1, 17);
+      expect(f.flock.perched).toBe(false);
+      expect(f.life.startled).toHaveLength(0);
+      expect(f.life.birdEmojiOwners.size).toBe(0);
+      for (let i = 0; i < 6; i++) f.step();
+      expect(f.visible().some((a) => a.emoji)).toBe(false);
+    }
+  });
+  it('keeps disabled observation collections empty while physical pointer reactions continue', () => {
+    const f = sitting(false);
+    for (let i = 0; i < 50; i++) {
+      f.step(birdLngLat(50, 0));
+      expect(f.life.startled).toHaveLength(0);
+      expect(f.life.birdEmojiOwners.size).toBe(0);
+    }
+    expect(f.flock.perched).toBe(false);
+    expect(f.visible().some((a) => a.emoji)).toBe(false);
+  });
+  it('drops undelivered events on retirement, while pending and active cues freeze through revival', () => {
+    for (const delivery of ['raw', 'pending', 'active'] as const) {
+      const f = sitting();
+      f.step(birdLngLat(50, 0));
+      if (delivery !== 'raw') f.step();
+      if (delivery === 'active') for (let i = 0; i < 4; i++) f.step();
+      const cue = f.life.emoji.cue(f.flock);
+      f.world.sync([]);
+      expect(f.life.startled).toHaveLength(0);
+      for (let i = 0; i < 20; i++) f.step();
+      f.world.sync([f.entry]);
+      for (let i = 0; i < 5; i++) f.step();
+      if (delivery === 'raw') expect(f.visible().some((a) => a.emoji)).toBe(false);
+      else {
+        expect(f.visible().find((a) => a.emoji)?.emoji?.mood).toBe('scared');
+        if (cue) expect(f.life.emoji.cue(f.flock)?.id).toBe(cue.id);
+      }
+    }
+  });
+  it('anchors fear to the admitted bird when the first pushed bird is capped out', () => {
+    const f = cued();
+    Object.assign(f.flock, birdPoint(0, 0), { perched: true });
+    Object.assign(f.flock.birds[0]!, { ox: 100 * birdPerMeter, oy: 0, phase: 0 });
+    Object.assign(f.flock.birds[1]!, { ox: 0, oy: 0, phase: 0 });
+    const views = f.visible();
+    const kept = f.visible(19, 1);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]!.lng).toBe(views[1]!.lng);
+    expect(kept[0]!.emoji?.mood).toBe('scared');
+  });
+  it('prefers an admitted in-view bird over an off-view first bird', () => {
+    const f = cued();
+    Object.assign(f.flock, birdPoint(0, 0), { perched: true });
+    Object.assign(f.flock.birds[0]!, { ox: -100 * birdPerMeter, oy: 0, phase: 0 });
+    Object.assign(f.flock.birds[1]!, { ox: 0, oy: 0, phase: 0 });
+    const a = birdLngLat(-1, 1),
+      b = birdLngLat(1, -1);
+    const views = f.world.visible(19, 1, f.center, undefined, [a[0], a[1], b[0], b[1]]);
+    expect(views.filter((v) => v.emoji)).toHaveLength(1);
+    expect(views[0]!.emoji).toBeUndefined();
+    expect(views[1]!.emoji?.mood).toBe('scared');
   });
 });

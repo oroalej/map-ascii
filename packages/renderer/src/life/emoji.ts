@@ -7,7 +7,7 @@ import {
   type SeasonEmojiEntry,
 } from '@atlas/shared';
 import { random } from './random';
-import type { Gatherer, LifeEnv, Mover, Stall } from './simulate';
+import type { Flock, Gatherer, LifeEnv, Mover, Stall } from './simulate';
 import type { Visit } from './interactions';
 import { exhaustKind, PUFF } from './exhaust';
 
@@ -111,7 +111,7 @@ export function eveningDate(env: Pick<LifeEnv, 'date' | 'minutes'>) {
   return { month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 export type EmojiObservation = {
-  owner: Mover | Gatherer | Stall;
+  owner: Mover | Gatherer | Stall | Flock;
   subject: EmojiSubject;
   figure?: 'adult' | 'child';
   eligible: boolean;
@@ -496,6 +496,7 @@ export class EmojiObserver {
     observations: readonly EmojiObservation[],
     purchases: readonly { mover: Mover; stall: Stall; key: object }[] = [],
     completions: readonly { token: object; owners: readonly object[] }[] = [],
+    startled: readonly Flock[] = [],
   ) {
     dt = env.emojiTime?.dt ?? dt;
     this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
@@ -537,6 +538,14 @@ export class EmojiObserver {
         t.standoff = undefined;
         t.passenger = undefined;
         t.visit = undefined;
+        continue;
+      }
+      // Explicit flock events survive evaluation gaps, including the first observation.
+      // Birds have no sampled conditions, voice follow-ups or ambient opportunities.
+      if (o.subject === 'bird') {
+        t.epoch = this.epoch;
+        t.clock = this.clock;
+        if (startled.includes(o.owner as Flock)) t.edges.add('scared');
         continue;
       }
       if (gap) {
@@ -761,6 +770,12 @@ export class EmojiObserver {
     for (const o of evaluation) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
+      if (o.subject === 'bird') {
+        // Chance 1; admission retains the shared eligibility, cooldown and capacity gates.
+        if (t.edges.has('scared')) this.admit(o, 'scared', observations);
+        t.edges.clear();
+        continue;
+      }
       if (t.edges.size)
         for (const mood of priorities) {
           if (!t.edges.has(mood)) continue;

@@ -826,6 +826,10 @@ export class TileLife {
   private inspected?: object;
   readonly momentHost: MomentHost;
   readonly emoji: EmojiObserver;
+  /** Observer events and ownership never enter physical flock state. */
+  readonly startled: Flock[] = [];
+  readonly birdEmojiOwners = new Set<Flock>();
+  private pointerInside?: WeakSet<Flock>;
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -5028,7 +5032,7 @@ export class TileLife {
     input.owner = owner;
     input.subject = subject;
     input.eligible = eligible;
-    input.speaking = this.momentHost.speaking(owner);
+    input.speaking = subject === 'bird' ? false : this.momentHost.speaking(owner);
     // Required fields are populated before lending this pooled record to the observer.
     const observation = input as EmojiObservation;
     this.emojiInputs.push(observation);
@@ -5087,7 +5091,29 @@ export class TileLife {
       input.vendor = true;
       input.held = input.arrival = input.still = undefined;
     }
+    for (const flock of this.birdEmojiOwners) {
+      const spec = BIRD_SPECIES[flock.species];
+      const share = levels ? (spec.nocturnal ? levels.night : levels.bird) : 1;
+      const admitted = this.flocks.includes(flock) && eligible(flock) && flock.rank < share * crowd;
+      this.emojiInput(flock, 'bird', admitted);
+    }
     return observations;
+  }
+  /** Freeze pending/active cues, but never replay an undelivered physical event. */
+  freezeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.emoji.freeze();
+  }
+  private clearBirdEmojiOwners() {
+    for (const flock of this.birdEmojiOwners) this.emoji.memory.get(flock)?.edges.clear();
+    this.birdEmojiOwners.clear();
+  }
+  disposeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.clearBirdEmojiOwners();
+    this.emoji.dispose();
   }
   visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
     return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
@@ -5137,6 +5163,7 @@ export class TileLife {
     pedestrianTarget?: (m: Mover, target: number) => { target: number; held: boolean },
   ) {
     if (dt <= 0) return;
+    if (!env?.pointer) this.pointerInside = undefined;
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -5223,7 +5250,9 @@ export class TileLife {
     );
     const emojiEnv = env ?? { rain: 0, clock };
     const emojiZoom = momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0);
-    if (this.emoji.observes(emojiZoom))
+    const observing = this.emoji.observes(emojiZoom);
+    if (observing) {
+      for (const flock of this.startled) this.birdEmojiOwners.add(flock);
       this.emoji.step(
         dt,
         emojiZoom,
@@ -5231,8 +5260,17 @@ export class TileLife {
         this.emojiObservations(emojiEnv, near, pass?.owns),
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
+        this.startled,
       );
-    else this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      for (const flock of this.birdEmojiOwners) {
+        const track = this.emoji.memory.get(flock);
+        if (!track?.edges.has('scared') && !track?.group) this.birdEmojiOwners.delete(flock);
+      }
+    } else {
+      this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      this.clearBirdEmojiOwners();
+    }
+    this.startled.length = 0;
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
@@ -6084,7 +6122,7 @@ export class TileLife {
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
-    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env, observing);
     if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
     if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
@@ -6706,6 +6744,7 @@ export class TileLife {
     gustAt?: (x: number, y: number) => number,
     near?: (x: number, y: number) => boolean,
     env?: LifeEnv,
+    observing = false,
   ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
@@ -6715,9 +6754,15 @@ export class TileLife {
     const wx = wind ? wind.dir[0] * wind.strength : 0;
     const wy = wind ? wind.dir[1] * wind.strength : 0;
     const pointer = env?.pointer
-      ? { ...lngLatToTile(this.tile, ...env.pointer.lngLat), cellMeters: env.pointer.cellMeters }
+      ? {
+          ...lngLatToTile(this.tile, ...env.pointer.lngLat),
+          cellMeters: env.pointer.cellMeters,
+          radius: undefined as number | undefined,
+        }
       : undefined;
+    if (pointer) this.pointerInside ??= new WeakSet();
     for (const flock of this.flocks) {
+      if (pointer) pointer.radius = undefined;
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
       if (flock.departureBlend)
@@ -6732,6 +6777,7 @@ export class TileLife {
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
         const pointerFlush = pointer ? this.pointerNear(flock, pointer) : false;
+        if (pointerFlush) this.recordStartle(flock, observing);
         const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels) || pointerFlush;
         if (flushed || (!sheltering && flock.stay <= 0)) {
           if (!flushed && flock.perched && flock.home >= 0) {
@@ -6786,6 +6832,8 @@ export class TileLife {
             ? { x: flock.lx, y: flock.ly }
             : undefined;
       if (pointer && to && this.pointerNear(flock, pointer, to)) {
+        this.recordStartle(flock, observing);
+        pointer.radius = undefined;
         this.beginDeparture(flock);
         flock.scatter = PERCH.scatter;
         this.pickDestination(flock, { prepare: false });
@@ -6808,6 +6856,7 @@ export class TileLife {
           flock.y += detour.y * step;
           [flock.hx, flock.hy] = [detour.x, detour.y];
         } else if (distance <= step) {
+          if (pointer) pointer.radius = undefined;
           flock.x = to.x;
           flock.y = to.y;
           if (flock.perch >= 0) {
@@ -6836,11 +6885,11 @@ export class TileLife {
           flock.y += (dy / distance) * step + wy * nudge;
         }
         if (distance > 0 && !detour) [flock.hx, flock.hy] = [dx / distance, dy / distance];
-        if (pointer) this.avoidPointer(flock, pointer, dt, speed);
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
         continue;
       }
       if (count === 0) {
-        if (pointer) this.avoidPointer(flock, pointer, dt, speed);
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
         continue;
       }
       // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
@@ -6868,7 +6917,7 @@ export class TileLife {
         flock.y += (dy / distance) * reach;
         [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
-      if (pointer) this.avoidPointer(flock, pointer, dt, speed);
+      if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
     }
   }
 
@@ -6901,7 +6950,11 @@ export class TileLife {
     return extent;
   }
 
-  private pointerRadius(flock: Flock, pointer: Point & { cellMeters: number }, target?: Point) {
+  private pointerRadius(
+    flock: Flock,
+    pointer: Point & { cellMeters: number; radius?: number },
+    target?: Point,
+  ) {
     const spec = BIRD_SPECIES[flock.species];
     const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
     const bound =
@@ -6913,29 +6966,39 @@ export class TileLife {
       (!target || (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + bound) ** 2)
     )
       return 0;
-    return reach + this.flockExtent(flock);
+    return (pointer.radius ??= reach + this.flockExtent(flock));
   }
 
   private pointerNear(
     flock: Flock,
-    pointer: Point & { cellMeters: number },
+    pointer: Point & { cellMeters: number; radius?: number },
     target: Point = flock,
   ) {
     const radius = this.pointerRadius(flock, pointer, target);
     return radius > 0 && (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 < radius ** 2;
   }
 
+  private recordStartle(flock: Flock, observing: boolean) {
+    if (observing && !this.startled.includes(flock)) this.startled.push(flock);
+  }
+
   private avoidPointer(
     flock: Flock,
-    pointer: Point & { cellMeters: number },
+    pointer: Point & { cellMeters: number; radius?: number },
     dt: number,
     speed: number,
+    observing: boolean,
   ) {
     const radius = this.pointerRadius(flock, pointer);
     const dx = flock.x - pointer.x;
     const dy = flock.y - pointer.y;
     const distance2 = dx * dx + dy * dy;
-    if (radius <= 0 || distance2 >= radius * radius) return;
+    if (radius <= 0 || distance2 >= radius * radius) {
+      this.pointerInside!.delete(flock);
+      return;
+    }
+    if (!this.pointerInside!.has(flock)) this.recordStartle(flock, observing);
+    this.pointerInside!.add(flock);
     const distance = Math.sqrt(distance2);
     const hx = distance > 1e-8 ? dx / distance : flock.hx;
     const hy = distance > 1e-8 ? dy / distance : flock.hy;
@@ -6948,7 +7011,7 @@ export class TileLife {
   /** A blocked target leg spends its normal flight step tangentially instead of stalling. */
   private pointerDetour(
     flock: Flock,
-    pointer: Point & { cellMeters: number },
+    pointer: Point & { cellMeters: number; radius?: number },
     step: number,
     hx: number,
     hy: number,
@@ -7624,8 +7687,8 @@ export class LifeWorld {
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
     this.releaseEventActors(false, true);
-    for (const tile of this.tiles.values()) tile.emoji.dispose();
-    for (const { life } of this.retired.values()) life.emoji.dispose();
+    for (const tile of this.tiles.values()) tile.disposeEmoji();
+    for (const { life } of this.retired.values()) life.disposeEmoji();
     this.emojiMemory.reset();
     this.emojiView = undefined;
     this.puffPacket = EMPTY_PUFFS;
@@ -7674,7 +7737,7 @@ export class LifeWorld {
         entry.life.momentHost.clear();
         for (const owner of [...entry.life.movers, ...entry.life.gatherers])
           entry.life.crossingWaits.release(owner);
-        entry.life.emoji.dispose();
+        entry.life.disposeEmoji();
         this.retired.delete(key);
       }
     if (cap)
@@ -7683,7 +7746,7 @@ export class LifeWorld {
         const life = this.retired.get(key)!.life;
         life.momentHost.clear();
         for (const owner of [...life.movers, ...life.gatherers]) life.crossingWaits.release(owner);
-        life.emoji.dispose();
+        life.disposeEmoji();
         this.retired.delete(key);
       }
   }
@@ -7766,7 +7829,7 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
-          life.emoji.freeze();
+          life.freezeEmoji();
           life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
           this.appliedCrowds.delete(life);
           this.retired.set(key, { life, at: this.clock });
@@ -10381,6 +10444,7 @@ export class LifeWorld {
         agent.emoji = cue;
       return present(owner, agent);
     };
+    let birdCues: Map<VisibleAgent, Flock> | undefined;
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -10708,6 +10772,7 @@ export class LifeWorld {
       for (const flock of life.flocks) {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
+        const flockCue = this.emojiMemory.cue(flock);
         const out_ = spec.nocturnal ? levels.night : levels.bird;
         if (flock.rank >= out_ * crowd || !inView(flock.x, flock.y)) continue;
         const wobble = life.elapsed * 0.8;
@@ -10756,7 +10821,7 @@ export class LifeWorld {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          push(bird, {
+          const n = push(bird, {
             kind: 'bird',
             lng,
             lat,
@@ -10764,9 +10829,25 @@ export class LifeWorld {
             flap,
             bird: { species: flock.species, pose },
           });
+          if (flockCue) (birdCues ??= new Map()).set(out[n - 1]!, flock);
         }
       }
     }
+    const withBirdCues = (admitted: VisibleAgent[]) => {
+      if (!birdCues) return admitted;
+      const anchors = new Map<Flock, VisibleAgent>();
+      const inside = (a: VisibleAgent) =>
+        !bounds ||
+        (a.lng >= bounds[0] && a.lng <= bounds[2] && a.lat >= bounds[1] && a.lat <= bounds[3]);
+      for (const agent of admitted) {
+        const flock = birdCues.get(agent);
+        if (!flock) continue;
+        const prior = anchors.get(flock);
+        if (!prior || (!inside(prior) && inside(agent))) anchors.set(flock, agent);
+      }
+      for (const [flock, agent] of anchors) agent.emoji = this.emojiMemory.cue(flock);
+      return admitted;
+    };
     const withBalls = (admitted: VisibleAgent[]) => {
       if (!balls.length) return admitted;
       const kept = new Set(admitted);
@@ -10792,7 +10873,7 @@ export class LifeWorld {
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
+      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       return admitted;
@@ -10824,7 +10905,7 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBalls(kept), center, bounds);
+    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     return admitted;
