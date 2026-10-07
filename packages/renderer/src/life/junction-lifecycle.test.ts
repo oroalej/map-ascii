@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { JunctionTable, type Movement } from './junctions';
 import { JunctionTraffic } from './junction-traffic';
 import { LifeBuilder } from './geometry';
-import { TileLife, type Mover } from './simulate';
+import { LifeWorld, TileLife, type Mover } from './simulate';
 import { signalState } from './signals';
 import { metersPerUnit } from '../raster/geometry';
 
@@ -33,6 +33,178 @@ const movement = (key = 'a', vertical = false): Movement => ({
   exit: { line: 0, along: 0, out: 1, hx: 1, hy: 0 },
   ahead: 2,
 });
+
+for (const reversed of [false, true])
+  it(`admits and releases both opposing split-way close chains (reversed=${reversed})`, () => {
+    const tile = { z: 16, x: 55192, y: 30266 },
+      pm = 1 / metersPerUnit(tile),
+      a = { x: 2000, y: 2000 },
+      z = { x: 2000 + 10 * pm, y: 2000 },
+      b = new LifeBuilder();
+    b.line([{ x: a.x - 100 * pm, y: a.y }, a], 0, 4);
+    b.line([a, z], 0, 4);
+    b.line([z, { x: z.x + 100 * pm, y: z.y }], 0, 4);
+    b.line([a, { x: a.x, y: a.y - 100 * pm }], 0, 4);
+    b.line([z, { x: z.x, y: z.y + 100 * pm }], 0, 4);
+    const world = new LifeWorld();
+    world.sync([{ key: 'close-chains', tile, life: b.finish() }]);
+    const life = world.active('close-chains')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const make = (line: number, x: number, dir: 1 | -1, exit: number): Mover => ({
+      kind: 'vehicle',
+      vehicle: 'car',
+      line,
+      x,
+      y: a.y,
+      hx: dir,
+      hy: 0,
+      from: dir === 1 ? life.geo.starts[line]! : life.geo.starts[line + 1]! - 1,
+      dir,
+      d: (100 - 6.8) * pm,
+      speed: 8 * pm,
+      v: 0,
+      lane: 0,
+      paint: 0,
+      pause: 0,
+      rank: 0,
+      next: exit,
+      routing: {
+        seed: 1,
+        turns: 0,
+        plan: {
+          line,
+          dir,
+          vertex: dir === 1 ? life.geo.starts[line + 1]! - 1 : life.geo.starts[line]!,
+          exit,
+          radius: 3,
+        },
+      },
+    });
+    const movers = [make(0, a.x - 6.8 * pm, 1, 2), make(2, z.x + 6.8 * pm, -1, 3)];
+    life.movers.push(...(reversed ? [...movers].reverse() : movers));
+    const table = (world as unknown as { junctions: JunctionTable }).junctions,
+      admitted = [false, false],
+      released = [false, false],
+      held = [false, false];
+    for (let frame = 0; frame < 120 * 30; frame++) {
+      world.step(1 / 30, undefined, 18, undefined, undefined, { rain: 0, minutes: 720 }, 0.9);
+      for (let i = 0; i < movers.length; i++) {
+        const m = movers[i]!,
+          rows = [...table.holds(m)];
+        held[i] ||= rows.length > 0;
+        admitted[i] ||= rows.some((r) => table.canEnter(m, r.movement.key));
+        released[i] ||= held[i]! && rows.length === 0;
+      }
+    }
+    expect(admitted).toEqual([true, true]);
+    expect(released).toEqual([true, true]);
+  });
+
+it('allows complete storage along a committed 30 degree bend before a denied box', () => {
+  const tile = { z: 16, x: 55192, y: 30266 },
+    pm = 1 / metersPerUnit(tile),
+    a = { x: 2000, y: 2000 },
+    bend = { x: a.x + 20 * pm, y: a.y },
+    hx = Math.cos(Math.PI / 6),
+    hy = Math.sin(Math.PI / 6),
+    z = { x: bend.x + 25 * pm * hx, y: bend.y + 25 * pm * hy },
+    b = new LifeBuilder();
+  b.line(
+    [{ x: a.x - 100 * pm, y: a.y }, a, bend, z, { x: z.x + 100 * pm * hx, y: z.y + 100 * pm * hy }],
+    0,
+    4,
+  );
+  for (const point of [a, z])
+    b.line(
+      [{ x: point.x, y: point.y - 100 * pm }, point, { x: point.x, y: point.y + 100 * pm }],
+      0,
+      4,
+    );
+  const life = new TileLife(tile, b.finish(), 1),
+    table = new JunctionTable(),
+    m = car();
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  Object.assign(m, {
+    x: a.x - 6.8 * pm,
+    y: a.y,
+    d: (100 - 6.8) * pm,
+    speed: 8 * pm,
+    v: 0,
+    lane: 0,
+    paint: 0,
+    pause: 0,
+    rank: 0,
+  });
+  life.movers.push(m);
+  const motions = life.junctionIndex.movements(m, 60 * pm, (line, dir) =>
+      life.seamExit(m, line, dir),
+    ),
+    first = motions[0]!.key,
+    next = motions[1]!.key,
+    radius = motions[0]!.junction.radius;
+  const gate = vi.spyOn(life, 'junctionClear').mockImplementation((p) => p.key !== next);
+  for (let frame = 0; frame < 20 * 30; frame++) {
+    life.prepareTraffic(() => true);
+    table.begin(new Set([life]));
+    life.requestJunctions(table, () => true, frame / 30);
+    table.resolve(frame / 30);
+    if (frame === 2) {
+      expect(table.canEnter(m, first)).toBe(true);
+      expect(table.granted(m, next)).toBe(false);
+    }
+    life.step(1 / 30, undefined, undefined, undefined, { clock: frame / 30, rain: 0 }, undefined, {
+      junctions: table,
+    });
+  }
+  expect(m.x - 2.2 * pm).toBeGreaterThan(a.x + radius);
+  expect(table.movement(m, first)).toBeUndefined();
+  expect(table.granted(m, next)).toBe(false);
+  gate.mockRestore();
+});
+
+for (const linked of [false, true])
+  it(`uses final-exit projections conservatively for ${linked ? 'linked' : 'carried'} storage`, () => {
+    const life = empty(),
+      table = new JunctionTable(),
+      m = car(),
+      pm = life.perMeter;
+    const first = movement('a'),
+      next = movement('b');
+    Object.assign(first.junction, { radius: 3 * pm, linked });
+    first.exit = { ...first.exit, x: 20 * pm, y: 0 };
+    first.ahead = first.boxAhead = 0;
+    Object.assign(next.junction, { x: 30 * pm, radius: 3 * pm });
+    next.entry = { ...next.exit, x: 30 * pm, y: 0 };
+    next.ahead = next.boxAhead = 30 * pm;
+    life.movers.push(m);
+    table.begin(new Set([life]));
+    table.request({ m, life, tileKey: 'a', index: 0, movement: first, ready: true, inside: false });
+    table.request({
+      m,
+      life,
+      tileKey: 'a',
+      index: 0,
+      movement: next,
+      ready: false,
+      inside: false,
+      precedingKey: 'a',
+    });
+    table.resolve(0);
+    if (!linked) {
+      const target = empty();
+      target.movers.push(m);
+      table.rebind(m, target, 'target', life);
+    }
+    expect(table.canEnter(m, 'a')).toBe(false);
+    const currentNext = table.movement(m, 'b')!;
+    currentNext.junction.x = currentNext.entry!.x = 40 * pm;
+    expect(table.canEnter(m, 'a')).toBe(true);
+    currentNext.inHx = Math.cos(Math.PI / 6);
+    currentNext.inHy = Math.sin(Math.PI / 6);
+    expect(table.canEnter(m, 'a')).toBe(false);
+  });
 
 for (const [separation, turning] of [
   [10, false],
