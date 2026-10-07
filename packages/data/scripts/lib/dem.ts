@@ -3,7 +3,7 @@
  * public AWS open-data bucket. Ocean cells have no tile, so a missing one is recorded rather
  * than retried.
  */
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { BBox } from '@atlas/shared';
 
@@ -37,14 +37,25 @@ const exists = (path: string) =>
     () => false,
   );
 
+/** Copy `file` from the first of `copies` that has it; whether one did. */
+async function copyFirst(file: string, copies: readonly string[]): Promise<boolean> {
+  for (const copy of copies) {
+    if (!(await exists(copy))) continue;
+    await copyFile(copy, file);
+    return true;
+  }
+  return false;
+}
+
 /**
  * Download the DEM tiles covering `bbox` into `dir` (once; the DEM doesn't change). Returns the
  * paths of the tiles that exist. A tile the bucket lacks (open ocean) leaves a `.missing` marker.
+ * Another checkout's tile or marker (`copies`, see `copiesElsewhere`) is copied in first.
  */
 export async function downloadDem(
   bbox: BBox,
   dir: string,
-  { offline }: { offline: boolean },
+  { offline, copies = () => [] }: { offline: boolean; copies?: (file: string) => string[] },
 ): Promise<string[]> {
   await mkdir(dir, { recursive: true });
   const found: string[] = [];
@@ -52,6 +63,10 @@ export async function downloadDem(
     const name = demTileName(lng, lat);
     const file = join(dir, `${name}.tif`);
     const missing = join(dir, `${name}.missing`);
+    if (!(await exists(file)) && !(await exists(missing))) {
+      // The DEM never changes, so any saved copy is as good as a download.
+      if (!(await copyFirst(file, copies(file)))) await copyFirst(missing, copies(missing));
+    }
     if (await exists(file)) {
       found.push(file);
       continue;

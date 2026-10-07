@@ -1,8 +1,15 @@
-import { mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cacheAnswers, lagging, onlyRelation, overpass, type OverpassResponse } from './overpass';
+import { basename, join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  cacheAnswers,
+  lagging,
+  onlyRelation,
+  overpass,
+  type FetchOptions,
+  type OverpassResponse,
+} from './overpass';
 
 const q = (bbox: string, filter = 'way["highway"];') =>
   `[out:json][timeout:300][bbox:${bbox}];\n${filter}\nout body;`;
@@ -170,6 +177,97 @@ describe('overpass', () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it('skips a server that answered with lagging data for the rest of the run', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const stale = { ...empty, osm3s: { timestamp_osm_base: '2026-06-01T08:52:28Z' } };
+    const fresh = { ...empty, osm3s: { timestamp_osm_base: new Date().toISOString() } };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(stale)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(fresh)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(fresh)));
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // A fresh module, so the servers this test finds lagging stay skipped only here.
+    vi.resetModules();
+    const { overpass } = await import('./overpass');
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+    try {
+      await settle(overpass(city, join(dir, 'a.osm.json'), { offline: false }));
+      await settle(overpass(city, join(dir, 'b.osm.json'), { offline: false }));
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(fetch.mock.calls[2]![0]).not.toBe(fetch.mock.calls[0]![0]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  describe('with another checkout', () => {
+    const fresh: OverpassResponse = {
+      elements: [{ ...boundary, type: 'relation' }],
+      osm3s: { timestamp_osm_base: '2026-10-01T04:00:00Z' },
+    };
+    const downloaded = new Date('2026-10-01T05:00:00Z');
+    let dir: string;
+    let fetch: ReturnType<typeof vi.fn>;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+      await mkdir(join(dir, 'main'));
+      fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify(empty))));
+      vi.stubGlobal('fetch', fetch);
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => rm(dir, { recursive: true, force: true }));
+
+    /** Save `data` for `query` in the other checkout, downloaded at `downloaded`. */
+    async function saveElsewhere(data: OverpassResponse, query: string) {
+      const file = join(dir, 'main', 'boundary.osm.json');
+      await writeFile(file, JSON.stringify(data));
+      await writeFile(`${file}.query`, query);
+      await utimes(file, downloaded, downloaded);
+    }
+    const options = (extra: Partial<FetchOptions> = {}): FetchOptions => ({
+      offline: false,
+      copies: (file) => [join(dir, 'missing', basename(file)), join(dir, 'main', basename(file))],
+      ...extra,
+    });
+
+    it('copies its matching download in, with its query and time, instead of asking Overpass', async () => {
+      await saveElsewhere(fresh, city);
+      const file = join(dir, 'boundary.osm.json');
+      expect(await overpass(downtown, file, options(), hasBoundary)).toEqual(fresh);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await readFile(`${file}.query`, 'utf8')).toBe(city);
+      expect((await stat(file)).mtimeMs).toBe(downloaded.getTime());
+      // Offline too, when this checkout saved nothing.
+      await rm(file);
+      expect(await overpass(downtown, file, options({ offline: true }), hasBoundary)).toEqual(
+        fresh,
+      );
+    });
+
+    it('asks Overpass when its download answers another query, fails the check, lagged, or on refresh', async () => {
+      const file = join(dir, 'boundary.osm.json');
+      const ask = (extra?: Partial<FetchOptions>) =>
+        overpass(city, file, options(extra)).then(() => rm(file));
+      await saveElsewhere(fresh, downtown);
+      await ask();
+      await saveElsewhere(fresh, city);
+      await ask({ refresh: true });
+      await saveElsewhere(
+        { ...fresh, osm3s: { timestamp_osm_base: '2026-07-15T00:00:00Z' } },
+        city,
+      );
+      await ask();
+      expect(fetch).toHaveBeenCalledTimes(3);
+      await saveElsewhere(empty, city);
+      await expect(overpass(city, file, options({ offline: true }), hasBoundary)).rejects.toThrow(
+        /--offline: no cached download/,
+      );
+    });
   });
 
   it('retries a dropped connection, on the next server, and saves the answer', async () => {

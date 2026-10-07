@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import type { BBox, City } from '@atlas/shared';
+import { copiesElsewhere } from './lib/checkouts';
 import { downloadDem } from './lib/dem';
 import { bufferBbox, fromOverpassBounds, intersectBbox, toOverpassBbox } from './lib/geo';
 import { writeJson } from './lib/io';
@@ -11,7 +12,7 @@ import {
   type OsmElement,
   type OverpassResponse,
 } from './lib/overpass';
-import { files, type Step } from './step';
+import { files, paths, type Step } from './step';
 
 const boundaryQuery = ({ boundary }: City) => {
   const parent = boundary.within
@@ -203,7 +204,8 @@ out tags bb;`,
 export const step: Step = {
   name: '01-fetch',
   async run({ city, rawDir, offline, refresh }) {
-    const cache: FetchOptions = { offline, refresh };
+    const copies = copiesElsewhere(paths.raw);
+    const cache: FetchOptions = { offline, refresh, copies };
     const boundaryTags = {
       boundary: 'administrative',
       name: city.boundary.name,
@@ -282,7 +284,7 @@ export const step: Step = {
     await writeJson(join(rawDir, files.rawRegion), region);
     console.log(`  region: ${region.elements.length} elements (${parts.length} queries)`);
 
-    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline });
+    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline, copies });
     console.log(`  DEM: ${dem.length} tiles`);
   },
 };

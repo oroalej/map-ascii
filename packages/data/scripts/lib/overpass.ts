@@ -1,4 +1,4 @@
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, stat, utimes, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { bboxContains, splitOverpassBbox } from './geo';
 
@@ -48,6 +48,8 @@ export type FetchOptions = {
   offline: boolean;
   /** Download again, replacing saved copies. */
   refresh?: boolean;
+  /** Where other checkouts keep the same download (`copiesElsewhere`), tried before Overpass. */
+  copies?: (file: string) => string[];
 };
 
 /**
@@ -87,11 +89,44 @@ export function lagging(data: OverpassResponse, receivedAt: number) {
   return `server had OSM data from ${new Date(base).toISOString().slice(0, 10)}`;
 }
 
+/** Servers that answered `lagging` in this run. A mirror months behind stays behind, so skip it. */
+const behind = new Set<string>();
+
+/**
+ * Another checkout's saved download at `copy`, when it answers `query` as a saved download here
+ * would (`cacheAnswers`, `check`, not `lagging`). Copied in with its query and time, so it stays
+ * judged by when it was downloaded.
+ */
+async function adopt(
+  copy: string,
+  cacheFile: string,
+  query: string,
+  check: ResponseCheck | undefined,
+): Promise<OverpassResponse | undefined> {
+  try {
+    const saved = await stat(copy);
+    const savedQuery = await readFile(queryFile(copy), 'utf8');
+    if (!cacheAnswers(savedQuery, query, { offline: false })) return undefined;
+    const data = JSON.parse(await readFile(copy, 'utf8')) as OverpassResponse;
+    if (rejection(check, data) ?? lagging(data, saved.mtimeMs)) return undefined;
+    await mkdir(dirname(cacheFile), { recursive: true });
+    await copyFile(copy, cacheFile);
+    await utimes(cacheFile, saved.atime, saved.mtime);
+    await writeFile(queryFile(cacheFile), savedQuery);
+    return data;
+  } catch {
+    // Missing, or being written by another session: not usable.
+    return undefined;
+  }
+}
+
 /**
  * Run an Overpass query, saving the response at `cacheFile` (see `cacheAnswers`). Lagging mirrors
  * answer with old data, or with nothing for an area their index lacks, as successful responses.
  * So a response that is `lagging` or fails `check` is never saved: it is retried on the next
  * server, and a saved one is downloaded again (offline, a lagging one is still used).
+ * Without a usable saved download, another checkout's (`options.copies`) is copied in before
+ * asking Overpass, so a worktree downloads only what its queries changed.
  */
 export async function overpass(
   query: string,
@@ -114,10 +149,21 @@ export async function overpass(
     }
     console.log(`  ${problem} in ${cacheFile}; downloading again`);
   }
+  if (!options.refresh) {
+    for (const copy of options.copies?.(cacheFile) ?? []) {
+      const data = await adopt(copy, cacheFile, query, check);
+      if (data) {
+        console.log(`  copied ${copy}`);
+        return data;
+      }
+    }
+  }
   if (offline) throw new Error(`--offline: no cached download at ${cacheFile}`);
 
   for (let attempt = 1; ; attempt++) {
-    const endpoint = endpoints[(attempt - 1) % endpoints.length]!;
+    const current = endpoints.filter((url) => !behind.has(url));
+    const choices = current.length > 0 ? current : endpoints;
+    const endpoint = choices[(attempt - 1) % choices.length]!;
     console.log(
       `  querying ${new URL(endpoint).host}${attempt > 1 ? ` (attempt ${attempt})` : ''}…`,
     );
@@ -148,7 +194,9 @@ export async function overpass(
       const data = JSON.parse(text) as OverpassResponse;
       // Overpass reports timeouts and memory errors as a remark on an otherwise OK response.
       if (data.remark?.includes('error')) throw new Error(`Overpass: ${data.remark}`);
-      const problem = lagging(data, Date.now()) ?? rejection(check, data);
+      const late = lagging(data, Date.now());
+      if (late) behind.add(endpoint);
+      const problem = late ?? rejection(check, data);
       if (problem) {
         if (attempt >= maxAttempts) throw new Error(`Overpass: ${problem}`);
         await wait(`Overpass: ${problem}`);
