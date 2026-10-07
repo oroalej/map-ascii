@@ -223,6 +223,7 @@ export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as co
  * `taken` of the places filled; and on `lotTaken` of parking lots' stalls.
  */
 export const PARKED = {
+  classes: [LifeLine.roadMid, LifeLine.roadMinor],
   zoom: { min: 17 } as ZoomBand,
   minWidth: 10,
   chance: 0.5,

@@ -1142,7 +1142,7 @@ describe('vehicles and boats', () => {
 describe('parked vehicles', () => {
   const wide = geometry([
     [
-      LifeLine.roadMajor,
+      LifeLine.roadMid,
       [
         [0, 2048],
         [4095, 2048],
@@ -1174,7 +1174,7 @@ describe('parked vehicles', () => {
           { x: a!, y: 2048 },
           { x: z!, y: 2048 },
         ],
-        LifeLine.roadMajor,
+        LifeLine.roadMid,
         14,
         77,
       );

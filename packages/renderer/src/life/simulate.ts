@@ -3573,6 +3573,7 @@ export class TileLife {
       if (a.kind === 'blocked' || a.kind === 'vehicle-blocked' || a.kind === 'parking-exclusion')
         yield* excluded.addSteps(transformPolygon(a.rings, 0, 0, 1 / perMeter));
     const sample: Body[] = [];
+    const curbSources = new Map<Parked, number>();
     const bodyOf = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => ({
       x,
       y,
@@ -3581,7 +3582,14 @@ export class TileLife {
       length: VEHICLES[vehicle].length * perMeter,
       width: VEHICLES[vehicle].width * perMeter,
     });
-    const park = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => {
+    const park = (
+      x: number,
+      y: number,
+      hx: number,
+      hy: number,
+      vehicle: CraftType,
+      line?: number,
+    ) => {
       if (
         this.parked.length + (this.suppressedGround?.parked.hidden.length ?? 0) >=
           MAX_TILE_AGENTS ||
@@ -3616,7 +3624,9 @@ export class TileLife {
         })
       )
         return;
-      this.parked.push({ x, y, hx, hy, vehicle, paint });
+      const record = { x, y, hx, hy, vehicle, paint };
+      this.parked.push(record);
+      if (line !== undefined) curbSources.set(record, line);
     };
     const lots = geo.areas?.filter((a) => a.kind === 'parking');
     for (let i = 0; i < geo.spots.length; i += 4) {
@@ -3681,10 +3691,19 @@ export class TileLife {
           });
           if (!fits) continue;
           // Right of the line's own direction for `side` 1, facing along it; left, facing back.
-          park(p.x - p.hy * offset, p.y + p.hx * offset, p.hx * side, p.hy * side, vehicle);
+          park(p.x - p.hy * offset, p.y + p.hx * offset, p.hx * side, p.hy * side, vehicle, line);
         }
       }
     }
+    // Finish every legacy placement and conditional RNG draw before changing live parking.
+    const eligible = (line: number) => PARKED.classes.some((kind) => kind === geo.kinds[line]);
+    let kept = 0;
+    for (const record of this.parked) {
+      const line = curbSources.get(record);
+      if (line === undefined || eligible(line)) this.parked[kept++] = record;
+    }
+    this.parked.length = kept;
+    for (const line of this.parkingLines) if (!eligible(line)) this.parkingLines.delete(line);
   }
 
   /** Shared vertices, T-junctions and crossings; two continuation arms are just a bend. */
