@@ -6,9 +6,40 @@ import { tileToLngLat } from '../raster/geometry';
 import { outsideView } from './births';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld } from './simulate';
-import { left, right } from './testing/continuity';
+import { left, right, continuityMover } from './testing/continuity';
 import { hashString } from './random';
 import { worldTiles } from './testing/scenarios';
+it('rejects junction-centre fire-truck placement and accepts the clear road beyond its footprint', () => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 0, y: 2000 },
+      { x: 1000, y: 2000 },
+      { x: 4000, y: 2000 },
+    ],
+    LifeLine.roadMajor,
+    12,
+  );
+  b.line(
+    [
+      { x: 1000, y: 0 },
+      { x: 1000, y: 2000 },
+      { x: 1000, y: 4000 },
+    ],
+    LifeLine.roadMajor,
+    12,
+  );
+  const world = new LifeWorld();
+  world.sync([{ key: 'junction', tile: left, life: b.finish() }]);
+  const life = worldTiles(world).get('junction')!,
+    m = continuityMover(life, 1000);
+  m.y = 2000;
+  m.d = 1000;
+  m.vehicle = 'firetruck';
+  expect(life.junctionIndex.canSpawnVehicle(m)).toBe(false);
+  const beyond = life.placeSeed(m, 1000 + 30 * life.perMeter)!;
+  expect(life.junctionIndex.canSpawnVehicle(beyond)).toBe(true);
+});
 
 it('uses CSS margins and a partial contracted edge when its fire station is unloaded', () => {
   const f = dispatchFixture({ source: 'fixture', fire: emergencyConfig.fire }),

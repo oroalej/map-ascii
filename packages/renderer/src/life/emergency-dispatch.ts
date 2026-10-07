@@ -71,10 +71,16 @@ export class EmergencyDispatch {
   }
   private fireTarget(station: string, run: number) {
     const origin = this.router.targets.get(station)!.at;
-    const targets = this.router.network.targets.filter(
-      (t) => t.kind === 'building' && this.router.path(origin, t.id).length,
-    );
-    return targets[hashString(`fire/${run}`) % targets.length]?.id;
+    const targets = this.router.network.targets.filter((t) => t.kind === 'building');
+    const first = hashString(`fire/${run}`) % targets.length;
+    for (let i = 0; i < targets.length; i++) {
+      const target = targets[(first + i) % targets.length]!;
+      if (
+        (this.router.routeAt(origin, target.id)?.cost ?? 0) >= EMERGENCY.approachM &&
+        this.router.path(origin, target.id).length
+      )
+        return target.id;
+    }
   }
   step(
     dt: number,

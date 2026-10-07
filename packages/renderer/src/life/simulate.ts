@@ -3,6 +3,7 @@ import {
   emergencyBeacon,
   emergencyCraft,
   emergencyParked,
+  isUrgent,
   type Beacon,
   type EmergencyState,
 } from './emergency';
@@ -920,6 +921,24 @@ export class TileLife {
   private readonly carriedReady = (movement: Movement) =>
     this.junctionAllowed(movement, this.junctionRoom);
   private readonly trafficGroups = new Map<number, number[]>();
+  private urgentCount = 0;
+  private readonly emergencyYielders = new Map<
+    Mover,
+    { source: Mover; behind: number; feasible: boolean }
+  >();
+  private readonly emergencyOffsets = new Map<Mover, number>();
+  /** Accepted body headings include steering, so a yawed long nose cannot count as clear. */
+  private emergencyPassFits(a: Mover, b: Mover) {
+    const p = this.pose(a),
+      q = this.pose(b),
+      sa = VEHICLES[a.vehicle!],
+      sb = VEHICLES[b.vehicle!];
+    const separation = Math.abs((q.x - p.x) * -a.hy + (q.y - p.y) * a.hx) / this.perMeter;
+    const width = (pose: { hx: number; hy: number }, spec: typeof sa) =>
+      Math.abs(pose.hx * a.hx + pose.hy * a.hy) * spec.width +
+      Math.abs(-pose.hy * a.hx + pose.hx * a.hy) * spec.length;
+    return separation >= (width(p, sa) + width(q, sb)) / 2 + FOLLOW.roadGap + FOLLOW.lateralPad;
+  }
   private readonly trafficGroupBuffers = new Map<number, number[]>();
   /** Aggregate controller counters for deterministic regression/performance fixtures. */
   readonly motionStats = { steps: 0, hardCaps: 0, waiting: 0 };
@@ -4678,9 +4697,13 @@ export class TileLife {
       this.offsets = new Float64Array(size);
     }
     for (const group of this.trafficGroups.values()) group.length = 0;
+    this.urgentCount = 0;
+    this.emergencyYielders.clear();
+    this.emergencyOffsets.clear();
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       if (!m.vehicle || !active(m)) continue;
+      if (isUrgent(m)) this.urgentCount++;
       this.prepareTurn(m, i);
       if (this.junctionIndex.hasLinked) this.prepareSignalRoute(m);
       this.progress[i] = (m.dir * this.along[m.from]! + m.d) / pm;
@@ -4698,6 +4721,43 @@ export class TileLife {
     for (const [key, group] of this.trafficGroups) {
       if (group.length) group.sort((a, b) => this.progress[a]! - this.progress[b]! || a - b);
       else this.trafficGroups.delete(key);
+    }
+    if (this.urgentCount) {
+      const mark = (source: Mover, index: number, behind: number) => {
+        const m = movers[index]!;
+        if (m === source || isUrgent(m) || behind <= 0 || behind > EMERGENCY.yieldAheadM) return;
+        const old = this.emergencyYielders.get(m);
+        if (old && old.behind <= behind) return;
+        const bounds = this.roadShiftBounds(m),
+          passing = this.roadShiftBounds(source),
+          gap =
+            (VEHICLES[m.vehicle!].width + VEHICLES[source.vehicle!].width) / 2 +
+            FOLLOW.roadGap +
+            FOLLOW.lateralPad +
+            0.2;
+        const offset = Math.max(passing[0], Math.min(passing[1], bounds[1] - gap));
+        const feasible = bounds[1] - offset >= gap - 1e-8;
+        this.emergencyYielders.set(m, { source, behind, feasible });
+        this.emergencyOffsets.set(m, bounds[1]);
+        if (feasible) this.emergencyOffsets.set(source, offset);
+      };
+      for (const group of this.trafficGroups.values())
+        for (let k = 0; k < group.length; k++) {
+          const i = group[k]!,
+            source = movers[i]!;
+          if (!isUrgent(source)) continue;
+          for (let n = k + 1; n < group.length; n++)
+            mark(source, group[n]!, this.progress[group[n]!]! - this.progress[i]!);
+          const code = source.routing?.plan?.exit;
+          if (code === undefined || code < 0) continue;
+          const line = code >> 1,
+            dir = code & 1 ? -1 : 1,
+            end = source.dir === 1 ? this.last(source.line) : this.first(source.line),
+            remaining = (source.dir * this.along[end]!) / pm - this.progress[i]!,
+            entry = (dir * this.directedExit(code, end).along) / pm;
+          for (const j of this.trafficGroups.get(line * 2 + (dir === 1 ? 1 : 0)) ?? [])
+            if (this.progress[j]! >= entry) mark(source, j, remaining + this.progress[j]! - entry);
+        }
     }
   }
 
@@ -4799,14 +4859,21 @@ export class TileLife {
     this.junctionRoom = availableRoom ?? this.junctionTraffic.room(m, movement, this);
     return (
       this.junctionRoom >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
-      this.signals.allows(
+      (this.signals.allows(
         m,
         movement.entry?.x ?? movement.junction.x,
         movement.entry?.y ?? movement.junction.y,
         this.junctionClock,
         Math.max(0, movement.ahead),
         movement,
-      ) &&
+      ) ||
+        (isUrgent(m) &&
+          (((movement.ahead <= 0.5 * this.perMeter || this.signals.atStoppingLine(m, movement)) &&
+            (m.v ?? m.speed) <= EMERGENCY.creepMps * this.perMeter) ||
+            [...this.junctionTable.holds(m)].some(
+              (r) =>
+                r.movement.key === movement.key && r.authorizedOutside && r.since !== undefined,
+            )))) &&
       this.junctionClear(movement, this.junctionPedestrians)
     );
   }
@@ -4916,6 +4983,17 @@ export class TileLife {
       const m = movers[i]!;
       speeds[i] = m.speed;
       caps[i] = Infinity;
+      const yielding = this.urgentCount && this.emergencyYielders.get(m);
+      if (yielding && yielding.feasible) {
+        speeds[i] = Math.min(speeds[i]!, EMERGENCY.yieldMps * pm);
+        if (
+          yielding.behind <= EMERGENCY.stopBehindM &&
+          this.emergencyPassFits(yielding.source, m)
+        ) {
+          speeds[i] = 0;
+          caps[i] = 0;
+        }
+      }
       const room =
         m.kind === 'vehicle' && this.geo.oneway?.[m.line] ? this.oneWayEndRoom(m) : undefined;
       if (room !== undefined) {
@@ -4966,7 +5044,13 @@ export class TileLife {
           (movers[i]!.kind === 'vehicle' && movers[j]!.kind === 'vehicle'
             ? FOLLOW.roadGap
             : -FOLLOW.squeeze) ||
-      (curbScenes && this.mergingOverlap(i, j, lane));
+      (curbScenes &&
+        !(
+          this.urgentCount &&
+          ((isUrgent(movers[i]!) && this.emergencyYielders.get(movers[j]!)?.source === movers[i]) ||
+            (isUrgent(movers[j]!) && this.emergencyYielders.get(movers[i]!)?.source === movers[j]))
+        ) &&
+        this.mergingOverlap(i, j, lane));
     for (const group of this.trafficGroups.values())
       for (let k = 0; k < group.length; k++) {
         const i = group[k]!,
@@ -5403,6 +5487,75 @@ export class TileLife {
           for (const r of table.holds(m))
             if (r.inside && r.since !== undefined && r.authorizedOutside)
               clearing.add(r.movement.key);
+          if (isUrgent(m))
+            for (const r of table.holds(m)) {
+              if (
+                !r.authorizedOutside ||
+                r.since === undefined ||
+                !table.canEnter(m, r.movement.key)
+              )
+                continue;
+              clearing.add(r.movement.key);
+              const path = r.movement;
+              for (const key of this.signals.controllerKeys(path)) clearing.add(key);
+              if (
+                !this.signals.allows(
+                  m,
+                  path.entry?.x ?? path.junction.x,
+                  path.entry?.y ?? path.junction.y,
+                  clock,
+                  Math.max(0, path.ahead),
+                  path,
+                )
+              ) {
+                const at = tileToLngLat(this.tile, path.junction),
+                  old = m.emergency!.creep ?? [];
+                if (
+                  !old.some(
+                    (p) => Math.abs(p.at[0] - at[0]) < 1e-9 && Math.abs(p.at[1] - at[1]) < 1e-9,
+                  )
+                )
+                  m.emergency = {
+                    ...m.emergency!,
+                    creep: [
+                      ...old,
+                      {
+                        at,
+                        out: [path.outHx, path.outHy],
+                        radiusM: Math.max(
+                          path.junction.radius / this.perMeter,
+                          this.signals.controllerRadius(path),
+                        ),
+                      },
+                    ],
+                  };
+                limit.target = Math.min(limit.target, EMERGENCY.creepMps * this.perMeter);
+                limit.cap = Math.min(limit.cap, EMERGENCY.creepMps * this.perMeter);
+              }
+            }
+          if (m.emergency?.creep) {
+            const retained = isUrgent(m)
+              ? m.emergency.creep.filter((p) => {
+                  const center = lngLatToTile(this.tile, ...p.at);
+                  return this.groundBodies(m).some((body) =>
+                    bodyCorners(body).some(
+                      (c) =>
+                        ((c.x * this.perMeter - center.x) * p.out[0] +
+                          (c.y * this.perMeter - center.y) * p.out[1]) /
+                          this.perMeter <=
+                        p.radiusM,
+                    ),
+                  );
+                })
+              : [];
+            if (retained.length) {
+              limit.target = Math.min(limit.target, EMERGENCY.creepMps * this.perMeter);
+              limit.cap = Math.min(limit.cap, EMERGENCY.creepMps * this.perMeter);
+            } else {
+              const { creep: _creep, ...state } = m.emergency;
+              m.emergency = state;
+            }
+          }
           intentionalHold = this.signals.vehicleLimit(
             m,
             dt,
@@ -5632,7 +5785,9 @@ export class TileLife {
       const curbTarget =
         parking && parking.remaining < EMERGENCY.approachM
           ? parking.curb - (this.offsetOf(m) - (m.roadShift ?? 0))
-          : undefined;
+          : this.urgentCount && this.emergencyOffsets.has(m)
+            ? this.emergencyOffsets.get(m)! - (this.offsetOf(m) - (m.roadShift ?? 0))
+            : undefined;
       if (
         curbTarget !== undefined &&
         !this.cornerWithin(m, m.from, m.d) &&
@@ -10291,7 +10446,7 @@ export class LifeWorld {
               heading = [candidate.hx, candidate.hy] as const;
             if (kind === 'ambulance') {
               const route = router.routeAt(point, 'hospital', heading);
-              if (!route) continue;
+              if (!route || route.cost < EMERGENCY.approachM) continue;
               candidate.emergency = { ...candidate.emergency!, target: route.target.id };
             } else if (
               kind === 'fire' &&
@@ -10307,6 +10462,11 @@ export class LifeWorld {
                         (leg.toT - p.t) * p.dir >= -0.03,
                     ),
                   ))
+            )
+              continue;
+            if (
+              kind === 'fire' &&
+              (router.routeAt(point, request.target!, heading)?.cost ?? 0) < EMERGENCY.approachM
             )
               continue;
             candidates.push({

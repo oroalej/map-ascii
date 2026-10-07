@@ -12,6 +12,7 @@ import type { Mover, TileLife } from './simulate';
 import { VEHICLES } from './vehicles';
 import { frameBetween } from './frames';
 import { complete } from './cooperate';
+import { isUrgent } from './emergency';
 import type { JunctionTraffic } from './junction-traffic';
 import { binKeys, bodyCorners, type Body, type Point } from './occupancy';
 
@@ -520,6 +521,7 @@ export class JunctionTable {
   private readonly yielded = new Set<Hold>();
   private readonly eligibleRows = new Set<Hold>();
   private readonly compare = (a: Hold, b: Hold) =>
+    Number(isUrgent(b.m)) - Number(isUrgent(a.m)) ||
     Number(this.over(b)) - Number(this.over(a)) ||
     (a.arrival ?? Infinity) - (b.arrival ?? Infinity) ||
     stable(a, b);
@@ -732,6 +734,7 @@ export class JunctionTable {
   }
   private surrender(a: Hold, b: Hold): boolean {
     return (
+      !(isUrgent(a.m) && !isUrgent(b.m)) &&
       !this.yielded.has(a) &&
       b.surrenderedAt !== undefined &&
       !this.over(b) &&
@@ -754,6 +757,7 @@ export class JunctionTable {
   }
   private oncoming(a: Hold, b: Hold): boolean {
     return (
+      !(isUrgent(a.m) && !isUrgent(b.m)) &&
       a !== b &&
       leftTurn(a.movement) &&
       !this.over(a) &&
@@ -906,7 +910,12 @@ export class JunctionTable {
       ordered.length = 0;
       for (let i = 0; i < group.length;) {
         const anchor = group[i]!;
-        if (this.over(anchor) || anchor.arrival === undefined || !anchor.ready) {
+        if (
+          isUrgent(anchor.m) ||
+          this.over(anchor) ||
+          anchor.arrival === undefined ||
+          !anchor.ready
+        ) {
           ordered.push(anchor);
           i++;
           continue;

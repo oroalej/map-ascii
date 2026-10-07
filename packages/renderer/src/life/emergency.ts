@@ -24,6 +24,12 @@ export type EmergencyState = Readonly<{
   remaining: number;
   offscreen: number;
   run: number;
+  /** Earned red entries stay capped until the whole body clears their geographic controller. */
+  creep?: readonly Readonly<{
+    at: readonly [number, number];
+    out: readonly [number, number];
+    radiusM: number;
+  }>[];
 }>;
 export const BEACON_BIT = 16;
 export const BEACON_COLORS = [

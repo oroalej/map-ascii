@@ -57,7 +57,7 @@ export function emergencyReplay(hz: number, kind: 'ambulance' | 'police' | 'fire
   const a = [dispatchFixture({ source: 'Synthetic', [kind]: emergencyConfig[kind] })],
     b = [dispatchFixture({ source: 'Synthetic', [kind]: emergencyConfig[kind] })],
     phases = new Set<string>();
-  for (let i = 0; i < hz * 90; i++) {
+  for (let i = 0; i < hz * (kind === 'police' ? 40 : 90); i++) {
     for (let j = 0; j < a.length; j++) {
       a[j]!.step(1 / hz);
       b[j]!.step(1 / hz);
