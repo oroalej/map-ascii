@@ -76,6 +76,9 @@ export function checkCrossroads(variant: CrossroadsVariant, minimum: number, dur
           expect(arms).toEqual(variant === 'original' ? [0, 1, 2, 3] : [2, 3]);
         // PRE's movement-only guard wrapper measured 0 original and 1 mixed rejection per minimum.
         expect(result.guardRejections).toBeLessThanOrEqual(variant === 'original' ? 0 : 2);
+        // These terminal assertions require all 180 seconds of acceptance coverage.
+        // Secondary-minimum CI files intentionally run only a 30-second smoke window;
+        // the independent PRE comparison still exercises every minimum for 180 seconds.
         if (period === 6) {
           expect(result.windows).toHaveLength(3);
           if (variant === 'mixed') {

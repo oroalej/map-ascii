@@ -185,51 +185,87 @@ describe('accepted road lateral state', () => {
     expect(m.laneSignal).toBeUndefined();
   });
 
-  it('completes a swept return and heading alignment after its protected-stop gap opens', () => {
-    const { life, m } = road();
-    m.d = m.x = 4095 - 31 * pm;
-    m.speed = 8 * pm;
-    m.v = pm;
-    m.lat = -3.2;
-    m.latYaw = 0.15;
-    m.maneuver = { kind: 'lane', target: 0.5, returning: true };
-    m.laneSignal = 'left';
-    const peer = { ...m, lat: undefined, latYaw: undefined, maneuver: undefined };
-    life.movers.push(peer);
-    for (let frame = 0; frame < 3 * 30; frame++) {
-      peer.d = peer.x = m.d;
-      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
-    }
-    expect((4095 - m.d) / pm).toBeCloseTo(LANE.clear);
-    expect(m.maneuver?.kind).toBe('lane');
-    expect(m.maneuver?.returning).toBe(true);
-    expect(m.lat).toBe(-3.2);
-    expect(m.latYaw).not.toBeUndefined();
-    life.movers.pop();
-    const stopped = m.d;
-    let completed = false;
-    for (let frame = 0; frame < 8 * 30; frame++) {
-      const previous = life.pose(m);
-      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
-      const current = life.pose(m);
-      const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
-      const travel =
-        Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
-        radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy);
-      expect(travel).toBeLessThanOrEqual(m.speed / pm / 30 + 1e-8);
-      expect(m.d).toBeCloseTo(stopped);
-      if (!m.maneuver) {
-        completed = true;
-        break;
+  it.each([
+    { dir: 1, lat: -3.2, lane: 0.9, side: 'right' },
+    { dir: 1, lat: 3.2, lane: 0.1, side: 'left' },
+    { dir: -1, lat: -3.2, lane: 0.9, side: 'right' },
+    { dir: -1, lat: 3.2, lane: 0.1, side: 'left' },
+  ] as const)(
+    'completes a swept $side return in direction $dir after its protected-stop gap opens',
+    ({ dir, lat, lane, side }) => {
+      const { life, m } = road(dir);
+      m.d = 4095 - 31 * pm;
+      m.x = dir === 1 ? m.d : 4095 - m.d;
+      m.speed = 8 * pm;
+      m.v = pm;
+      m.lane = lane;
+      m.lat = lat;
+      m.latYaw = 0.15;
+      m.maneuver = { kind: 'lane', target: 0.5, returning: true };
+      m.laneSignal = 'left';
+      const peer = { ...m, lat: undefined, latYaw: undefined, maneuver: undefined };
+      life.movers.push(peer);
+      for (let frame = 0; frame < 3 * 30; frame++) {
+        peer.d = m.d;
+        peer.x = m.x;
+        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
       }
-      expect(m.laneSignal).toBe('right');
-    }
-    expect(completed).toBe(true);
-    expect(m.lat).toBeUndefined();
-    expect(m.latYaw).toBeUndefined();
-    expect(m.laneSignal).toBeUndefined();
-    expect(life.offsetOf(m)).toBeCloseTo(3.2);
-  });
+      expect((4095 - m.d) / pm).toBeCloseTo(LANE.clear);
+      expect(m.maneuver?.kind).toBe('lane');
+      expect(m.maneuver?.returning).toBe(true);
+      expect(m.lat).toBe(lat);
+      expect(m.latYaw).not.toBeUndefined();
+      life.movers.pop();
+      const stopped = m.d;
+      let completed = false;
+      for (let frame = 0; frame < 8 * 30; frame++) {
+        const previous = life.pose(m);
+        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+        const current = life.pose(m);
+        const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
+        const travel =
+          Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
+          radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy);
+        expect(travel).toBeLessThanOrEqual(m.speed / pm / 30 + 1e-8);
+        expect(m.d).toBeCloseTo(stopped);
+        if (!m.maneuver) {
+          completed = true;
+          break;
+        }
+        expect(m.laneSignal).toBe(side);
+      }
+      expect(completed).toBe(true);
+      expect(m.lat).toBeUndefined();
+      expect(m.latYaw).toBeUndefined();
+      expect(m.laneSignal).toBeUndefined();
+      expect(life.offsetOf(m)).toBeCloseTo(-lat);
+    },
+  );
+
+  it.each([1, -1] as const)(
+    'keeps a left return signal while yaw settles in direction %s',
+    (dir) => {
+      const { life, m } = road(dir);
+      m.lane = 0.1;
+      m.lat = 3.2;
+      m.maneuver = { kind: 'return', target: m.lane, returning: true };
+      m.laneSignal = 'left';
+      m.speed = m.v = 8 * pm;
+      let settling = 0;
+      for (let frame = 0; frame < 200 && m.maneuver; frame++) {
+        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+        if (m.maneuver) {
+          expect(m.laneSignal).toBe('left');
+          if (Math.abs(m.lat ?? 0) < 1e-6 && m.latYaw !== undefined) settling++;
+        }
+      }
+      expect(settling).toBeGreaterThan(0);
+      expect(m.maneuver).toBeUndefined();
+      expect(m.lat).toBeUndefined();
+      expect(m.latYaw).toBeUndefined();
+      expect(m.laneSignal).toBeUndefined();
+    },
+  );
 
   it.each([1 / 30, 0.1])('retries a proportional standstill return at dt=%s', (dt) => {
     const { life, m } = road();

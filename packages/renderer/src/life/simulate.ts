@@ -5286,7 +5286,9 @@ export class TileLife {
       const preference = m.chosenLane ?? m.lane;
       if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true)) {
         m.maneuver = { ...state, kind: 'return', target: preference, returning: true };
-        m.laneSignal = this.laneTargetOffset(m, preference) < this.offsetOf(m) ? 'left' : 'right';
+        const goal = this.laneTargetOffset(m, preference),
+          at = this.offsetOf(m);
+        if (Math.abs(goal - at) > 1e-6) m.laneSignal = goal < at ? 'left' : 'right';
       } else if (state.kind === 'return' || !state.returning)
         m.maneuver = { ...state, kind: 'lane', returning: true };
       return;
