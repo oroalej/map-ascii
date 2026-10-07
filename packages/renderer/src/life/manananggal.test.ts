@@ -7,8 +7,46 @@ import { parent, right, continuityMover } from './testing/continuity';
 import { frameBetween } from './frames';
 import { lngLatToTile, tileToLngLat } from '../raster/geometry';
 import { LifeWorld, TileLife, type LifeEnv, type Flock } from './simulate';
-import { LifeBuilder } from './geometry';
+import { LifeBuilder, packFootprints, unpackFootprints } from './geometry';
 import { Habitat } from './birds';
+import { FOLKLORE } from './folklore-config';
+
+it('varies nightly fields and cycle landings across neighboring dates and sequential identities', () => {
+  const t = folkloreTile(),
+    field = unpackFootprints(t.geo.fields)[0]!,
+    roof = unpackFootprints(t.geo.roofs)[0]!;
+  t.geo.fields = packFootprints(
+    Array.from({ length: 12 }, (_, i) => ({ ...field, id: `way/${100000000 + i}` })),
+  );
+  t.geo.roofs = packFootprints(
+    Array.from({ length: 40 }, (_, i) => ({ ...roof, id: `way/${200000000 + i}` })),
+  );
+  const observer = new FolkloreObserver(),
+    geometry = new FolkloreGeometry([t], t),
+    internals = observer as unknown as {
+      selection: { candidate: { id: string } };
+      landing(
+        g: FolkloreGeometry,
+        c: (typeof geometry.candidates)[number],
+        night: number,
+        cycle: number,
+      ): { id: string };
+    },
+    fields = new Set<string>(),
+    landings = new Set<string>();
+  observer.setConfig(folkloreConfig);
+  for (let i = 0; i < 30; i++) {
+    observer.step([t], { minutes: 1320, calendar: calendar(11, i + 1), clock: 0, dt: 0 });
+    fields.add(internals.selection.candidate.id);
+    const landing = internals.landing(geometry, geometry.candidates[0]!, calendar(11).epochDay, i);
+    landings.add(landing.id);
+    expect(internals.landing(geometry, geometry.candidates[0]!, calendar(11).epochDay, i)).toEqual(
+      landing,
+    );
+  }
+  expect(fields.size).toBeGreaterThanOrEqual(8);
+  expect(landings.size).toBeGreaterThanOrEqual(15);
+});
 
 it('flies, approaches a solid roof continuously, lands and returns by the civil boundary', () => {
   const t = folkloreTile(),
@@ -27,6 +65,20 @@ it('flies, approaches a solid roof continuously, lands and returns by the civil 
   expect(at(timing.flight + 1).at).toEqual(roof.at);
   expect(at(timing.flight + 1).pose).toBe('perched');
   const depart = timing.flight + timing.landing;
+  for (const elapsed of [
+    FOLKLORE.departure / 2,
+    timing.flight - FOLKLORE.approach / 2,
+    depart + FOLKLORE.departure / 2,
+  ]) {
+    const current = at(elapsed),
+      next = at(elapsed + 0.1),
+      dx = next.at.x - current.at.x,
+      dy = next.at.y - current.at.y;
+    expect(Math.cos(current.heading) * dx + Math.sin(current.heading) * dy).toBeCloseTo(
+      Math.hypot(dx, dy),
+      8,
+    );
+  }
   expect(distance(at(depart - 0.001).at, at(depart + 0.001).at)).toBeLessThan(0.01);
   expect(at(12).at).not.toEqual(at(13).at);
   expect(at(20, 0).at).toEqual(c.lower);
@@ -44,12 +96,16 @@ it('preserves latched world anchors and elapsed pose through parent/fine ownersh
   const f = frameBetween(t.tile, parent),
     point = (p: { x: number; y: number }) => ({ x: f.x + p.x * f.scale, y: f.y + p.y * f.scale }),
     geo = structuredClone(t.geo);
-  geo.fields = geo.fields!.map((s) => ({ ...s, rings: s.rings.map((r) => r.map(point)) }));
-  geo.roofs = geo.roofs!.map((s) => ({
-    ...s,
-    anchor: point(s.anchor),
-    rings: s.rings.map((r) => r.map(point)),
-  }));
+  geo.fields = packFootprints(
+    unpackFootprints(geo.fields).map((s) => ({ ...s, rings: s.rings.map((r) => r.map(point)) })),
+  );
+  geo.roofs = packFootprints(
+    unpackFootprints(geo.roofs).map((s) => ({
+      ...s,
+      anchor: point(s.anchor),
+      rings: s.rings.map((r) => r.map(point)),
+    })),
+  );
   step([{ ...t, key: 'parent', tile: parent, perMeter: t.perMeter * f.scale, geo }]);
   expect(o.packet(16, folkloreCenter)).toEqual(saved);
   step([t]);
@@ -117,14 +173,14 @@ it('latches one selection and landing through arrivals, releases missing active 
   expect(original).toHaveLength(2);
   expect(o.packet(16, folkloreCenter).haunts).toHaveLength(1);
   const extra = { ...t, key: 'new', geo: structuredClone(t.geo), owns: () => true };
-  extra.geo.fields![0]!.id = 'lower-hash-farmland';
-  extra.geo.fields![0]!.kind = 'farmland';
+  extra.geo.fields!.items[0]!.id = 'lower-hash-farmland';
+  extra.geo.fields!.items[0]!.kind = 'farmland';
   step(6, [extra, t]);
   expect(o.packet(16, folkloreCenter).sprites).toEqual(original);
   const equivalent = { ...t, geo: structuredClone(t.geo) };
   step(6, [equivalent]);
   expect(o.packet(16, folkloreCenter).sprites).toEqual(original);
-  const missing = { ...t, geo: { ...t.geo, roofs: [], fields: [] } };
+  const missing = { ...t, geo: { ...t.geo, roofs: undefined, fields: undefined } };
   step(7, [missing]);
   expect(o.packet(16, folkloreCenter).sprites).toEqual([]);
   expect(o.manananggal).toBeUndefined();
@@ -144,8 +200,8 @@ it('latches one selection and landing through arrivals, releases missing active 
 it('selects independently of tile enumeration and releases each required anchor separately', () => {
   const t = folkloreTile(),
     extra = { ...t, key: 'another', geo: structuredClone(t.geo) };
-  extra.geo.fields![0]!.id = 'farmland';
-  extra.geo.fields![0]!.kind = 'farmland';
+  extra.geo.fields!.items[0]!.id = 'farmland';
+  extra.geo.fields!.items[0]!.kind = 'farmland';
   const sample = (tiles: (typeof t)[]) => {
     const o = new FolkloreObserver();
     o.setConfig(folkloreConfig);
@@ -169,15 +225,18 @@ it('selects independently of tile enumeration and releases each required anchor 
       }
     ).selection;
     const geo = structuredClone(t.geo);
-    if (anchor === 'field') geo.fields = geo.fields!.filter((f) => f.id !== selected.candidate.id);
+    if (anchor === 'field')
+      geo.fields = packFootprints(
+        unpackFootprints(geo.fields).filter((f) => f.id !== selected.candidate.id),
+      );
     else {
       const id = anchor === 'centre' ? selected.candidate.centre.id : selected.landing.id;
-      geo.roofs = geo.roofs!.filter((r) => r.id !== id);
+      geo.roofs = packFootprints(unpackFootprints(geo.roofs).filter((r) => r.id !== id));
     }
     o.step([{ ...t, geo }], { minutes: 1320, calendar: calendar(11), clock: 7, dt: 1 });
     expect(o.packet(16, folkloreCenter)).toEqual({ sprites: [], haunts: [] });
     expect(o.manananggal).toBeUndefined();
   }
-  const invalid = { ...t, geo: { ...t.geo, fields: [] } };
+  const invalid = { ...t, geo: { ...t.geo, fields: undefined } };
   expect(sample([invalid]).sprites).toEqual([]);
 });

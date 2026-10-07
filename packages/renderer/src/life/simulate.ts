@@ -7387,7 +7387,7 @@ export class LifeWorld {
               (m.kind !== 'person' && m.kind !== 'vehicle') ||
               !inTile(m) ||
               !this.owns(life, m) ||
-              (this.lastLevels && m.rank >= this.lastLevels[m.kind])
+              !life.visibleMover(m, this.lastLevels, this.lastCrowd)
             )
               continue;
             const p = life.pose(m, pose),
@@ -7996,6 +7996,7 @@ export class LifeWorld {
   private live: { id: string; progress: number; occurrence?: string } | undefined;
   /** Who is out and how hard it rains, as last drawn (`visible`): the flocks react to them. */
   private lastLevels: Activity | undefined;
+  private lastCrowd = 1;
   private lastRain = 0;
   readonly emojiMemory = new EmojiMemory();
   private emojiView?: LifeEnv['emojiView'];
@@ -8627,6 +8628,7 @@ export class LifeWorld {
       sandbox.seasonalConfig = this.seasonalConfig;
       sandbox.seasonalTerrainKey = terrain.seasonalKey;
       sandbox.lastLevels = this.lastLevels;
+      sandbox.lastCrowd = this.lastCrowd;
       sandbox.mixedZoom = [...next.values()].some(
         (life) => life.tile.z !== next.values().next().value!.tile.z,
       );
@@ -10997,6 +10999,7 @@ export class LifeWorld {
     const levels =
       typeof levelsOrDaylight === 'number' ? activityLevels(levelsOrDaylight) : levelsOrDaylight;
     this.lastLevels = levels;
+    this.lastCrowd = crowd;
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];

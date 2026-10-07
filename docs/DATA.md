@@ -134,6 +134,8 @@ The small traffic query also fetches `highway=stop` nodes. Resolved signals gene
 
 Optional `life.emergency` supplies per-kind `max` (0–3) and `[min,max]` simulated-second intervals. Ambulance/fire include `dwell_s`; police include `call_every_s` and `call_s`. At least one kind and a `source` are required. `exclude` lists station OSM identities to omit. These are illustrative settings, without dispatch or construction-history claims. Step 08 validates the generated `CityEmergency` payload and its graph/target references; the browser uses the corresponding plain codec guard.
 
+Optional `life.folklore` enables illustrative nighttime ghosts and a seasonal manananggal. `hours.from` and `hours.to` are city-local integer minutes (0–1439), must differ, and may wrap midnight. `ghosts.sites` is a nonempty, unique selection of `cemetery`, `worship`, and `hospital`; `per_cemetery` and `undas_per_cemetery` are ascending integer `[min,max]` counts (1–16). `site_share` and `manananggal.night_chance` are probabilities (0–1). `range_m` is an ascending positive `[min,max]` range in metres, at most 200. `undas_season` must name a season in the same pack's `life.seasons`; `manananggal.window` uses the annual season-window schema. Nonempty `sources` are required and describe folklore and illustrative settings, without claims about individual sites. Field/roof sidecars come from existing mapped geometry at runtime; this block requires no new tile archive or geographic edits.
+
 ```ts
 City {                           // cities/<slug>/city.json
   slug: string;                  // "naga", also the route and file prefix
@@ -173,6 +175,7 @@ City {                           // cities/<slug>/city.json
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
   life?: {
     emergency?: EmergencyConfig; // optional illustrative vehicles and OSM station exclusions
+    folklore?: FolkloreConfig; // optional sourced ghosts and seasonal manananggal
     // Annual illustrative decorations; source calendars and placement estimates.
     seasons?: Season[];
     // Source each mode override or missing site. Give exactly one of osm_id or position.

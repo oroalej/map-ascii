@@ -40,31 +40,35 @@ export function manananggalPose(
       y: candidate.centre.at.y + Math.sin(angle) * radius + Math.cos(time * 1.6 + seed) * 2,
     };
   };
-  let at = orbit(elapsed),
-    pose: 'flying' | 'perched' = 'flying';
-  if (cycle === 0 && age < FOLKLORE.departure)
-    at = mixPoint(candidate.lower, orbit(FOLKLORE.departure), smooth(age / FOLKLORE.departure));
-  else if (age >= timing.flight - FOLKLORE.approach && age < timing.flight)
-    at = mixPoint(
-      orbit(cycle * timing.span + timing.flight - FOLKLORE.approach),
-      landing.at,
-      smooth((age - timing.flight + FOLKLORE.approach) / FOLKLORE.approach),
-    );
-  else if (age >= timing.flight && age < timing.flight + timing.landing) {
-    at = landing.at;
-    pose = 'perched';
-  } else if (age >= timing.flight + timing.landing)
-    at = mixPoint(
-      landing.at,
-      orbit((cycle + 1) * timing.span),
-      smooth((age - timing.flight - timing.landing) / FOLKLORE.departure),
-    );
+  const position = (time: number): Point => {
+    const cycle = Math.floor(time / timing.span),
+      age = time - cycle * timing.span;
+    if (cycle === 0 && age < FOLKLORE.departure)
+      return mixPoint(candidate.lower, orbit(FOLKLORE.departure), smooth(age / FOLKLORE.departure));
+    if (age >= timing.flight - FOLKLORE.approach && age < timing.flight)
+      return mixPoint(
+        orbit(cycle * timing.span + timing.flight - FOLKLORE.approach),
+        landing.at,
+        smooth((age - timing.flight + FOLKLORE.approach) / FOLKLORE.approach),
+      );
+    if (age >= timing.flight && age < timing.flight + timing.landing) return landing.at;
+    if (age >= timing.flight + timing.landing)
+      return mixPoint(
+        landing.at,
+        orbit((cycle + 1) * timing.span),
+        smooth((age - timing.flight - timing.landing) / FOLKLORE.departure),
+      );
+    return orbit(time);
+  };
+  let at = position(elapsed),
+    pose: 'flying' | 'perched' =
+      age >= timing.flight && age < timing.flight + timing.landing ? 'perched' : 'flying';
   if (remainingMinutes <= FOLKLORE.returnMinutes) {
     at = mixPoint(at, candidate.lower, smooth(1 - remainingMinutes / FOLKLORE.returnMinutes));
     pose = 'flying';
   }
   const future =
-    remainingMinutes <= FOLKLORE.returnMinutes ? candidate.lower : orbit(elapsed + 0.1);
+    remainingMinutes <= FOLKLORE.returnMinutes ? candidate.lower : position(elapsed + 0.1);
   const heading = distance(at, future) > 1e-9 ? Math.atan2(future.y - at.y, future.x - at.x) : 0;
   return {
     at,

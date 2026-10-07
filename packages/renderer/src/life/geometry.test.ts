@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { VEHICLE_TYPES } from '@atlas/shared';
-import { LifeBuilder, LifeLine, lifeTransferables, type LifeGeometry } from './geometry';
+import {
+  LifeBuilder,
+  LifeLine,
+  lifeTransferables,
+  unpackFootprints,
+  type LifeGeometry,
+} from './geometry';
 import { JUNCTION, ROAD_SPLIT_CLEARANCE_M, SIGNAL } from './config';
 import { VEHICLES } from './vehicles';
 
 const clearance = ROAD_SPLIT_CLEARANCE_M;
 
-it('clones folklore footprints and retains identities without changing place admission', () => {
+it('transfers packed folklore footprints and retains identities without changing place admission', () => {
   const b = new LifeBuilder();
   const ring = [
     { x: 10, y: 10 },
@@ -27,8 +33,13 @@ it('clones folklore footprints and retains identities without changing place adm
   expect(geo.worshipIds!.at(-1)).toEqual([39, 'church/39']);
   const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
   expect(copy.hospitals).toEqual([{ id: 'hospital', x: 30, y: 40, radius: 20 }]);
-  expect(copy.fields![0]!.rings[0]![0]!.x).toBe(10);
-  expect(copy.roofs![0]!.anchor).toEqual({ x: 50, y: 50 });
+  expect(unpackFootprints(copy.fields)[0]!.rings[0]![0]!.x).toBe(10);
+  expect(unpackFootprints(copy.roofs)[0]!.anchor).toEqual({ x: 50, y: 50 });
+  for (const packed of [geo.fields!, geo.roofs!]) {
+    expect(packed.coords.byteLength).toBe(0);
+    expect(packed.ringStarts.byteLength).toBe(0);
+    expect(packed.polygonStarts.byteLength).toBe(0);
+  }
 });
 
 it('deduplicates full marker identities without dropping compact-seed collisions', () => {

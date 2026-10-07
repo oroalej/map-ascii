@@ -9,6 +9,9 @@ import {
   PLACE_CODES,
   PLACE_STRIDE,
   TILE_QUANTIZATION_TOLERANCE,
+  unpackFootprints,
+  type LifeField,
+  type LifeRoof,
   type LifeGeometry,
 } from './geometry';
 import { hashString, random } from './random';
@@ -42,8 +45,8 @@ export type Candidate = {
 const localGeometry = new WeakMap<
   LifeGeometry,
   {
-    fields: (NonNullable<LifeGeometry['fields']>[number] & { edges: Point[] })[];
-    roofs: NonNullable<LifeGeometry['roofs']>;
+    fields: (LifeField & { edges: Point[] })[];
+    roofs: LifeRoof[];
     worship: Map<number, string>;
   }
 >();
@@ -51,13 +54,13 @@ function localData(geo: LifeGeometry) {
   let data = localGeometry.get(geo);
   if (!data) {
     data = {
-      fields: (geo.fields ?? []).map((field) => ({
+      fields: unpackFootprints(geo.fields).map((field) => ({
         ...field,
         edges: (field.rings[0] ?? [])
           .slice(1)
           .map((point, i) => mixPoint(field.rings[0]![i]!, point, 0.5)),
       })),
-      roofs: (geo.roofs ?? []).filter((roof) => insidePolygon(roof.rings, roof.anchor)),
+      roofs: unpackFootprints(geo.roofs).filter((roof) => insidePolygon(roof.rings, roof.anchor)),
       worship: new Map(geo.worshipIds),
     };
     localGeometry.set(geo, data);

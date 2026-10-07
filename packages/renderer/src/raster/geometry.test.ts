@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
-import { graveSeed, lifeTransferables } from '../life/geometry';
+import { graveSeed, lifeTransferables, unpackFootprints } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import { pointInside } from '../life/occupancy';
@@ -86,13 +86,15 @@ it('extracts mapped hospital identities, field holes and solid roof anchors as s
   expect(geo.hospitals!.map((site) => site.id)).toEqual(['hospital/point', 'hospital/roof']);
   expect(geo.places).toHaveLength(2 * PLACE_STRIDE); // worship and the existing farmland population
   expect(geo.worshipIds).toEqual([[0, 'church']]);
-  expect(geo.fields![0]!.rings).toHaveLength(2);
-  expect(geo.roofs!.map((r) => r.id)).toEqual(['hospital/roof', 'church']);
-  for (const r of geo.roofs!) expect(insidePolygon(r.rings, r.anchor)).toBe(true);
-  expect(insidePolygon(geo.roofs![0]!.rings, ringCentroid(geo.roofs![0]!.rings[0]!))).toBe(false);
+  const fields = unpackFootprints(geo.fields),
+    roofs = unpackFootprints(geo.roofs);
+  expect(fields[0]!.rings).toHaveLength(2);
+  expect(roofs.map((r) => r.id)).toEqual(['hospital/roof', 'church']);
+  for (const r of roofs) expect(insidePolygon(r.rings, r.anchor)).toBe(true);
+  expect(insidePolygon(roofs[0]!.rings, ringCentroid(roofs[0]!.rings[0]!))).toBe(false);
   const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
-  expect(copy.roofs).toEqual(geo.roofs);
-  expect(copy.fields).toEqual(geo.fields);
+  expect(unpackFootprints(copy.roofs)).toEqual(roofs);
+  expect(unpackFootprints(copy.fields)).toEqual(fields);
 });
 
 it.each([

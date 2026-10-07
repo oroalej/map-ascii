@@ -3,6 +3,7 @@ import { lngLatToTile, insidePolygon } from '../raster/geometry';
 import { FolkloreObserver, folkloreNight, ghostCount, type FolkloreBody } from './folklore';
 import { LifeWorld } from './simulate';
 import { continuityMover } from './testing/continuity';
+import { packFootprints, unpackFootprints } from './geometry';
 import { FolkloreGeometry, segmentInside, distance } from './folklore-geometry';
 import {
   calendar,
@@ -180,19 +181,63 @@ describe('ghost observer', () => {
     expect(Math.abs(-dx * body.hy + dy * body.hx)).toBeLessThan(body.width / 2 + 0.35);
   });
 
+  it('observes only drawn movers under crowd reduction and scene hiding', () => {
+    const t = folkloreTile(),
+      world = new LifeWorld();
+    world.setFolklore(folkloreConfig);
+    world.sync([{ key: t.key, tile: t.tile, life: t.geo }]);
+    const life = world.resident(t.key)!,
+      geometry = new FolkloreGeometry([t], t),
+      ghost = geometry.world(t, { x: 2700, y: 2600 }),
+      shown = continuityMover(life, 1000, 'person'),
+      reduced = continuityMover(life, 1100, 'person'),
+      hidden = continuityMover(life, 1200, 'person');
+    shown.rank = hidden.rank = 0;
+    reduced.rank = 0.5;
+    life.movers.length = 0;
+    life.movers.push(shown, reduced, hidden);
+    vi.spyOn(life.scenes, 'hidden').mockImplementation((m) => m === hidden);
+    vi.spyOn(life, 'pose').mockImplementation((_m, out = { x: 0, y: 0, hx: 1, hy: 0 }) => {
+      Object.assign(out, { x: 2700, y: 2600 });
+      return out;
+    });
+    const observer = (world as unknown as { folklore: FolkloreObserver }).folklore;
+    let observed: readonly FolkloreBody[] = [];
+    vi.spyOn(observer, 'step').mockImplementation((_tiles, _env, bodies) => {
+      observed = bodies!(geometry, [ghost]);
+    });
+    const sample = () =>
+      (world as unknown as { sampleFolklore(weather: undefined, dt: number): void }).sampleFolklore(
+        undefined,
+        0,
+      );
+    world.visible(18, 1, folkloreCenter, undefined, undefined, 0.3);
+    sample();
+    expect(observed).toHaveLength(1);
+    world.visible(18, 1, folkloreCenter, undefined, undefined, 1);
+    sample();
+    expect(observed).toHaveLength(2);
+  });
+
   it('does no roof-neighborhood distance work without fields, even on a dense tile', () => {
     const t = folkloreTile();
     t.geo = {
       ...t.geo,
-      fields: [],
+      fields: undefined,
       hospitals: [],
       cemeteryAreas: [],
       places: new Float32Array(),
-      roofs: Array.from({ length: 1600 }, (_, i) => {
-        const x = 20 + (i % 40) * 90,
-          y = 20 + Math.floor(i / 40) * 90;
-        return { id: `roof/${i}`, rings: [rectangle(x, y, 30)], anchor: { x: x + 15, y: y + 15 } };
-      }),
+      roofs: packFootprints(
+        Array.from({ length: 1600 }, (_, i) => {
+          const x = 20 + (i % 40) * 90,
+            y = 20 + Math.floor(i / 40) * 90;
+          return {
+            id: `roof/${i}`,
+            rings: [rectangle(x, y, 30)],
+            anchor: { x: x + 15, y: y + 15 },
+          };
+        }),
+      ),
     };
     const hypot = vi.spyOn(Math, 'hypot');
     try {
@@ -207,9 +252,9 @@ describe('ghost observer', () => {
 
   it('requires distinct owned roof identities and keeps nearest-center identity ties stable', () => {
     const t = folkloreTile(),
-      roof = t.geo.roofs![0]!;
+      roof = unpackFootprints(t.geo.roofs)[0]!;
     const geometry = (ids: string[]) => {
-      const geo = { ...t.geo, roofs: ids.map((id) => ({ ...roof, id })) };
+      const geo = { ...t.geo, roofs: packFootprints(ids.map((id) => ({ ...roof, id }))) };
       return new FolkloreGeometry([{ ...t, geo }], t);
     };
     expect(geometry(['a', 'a', 'b']).candidates).toEqual([]);

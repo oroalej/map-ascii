@@ -153,7 +153,7 @@ export class FolkloreObserver {
   private landing(geometry: FolkloreGeometry, candidate: Candidate, night: number, cycle: number) {
     return geometry
       .roofsNear(candidate.centre.at, FOLKLORE.roofRadius)
-      .map((roof) => ({ roof, rank: hashString(`${roof.id}/${night}/${cycle}`) }))
+      .map((roof) => ({ roof, rank: unitHash(`${roof.id}/${night}/${cycle}`) }))
       .sort((a, b) => a.rank - b.rank || a.roof.id.localeCompare(b.roof.id))[0]?.roof;
   }
   step(
@@ -220,14 +220,14 @@ export class FolkloreObserver {
     if (night.manananggal && !this.selection) {
       const farmland = geometry.candidates.filter((c) => c.kind === 'farmland');
       const candidate = (farmland.length ? farmland : geometry.candidates)
-        .slice()
+        .map((candidate) => ({ candidate, rank: unitHash(`${candidate.id}/${night.day}`) }))
         .sort(
           (a, b) =>
-            hashString(`${a.id}/${night.day}`) - hashString(`${b.id}/${night.day}`) ||
-            a.id.localeCompare(b.id) ||
-            a.lower.x - b.lower.x ||
-            a.lower.y - b.lower.y,
-        )[0];
+            a.rank - b.rank ||
+            a.candidate.id.localeCompare(b.candidate.id) ||
+            a.candidate.lower.x - b.candidate.lower.x ||
+            a.candidate.lower.y - b.candidate.lower.y,
+        )[0]?.candidate;
       const landing = candidate && this.landing(geometry, candidate, night.day, 0);
       if (candidate && landing)
         this.selection = {
