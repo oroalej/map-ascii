@@ -496,7 +496,7 @@ export class EmojiObserver {
     observations: readonly EmojiObservation[],
     purchases: readonly { mover: Mover; stall: Stall; key: object }[] = [],
     completions: readonly { token: object; owners: readonly object[] }[] = [],
-    startled: readonly Flock[] = [],
+    startled: readonly object[] = [],
   ) {
     dt = env.emojiTime?.dt ?? dt;
     this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
@@ -545,7 +545,7 @@ export class EmojiObserver {
       if (o.subject === 'bird') {
         t.epoch = this.epoch;
         t.clock = this.clock;
-        if (startled.includes(o.owner as Flock)) t.edges.add('scared');
+        if (startled.includes(o.owner)) t.edges.add('scared');
         continue;
       }
       if (gap) {

@@ -94,10 +94,19 @@ describe('birds keep clear of the mouse', () => {
 
   it('points directly away during a correction and handles an exact-centre pointer', () => {
     const f = birdFixture('swallow', { roost: false });
-    const before = { x: f.flock.x, y: f.flock.y };
-    f.step(birdLngLat(20, 0));
-    expect(f.flock.x - before.x).toBeGreaterThan(0);
-    expect(f.flock.hy).toBeCloseTo(0);
+    Object.assign(f.flock, birdPoint(0, 0), { hx: 0.6, hy: 0.8 });
+    const before = { x: f.flock.x, y: f.flock.y, hx: f.flock.hx, hy: f.flock.hy };
+    const pointer = birdLngLat(0, 0);
+    expect(lngLatToTile(birdTile, ...pointer)).toEqual({ x: before.x, y: before.y });
+    f.step(pointer);
+    const dx = f.flock.x - before.x;
+    const dy = f.flock.y - before.y;
+    const distance = Math.hypot(dx, dy);
+    expect(distance).toBeGreaterThan(0);
+    expect(dx / distance).toBeCloseTo(before.hx);
+    expect(dy / distance).toBeCloseTo(before.hy);
+    expect(f.flock.hx).toBeCloseTo(before.hx);
+    expect(f.flock.hy).toBeCloseTo(before.hy);
     expect(Math.hypot(f.flock.hx, f.flock.hy)).toBeCloseTo(1);
   });
 
@@ -126,6 +135,39 @@ describe('birds keep clear of the mouse', () => {
     for (let i = 0; i < 200 && !f.flock.perched; i++) f.step();
     expect(f.flock.perched).toBe(true);
   });
+
+  it.each(['perched', 'ground', 'scattered'] as const)(
+    'matches the visible extent of every bird in a %s layout',
+    (layout) => {
+      const f = birdFixture();
+      const bird = f.flock.birds[0]!;
+      f.flock.birds.push({ ...bird, ox: -3 * birdPerMeter, oy: birdPerMeter, phase: 0.37 });
+      if (layout === 'perched') f.flock.perched = true;
+      else if (layout === 'ground') {
+        f.flock.landed = true;
+        f.flock.birds.forEach((b, i) =>
+          Object.assign(b, {
+            gx: (i + 1) * 4 * birdPerMeter,
+            gy: -2 * birdPerMeter,
+            tx: (i + 1) * 4 * birdPerMeter,
+            ty: -2 * birdPerMeter,
+            face: 0,
+            wait: 100,
+          }),
+        );
+      } else f.flock.scatter = PERCH.scatter * 0.7;
+      const views = f.visible();
+      expect(views).toHaveLength(f.flock.birds.length);
+      const visibleExtent = Math.max(
+        ...views.map((view) => {
+          const at = lngLatToTile(birdTile, view.lng, view.lat);
+          return Math.hypot(at.x - f.flock.x, at.y - f.flock.y);
+        }),
+      );
+      const extent = f.life as unknown as { flockExtent(flock: Flock): number };
+      expect(extent.flockExtent(f.flock)).toBeCloseTo(visibleExtent, 5);
+    },
+  );
 
   it.each(['landing', 'departure'] as const)(
     'includes %s-blended positions in clearance',
