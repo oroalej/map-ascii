@@ -1,3 +1,4 @@
+import { emergencyBeacon, emergencyParked, type Beacon, type EmergencyState } from './emergency';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -430,6 +431,7 @@ const handoffHalf = (a: number, b: number) =>
 
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
+  emergency?: EmergencyState;
   crossingWait?: CrossingWaitState;
   /** Displayed social heading, separate from the navigation cursor and detour. */
   momentFacing?: { hx: number; hy: number };
@@ -6877,6 +6879,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  beacon?: Beacon;
   /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
   mappedPersonMover?: boolean;
   /** Serializable event membership for discarding a superseded formation on host commands. */
@@ -10334,7 +10337,7 @@ export class LifeWorld {
             ? visibleLamps(
                 m.vehicle,
                 effects?.brake,
-                life.scenes.held(m),
+                life.scenes.held(m) || emergencyParked(m),
                 m.routing,
                 inspection?.clock(m, this.clock) ?? this.clock,
               )
@@ -10354,6 +10357,15 @@ export class LifeWorld {
             flap: 0,
           };
           if (lamps) agent.lamps = lamps;
+          if (m.emergency) {
+            if (emergencyParked(m)) agent.parked = true;
+            const beacon = emergencyBeacon(
+              m.emergency,
+              m.routing?.seed ?? 0,
+              inspection?.clock(m, this.clock) ?? this.clock,
+            );
+            if (beacon) agent.beacon = beacon;
+          }
           if (collectPuffs && effects?.sourceId !== undefined)
             this.actorSources.set(agent, effects.sourceId);
           push(m, agent);
