@@ -49,10 +49,7 @@ export function ArtView({ art }: { art: LandmarkArt }) {
       <pre className={styles.art} aria-hidden="true">
         {rows}
       </pre>
-      <figcaption className={styles.caption}>
-        {art.title}
-        {art.status === 'draft' && <span className={styles.draft}>draft drawing</span>}
-      </figcaption>
+      <figcaption className={styles.caption}>{art.title}</figcaption>
     </figure>
   );
 }

@@ -243,7 +243,7 @@ Shop areas without a building or another rendered area class receive one interio
 
 **Landmark facts**
 - A non-modal dialog beside the selected landmark on desktop, flipping or shifting within the visible canvas viewport. It follows pans, zooms, flights and resizes, and hides while its anchor is unresolved or off screen without clearing the selection. At 640 CSS pixels or below, the same content appears in a bottom sheet with expand, close and swipe-to-close controls.
-- Contents: type, name, subdivision, years when known, 3–5 short facts with source links and exact/circa dates, an optional Drawing disclosure, story, sources and an OpenStreetMap link. Photos and timeline actions remain future work.
+- Contents: type, name, subdivision, years when known, 3–5 short facts with source links and exact/circa dates, an optional Drawing disclosure, story and sources. Photos and timeline actions remain future work.
 - Keyboard selection focuses the heading once when the dialog becomes visible. Pointer and programmatic selection preserve focus.
 - The legend hides only while the facts shell is visible.
 

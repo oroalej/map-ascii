@@ -190,7 +190,7 @@ it('shows sourced facts, follows the camera, hides offscreen and remeasures on r
   expect(dialog()!.querySelector('sup a')?.getAttribute('href')).toBe(
     'https://example.org/history',
   );
-  expect(dialog()!.querySelector('a[href="https://www.openstreetmap.org/node/1"]')).not.toBeNull();
+  expect(dialog()!.textContent).not.toContain('View on OpenStreetMap');
   const before = dialog()!.style.transform;
   projected = [210, 220];
   act(() => cameraChanged!());

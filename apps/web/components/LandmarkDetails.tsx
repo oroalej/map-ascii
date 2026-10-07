@@ -32,7 +32,6 @@ export function LandmarkDetails({
       : end !== undefined
         ? `Until ${circa}${end}`
         : null;
-  const osm = /^osm:(node|way|relation)\/(\d+)$/.exec(landmark.osm_id ?? '');
   return (
     <>
       <header className={styles.header}>
@@ -130,17 +129,6 @@ export function LandmarkDetails({
           ))}
         </ul>
       </section>
-      {osm && (
-        <p className={styles.links}>
-          <a
-            href={`https://www.openstreetmap.org/${osm[1]}/${osm[2]}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View on OpenStreetMap
-          </a>
-        </p>
-      )}
     </>
   );
 }

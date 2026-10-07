@@ -21,15 +21,6 @@
   color: var(--fg-dim);
 }
 
-.draft {
-  margin-left: 8px;
-  padding: 0 4px;
-  border: 1px solid var(--fg-dim);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
 /* Palette roles (the pack's art palette → theme colors). */
 .stone {
   color: #d9cbb0;
