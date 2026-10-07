@@ -302,6 +302,49 @@ export class JunctionIndex {
     if (found.length > 1) found.sort(compareMovements);
     return found;
   }
+  /** Match rear release at the actual route stop, including bends inside its setback. */
+  storageClear(m: Mover, first: Movement, remaining: number, life: TileLife): boolean {
+    let line = first.exit.line,
+      dir = first.exit.out,
+      progress = first.exit.along;
+    if (remaining < 0 || !Number.isFinite(remaining)) return false;
+    // Indexed requests stop before revisiting a directed line. Keep corrupt or
+    // abandoned routes bounded too, without allocating a per-query visited set.
+    for (let hops = 0; hops < this.geo.kinds.length * 2; hops++) {
+      const start = this.geo.starts[line],
+        end = (this.geo.starts[line + 1] ?? 0) - 1;
+      if (start === undefined || end <= start) return false;
+      const available = dir * (this.along[dir === 1 ? end : start]! - progress);
+      if (remaining <= available) {
+        const at = progress + dir * remaining;
+        let low = start,
+          high = end;
+        while (high - low > 1) {
+          const mid = (low + high) >>> 1;
+          if (this.along[mid]! <= at) low = mid;
+          else high = mid;
+        }
+        const length = this.along[high]! - this.along[low]!;
+        if (length <= 0) return false;
+        const t = (at - this.along[low]!) / length,
+          coords = this.geo.coords,
+          x = coords[low * 2]! + (coords[high * 2]! - coords[low * 2]!) * t,
+          y = coords[low * 2 + 1]! + (coords[high * 2 + 1]! - coords[low * 2 + 1]!) * t;
+        return (
+          (x - (first.exit.x ?? first.junction.x)) * first.outHx +
+            (y - (first.exit.y ?? first.junction.y)) * first.outHy >
+          first.junction.radius + (VEHICLES[m.vehicle!].length * this.pm) / 2
+        );
+      }
+      remaining -= available;
+      const code = life.seamExit(m, line, dir);
+      if (code === undefined || code < 0) return false;
+      line = code >> 1;
+      dir = code & 1 ? -1 : 1;
+      progress = this.along[dir === 1 ? this.geo.starts[line]! : this.geo.starts[line + 1]! - 1]!;
+    }
+    return false;
+  }
   private lineMovements(m: RouteCursor, reach: number, routeDistance: number, found: Movement[]) {
     const progress = this.along[m.from]! + m.dir * m.d;
     for (const j of this.lines.get(m.line) ?? []) {
@@ -590,9 +633,11 @@ export class JunctionTable {
         first.entry?.stopAlong !== undefined
           ? first.dir * (first.entry.along - first.entry.stopAlong) + half
           : first.junction.radius + JUNCTION.gap * a.life.perMeter + half;
-      if (next.ahead - ((first.boxAhead ?? first.ahead) + setback) < first.junction.radius + half)
-        return false;
-    } else if (first.outHx * next.inHx + first.outHy * next.inHy <= COS20) return false;
+      const room = next.ahead - ((first.boxAhead ?? first.ahead) + setback);
+      if (room < first.junction.radius + half) return false;
+      return a.life.junctionIndex.storageClear(a.m, first, room, a.life);
+    }
+    if (first.outHx * next.inHx + first.outHy * next.inHy <= COS20) return false;
     const entry = next.entry,
       offset =
         entry?.stopAlong !== undefined

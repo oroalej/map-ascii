@@ -102,36 +102,50 @@ for (const reversed of [false, true])
     expect(released).toEqual([true, true]);
   });
 
-for (const [angle, bendMeters, linkMeters, allowed] of [
-  [30, 20, 25, true],
-  [60, 4, 8.3, false],
+for (const [angle, bendMeters, linkMeters, tailMeters, allowed, reversed, split] of [
+  [30, 20, 25, 0, true, false, false],
+  [60, 4, 8.3, 0, false, false, false],
+  [60, 2, 8, 4, false, false, false],
+  [60, 20, 8, 4, true, false, false],
+  [60, 2, 8, 4, false, true, false],
+  [60, 20, 8, 4, true, true, false],
+  [60, 2, 8, 4, false, false, true],
+  [60, 20, 8, 4, true, false, true],
 ] as const)
-  it(`${allowed ? 'allows' : 'holds upstream of'} storage along a ${angle} degree bend before a denied box`, () => {
+  it(`${allowed ? 'allows' : 'holds upstream of'} storage with a ${angle} degree bend at ${bendMeters}m and ${tailMeters}m tail (reversed=${reversed}, split=${split})`, () => {
     const tile = { z: 16, x: 55192, y: 30266 },
       pm = 1 / metersPerUnit(tile),
       a = { x: 2000, y: 2000 },
       bend = { x: a.x + bendMeters * pm, y: a.y },
       hx = Math.cos((angle * Math.PI) / 180),
       hy = Math.sin((angle * Math.PI) / 180),
-      z = { x: bend.x + linkMeters * pm * hx, y: bend.y + linkMeters * pm * hy },
-      b = new LifeBuilder();
-    b.line(
-      [
+      turn = { x: bend.x + linkMeters * pm * hx, y: bend.y + linkMeters * pm * hy },
+      z = { x: turn.x, y: turn.y + tailMeters * pm },
+      outHx = tailMeters ? 0 : hx,
+      outHy = tailMeters ? 1 : hy,
+      b = new LifeBuilder(),
+      road = [
         { x: a.x - 100 * pm, y: a.y },
         a,
         bend,
+        ...(tailMeters ? [turn] : []),
         z,
-        { x: z.x + 100 * pm * hx, y: z.y + 100 * pm * hy },
+        { x: z.x + 100 * pm * outHx, y: z.y + 100 * pm * outHy },
+      ];
+    if (split) {
+      b.line(road.slice(0, -2), 0, 4);
+      b.line(road.slice(-3), 0, 4);
+    } else b.line(reversed ? road.reverse() : road, 0, 4);
+    b.line([{ x: a.x, y: a.y - 100 * pm }, a, { x: a.x, y: a.y + 100 * pm }], 0, 4);
+    b.line(
+      [
+        { x: z.x - 100 * pm * outHy, y: z.y + 100 * pm * outHx },
+        z,
+        { x: z.x + 100 * pm * outHy, y: z.y - 100 * pm * outHx },
       ],
       0,
       4,
     );
-    for (const point of [a, z])
-      b.line(
-        [{ x: point.x, y: point.y - 100 * pm }, point, { x: point.x, y: point.y + 100 * pm }],
-        0,
-        4,
-      );
     const life = new TileLife(tile, b.finish(), 1),
       table = new JunctionTable(),
       m = car();
@@ -140,6 +154,8 @@ for (const [angle, bendMeters, linkMeters, allowed] of [
     Object.assign(m, {
       x: a.x - 6.8 * pm,
       y: a.y,
+      dir: reversed ? -1 : 1,
+      from: reversed ? life.geo.starts[1]! - 1 : 0,
       d: (100 - 6.8) * pm,
       speed: 8 * pm,
       v: 0,
@@ -147,6 +163,7 @@ for (const [angle, bendMeters, linkMeters, allowed] of [
       paint: 0,
       pause: 0,
       rank: 0,
+      next: split ? 2 : undefined,
     });
     life.movers.push(m);
     const motions = life.junctionIndex.movements(m, 60 * pm, (line, dir) =>
@@ -191,8 +208,8 @@ for (const [angle, bendMeters, linkMeters, allowed] of [
       y: a.y - 6.8 * pm,
       hx: 0,
       hy: 1,
-      line: 1,
-      from: life.geo.starts[1]!,
+      line: split ? 2 : 1,
+      from: life.geo.starts[split ? 2 : 1]!,
       d: (100 - 6.8) * pm,
       speed: 8 * pm,
       v: 0,
