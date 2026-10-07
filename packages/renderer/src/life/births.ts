@@ -131,13 +131,16 @@ function retainSeeds(life: TileLife, keep: (seed: PendingSeed) => boolean) {
   life.pending.length = count;
 }
 
+/** Birth admission needs the callable clearance check, without recovery controls. */
+type BirthGuard = (...args: Parameters<WorldGroundGuard>) => boolean;
+
 export type BirthContext = {
   view?: LifeViewContext;
   lives: TileLife[];
   credit: number;
   cursor: number;
   owns(life: TileLife, point: { x: number; y: number }): boolean;
-  guard(life: TileLife): WorldGroundGuard;
+  guard(life: TileLife): BirthGuard;
   boatRoom(life: TileLife, mover: Mover): boolean;
   count?: (event: ContinuityCounter) => void;
 };
@@ -155,7 +158,7 @@ export function admitBirths(context: BirthContext, dt: number) {
   context.credit = Math.min(BIRTHS.worldRate, context.credit + dt * BIRTHS.worldRate);
   for (const life of lives)
     life.birthCredit = Math.min(BIRTHS.tileRate, life.birthCredit + dt * BIRTHS.tileRate);
-  let guard: WorldGroundGuard | undefined;
+  let guard: BirthGuard | undefined;
   const reject = context.count;
   // Expiry is active simulation time; retirement leaves life.elapsed frozen.
   for (const life of lives) {
@@ -278,7 +281,7 @@ function birthFits(
   context: BirthContext,
   life: TileLife,
   m: Mover,
-  guard: WorldGroundGuard,
+  guard: BirthGuard,
   reject?: (reason: ContinuityRejection) => void,
 ) {
   if (m.kind === 'vehicle' && !life.junctionIndex.canSpawnVehicle(m)) {

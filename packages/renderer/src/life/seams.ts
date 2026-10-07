@@ -3,7 +3,7 @@ import type { TileId } from '../tiles';
 import { frameBetween, masked } from './frames';
 import type { Mover, TileLife } from './simulate';
 
-export const SEAMS = { missingSeconds: 3 } as const;
+export const SEAMS = { missingSeconds: 3, rejectedSeconds: 8 } as const;
 
 /** First ownership boundary along committed exits, without choosing turns or drawing RNG. */
 export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], reach: number) {
@@ -22,16 +22,19 @@ export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], r
     from = m.from,
     distance = m.d,
     traveled = 0,
+    consumed = 0,
     x = m.x,
     y = m.y;
   for (let n = 0; n < 256 && traveled <= reach; n++) {
     const end = dir === 1 ? starts[line + 1]! - 1 : starts[line]!;
     if (from === end) {
-      const exit = life.seamExit(m, line, dir);
+      const exit = life.seamExit(m, line, dir, consumed);
       if (exit === undefined) break;
+      const target = life.directedExit(exit, from);
+      consumed++;
       line = exit >> 1;
       dir = exit & 1 ? -1 : 1;
-      from = dir === 1 ? starts[line]! : starts[line + 1]! - 1;
+      from = target.vertex;
       distance = 0;
       x = coords[from * 2]!;
       y = coords[from * 2 + 1]!;
@@ -68,6 +71,12 @@ export function seamAhead(life: TileLife, m: Mover, covers: readonly TileId[], r
           d: distance + probe * length,
           next: line === m.line ? m.next : undefined,
           routing: line === m.line || !m.routing ? m.routing : { ...m.routing, plan: undefined },
+          junctionRoute:
+            consumed && m.junctionRoute
+              ? consumed < m.junctionRoute.exits.length
+                ? { ...m.junctionRoute, exits: m.junctionRoute.exits.slice(consumed) }
+                : undefined
+              : m.junctionRoute,
         };
         return { distance: traveled + t * length, preview };
       }

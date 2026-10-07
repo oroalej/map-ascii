@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { activityLevels, RUN } from './config';
+import { activityLevels, RUN, RECOVERY } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LocalScenes } from './interactions';
+import { LocalScenes, type Visit } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
+import type { WalkingGraph } from './navigation';
+import { Occupancy, memberSize, sweptBodyOverlap, type Body } from './occupancy';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -54,6 +56,812 @@ const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => 
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
 describe('local interaction scenes', () => {
+  it('finds a checked holding corridor wide enough for two intact three-person formations', () => {
+    const scene = setup(),
+      p = {
+        ...person(),
+        group: [{ ...walker }, { ...walker, lateral: 1 }, { ...walker, lateral: -1 }],
+      },
+      priority = {
+        ...person(45),
+        group: [{ ...walker }, { ...walker, lateral: 1 }, { ...walker, lateral: -1 }],
+      };
+    const physical = (m: Mover): Body[] => {
+      const h = m.momentFacing ?? m;
+      return m.group!.map((w) => ({
+        x: m.x - h.hy * w.lateral - h.hx * w.back,
+        y: m.y + h.hx * w.lateral - h.hy * w.back,
+        hx: h.hx,
+        hy: h.hy,
+        ...memberSize(w.figure),
+      }));
+    };
+    const fixed = physical(priority),
+      group = p.group,
+      members = [...group];
+    let active = true;
+    const holding = (m: Mover) =>
+      physical(m).every((body) =>
+        fixed.every((other) => !sweptBodyOverlap(other, { x: other.x - 25, y: other.y }, body)),
+      );
+    const guard = Object.assign(
+      (next: Mover, before: Mover) => {
+        const previous = physical(before);
+        return physical(next).every((body, i) =>
+          fixed.every((other) => !sweptBodyOverlap(previous[i]!, body, other)),
+        );
+      },
+      {
+        yielding: () => (active ? priority : undefined),
+        holding,
+        cancelYield: () => {
+          active = false;
+        },
+      },
+    );
+    let cleared = false;
+    for (let frame = 0; frame < 80; frame++) {
+      const before = structuredClone(p);
+      if (!scene.yieldStep(p, 0.1, guard)) break;
+      expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+      expect(guard(p, before)).toBe(true);
+      if (holding(p)) {
+        cleared = true;
+        break;
+      }
+    }
+    expect(cleared).toBe(true);
+    expect(p.y - 30).toBeGreaterThan(RECOVERY.holdingOffsets.at(-1)!);
+    active = false;
+    for (let frame = 0; frame < 100 && scene.yieldStep(p, 0.1, guard); frame++);
+    expect(p.group).toBe(group);
+    group.forEach((member, i) => expect(member).toBe(members[i]));
+    expect([p.x, p.y]).toEqual([40, 30]);
+    expect(scene.transferable(p)).toBe(true);
+  });
+
+  it('restores every live member and retained visit when a return clearance query throws', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }, { ...walker, figure: 'child' as const, back: 1 }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      path = visit.path,
+      trail = visit.trail,
+      group = p.group,
+      members = [...group];
+    visit.state = 'return';
+    visit.blocked = RECOVERY.returnReplanSeconds;
+    p.x = 48;
+    const before = structuredClone(p),
+      query = () => {
+        throw new Error('clearance query failed');
+      };
+    const retry = scene as unknown as {
+      blockedTimeout(m: Mover, visit: Visit, guard: typeof query): void;
+      rng(): number;
+    };
+    const rng = vi.spyOn(retry, 'rng');
+    expect(() => retry.blockedTimeout(p, visit, query)).toThrow('clearance query failed');
+    expect(p).toEqual(before);
+    expect(p.group).toBe(group);
+    group.forEach((w, i) => expect(w).toBe(members[i]));
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.path).toBe(path);
+    expect(visit.trail).toBe(trail);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(rng).not.toHaveBeenCalled();
+  });
+
+  it('replans an entire returning formation around a centroid-clear blocked member corridor', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+      ],
+      LifeLine.path,
+      2,
+    );
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 10, y: 40 },
+        { x: 40, y: 40 },
+        { x: 40, y: 30 },
+      ],
+      LifeLine.path,
+      2,
+    );
+    b.site({ x: 10, y: 30 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = {
+        ...person(10),
+        d: 0,
+        group: [
+          { ...walker },
+          { ...walker, lateral: -1 },
+          { ...walker, figure: 'child' as const, back: 1 },
+        ],
+      };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      trail = structuredClone(visit.trail),
+      group = p.group,
+      members = [...group],
+      appearances = group.map(({ figure, shirt, umbrella, canopy }) => ({
+        figure,
+        shirt,
+        umbrella,
+        canopy,
+      })),
+      obstacle: Body = { x: 27.5, y: 29, hx: 1, hy: 0, length: 15, width: 0.5 };
+    p.x = 35.8;
+    visit.state = 'return';
+    visit.path = [{ x: p.x, y: p.y }, trail[0]!];
+    visit.next = 1;
+    visit.blocked = RECOVERY.returnReplanSeconds;
+    const physical = (m: Mover): Body[] => {
+      const h = m.momentFacing ?? m;
+      return m.group!.map((w) => ({
+        x: m.x - h.hy * w.lateral - h.hx * w.back,
+        y: m.y + h.hx * w.lateral - h.hy * w.back,
+        hx: h.hx,
+        hy: h.hy,
+        ...memberSize(w.figure),
+      }));
+    };
+    let planned = false;
+    const guard = (next: Mover, before: Mover, reserve = true) => {
+      if (!reserve) planned = true;
+      const a = physical(before),
+        c = physical(next);
+      return c.every((body, i) => !sweptBodyOverlap(a[i]!, body, obstacle));
+    };
+    const original = structuredClone(p);
+    const retry = scene as unknown as {
+      blockedTimeout(m: Mover, visit: Visit, clearance: typeof guard): void;
+    };
+    retry.blockedTimeout(p, visit, guard);
+    expect(p).toEqual(original);
+    expect(visit.path.some((point) => point.y === 40)).toBe(true);
+    for (let frame = 0; frame < 500 && scene.visits.has(p); frame++) {
+      const before = structuredClone(p);
+      scene.step(0.1, [p], {}, undefined, undefined, guard);
+      expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+      expect(guard(p, before)).toBe(true);
+      expect(p.group).toBe(group);
+      group.forEach((w, i) => expect(w).toBe(members[i]));
+      expect(visit.trail[0]).toEqual(trail[0]);
+    }
+    expect(planned).toBe(true);
+    expect(scene.visits.has(p)).toBe(false);
+    expect([p.x, p.y, p.d]).toEqual([10, 30, 0]);
+    expect(
+      group.map(({ figure, shirt, umbrella, canopy }) => ({ figure, shirt, umbrella, canopy })),
+    ).toEqual(appearances);
+  });
+
+  it.each([1, -1] as const)('finishes an oblique endpoint return in direction %s', (dir) => {
+    const b = new LifeBuilder(),
+      a = { x: 100, y: 100 },
+      z = { x: 130, y: 133 },
+      length = Math.hypot(z.x - a.x, z.y - a.y),
+      endpoint = dir === 1 ? z : a;
+    b.line([a, z], LifeLine.path, 4);
+    b.site({ x: 115, y: 116.5 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p: Mover = {
+        ...person(),
+        ...endpoint,
+        from: dir === 1 ? 0 : 1,
+        dir,
+        d: length,
+        hx: (dir * (z.x - a.x)) / length,
+        hy: (dir * (z.y - a.y)) / length,
+        group: [{ ...walker }],
+      };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    visit.state = 'return';
+    visit.path = [{ ...endpoint }];
+    visit.next = 1;
+    const group = p.group,
+      member = group![0];
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(scene.visits.has(p)).toBe(false);
+    expect(p.d).toBeCloseTo(length, 12);
+    expect(p.x).toBeCloseTo(endpoint.x, 12);
+    expect(p.y).toBeCloseTo(endpoint.y, 12);
+    expect(p.group).toBe(group);
+    expect(p.group![0]).toBe(member);
+    // A real anchor mismatch still cannot bypass the mapped route guard.
+    const other = new LocalScenes(b.finish(), 1, 8, []);
+    expect(other.reserve(p, 0)).toBe(true);
+    const invalid = other.visits.get(p)!;
+    invalid.state = 'return';
+    invalid.trail[0] = { x: p.x + p.hx * 0.01, y: p.y + p.hy * 0.01 };
+    invalid.path = [{ x: p.x, y: p.y }];
+    invalid.next = 1;
+    const before = structuredClone(p);
+    other.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(other.visits.get(p)).toBe(invalid);
+    expect(p).toEqual(before);
+  });
+
+  it('hands a final return back with its checked facing and rolls back a refused handoff', () => {
+    const scene = setup(),
+      p = { ...person(), avoid: 0.4, group: [{ ...walker }, { ...walker, back: 1.2 }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      group = p.group,
+      members = [...group];
+    Object.assign(p, { hx: 0, hy: 1 });
+    Object.assign(visit, { state: 'return', path: [{ x: 40, y: 30 }], next: 1 });
+    const physical = (m: Mover) => {
+      const heading = m.momentFacing ?? m,
+        lane = scene.walkingOffset(m, p);
+      return m.group!.map((member) => ({
+        x: m.x - m.hy * lane - heading.hy * member.lateral - heading.hx * member.back,
+        y: m.y + m.hx * lane + heading.hx * member.lateral - heading.hy * member.back,
+        hx: heading.hx,
+        hy: heading.hy,
+        ...memberSize(member.figure),
+      }));
+    };
+    const bodies = physical(p),
+      occupied = new Occupancy();
+    occupied.set({}, [{ x: 40, y: 31.125, hx: 1, hy: 0, ...memberSize('adult') }]);
+    for (let frame = 0; frame < 200; frame++)
+      scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.blocked).toBeCloseTo(20);
+    expect(visit.retryAt).toBeGreaterThan(visit.blocked);
+    expect(physical(p)).toEqual(bodies);
+    scene.step(
+      0.1,
+      [p],
+      {},
+      undefined,
+      undefined,
+      (next) => occupied.conflicts(p, physical(next)) === 0,
+    );
+    expect(scene.visits.has(p)).toBe(false);
+    expect(physical(p)).toEqual(bodies);
+    expect(p.momentFacing).toEqual({ hx: 0, hy: 1 });
+    expect(p.hx).toBe(1);
+    expect(p.d).toBe(40);
+    expect(p.avoid).toBe(0);
+    expect(p.group).toBe(group);
+    members.forEach((member, index) => expect(p.group[index]).toBe(member));
+    expect(scene.transferable(p)).toBe(true);
+  });
+
+  it.each([false, true])(
+    'releases a permanently blocked yield return while preserving checked ownership (visit %s)',
+    (visiting) => {
+      const scene = setup(),
+        p = { ...person(), avoid: visiting ? 0 : 0.4, group: [{ ...walker }] };
+      if (visiting) expect(scene.reserve(p, 0)).toBe(true);
+      const visit = scene.visits.get(p),
+        trail = visit && structuredClone(visit.trail),
+        group = p.group;
+      const body = (m: Mover) => ({
+        x: m.x - m.hy * (visiting ? 0 : (m.avoid ?? 0)),
+        y: m.y + m.hx * (visiting ? 0 : (m.avoid ?? 0)),
+        hx: m.hx,
+        hy: m.hy,
+        length: 0.5,
+        width: 0.45,
+      });
+      const anchor = body(p),
+        occupied = new Occupancy();
+      let active = true;
+      const guard = Object.assign(
+        (next: Mover, _before: Mover, reserve = true) => {
+          if (occupied.conflicts(p, [body(next)]) > 0) return false;
+          if (reserve) occupied.set(p, [body(next)]);
+          return true;
+        },
+        {
+          yielding: () => (active ? person(45) : undefined),
+          holding: () => true,
+          cancelYield: () => {
+            active = false;
+          },
+        },
+      );
+      for (let i = 0; i < 10; i++) scene.yieldStep(p, 0.1, guard);
+      occupied.set({}, [anchor]);
+      let released = false;
+      for (let i = 0; i < 500; i++) {
+        const before = body(p);
+        if (!scene.yieldStep(p, 0.1, guard)) {
+          expect(body(p)).toEqual(before);
+          released = true;
+          break;
+        }
+      }
+      expect(released).toBe(true);
+      expect(p.group).toBe(group);
+      expect(scene.yieldStep(p, 0, guard)).toBe(false);
+      if (visit) {
+        expect(scene.visits.get(p)).toBe(visit);
+        expect(visit.trail).toEqual(trail);
+        expect(scene.sites[0]!.queue).toContain(p);
+        const start = p.x;
+        for (let i = 0; i < 40; i++) scene.step(0.1, [p], {}, undefined, undefined, guard);
+        expect(p.x).toBeGreaterThan(start + 0.5);
+      } else {
+        expect(p.y).toBe(30);
+        expect(p.d).toBeCloseTo(p.x);
+        expect(scene.transferable(p)).toBe(true);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'checks a retained-facing corner yield resume (admissible %s)',
+    (admissible) => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 30 },
+          { x: 40, y: 30 },
+          { x: 40, y: 80 },
+        ],
+        LifeLine.path,
+        4,
+      );
+      const scene = new LocalScenes(b.finish(), 1, 8, []);
+      const p: Mover = { ...person(39.8), group: [{ ...walker }, { ...walker, lateral: 1 }] };
+      const group = p.group;
+      let active = true;
+      let holdingY = 0;
+      const physical = (m: Mover) => ({
+        x: m.x - m.hy * (m.avoid ?? 0),
+        y: m.y + m.hx * (m.avoid ?? 0),
+        ...(m.momentFacing ?? { hx: m.hx, hy: m.hy }),
+      });
+      const guard = Object.assign(
+        (next: Mover) => {
+          if (active) return true;
+          const body = physical(next);
+          return admissible && body.y >= holdingY - 1e-8 && body.hx === 1 && body.hy === 0;
+        },
+        { yielding: () => (active ? person(42) : undefined), holding: () => true },
+      );
+      for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+      const holding = physical(p);
+      holdingY = holding.y;
+      active = false;
+      let resumed = false;
+      for (let frame = 0; frame < 300; frame++) {
+        if (!scene.yieldStep(p, 0.1, guard)) {
+          resumed = true;
+          break;
+        }
+      }
+      expect(resumed).toBe(admissible);
+      expect(physical(p)).toEqual(holding);
+      expect(p.group).toBe(group);
+      expect(p.hx).toBe(admissible ? 0 : 1);
+      expect(p.hy).toBe(admissible ? 1 : 0);
+      expect(p.momentFacing).toEqual(admissible ? { hx: 1, hy: 0 } : undefined);
+      expect(scene.transferable(p)).toBe(admissible);
+    },
+  );
+
+  it('prevents visit admission and tile transfer while yielding owns movement', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] };
+    const guard = Object.assign(() => true, { yielding: () => person(45), holding: () => true });
+    for (let i = 0; i < 10; i++) scene.yieldStep(p, 0.1, guard);
+    expect(scene.transferable(p)).toBe(false);
+    expect(scene.reserve(p, 0)).toBe(false);
+    expect(scene.visits.has(p)).toBe(false);
+  });
+
+  it('counts accepted mapped-corner progress after a transient refusal', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+        { x: 40, y: 90 },
+      ],
+      LifeLine.path,
+      1,
+    );
+    b.site({ x: 40, y: 80 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = { ...person(10), speed: 1, d: 0 };
+    expect(scene.reserve(p, 0)).toBe(true);
+    for (let i = 0; i < 298; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    const visit = scene.visits.get(p)!;
+    expect(visit.progress).toBeDefined();
+    for (let i = 0; i < 90; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(visit.state).toBe('approach');
+    expect(visit.blocked).toBe(0);
+    expect(p.y).toBeGreaterThan(38);
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
+  it('retains blockage and retry cadence through rejected corners and futile replans', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 10, y: 30 },
+        { x: 40, y: 30 },
+        { x: 40, y: 90 },
+      ],
+      LifeLine.path,
+      1,
+    );
+    b.site({ x: 40, y: 80 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []),
+      p = { ...person(10), speed: 1, d: 0 };
+    expect(scene.reserve(p, 0)).toBe(true);
+    for (let i = 0; i < 298; i++) scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    const visit = scene.visits.get(p)!,
+      before = structuredClone(p),
+      goal = visit.path.at(-1)!;
+    visit.state = 'return';
+    visit.trail = [{ ...goal }];
+    visit.blocked = RECOVERY.returnReplanSeconds - 0.1;
+    visit.retryAt = RECOVERY.returnReplanSeconds;
+    visit.progress = { x: p.x, y: p.y, hx: 1, hy: 0, target: visit.path[visit.next] };
+    for (let i = 0; i < 180; i++) scene.step(0.1, [p], {}, undefined, undefined, () => false);
+    expect(p).toEqual(before);
+    expect(visit.blocked).toBeGreaterThan(32);
+    expect(visit.retryAt).toBeGreaterThan(visit.blocked);
+    expect(visit.progress).toMatchObject({ x: before.x, y: before.y, hx: 1, hy: 0 });
+  });
+
+  it('expires active yielding through a checked return while preserving its reservation', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] },
+      priority = person(45);
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(p),
+      trail = structuredClone(visit.trail),
+      group = p.group;
+    let active = true,
+      returning = false;
+    const cancel = vi.fn(() => {
+      active = false;
+      returning = true;
+    });
+    let blockReturn = true;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) => {
+        if (reserve) {
+          expect(Math.hypot(next.x - before.x, next.y - before.y)).toBeLessThanOrEqual(
+            p.speed * 0.1 + 1e-8,
+          );
+          return !(returning && blockReturn);
+        }
+        return true;
+      },
+      { yielding: () => (active ? priority : undefined), holding: () => true, cancelYield: cancel },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    const holding = structuredClone(p);
+    // A zero-time call must preserve the active timeout and complete pose.
+    for (let frame = 0; frame < 60; frame++) scene.yieldStep(p, 0, guard);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(p).toEqual(holding);
+    for (let frame = 10; frame < (RECOVERY.yieldSeconds + 1) * 10; frame++)
+      scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(p.y).toBe(holding.y);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(visit.state).toBe('approach');
+    expect(visit.blocked).toBe(0);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(visit.trail).toEqual(trail);
+    blockReturn = false;
+    for (let frame = 0; frame < 12; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p).toEqual({ ...anchor, walked: p.walked });
+    expect(p.group).toBe(group);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(scene.yieldStep(p, 0.1, guard)).toBe(false);
+  });
+
+  it('rejects holding candidates before performing a route search', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] };
+    const graph = (scene as unknown as { graph: WalkingGraph }).graph,
+      route = vi.spyOn(graph, 'route'),
+      cancel = vi.fn();
+    const guard = Object.assign(() => true, {
+      yielding: () => person(45),
+      holding: () => false,
+      cancelYield: cancel,
+    });
+    expect(scene.yieldStep(p, 0.1, guard)).toBe(false);
+    expect(route).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('retreats against mapped travel while retaining a backward physical facing', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }], momentFacing: { hx: -1, hy: 0 } },
+      anchor = structuredClone(p);
+    const guard = Object.assign(
+      (next: Mover, before: Mover) => {
+        expect(next.hx).toBe(before.hx);
+        expect(next.hy).toBe(before.hy);
+        expect(next.momentFacing).toEqual(anchor.momentFacing);
+        return true;
+      },
+      { yielding: () => person(45), holding: (m: Mover) => m.x < anchor.x - 0.4 },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p.x).toBeCloseTo(anchor.x - 0.5);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    expect(p.momentFacing).toEqual(anchor.momentFacing);
+  });
+
+  it('withdraws through its checked path when a replan invalidates the holding spot', () => {
+    const scene = setup(),
+      p = { ...person(), group: [{ ...walker }] },
+      priority = person(45);
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(p),
+      trail = structuredClone(visit.trail),
+      group = p.group;
+    let active = true,
+      valid = true,
+      cancelled = 0;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) => {
+        if (reserve)
+          expect(Math.hypot(next.x - before.x, next.y - before.y)).toBeLessThanOrEqual(
+            p.speed * 0.1 + 1e-8,
+          );
+        return true;
+      },
+      {
+        yielding: () => (active ? priority : undefined),
+        holding: () => valid,
+        cancelYield: () => {
+          active = false;
+          cancelled++;
+        },
+      },
+    );
+    for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(p.y).toBeGreaterThan(anchor.y);
+    valid = false;
+    for (let frame = 0; frame < 12; frame++) scene.yieldStep(p, 0.1, guard);
+    expect(cancelled).toBe(1);
+    expect(p).toEqual({ ...anchor, walked: p.walked });
+    expect(p.walked).toBeGreaterThan(0);
+    expect(p.group).toBe(group);
+    expect(visit.trail).toEqual(trail);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
+  it.each([0, 1])(
+    'translates the physical footprint along a narrow crossing at lane offset %s',
+    (lane) => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 40, y: 25 },
+          { x: 40, y: 40 },
+        ],
+        LifeLine.path,
+        1,
+      );
+      b.line(
+        [
+          { x: 0, y: 30 },
+          { x: 100, y: 30 },
+        ],
+        LifeLine.roadMajor,
+        20,
+      );
+      b.area('crossing', [
+        [
+          { x: 39.5, y: 24 },
+          { x: 40.5, y: 24 },
+          { x: 40.5, y: 41 },
+          { x: 39.5, y: 41 },
+          { x: 39.5, y: 24 },
+        ],
+      ]);
+      const scene = new LocalScenes(b.finish(), 1, 8, []),
+        p = { ...person(), y: 30 - lane, avoid: lane, group: [{ ...walker }] };
+      let checked = 0;
+      const guard = Object.assign(
+        (next: Mover, before: Mover) => {
+          checked++;
+          expect(next.hx).toBe(before.hx);
+          expect(next.hy).toBe(before.hy);
+          return true;
+        },
+        { yielding: () => person(45), holding: () => true },
+      );
+      for (let frame = 0; frame < 10; frame++) scene.yieldStep(p, 0.1, guard);
+      expect(checked).toBeGreaterThan(0);
+      expect(p.x).toBe(40);
+      expect(p.y).toBeCloseTo(30.65 - lane);
+      expect(p.hx).toBe(1);
+      expect(p.group).toHaveLength(1);
+    },
+  );
+
+  it('reports a denied trial after restoring its actual pose and retained route cursor', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    const before = structuredClone(p),
+      next = visit.next;
+    let contacted = false;
+    const guard = Object.assign(() => false, {
+      contact: (owner: Mover, trial?: Mover) => {
+        contacted = true;
+        expect(owner).toBe(p);
+        expect(owner).toEqual(before);
+        expect(visit.next).toBe(next);
+        expect(trial!.x).toBeGreaterThan(before.x);
+      },
+    });
+    scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(contacted).toBe(true);
+    expect(p).toEqual(before);
+  });
+
+  it('advances an owned visit and service when their site is covered by another tile', () => {
+    const scene = setup(),
+      p = person(),
+      bus = { ...person(50, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    scene.services.set(bus, { site: visit.site, time: 10, arriving: false, boarded: 0 });
+    scene.step(
+      0.1,
+      [p, bus],
+      {},
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (owner) => owner === p || owner === bus,
+    );
+    expect(p.x).toBeGreaterThan(40);
+    expect(scene.services.get(bus)!.time).toBeCloseTo(9.9);
+  });
+
+  it('replans a blocked return on the walking graph while retaining the visit and position', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    p.x = 48;
+    visit.state = 'return';
+    visit.path = [
+      { x: 48, y: 30 },
+      { x: 40, y: 50 },
+      { x: 40, y: 30 },
+    ];
+    visit.next = 1;
+    visit.blocked = 15.95;
+    scene.step(0.1, [p], {}, undefined, undefined, (_next, _before, reserve = true) => !reserve);
+    expect(scene.visits.get(p)).toBe(visit);
+    expect([p.x, p.y]).toEqual([48, 30]);
+    expect(visit.blocked).toBeCloseTo(16.05);
+    expect(visit.retryAt).toBeCloseTo(32.05);
+    expect(visit.next).toBe(1);
+    expect(visit.path.every((point) => point.y === 30)).toBe(true);
+    scene.step(0.1, [p], {}, undefined, undefined, () => true);
+    expect(p.x).toBeLessThan(48);
+    expect(scene.visits.get(p)).toBe(visit);
+  });
+
+  it('continues its retained route when reciprocal yielding has no safe holding corridor', () => {
+    const scene = setup(),
+      p = { ...person(), hx: 1, hy: 0, group: [{ ...walker }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!,
+      anchor = structuredClone(visit.trail);
+    let cancelled = 0;
+    const guard = Object.assign(
+      (next: Mover, before: Mover, reserve = true) =>
+        reserve && Math.hypot(next.x - before.x, next.y - before.y) <= p.speed * 0.1 + 1e-8,
+      {
+        yielding: () => person(45),
+        cancelYield: () => {
+          cancelled++;
+        },
+      },
+    );
+    scene.step(0.1, [p], {}, undefined, undefined, guard);
+    expect(cancelled).toBe(1);
+    expect(p.x).toBeGreaterThan(40);
+    expect(p.x - 40).toBeLessThanOrEqual(p.speed * 0.1 + 1e-8);
+    expect(visit.trail[0]).toEqual(anchor[0]);
+    expect(scene.sites[0]!.queue).toContain(p);
+    expect(visit.blocked).toBe(0);
+  });
+
+  it('freezes an existing blocked episode and facing during a signal hold', () => {
+    const scene = setup(),
+      p = { ...person(), hx: 0, hy: 1, group: [{ ...walker }] };
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    visit.blocked = 7.5;
+    const before = structuredClone(p);
+    for (let i = 0; i < 120; i++)
+      scene.step(
+        0.1,
+        [p],
+        {},
+        undefined,
+        undefined,
+        () => true,
+        undefined,
+        () => 0,
+      );
+    expect(p).toEqual(before);
+    expect(visit.blocked).toBe(7.5);
+    expect(visit.state).toBe('approach');
+    expect(scene.sites[0]!.queue).toContain(p);
+  });
+
+  it.each([0, 1e-12])(
+    'finishes a return at its route start within %s without a footprint move',
+    (residue) => {
+      const scene = setup(),
+        p = person();
+      expect(scene.reserve(p, 0)).toBe(true);
+      const visit = scene.visits.get(p)!;
+      visit.state = 'return';
+      visit.path = [
+        { x: p.x, y: p.y },
+        { x: p.x, y: p.y },
+      ];
+      visit.next = 1;
+      p.x += residue;
+      let checks = 0;
+      scene.step(0.1, [p], {}, undefined, undefined, () => {
+        checks++;
+        return false;
+      });
+      expect(checks).toBe(0);
+      expect(scene.visits.has(p)).toBe(false);
+      expect([p.x, p.y, p.d]).toEqual([40, 30, 40]);
+    },
+  );
+
+  it('replans past a nearby perpendicular attachment without retaining mutable route points', () => {
+    const scene = setup(),
+      p = person();
+    expect(scene.reserve(p, 0)).toBe(true);
+    const visit = scene.visits.get(p)!;
+    p.x = 48;
+    p.y = 30.2;
+    visit.state = 'return';
+    visit.path = [
+      { x: p.x, y: p.y },
+      { x: 40, y: 50 },
+    ];
+    visit.next = 1;
+    visit.blocked = 15.95;
+    scene.step(0.1, [p], {}, undefined, undefined, (_next, _before, reserve = true) => !reserve);
+    expect(visit.path[1]).toEqual({ x: 40, y: 30 });
+    expect(visit.path[0]).toEqual({ x: 48, y: 30.2 });
+    p.x = 47;
+    expect(visit.path[0]!.x).toBe(48);
+  });
   it('keeps curb-service ownership and offset blending local to the vehicle', () => {
     const scene = setup(),
       bus = { ...person(40, 'vehicle'), vehicle: 'bus' as const };
@@ -658,7 +1466,8 @@ describe('local interaction scenes', () => {
     for (let i = 0; i < 90; i++) scene.step(0.1, [p], {}, undefined, undefined, () => false);
     expect(p.x).toBe(40);
     expect(scene.sites[0]!.queue).toHaveLength(0);
-    expect(scene.visits.get(p)?.state).toBe('return');
+    // The failed approach never left its route start, so its return completes safely.
+    expect(scene.visits.has(p)).toBe(false);
     scene.step(0.1, [p], {}, undefined, undefined, () => true);
     expect(scene.visits.size).toBe(0);
   });

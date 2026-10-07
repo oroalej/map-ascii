@@ -4,6 +4,7 @@ import { frameBetween } from './frames';
 import { VEHICLES } from './vehicles';
 import type { Mover, TileLife } from './simulate';
 import type { ContinuityRejection } from './diagnostics';
+import { EXTENT } from '../raster/geometry';
 import { copyVehicleEffects } from './vehicle-effects';
 
 export type AdoptionOptions = {
@@ -15,6 +16,8 @@ export type AdoptionOptions = {
   replace?: Mover;
   reject?: (reason: ContinuityRejection) => void;
   nudgeM?: number;
+  /** Geographic seam transfers must project onto an owned portion of a buffered line. */
+  insideTile?: boolean;
 };
 type Segment = {
   line: number;
@@ -96,6 +99,29 @@ export class SegmentGrid {
     // Legacy closest-segment ties are resolved by original geometry order.
     return [...found].sort((a, b) => a.line - b.line || a.v - b.v);
   }
+
+  /** Candidate line order matches the full geometry scan, including duplicate identities. */
+  linesNear(x: number, y: number, reach: number): readonly number[] {
+    const found = new Set<number>();
+    for (
+      let row = Math.floor((y - reach) / this.cell);
+      row <= Math.floor((y + reach) / this.cell);
+      row++
+    )
+      for (
+        let col = Math.floor((x - reach) / this.cell);
+        col <= Math.floor((x + reach) / this.cell);
+        col++
+      )
+        for (const segment of this.bins.get(row)?.get(col) ?? []) found.add(segment.line);
+    return [...found].sort((a, b) => a - b);
+  }
+}
+
+/** Point matching is independent of whether either neighboring directed arm is legal. */
+function* matchingVertices(geo: LifeGeometry, line: number, x: number, y: number) {
+  for (let v = geo.starts[line]!; v < geo.starts[line + 1]!; v++)
+    if (Math.hypot(geo.coords[v * 2]! - x, geo.coords[v * 2 + 1]! - y) <= ADOPT.vertexSnap) yield v;
 }
 
 /** No mutation or random draws: source and preview may coexist until an admission commits. */
@@ -135,7 +161,28 @@ export function projectMover(
       rejection = 'directionCraft';
       continue;
     }
-    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / length ** 2));
+    let lo = 0,
+      hi = 1;
+    if (options.insideTile) {
+      // Tile vertices are independently quantized. The closest buffered point can
+      // lie just outside even after the source cursor crosses the edge.
+      const inset = 0.001 * target.perMeter;
+      for (const [a, delta] of [
+        [ax, dx],
+        [ay, dy],
+      ]) {
+        if (!delta) {
+          if (a! < inset || a! > EXTENT - inset) lo = 2;
+        } else {
+          const first = (inset - a!) / delta,
+            last = (EXTENT - inset - a!) / delta;
+          lo = Math.max(lo, Math.min(first, last));
+          hi = Math.min(hi, Math.max(first, last));
+        }
+      }
+      if (lo > hi) continue;
+    }
+    const t = Math.max(lo, Math.min(hi, ((x - ax) * dx + (y - ay) * dy) / length ** 2));
     const distance = Math.hypot(ax + dx * t - x, ay + dy * t - y);
     if (distance > reach || (best && distance >= best.distance)) continue;
     const dir: 1 | -1 = m.hx * dx + m.hy * dy >= 0 ? 1 : -1;
@@ -180,6 +227,70 @@ export function projectMover(
     avoid: m.avoid,
     waiting: m.waiting,
   };
+  if (m.roadSteering !== undefined) preview.roadSteering = m.roadSteering;
+  if (m.curveLengthM !== undefined) preview.curveLengthM = m.curveLengthM;
+  if (m.curveCorner) {
+    const x = frame.x + m.curveCorner.x * frame.scale;
+    const y = frame.y + m.curveCorner.y * frame.scale;
+    for (const v of matchingVertices(target.geo, s.line, x, y)) {
+      const point = { x: target.geo.coords[v * 2]!, y: target.geo.coords[v * 2 + 1]! };
+      preview.curveCorner = point;
+      break;
+    }
+    if (!preview.curveCorner) delete preview.curveLengthM;
+  }
+  if (m.junctionRoute) {
+    const exits: number[] = [];
+    let shared = m.dir === 1 ? source.geo.starts[m.line + 1]! - 1 : source.geo.starts[m.line]!;
+    for (const code of m.junctionRoute.exits) {
+      const old = source.directedExit(code, shared),
+        id = source.geo.lineIds?.[old.line];
+      if (!id) break;
+      const x = frame.x + source.geo.coords[old.vertex * 2]! * frame.scale;
+      const y = frame.y + source.geo.coords[old.vertex * 2 + 1]! * frame.scale;
+      const [hx, hy] = source.endHeading(code, old.vertex);
+      let mapped: number | undefined;
+      for (const line of grid.linesNear(x, y, ADOPT.vertexSnap)) {
+        if (target.geo.lineIds?.[line] !== id) continue;
+        for (const v of matchingVertices(target.geo, line, x, y)) {
+          for (const direction of [1, -1] as const) {
+            const next = v + direction;
+            if (
+              next < target.geo.starts[line]! ||
+              next >= target.geo.starts[line + 1]! ||
+              (target.geo.oneway?.[line] && target.geo.oneway[line] !== direction)
+            )
+              continue;
+            const [dx, dy] = target.endHeading(line * 2 + (direction === 1 ? 0 : 1), v);
+            if (hx * dx + hy * dy > 0) {
+              mapped = line * 2 + (direction === 1 ? 0 : 1);
+              break;
+            }
+          }
+          if (mapped !== undefined) break;
+        }
+        if (mapped !== undefined) break;
+      }
+      if (mapped === undefined) break;
+      exits.push(mapped);
+      shared = old.dir === 1 ? source.geo.starts[old.line + 1]! - 1 : source.geo.starts[old.line]!;
+    }
+    if (exits.length === m.junctionRoute.exits.length)
+      preview.junctionRoute = { key: m.junctionRoute.key, exits };
+  }
+  if (m.entered) {
+    const x = frame.x + source.geo.coords[m.entered.vertex * 2]! * frame.scale;
+    const y = frame.y + source.geo.coords[m.entered.vertex * 2 + 1]! * frame.scale;
+    for (const v of matchingVertices(target.geo, s.line, x, y)) {
+      preview.entered = {
+        vertex: v,
+        x: frame.x + m.entered.x * frame.scale,
+        y: frame.y + m.entered.y * frame.scale,
+        offset: m.entered.offset,
+      };
+      break;
+    }
+  }
   if (m.crossingWait) {
     const wait = m.crossingWait.waiting;
     const project = (p: { x: number; y: number; hx: number; hy: number }) => ({
@@ -199,6 +310,60 @@ export function projectMover(
       signal: m.routing.signal,
       indicating: false,
     };
+    const plan = m.routing.plan;
+    const exitId = plan && source.geo.lineIds?.[plan.exit >> 1];
+    if (plan && exitId && plan.line === m.line && plan.dir === m.dir) {
+      const vertex = dir === 1 ? target.geo.starts[s.line + 1]! - 1 : target.geo.starts[s.line]!;
+      const px = frame.x + source.geo.coords[plan.vertex * 2]! * frame.scale;
+      const py = frame.y + source.geo.coords[plan.vertex * 2 + 1]! * frame.scale;
+      if (
+        Math.hypot(target.geo.coords[vertex * 2]! - px, target.geo.coords[vertex * 2 + 1]! - py) <=
+        ADOPT.vertexSnap
+      ) {
+        const oldLine = plan.exit >> 1,
+          oldDir = plan.exit & 1 ? -1 : 1;
+        const oldVertex =
+          plan.target?.vertex ??
+          (oldDir === 1 ? source.geo.starts[oldLine]! : source.geo.starts[oldLine + 1]! - 1);
+        const [hx, hy] = source.endHeading(plan.exit, oldVertex);
+        mappedPlan: for (const line of grid.linesNear(
+          target.geo.coords[vertex * 2]!,
+          target.geo.coords[vertex * 2 + 1]!,
+          ADOPT.vertexSnap,
+        )) {
+          if (target.geo.lineIds?.[line] !== exitId) continue;
+          for (const direction of [1, -1] as const) {
+            const ref = target.directedExit(line * 2 + (direction === 1 ? 0 : 1), vertex);
+            const to = ref.vertex + direction;
+            if (to < target.geo.starts[line]! || to >= target.geo.starts[line + 1]!) continue;
+            if (
+              target.geo.coords[ref.vertex * 2] !== target.geo.coords[vertex * 2] ||
+              target.geo.coords[ref.vertex * 2 + 1] !== target.geo.coords[vertex * 2 + 1]
+            )
+              continue;
+            const [dx, dy] = target.endHeading(line * 2 + (direction === 1 ? 0 : 1), ref.vertex);
+            if (
+              dx * hx + dy * hy <= 0 ||
+              (target.geo.oneway?.[line] && target.geo.oneway[line] !== direction)
+            )
+              continue;
+            preview.routing = {
+              ...preview.routing,
+              indicating: m.routing.indicating,
+              plan: {
+                ...plan,
+                line: s.line,
+                dir,
+                vertex,
+                exit: line * 2 + (direction === 1 ? 0 : 1),
+                target: ref,
+              },
+            };
+            break mappedPlan;
+          }
+        }
+      }
+    }
   }
   if (m.train)
     preview.train = {

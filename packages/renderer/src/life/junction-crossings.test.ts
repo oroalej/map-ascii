@@ -492,7 +492,7 @@ it('retains controlled geometry separately without enabling entrance courtesy', 
   expect(crossings.along(path, 1).size).toBe(0);
   expect(
     crossings.limit(humanView(f.life), path, 1, 4.4, 30, 8 * pm, kinematicsOf('car'), 0.1),
-  ).toEqual({ target: 8 * pm, holds: undefined });
+  ).toEqual({ target: 8 * pm, holds: undefined, held: false });
   const j = f.life.junctionIndex.junctions[0]!;
   expect(
     f.life.junctionCrossings.forArm(

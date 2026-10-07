@@ -10,15 +10,18 @@ const pm = 1 / metersPerUnit(tile);
 function crossingRun(split: boolean, oneway = false, seconds = 120) {
   const b = new LifeBuilder();
   const center = { x: 2048, y: 2048 };
+  // Keep both arms inside the owning tile. Shorter approaches retain every
+  // junction movement while avoiding unrelated actors at clipped tile ends.
+  const arm = 150 * pm;
   b.line(
-    [{ x: center.x - 300 * pm, y: center.y }, center, { x: center.x + 300 * pm, y: center.y }],
+    [{ x: center.x - arm, y: center.y }, center, { x: center.x + arm, y: center.y }],
     LifeLine.roadMid,
     8,
     77,
     oneway ? 1 : 0,
   );
   b.line(
-    [{ x: center.x, y: center.y - 300 * pm }, center, { x: center.x, y: center.y + 300 * pm }],
+    [{ x: center.x, y: center.y - arm }, center, { x: center.x, y: center.y + arm }],
     LifeLine.roadMid,
     8,
     88,

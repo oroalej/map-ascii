@@ -626,7 +626,7 @@ export class PedestrianCrossings {
     candidates.clear();
     used.clear();
     try {
-      if (!found.size && !holds.length) return { target, holds: undefined };
+      if (!found.size && !holds.length) return { target, holds: undefined, held: false };
       for (const [crossing, ahead] of found) {
         const previous = candidates.get(crossing.identity.key);
         if (!previous || ahead < found.get(previous)!)
@@ -636,6 +636,7 @@ export class PedestrianCrossings {
       const global = position && this.geographic(position);
       const scale = this.geographicScale;
       const records: PedestrianHold[] = [];
+      let held = false;
       for (const c of candidates.values()) {
         const ahead = found.get(c)!;
         const previous = holds.find(
@@ -669,7 +670,10 @@ export class PedestrianCrossings {
         records.push(record);
         // Expiry ends the courtesy hold; people in the physical lane still limit speed.
         if (!expired && !committed && blocked && !clearingCrossings?.has(c.identity.key)) {
-          target = Math.min(target, stopTarget(ahead, length, k, this.pm, dt));
+          const courtesyTarget = stopTarget(ahead, length, k, this.pm, dt);
+          target = Math.min(target, courtesyTarget);
+          // A live record only excludes a stop actually applied at the stripe edge.
+          held ||= courtesyTarget <= 1e-8 * this.pm;
         }
       }
       // Keep a crossing while the rear is still over it, even after its edge leaves forward lookahead.
@@ -678,7 +682,7 @@ export class PedestrianCrossings {
         const distance = Math.hypot(h.x - global.x, h.y - global.y);
         if (distance <= h.radius + (length / 2) * scale) records.push(h);
       }
-      return { target, holds: records.length ? records : undefined };
+      return { target, holds: records.length ? records : undefined, held };
     } finally {
       found.clear();
       candidates.clear();
