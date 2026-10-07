@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
-import { TileLife, type Mover, type GroundGuard } from './simulate';
+import { LifeWorld, TileLife, type Mover, type GroundGuard } from './simulate';
+import { worldTiles } from './testing/scenarios';
 import { activityLevels, laneOffset } from './config';
-import { metersPerUnit } from '../raster/geometry';
+import { FOLLOW, LANE } from './config';
+import { VEHICLES } from './vehicles';
+import { bodiesOverlap } from './occupancy';
+import { visibleTurnSignal, blinkOn } from './turn-signals';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const pm = 1 / metersPerUnit(tile);
@@ -153,5 +158,145 @@ describe('accepted road lateral state', () => {
     expect(m.lane).toBe(0.9);
     expect(life.offsetOf(m)).toBeCloseTo(0);
     expect(m.laneSignal).toBeUndefined();
+  });
+});
+
+function passing(dir: 1 | -1 = 1) {
+  const { life, m } = road(dir);
+  m.speed = 8 * pm;
+  m.v = pm;
+  const gap = (VEHICLES.car.length + VEHICLES.truck.length) / 2 + FOLLOW.minGap + FOLLOW.headway;
+  const leader: Mover = {
+    ...m,
+    vehicle: 'truck',
+    d: m.d + gap * pm,
+    x: m.x + dir * gap * pm,
+    speed: pm,
+    v: pm,
+    routing: { seed: 321, turns: 0 },
+  };
+  life.movers.push(leader);
+  return { life, m, leader };
+}
+
+describe('deterministic passing', () => {
+  it('freezes accepted state and blink phase during inspection, with hazards taking precedence', () => {
+    const fixture = passing();
+    const world = new LifeWorld(undefined, undefined, undefined, true);
+    world.sync([{ key: 'road', tile, life: fixture.life.geo }]);
+    const life = worldTiles(world).get('road')!;
+    life.movers.splice(0, life.movers.length, fixture.m);
+    life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    const m = fixture.m;
+    m.maneuver = { kind: 'lane', target: 0.5 };
+    m.laneSignal = 'left';
+    const center = tileToLngLat(tile, m);
+    const first = world.visible(21, 1, center)[0]!;
+    world.inspection!.select({ id: first.inspectionId!, revision: 1, time: 0 }, 0);
+    const before = structuredClone(m);
+    for (let frame = 0; frame < 20; frame++) {
+      world.step(0.1, undefined, 21);
+      expect(world.visible(21, 1, center)[0]!.turnSignal).toEqual(first.turnSignal);
+      expect(m).toEqual(before);
+    }
+    const held = vi.spyOn(life.scenes, 'held').mockReturnValue(true);
+    const hazard = world.visible(21, 1, center)[0]!;
+    expect(hazard.lamps?.kind).toBe('hazard');
+    expect(hazard.turnSignal).toBeUndefined();
+    held.mockRestore();
+  });
+  it.each([1, -1] as const)(
+    'starts a left pass within five seconds and overtakes in direction %s',
+    (dir) => {
+      const { life, m, leader } = passing(dir);
+      let started = Infinity,
+        completed = false,
+        passed = false;
+      for (let frame = 0; frame < 40 * 30; frame++) {
+        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+        if (m.maneuver && started === Infinity) started = (frame + 1) / 30;
+        completed ||= m.chosenLane !== undefined && !m.maneuver;
+        passed ||= m.d - leader.d > ((VEHICLES.car.length + VEHICLES.truck.length) / 2) * pm;
+        expect(bodiesOverlap(life.groundBodies(m)[0]!, life.groundBodies(leader)[0]!)).toBe(false);
+      }
+      expect(started).toBeLessThanOrEqual(5);
+      expect(completed).toBe(true);
+      expect(passed).toBe(true);
+      expect(m.lane).toBe(0.9);
+    },
+  );
+
+  it.each(['front', 'rear'] as const)('rejects an unsafe target-lane %s gap', (position) => {
+    const { life, m } = passing();
+    const peer = {
+      ...m,
+      lane: 0.5,
+      d: m.d + (position === 'front' ? 4 : -12) * pm,
+      x: m.x + (position === 'front' ? 4 : -12) * pm,
+      speed: position === 'front' ? pm : 15 * pm,
+      v: position === 'front' ? pm : 15 * pm,
+    };
+    life.movers.push(peer);
+    life.prepareTraffic(() => true);
+    // Candidate selection sees the unsafe snapshot without moving the blocker out of it.
+    const query = life as unknown as { roadGapSafe(m: Mover, target: number): boolean };
+    expect(query.roadGapSafe(m, 0)).toBe(false);
+  });
+
+  it('does not start at a fast protected approach or for tricycles', () => {
+    for (const vehicle of ['car', 'tricycle'] as const) {
+      const { life, m, leader } = passing();
+      m.vehicle = vehicle;
+      if (vehicle === 'car') {
+        m.speed = 30 * pm;
+        m.d = 4095 - 50 * pm;
+        m.x = m.d;
+        leader.d = m.d + 12 * pm;
+        leader.x = leader.d;
+      }
+      for (let frame = 0; frame < 5 * 30; frame++) life.step(1 / 30);
+      expect(m.maneuver).toBeUndefined();
+      expect(m.chosenLane).toBeUndefined();
+    }
+  });
+
+  it('reserves the destination envelope before a simultaneous competing change', () => {
+    const { life, m } = passing();
+    m.maneuver = { kind: 'lane', target: 0.5 };
+    const peer = { ...m, lane: 0.1, maneuver: undefined, routing: { seed: 456, turns: 0 } };
+    life.movers.push(peer);
+    life.prepareTraffic(() => true);
+    const query = life as unknown as { roadGapSafe(m: Mover, target: number): boolean };
+    expect(query.roadGapSafe(peer, 0)).toBe(false);
+  });
+
+  it('uses the routing seed phase and retains lane indication ahead of route indication', () => {
+    const routing = { seed: 123, turns: 0, signal: { side: 'right' as const, remaining: 1 } };
+    for (const clock of [0, 0.25, 0.75, 1.25])
+      expect(visibleTurnSignal(routing, clock, 'left')).toEqual({
+        side: 'left',
+        on: blinkOn(123, clock),
+      });
+    expect(LANE).toEqual({ lateral: 1, gain: 1.5, patience: 2, clear: 30, cooldown: 6 });
+  });
+
+  it.each([30, 60, 120])('replays complete accepted pass state at %s Hz', (hz) => {
+    const a = passing(),
+      b = passing();
+    let active = false;
+    for (let frame = 0; frame < 8 * hz; frame++) {
+      a.life.step(1 / hz);
+      b.life.step(1 / hz);
+      active ||= !!a.m.maneuver;
+      expect(a.life.movers).toEqual(b.life.movers);
+      expect(a.life.movers.map((m) => a.life.pose(m))).toEqual(
+        b.life.movers.map((m) => b.life.pose(m)),
+      );
+      expect(visibleTurnSignal(a.m.routing, frame / hz, a.m.laneSignal)).toEqual(
+        visibleTurnSignal(b.m.routing, frame / hz, b.m.laneSignal),
+      );
+    }
+    expect(active).toBe(true);
   });
 });

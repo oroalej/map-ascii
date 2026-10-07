@@ -81,6 +81,7 @@ import {
   FOLLOW,
   frontClearance,
   laneLayout,
+  LANE_WIDTH_M,
   TERMINAL,
   PEDESTRIAN,
   STALL,
@@ -111,6 +112,7 @@ import {
   SEASON_CROWD,
   ROAD_MARGIN_M,
   ROAD_AVOID,
+  LANE,
   RECOVERY,
   spawnRules,
   TRAIN,
@@ -1177,6 +1179,8 @@ export class TileLife {
   private caps = new Float64Array(0);
   private progress = new Float64Array(0);
   private offsets = new Float64Array(0);
+  private followLeaders = new Int32Array(0);
+  private followTargets = new Float64Array(0);
   /** How people look and where vendors stand: its own stream, so no one else moves for it. */
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
@@ -4678,6 +4682,8 @@ export class TileLife {
       this.caps = new Float64Array(size);
       this.progress = new Float64Array(size);
       this.offsets = new Float64Array(size);
+      this.followLeaders = new Int32Array(size);
+      this.followTargets = new Float64Array(size);
     }
     for (const group of this.trafficGroups.values()) group.length = 0;
     for (let i = 0; i < movers.length; i++) {
@@ -4891,7 +4897,11 @@ export class TileLife {
   private proposeLateral(m: Mover, before: Mover, distance: number, dt: number, share = 1) {
     if (!before.maneuver) return 0;
     const difference = this.maneuverOffset(before) - this.offsetOf(before, m);
-    const limit = Math.min(dt * share, (distance / this.perMeter) * Math.sin(Math.PI / 12));
+    if (before.maneuver.returning && before.maneuver.kind !== 'return') return 0;
+    const limit = Math.min(
+      LANE.lateral * dt * share,
+      (distance / this.perMeter) * Math.sin(Math.PI / 12),
+    );
     const change = Math.max(-limit, Math.min(limit, difference));
     m.lat = (before.lat ?? 0) + change;
     return Math.abs(change) * this.perMeter;
@@ -4919,7 +4929,157 @@ export class TileLife {
     m.lat = Math.abs(residual) > 1e-8 ? residual : undefined;
     m.maneuver = undefined;
     m.laneSignal = undefined;
-    m.laneCooldown = 6;
+    m.laneCooldown = LANE.cooldown;
+  }
+
+  /** Next protected approach in metres; following room is deliberately excluded. */
+  private roadProtectedRoom(m: Mover, table: JunctionTable): number {
+    let room = this.lineLength(m.line) / this.perMeter - this.travelled(m);
+    room = Math.min(room, this.signals.protectedRoom(m) / this.perMeter);
+    for (const r of table.holds(m)) {
+      if (r.inside) return 0;
+      if (r.movement.ahead >= -JUNCTION.insideToleranceM * this.perMeter)
+        room = Math.min(room, Math.max(0, r.movement.ahead / this.perMeter));
+    }
+    const site = this.scenes.services.get(m)?.site;
+    if (site?.road === m.line && site.direction === m.dir) {
+      const ahead = ((site.x - m.x) * m.hx + (site.y - m.y) * m.hy) / this.perMeter;
+      if (ahead >= 0) room = Math.min(room, ahead);
+    }
+    return room;
+  }
+
+  /** Project the accepted body onto its current travel axes, including stamp-size clearance. */
+  private roadEnvelope(m: Mover) {
+    const spec = VEHICLES[m.vehicle!],
+      pose = this.pose(m);
+    const length = Math.max(spec.length, this.crossingMinimum);
+    const width = Math.max(spec.width, this.crossingMinimum);
+    const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
+    const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
+    return {
+      length: (along * length + across * width) / 2,
+      width: (along * width + across * length) / 2,
+    };
+  }
+
+  /** Full lateral sweep plus both longitudinal gaps, in metres and m/s. */
+  private roadGapSafe(m: Mover, target: number, continuing = false): boolean {
+    const at = this.offsetOf(m),
+      body = this.roadEnvelope(m);
+    const progress = (m.dir * this.along[m.from]! + m.d) / this.perMeter;
+    const velocity = Math.max(0, (m.v ?? m.speed) / this.perMeter);
+    for (const index of this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? []) {
+      const other = this.movers[index]!;
+      if (other === m) continue;
+      const offset = this.offsetOf(other),
+        peer = this.roadEnvelope(other);
+      const future = other.maneuver ? this.maneuverOffset(other) : offset;
+      const lateral = Math.max(
+        Math.min(at, target) - Math.max(offset, future),
+        Math.min(offset, future) - Math.max(at, target),
+      );
+      if (lateral >= body.width + peer.width + FOLLOW.roadGap) continue;
+      const separation = (other.dir * this.along[other.from]! + other.d) / this.perMeter - progress;
+      const gap = Math.abs(separation) - body.length - peer.length;
+      if (gap < FOLLOW.minGap) return false;
+      if (separation >= 0) {
+        if (!continuing && gap + 1e-8 < FOLLOW.minGap + FOLLOW.headway * velocity) return false;
+        const lead =
+          this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+        if (
+          continuing &&
+          approach(gap - FOLLOW.minGap, lead, kinematicsOf(m.vehicle).brake) + 1e-8 < velocity
+        )
+          return false;
+      } else {
+        const rearSpeed =
+          this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+        if (
+          approach(gap - FOLLOW.minGap, velocity, kinematicsOf(other.vehicle).brake) + 1e-8 <
+          rearSpeed
+        )
+          return false;
+      }
+    }
+    return true;
+  }
+
+  private laneTargetOffset(m: Mover, preference: number): number {
+    return this.offsetOf({ ...m, chosenLane: preference, lat: undefined, maneuver: undefined }, m);
+  }
+
+  private updateLane(index: number, dt: number, table: JunctionTable, otherLimited: boolean) {
+    const m = this.movers[index]!;
+    if (!m.vehicle || m.kind !== 'vehicle') return;
+    const state = m.maneuver;
+    if (state) {
+      if (state.kind === 'filter') return;
+      const target = this.maneuverOffset(m),
+        delta = Math.abs(target - this.offsetOf(m));
+      const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+      const room = this.roadProtectedRoom(m, table);
+      if (
+        !state.returning &&
+        room >= LANE.clear + (bound * delta) / LANE.lateral &&
+        this.roadGapSafe(m, target, true)
+      )
+        return;
+      const preference = m.chosenLane ?? m.lane;
+      if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true))
+        m.maneuver = { ...state, kind: 'return', target: preference, returning: true };
+      else if (!state.returning) m.maneuver = { ...state, returning: true };
+      return;
+    }
+    if (
+      !hasTurnSignals(m.vehicle) ||
+      m.vehicle === 'tricycle' ||
+      m.roadShift !== undefined ||
+      m.curveLengthM !== undefined ||
+      (m.guardWait ?? 0) > 0 ||
+      this.scenes.merging(m) ||
+      otherLimited ||
+      (m.laneCooldown ?? 0) > 0 ||
+      this.roadWidth(m.line) < (this.geo.oneway?.[m.line] ? 2 : 4) * LANE_WIDTH_M
+    ) {
+      m.lanePatience = undefined;
+      return;
+    }
+    const leaderIndex = this.followLeaders[index]!,
+      leader = leaderIndex >= 0 ? this.movers[leaderIndex] : undefined;
+    if (
+      !leader ||
+      leader.line !== m.line ||
+      leader.dir !== m.dir ||
+      (m.speed - this.followTargets[index]!) / this.perMeter + 1e-8 < LANE.gain
+    ) {
+      m.lanePatience = undefined;
+      return;
+    }
+    m.lanePatience = (m.lanePatience ?? 0) + dt;
+    if (m.lanePatience + 1e-8 < LANE.patience || (m.roadScan ?? 0) > 0) return;
+    m.roadScan = 0.5;
+    const layout = this.directionalLanes(m.line);
+    const lane = Math.max(
+      0,
+      Math.min(layout.count - 1, Math.floor((m.chosenLane ?? m.lane) * layout.count)),
+    );
+    const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+    for (const candidate of [lane - 1, lane + 1]) {
+      if (candidate < 0 || candidate >= layout.count) continue;
+      const preference = (candidate + 0.5) / layout.count;
+      const target = this.laneTargetOffset(m, preference);
+      const duration = Math.abs(target - this.offsetOf(m)) / LANE.lateral;
+      if (
+        this.roadProtectedRoom(m, table) + 1e-8 < LANE.clear + bound * duration ||
+        !this.roadGapSafe(m, target)
+      )
+        continue;
+      m.maneuver = { kind: 'lane', target: preference };
+      m.laneSignal = candidate < lane ? 'left' : 'right';
+      m.lanePatience = undefined;
+      return;
+    }
   }
 
   private mergingOverlap(i: number, j: number, lane: number): boolean {
@@ -4988,6 +5148,8 @@ export class TileLife {
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = m.speed;
+      this.followLeaders[i] = -1;
+      this.followTargets[i] = m.speed;
       caps[i] = Infinity;
       const room =
         m.kind === 'vehicle' && this.geo.oneway?.[m.line] ? this.oneWayEndRoom(m) : undefined;
@@ -4997,11 +5159,24 @@ export class TileLife {
       }
     }
     const limit = (i: number, j: number, separation: number) => {
+      const previous = speeds[i]!;
       const m = movers[i]!,
         leader = movers[j]!;
       const spec = VEHICLES[m.vehicle!],
         leaderSpec = VEHICLES[leader.vehicle!];
       let gap = separation - (spec.length + leaderSpec.length) / 2;
+      if (
+        m.chosenLane !== undefined ||
+        leader.chosenLane !== undefined ||
+        m.maneuver ||
+        leader.maneuver ||
+        m.lat !== undefined ||
+        leader.lat !== undefined
+      )
+        gap = Math.min(
+          gap,
+          separation - this.roadEnvelope(m).length - this.roadEnvelope(leader).length,
+        );
       if (
         m.roadShift !== undefined ||
         leader.roadShift !== undefined ||
@@ -5035,16 +5210,32 @@ export class TileLife {
           ? target
           : Math.min(target, approach(room, lead, kinematicsOf(m.vehicle).brake * pm));
       caps[i] = Math.min(caps[i]!, room / dt);
+      this.followLeaders[i] = j;
+      if (speeds[i]! + 1e-9 < previous) this.followTargets[i] = speeds[i]!;
     };
     const curbScenes =
       this.scenes.hasCurbScenes || movers.some((m) => this.offsetVaries(m, FOLLOW.laneAheadM));
-    const overlaps = (i: number, j: number, lane = offsets[i]!) =>
-      Math.abs(lane - offsets[j]!) <
-        (VEHICLES[movers[i]!.vehicle!].width + VEHICLES[movers[j]!.vehicle!].width) / 2 +
-          (movers[i]!.kind === 'vehicle' && movers[j]!.kind === 'vehicle'
-            ? FOLLOW.roadGap
-            : -FOLLOW.squeeze) ||
-      (curbScenes && this.mergingOverlap(i, j, lane));
+    const overlaps = (i: number, j: number, lane = offsets[i]!) => {
+      const a = movers[i]!,
+        b = movers[j]!;
+      const width =
+        a.kind === 'vehicle' &&
+        b.kind === 'vehicle' &&
+        (a.chosenLane !== undefined ||
+          b.chosenLane !== undefined ||
+          a.maneuver ||
+          b.maneuver ||
+          a.lat !== undefined ||
+          b.lat !== undefined)
+          ? this.roadEnvelope(a).width + this.roadEnvelope(b).width
+          : (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
+      return (
+        Math.abs(lane - offsets[j]!) <
+          width +
+            (a.kind === 'vehicle' && b.kind === 'vehicle' ? FOLLOW.roadGap : -FOLLOW.squeeze) ||
+        (curbScenes && this.mergingOverlap(i, j, lane))
+      );
+    };
     for (const group of this.trafficGroups.values())
       for (let k = 0; k < group.length; k++) {
         const i = group[k]!,
@@ -5455,6 +5646,7 @@ export class TileLife {
         continue;
       }
       let intentionalHold = false;
+      let otherRoadLimit = false;
       if (m.kind === 'vehicle') {
         if (m.vehicle) {
           limit.target = speeds[i]!;
@@ -5636,6 +5828,7 @@ export class TileLife {
           if (decision.held) env?.diagnostics?.hold(m, 'signal');
         }
 
+        otherRoadLimit = intentionalHold || speeds[i]! + 1e-9 < this.followTargets[i]!;
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
         const next = nextSpeed(
@@ -5650,7 +5843,7 @@ export class TileLife {
         speeds[i] = Math.min(next, this.caps[i]!);
         if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
-      const distance = speeds[i]! * dt;
+      let distance = speeds[i]! * dt;
       if (pass?.recoveredNow?.has(m)) {
         m.v = 0;
         continue;
@@ -5670,7 +5863,15 @@ export class TileLife {
         continue;
       }
       this.enteredExits.clear();
-      if (m.kind === 'vehicle') this.tickRoadTimers(m, dt);
+      if (m.kind === 'vehicle') {
+        this.tickRoadTimers(m, dt);
+        this.updateLane(i, dt, table, otherRoadLimit);
+        if (m.maneuver && m.maneuver.kind !== 'filter')
+          distance = Math.min(
+            distance,
+            Math.max(0, this.roadProtectedRoom(m, table) - LANE.clear) * this.perMeter,
+          );
+      }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
       if (m.vehicle && (!guard || m.kind !== 'vehicle') && !m.maneuver && !m.latYaw) {
         m.v =

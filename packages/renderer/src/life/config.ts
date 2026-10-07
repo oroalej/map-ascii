@@ -118,6 +118,8 @@ export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
  * Recovery steering can retreat while stopped; road edge allowance for inferred widths is in m.
  */
 export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
+/** Passing uses actor-active seconds and metre/m/s limits, with deterministic lane preference. */
+export const LANE = { lateral: 1, gain: 1.5, patience: 2, clear: 30, cooldown: 6 } as const;
 /**
  * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
  * or the movement guard has refused it for any reason this long.

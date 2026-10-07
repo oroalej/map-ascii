@@ -226,6 +226,21 @@ export class SignalControl {
     }
     return held;
   }
+  /** Distance to the next protected stop, including green approaches, in tile units. */
+  protectedRoom(m: Mover): number {
+    let room = Infinity;
+    const progress = this.along[m.from]! + m.dir * m.d;
+    for (const stop of this.stops.get(m.line) ?? []) {
+      if (stop.dir !== undefined && stop.dir !== m.dir) continue;
+      const ahead =
+        m.dir * (stop.along - progress) -
+        ((stop.exact ? 0 : stop.signal.radius + SIGNAL.gap) +
+          (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2)) *
+          this.perMeter;
+      if (ahead >= -0.5 * this.perMeter) room = Math.min(room, Math.max(0, ahead));
+    }
+    return room;
+  }
   allows(
     m: Mover,
     x: number,
