@@ -34,7 +34,7 @@ Round 2 has no validator: Claude's delta review judges the fixes against the led
 - `--claude-effort <level>`: shared.md, Claude effort. Save the resolved value as `claudeEffort` and use it for unfinished reviews and later rounds.
 - `Result file: <path>`: also write the final result JSON there (step 7).
 - `--fresh`: start an independent review, retaining earlier invocations. Never duplicate an active review process.
-- `--resume <run-path>`: continue that checkpoint or verifiable legacy invocation.
+- `--resume <run-path>`: continue that checkpoint.
   - With no PR argument, take the PR from its saved identity.
   - Reject a mismatched explicit target.
   - Reject combining `--fresh` and `--resume`.
@@ -71,7 +71,7 @@ shared.md's Rules apply, plus:
        - Body: what the branch does, from its commits and its handoff (if `.plans/README.md` lists it), plus the checks the handoff names. Never claim tests that didn't run.
      - Read the new PR's fields.
 3. **Pick `<pr-checkout>`,** the worktree on `headRefName`.
-   - Before fast-forwarding, pushing, choosing a detached tree or replacing a baseline, inspect the saved checkpoint. Preserve verified owned WIP; unfamiliar edits keep the protections below. Reconcile a pending commit or push with Git before repeating it.
+   - Run the recovery reference's `inspect` first, so a saved run's phase, round and live children are known before anything is fast-forwarded or pushed.
    - **Checked out in `<main-checkout>`:** use a detached work tree (shared.md); the main checkout stays untouched.
    - **No worktree:**
      1. `<short>` is `headRefName` without `codex/`, with `/` replaced by `-`.
@@ -79,20 +79,19 @@ shared.md's Rules apply, plus:
      3. If the local branch exists, run `git -C <main-checkout> worktree add <main-checkout>/worktrees/<short> <headRefName>`. Otherwise run `git -C <main-checkout> worktree add --track -b <headRefName> <main-checkout>/worktrees/<short> origin/<headRefName>`.
      4. In the new worktree, run `pnpm install --frozen-lockfile --prefer-offline`, `pnpm data:fetch` and `pnpm.cmd exec tsx "<repo>/scripts/claude-worktree-settings.ts"`. Use the skill checkout's initializer even when the branch predates it.
      5. If the path is occupied by a folder of unknown origin, use a detached work tree instead.
-   - **Existing worktree:** run `git -C <pr-checkout> fetch origin <headRefName>` (Retry). After the recovery reference's `inspect` (so owned checkpoint WIP and live children are known), follow "Commit task leftovers" (shared.md) in it with `<main-checkout>/.plans/active/pr<N>-review-fixes/leftovers/` as `<scratch>` (the invocation's own scratch doesn't exist yet). It commits every uncommitted file except held-back ones and owned WIP, merges `origin/<headRefName>` when the worktree is behind or diverged, and pushes. Then:
-     - **Behind** (`merge-base --is-ancestor HEAD origin/<headRefName>`; only when nothing was committed): fast-forward with `merge --ff-only`. If git refuses because of held-back or owned files, merge `origin/<headRefName>` instead.
+   - **Existing worktree:** run `git -C <pr-checkout> fetch origin <headRefName>` (Retry). After `inspect` (so live children are known), follow "Commit task leftovers" (shared.md) in it with `<main-checkout>/.plans/active/pr<N>-review-fixes/leftovers/` as `<scratch>` (the invocation's own scratch doesn't exist yet). It commits every uncommitted file except held-back ones, merges `origin/<headRefName>` when the worktree is behind or diverged, and pushes. Then:
+     - **Behind** (`merge-base --is-ancestor HEAD origin/<headRefName>`; only when nothing was committed): fast-forward with `merge --ff-only`. If git refuses because of held-back files, merge `origin/<headRefName>` instead.
      - **Ahead:** push the unpushed commits.
      - Never move to a detached work tree because the worktree is dirty, behind or diverged; that would strand its work. Name each leftovers commit and held-back file in the report.
    - In the first lines of output, name the PR (#, branch), `<pr-checkout>`, and whether it is a detached work tree.
 4. **Initialize.** Fetch `origin/main` and refresh the PR head. Run the recovery reference's `init`, or attach to `Worker checkpoint`.
    - Set `<scratch>` to the returned invocation path.
-   - `init` continues the latest valid checkpoint or imports verifiable legacy work; `--fresh` starts independently. Earlier invocation files stay read-only.
+   - `init` continues the latest valid checkpoint; `--fresh` starts independently. Earlier invocation files stay read-only.
    - Report the recovered phase and source invocation. Carry the cumulative round numbers, history and rejected decisions.
-5. **Baseline.** Save `<scratch>/status-baseline.txt`: the checkpoint's baseline status when resuming, or `git status --porcelain=v1 -z --untracked-files=all` on a fresh run. Use this NUL-separated form for every baseline comparison. Owned WIP is tracked separately. In the PR's task worktree, step 1.3 already committed the leftovers, so the baseline holds only held-back files and owned WIP. In a detached work tree, never adopt dirty files as the review's own.
+5. **Baseline.** Save `git status --porcelain=v1 -z --untracked-files=all` as `<scratch>/status-baseline.txt` and use this NUL-separated form for every comparison. In the PR's task worktree, step 1.3 already committed the leftovers, so it holds only held-back files. In a detached work tree, never adopt dirty files as the review's own.
 6. **Settings.** Set `<speed>` and `<claude-effort>` (`state.claudeEffort`), and print both in the first line of output. Resolve `<codex>` and `<claude>` (shared.md, Binaries) and note their versions.
 7. **Merge `origin/main`** so Claude reviews the branch as it will merge. Follow [merge-main.md](references/merge-main.md) in `<pr-checkout>` with the step 1.5 baseline, setting `mainMerge`. Around it:
-   - Save a checkpoint before and after synchronization, and refresh and checkpoint `remoteSha` after the push.
-   - Finish a pending merge only when its saved operation and `MERGE_HEAD` establish ownership.
+   - `record` `mainSha` before the merge and `headSha`/`remoteSha` after the push.
    - If synchronization changed HEAD, keep the historical records and review the new commit in a new round. Otherwise continue at the recovered phase (step 2 for a new review); never restart at round 1.
    - A saved clean result counts only when local HEAD equals the refreshed PR head, current main is an ancestor, and a fresh GitHub CI check passes.
 
@@ -124,7 +123,7 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-i
 ```
 
 - **Arguments:** use the reference's exact Claude arguments; the wrapper substitutes the saved effort. Never change the model or effort, or drop a flag. Put the pinned-head instruction and the saved rejection text in one `--append-system-prompt` argument.
-- **Read-only check:** `--report-only` keeps Claude from editing. Afterwards, compare `git status --porcelain=v1 -z --untracked-files=all` with the baseline. Record any difference in the round's record. Never revert or stage it; protect unfamiliar changes with the reference's `protect`.
+- **Read-only check:** `--report-only` keeps Claude from editing. Afterwards, compare `git status --porcelain=v1 -z --untracked-files=all` with the baseline. Record any difference in the round's record. Never revert or stage it.
 - **Acceptance:** the receipt says `valid: true` with an unchanged PR head. A `reportSource: "transcript"` receipt is a normal success (the wrapper took the finished report from the session transcript); its exit code doesn't matter. A recovered receipt must pass the reference's checks.
   - A quota receipt or wrapper exit 75 means `interrupted`.
   - Any other `valid: false` attempt gets Retry.
@@ -157,7 +156,7 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/validati
 
 ## 4. Round k: implement the valid entries
 
-Read `<validation-report>` (round 1) or Claude's report (round 2). A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round: add it with `claudeSeverity: null`, `verdict: "valid"` and the validator's severity as `finalSeverity`, and fix it with the others. Save `begin` / `finish` checkpoints for each fix, check, commit and push (recovery reference). Continue verified completed steps; leave unfamiliar or uncheckpointed edits untouched.
+Read `<validation-report>` (round 1) or Claude's report (round 2). A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round: add it with `claudeSeverity: null`, `verdict: "valid"` and the validator's severity as `finalSeverity`, and fix it with the others. `record` `phase: "fixes"` once when the fixes start and `headSha`/`remoteSha` after the push; nothing is checkpointed per entry.
 
 **Nits are never fixed in this loop.** Record them in the round's record with `outcome: "none"` and list them in the PR body under "Nits (not fixed)" (`gh pr edit <N> --body-file`), so the owner can pick them up. Fixing nits took two hours per round and started new rounds that found more nits.
 
@@ -283,7 +282,7 @@ End with a fenced `review-pr-result` block holding one JSON object:
 - **`status`:**
   - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 2 ended with its fixes pushed (`roundCap: true`), and `ci.status` is `green` or `fixed`.
   - `error`: an Ends case; `stopReason` names it.
-  - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes live in checkpoint operations, and no clean result is implied for WIP. `resume` is null otherwise.
+  - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes stay uncommitted in the worktree (the next run commits them as leftovers and reviews them), and no clean result is implied for them. `resume` is null otherwise.
 - **`headSha`:** the PR head when the run ends (`gh pr view <N> --json headRefOid`). The results apply to this commit only.
 - **`claudeEffort`:** the resolved selection for unfinished and future reviews. Each round keeps its actual effort.
 - **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`leftovers`:** the SHAs of leftovers commits (shared.md, Commit task leftovers). **`heldBack`:** paths left uncommitted as secrets or files over 10 MB; a `clean` result has nothing else uncommitted. **`roundCount`:** the report's round count. **`roundCap`:** true when round 2 had fixes and no round 3 ran.

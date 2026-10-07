@@ -55,7 +55,7 @@ shared.md's Rules apply, plus:
 5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, end with a missing tool. Then resolve `<codex>` (shared.md, Binaries).
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
-For a branch whose existing PR has a saved incomplete review, inspect it with the review recovery reference before step 1. Skip steps 1 and 3 and continue at step 4: the review coordinator owns its unfinished fixes and verification. Do not commit that WIP through the generic commit step. A live saved coordinator is awaited.
+For a branch whose existing PR has a saved incomplete review, run the recovery reference's `inspect` before step 1: a live child process is awaited; otherwise step 1 commits whatever is uncommitted and the resumed review covers it.
 
 ## 1. Commit and push
 
