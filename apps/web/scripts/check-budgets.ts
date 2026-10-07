@@ -19,6 +19,7 @@ const BUDGETS = {
   renderer: 120 * KB,
   pmtiles: 40 * MB,
   processions: 60 * KB,
+  emergency: 32 * KB,
 };
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -73,6 +74,13 @@ for (const slug of slugs) {
 
   const pmtiles = join(tiles, `${slug}.pmtiles`);
   const processions = join(tiles, `${slug}.processions.json`);
+  const emergency = join(tiles, `${slug}.emergency.json`);
+  if (existsSync(emergency))
+    rows.push({
+      what: `${slug}.emergency.json (gzipped)`,
+      size: gzipSync(readFileSync(emergency)).length,
+      budget: BUDGETS.emergency,
+    });
   if (existsSync(processions))
     rows.push({
       what: `${slug}.processions.json (gzipped)`,

@@ -28,6 +28,7 @@ import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
+import { BEACON_BIT, BEACON_COLORS } from '../life/emergency';
 import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
@@ -279,6 +280,12 @@ float groundMask(vec2 at) {
 
 // A vehicle or boat cell's color: its paint, shaded by the part it shows (life/vehicles.ts). At
 // night, head- and taillights shine, and a one-glyph vehicle glows whole, unless it is parked.
+vec3 beaconColor(int code) {
+  return code == 0 ? vec3(${BEACON_COLORS[0].map(float).join(', ')})
+    : code == 1 ? vec3(${BEACON_COLORS[1].map(float).join(', ')})
+    : vec3(${BEACON_COLORS[2].map(float).join(', ')});
+}
+
 vec3 vehicleColor(int byte, float night) {
   int index = byte & 15;
   int part = (byte >> 4) & 7;
@@ -753,6 +760,7 @@ void main() {
       color = (lifeFlags & ${LIFE_FOCUS_BIT}) != 0 ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
       if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     }
+    if (lifeClass == u_vehicle && (lifeFlags & ${BEACON_BIT}) != 0) color = beaconColor(lifeByte & 3);
     o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }

@@ -38,6 +38,7 @@ import {
 import type { LifeLineShape, VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
+import { BEACON_BIT, type Beacon } from './emergency';
 import { BRAKE_LAMP } from './lamps';
 import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
 import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
@@ -810,6 +811,9 @@ function drawAgent(
           vehicleByte(agent.paint ?? 0, part, agent.parked, brake),
         ],
         indicator,
+        agent.kind === 'vehicle' && (!agent.parked || agent.vehicle === 'firetruck') && agent.beacon
+          ? { ...agent.beacon, glyph: parts[VehiclePart.headlight]! }
+          : undefined,
       );
       detailedStamp = stamped;
       if (stamped && agent.emoji && agent.kind === 'vehicle')
@@ -856,6 +860,14 @@ function drawAgent(
     agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind],
     spec ? vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked) : 255,
   );
+  if (
+    agent.kind === 'vehicle' &&
+    (!agent.parked || agent.vehicle === 'firetruck') &&
+    agent.beacon?.half === 0
+  ) {
+    out[at + 2] = out[at + 2]! | BEACON_BIT;
+    out[at + 3] = (out[at + 3]! & ~3) | agent.beacon.colors[0];
+  }
   if (agent.emoji && agent.kind !== 'person')
     drawingSpeakers?.points.set(drawingOwner, [c + 0.5, r + 0.5]);
   return people + 1;
@@ -1426,6 +1438,7 @@ function stamp(
   spec: VehicleSpec,
   texel: (part: VehiclePart) => [number, number, number, number],
   indicator?: { sides: readonly TurnSide[]; glyph: number },
+  beacon?: Beacon & { glyph: number },
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -1446,6 +1459,9 @@ function stamp(
   const r1 = Math.min(rows - 1, Math.floor(cy + extentY));
   if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_STAMP_CELLS) return false;
   let any = false;
+  const barCells: { at: number; forward: number; right: number }[] | undefined = beacon
+    ? []
+    : undefined;
   // Nearest existing cells to front/rear corners: never enlarge the vehicle's footprint.
   const lamps = indicator
     ? indicator.sides.flatMap((side) => [
@@ -1480,6 +1496,7 @@ function stamp(
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, glyph, cls, bits, byte);
+      barCells?.push({ at, forward, right });
       if (lamps)
         for (const lamp of lamps) {
           if (lamp.side === 'left' ? right >= 0 : right <= 0) continue;
@@ -1501,6 +1518,29 @@ function stamp(
       [out[lamp.at], out[lamp.at + 1]] = packGlyph(indicator.glyph, cls);
       out[lamp.at + 2] = out[lamp.at + 2]! | TURN_SIGNAL_BIT;
     }
+  if (beacon && barCells?.length && beacon.glyph > 0 && beacon.glyph <= MAX_GLYPHS) {
+    const available = barCells.filter((cell) => !(out[cell.at + 2]! & TURN_SIGNAL_BIT));
+    const selected: number[] = [];
+    for (const half of [0, 1] as const) {
+      const candidates = available.filter(
+        (cell) => available.length === 1 || !selected.includes(cell.at),
+      );
+      const right = (half === 0 ? -1 : 1) * spec.width * 0.25;
+      candidates.sort(
+        (a, b) =>
+          (a.forward - length * 0.1) ** 2 +
+            (a.right - right) ** 2 -
+            ((b.forward - length * 0.1) ** 2 + (b.right - right) ** 2) || a.at - b.at,
+      );
+      if (candidates[0]) selected.push(candidates[0].at);
+    }
+    const at = selected[beacon.half] ?? selected[0];
+    if (at !== undefined) {
+      [out[at], out[at + 1]] = packGlyph(beacon.glyph, out[at + 1]! & 63);
+      out[at + 2] = out[at + 2]! | BEACON_BIT;
+      out[at + 3] = (out[at + 3]! & ~3) | beacon.colors[beacon.half];
+    }
+  }
   return any;
 }
 

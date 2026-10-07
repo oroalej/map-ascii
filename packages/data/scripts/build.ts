@@ -8,9 +8,10 @@ import { step as mergeContent } from './04-merge-content';
 import { step as tiles } from './05-tiles';
 import { step as searchIndex } from './06-search-index';
 import { step as processions } from './07-processions';
+import { step as emergency } from './08-emergency';
 import { cityContext } from './step';
 
-const steps = [fetch, convert, normalize, mergeContent, tiles, searchIndex, processions];
+const steps = [fetch, convert, normalize, mergeContent, tiles, searchIndex, processions, emergency];
 
 const usage = `Usage: pnpm data:build [-- --city <slug>] [--offline | --refresh] [--from <step>]
 

@@ -4,6 +4,8 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { isEmergencyData, type EmergencyData } from './emergency-network';
+import type { EmergencyConfig } from './rhythm';
 import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitives';
 export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
@@ -1611,7 +1613,29 @@ export const Season = z
   }) satisfies z.ZodType<SeasonConfig>;
 export type Season = z.infer<typeof Season>;
 
+const EmergencySeconds = z
+  .tuple([z.number().finite().positive(), z.number().finite().positive()])
+  .refine(([min, max]) => min <= max, 'minimum must not exceed maximum');
+const EmergencyRun = { max: z.int().min(0).max(3), interval_s: EmergencySeconds };
+export const EmergencyConfigSchema = z
+  .strictObject({
+    ambulance: z.strictObject({ ...EmergencyRun, dwell_s: EmergencySeconds }).optional(),
+    police: z
+      .strictObject({ ...EmergencyRun, call_every_s: EmergencySeconds, call_s: EmergencySeconds })
+      .optional(),
+    fire: z.strictObject({ ...EmergencyRun, dwell_s: EmergencySeconds }).optional(),
+    exclude: z.array(OsmId).optional(),
+    source: z.string().min(1),
+  })
+  .refine(
+    (config) => !!(config.ambulance || config.police || config.fire),
+    'at least one emergency kind is required',
+  ) satisfies z.ZodType<EmergencyConfig>;
+/** The runtime codec validates the bounded packed graph, including every cross-reference. */
+export const CityEmergency = z.custom<EmergencyData>(isEmergencyData, 'invalid emergency network');
+
 export const CityLife = z.strictObject({
+  emergency: EmergencyConfigSchema.optional(),
   seasons: z
     .array(Season)
     .refine(

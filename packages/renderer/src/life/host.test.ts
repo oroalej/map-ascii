@@ -6,6 +6,7 @@ import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
 import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
+import { emergencyConfig, emergencyFixture } from './testing/emergency';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
 ];
@@ -19,6 +20,7 @@ const mock = vi.hoisted(() => ({
   stop: vi.fn(),
   setLive: vi.fn(),
   setProcessions: vi.fn(() => Promise.resolve()),
+  setEmergency: vi.fn(() => Promise.resolve()),
   release: vi.fn(),
   terminate: vi.fn(),
 }));
@@ -213,6 +215,39 @@ describe('pipelined Life host', () => {
     finish({ ...result(2), procession: run });
     await flush();
     expect(host.latest()?.throngRun).toBeUndefined();
+    host.dispose();
+  });
+  it('rejects stale emergency drawables while retaining terrain after a late network command', async () => {
+    const s = fixture(),
+      { data } = emergencyFixture(),
+      host = createWorkerHost(
+        { cityLife: { source: 'Test', emergency: emergencyConfig }, emergency: data },
+        [],
+      );
+    host.sync(s.tiles);
+    await flush();
+    expect(mock.init).toHaveBeenCalledWith(
+      expect.objectContaining({ emergency: data, emergencyConfig }),
+    );
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.setEmergency(undefined);
+    resolve({
+      ...result(1),
+      agents: [{ kind: 'vehicle', vehicle: 'ambulance', lng: 0, lat: 0, flap: 0 }],
+      terrain: snapshotOf(s.world.cellTerrain()!).snapshot,
+    });
+    await flush();
+    expect(host.latest()?.agents).toEqual([]);
+    expect(host.latest()?.cellGuard((x, y) => [x, y])).toBeTypeOf('function');
+    expect(mock.setEmergency).toHaveBeenCalledWith(undefined);
+    expect(mock.sync).toHaveBeenCalledTimes(1);
     host.dispose();
   });
   it('keeps provenance on an accepted frame and drops marked stale replies', async () => {

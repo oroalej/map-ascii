@@ -7,6 +7,7 @@ import {
   type RuntimeCityLife,
   type ProcessionRoute,
   type TrafficMix,
+  type EmergencyData,
 } from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
@@ -25,6 +26,7 @@ import { EMPTY_PUFFS } from './exhaust';
 import { groundsForRoutes, trafficRings } from './ground-events';
 import { PolygonIndex } from './occupancy';
 import { eventBodySize } from './event-actors';
+import { isEmergencyCraft } from './emergency';
 let nextGeneration = 0;
 
 /** Commands retain the previous ordinary snapshot while a fresh event frame is produced. */
@@ -86,6 +88,7 @@ export type FrameView = {
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
+  setEmergency(data?: EmergencyData): void;
   /** Drop replies produced under a previous season without resetting the population. */
   invalidateFrame(): void;
   sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext): void;
@@ -177,6 +180,17 @@ export function createInlineHost(
       view = retainOrdinary(view);
       acceptedPost = undefined;
     },
+    setEmergency(data) {
+      if (disposed) return;
+      world.setEmergency(data);
+      if (view)
+        view = {
+          ...view,
+          agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
+          puffs: EMPTY_PUFFS,
+        };
+      acceptedPost = undefined;
+    },
     setLive: (id, progress, occurrence) => {
       const previous = world.procession();
       const occurrenceChanged = liveIdentity.id !== id || liveIdentity.occurrence !== occurrence;
@@ -214,6 +228,7 @@ export function createWorkerHost(
   options: {
     traffic?: TrafficMix;
     cityLife?: RuntimeCityLife;
+    emergency?: EmergencyData;
     itemInspection?: boolean;
     emojiObserver?: boolean;
     moments?: MomentOptions;
@@ -222,6 +237,7 @@ export function createWorkerHost(
   profiler?: FrameProfiler,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
+  let emergency = options.emergency;
   let eventGrounds = groundsForRoutes(processions);
   let worker: Worker;
   const inline = () => {
@@ -236,6 +252,8 @@ export function createWorkerHost(
       processions,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      emergencyConfig: options.cityLife?.emergency,
+      emergency,
     });
     return createInlineHost(world, profiler);
   };
@@ -291,6 +309,8 @@ export function createWorkerHost(
       emojiObserver: options.emojiObserver,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
+      emergencyConfig: options.cityLife?.emergency,
+      emergency,
     })
     .then(() => {
       if (!disposed && !fallback) ready = true;
@@ -462,6 +482,21 @@ export function createWorkerHost(
       live = { id, progress, occurrence };
       if (fallback) fallback.setLive(id, progress, occurrence);
       else void remote.setLive(id, progress, occurrence).catch(fail);
+    },
+    setEmergency(data) {
+      // Reject stale agents while retaining valid terrain from an in-flight reply.
+      if (disposed) return;
+      emergency = data;
+      agentEpoch++;
+      acceptedPost = undefined;
+      if (view)
+        view = {
+          ...view,
+          agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
+          puffs: EMPTY_PUFFS,
+        };
+      if (fallback) fallback.setEmergency(data);
+      else void remote.setEmergency(data).catch(fail);
     },
     play(id, timing) {
       if (disposed || !processions.some((route) => route.id === id)) return false;

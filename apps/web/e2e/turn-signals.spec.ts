@@ -7,6 +7,7 @@ import {
   TURN_SIGNAL_COLOR,
 } from '../../../packages/renderer/src/life/turn-signals';
 import { VehiclePart } from '../../../packages/renderer/src/life/vehicles';
+import { BEACON_BIT, BEACON_COLORS } from '../../../packages/renderer/src/life/emergency';
 import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../../../packages/renderer/src/life/lamps';
 import { LampState, lightByte } from '../../../packages/renderer/src/life/lights';
 import { PersonPart } from '../../../packages/renderer/src/life/people';
@@ -170,7 +171,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           u_moon: 1,
           u_shimmer: 0,
         };
-        const n = 31;
+        const n = 40;
         let activeLight: WebGLTexture | null = null;
         canvas.width = n * input.cw;
         canvas.height = input.ch;
@@ -180,13 +181,13 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           overlay = new Uint8Array(n * 4);
         for (let x = 0; x < n; x++) {
           const cls =
-            x === 3 || x === 19 || x === 22
+            x === 3 || x === 19 || x === 22 || x === 35
               ? input.roof
               : x === 23
                 ? input.water
                 : x === 4 || x === 9
                   ? input.grounds
-                  : x === 5 || x === 6 || x === 18 || x === 24 || x === 29
+                  : x === 5 || x === 6 || x === 18 || x === 24 || x === 29 || x === 36 || x === 37
                     ? input.crown
                     : input.road;
           selected.set([input.block & 255, cls | ((input.block >> 8) << 6), 0, 0], x * 4);
@@ -245,10 +246,27 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
                 sub[(y * n * 2 + x * 2 + sx) * 4] =
                   x === 30 ? input.roof : x === 29 && sx === 0 ? input.road : cls;
           }
+          if (x >= 31) {
+            life.set(
+              [
+                input.block & 255,
+                input.vehicle | ((input.block >> 8) << 6),
+                input.vehicleBit | (x === 39 ? 0 : input.beacon),
+                (input.trim << 4) |
+                  (x === 34 ? 128 : 0) |
+                  (x === 32 ? 1 : x === 33 || x === 34 ? 2 : 0),
+              ],
+              x * 4,
+            );
+            for (let y = 0; y < 3; y++)
+              for (let sx = 0; sx < 2; sx++)
+                sub[(y * n * 2 + x * 2 + sx) * 4] = x === 37 && sx === 0 ? input.road : cls;
+          }
         }
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 7 * 4);
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 20 * 4);
         overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 25 * 4);
+        overlay.set([(input.block + 1) & 255, (input.block + 1) >> 8, 0, 0], 38 * 4);
         const selectedTex = texture(n, 1, selected),
           lifeTex = texture(n, 1, life);
         const subTex = texture(n * 2, 3, sub),
@@ -278,6 +296,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
             crownEdge: pixel(6, input.cw - 1),
             brakeEdge: [pixel(29), pixel(29, input.cw - 1)],
             neighborEdge: pixel(21, input.cw - 1),
+            beaconEdge: pixel(37, input.cw - 1),
           };
         };
         const day = render(1),
@@ -416,6 +435,8 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         occluders: [classId('tree'), classId('tree_crown'), classId('trees')],
         vehicleBit: CellBit.vehicle | CellBit.person,
         indicator: TURN_SIGNAL_BIT,
+        beacon: BEACON_BIT,
+        trim: VehiclePart.trim,
         focusBit: LIFE_FOCUS_BIT,
         body: VehiclePart.body,
         head: VehiclePart.headlight,
@@ -428,6 +449,30 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
       },
     );
     const amber = TURN_SIGNAL_COLOR.map((c) => Math.round(c * 255));
+    for (const frame of [
+      result.day,
+      result.night,
+      result.focusedDay,
+      result.focusedNight,
+      result.mapFocused,
+      result.brakeDay,
+      result.brakeNight,
+    ]) {
+      for (const [x, code] of [
+        [31, 0],
+        [32, 1],
+        [33, 2],
+        [34, 2],
+        [37, 0],
+      ] as const) {
+        const color = BEACON_COLORS[code].map((c) => Math.round(c * 255));
+        frame.cells[x]!.forEach((c, i) => expect(Math.abs(c - color[i]!)).toBeLessThanOrEqual(1));
+      }
+      const red = BEACON_COLORS[0].map((c) => Math.round(c * 255));
+      for (const x of [35, 36, 39]) expect(frame.cells[x]).not.toEqual(red);
+      expect(frame.beaconEdge).not.toEqual(red);
+      expect(frame.cells[38]).toEqual([0, 0, 255]);
+    }
     for (const frame of [result.day, result.night, result.focusedDay, result.focusedNight]) {
       for (const x of [0, 2, 6])
         frame.cells[x]!.forEach((c, i) => expect(Math.abs(c - amber[i]!)).toBeLessThanOrEqual(1));

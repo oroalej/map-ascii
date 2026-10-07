@@ -4,6 +4,7 @@ import {
   CameraState,
   City,
   CityLife,
+  EmergencyConfigSchema,
   Season,
   SeasonEmojiEntrySchema,
   contentSchemas,
@@ -21,6 +22,28 @@ import {
 } from './schemas';
 
 const source = { title: 'Example source', url: 'https://example.org/' };
+
+describe('illustrative emergency configuration', () => {
+  const run = { max: 1, interval_s: [150, 300], dwell_s: [20, 40] };
+  it('accepts disabled kinds and preserves runtime config without putting emergency crafts in traffic mixes', () => {
+    const emergency = { ambulance: run, source: 'illustrative OSM tags' };
+    expect(CityLife.parse({ emergency, source: 'synthetic' }).emergency).toEqual(emergency);
+    expect(
+      EmergencyConfigSchema.safeParse({ ...emergency, ambulance: { ...run, max: 0 } }).success,
+    ).toBe(true);
+  });
+  it.each([
+    { source: 'synthetic' },
+    { ambulance: { ...run, max: 4 }, source: 'synthetic' },
+    { ambulance: { ...run, interval_s: [300, 150] }, source: 'synthetic' },
+    { ambulance: { ...run, dwell_s: [0, 2] }, source: 'synthetic' },
+    { ambulance: run },
+    { ambulance: run, exclude: ['way/1'], source: 'synthetic' },
+    { ambulance: { ...run, siren: true }, source: 'synthetic' },
+  ])('rejects unsupported or unsourced config %j', (bad) => {
+    expect(EmergencyConfigSchema.safeParse(bad).success).toBe(false);
+  });
+});
 
 describe('seasonal emoji', () => {
   const entry = { mood: 'gift', subjects: ['person'] };

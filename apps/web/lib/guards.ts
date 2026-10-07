@@ -4,6 +4,7 @@
  * hand-edited file, and keep zod out of the browser bundle (ARCHITECTURE.md §8 initial JS).
  */
 import {
+  isEmergencyData,
   CAMERA_RANGES,
   PROCESSION_LIMITS,
   processionActorCount,
@@ -18,6 +19,7 @@ import {
   type SearchIndexFile,
   type SubdivisionArea,
 } from '@atlas/shared';
+export const isCityEmergency = isEmergencyData;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);

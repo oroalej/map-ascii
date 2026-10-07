@@ -25,6 +25,7 @@ import type {
   RuntimeDialogueCatalog,
   ProcessionRoute,
   TrafficMix,
+  EmergencyData,
 } from '@atlas/shared';
 import {
   clampCamera,
@@ -279,6 +280,8 @@ export type AtlasOptions = {
    * live while one is under way by its schedule (with the live time of day).
    */
   processions?: readonly ProcessionRoute[];
+  /** Optional generated dispatch geography; it can arrive after the renderer starts. */
+  emergency?: EmergencyData;
 };
 
 export type { ProcessionRun } from './life/simulate';
@@ -378,6 +381,7 @@ export type AtlasStats = {
 export type Atlas = {
   /** Install optional event routes after map startup; replace active event playback. */
   setProcessions(routes: readonly ProcessionRoute[]): void;
+  setEmergency(data?: EmergencyData): void;
   /** Transient legend focus; null restores ordinary map colours. */
   setFocus(focus: LegendFocus | null): void;
   setSpeech(enabled: boolean): void;
@@ -925,6 +929,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             processions,
             seasons: simulationSeasons(options.cityLife?.seasons),
             shopSchedule: options.cityLife?.schedules?.shops,
+            emergencyConfig: options.cityLife?.emergency,
+            emergency: options.emergency,
           });
           return createInlineHost(world, profiler);
         })();
@@ -2076,6 +2082,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getLife: () => ({ ...life }),
     getSeason: () => seasonSnapshot,
+    setEmergency(data) {
+      host.setEmergency(data);
+      lifeAgents = [];
+      cellDirty = true;
+      cellsFor = null;
+      drawDirty = true;
+    },
     setProcessions(routes) {
       processions = routes;
       host.setProcessions(routes);
