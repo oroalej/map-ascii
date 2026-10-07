@@ -1388,6 +1388,40 @@
         ]
       }
     ],
+    "folklore": {
+      "hours": {
+        "from": 1320,
+        "to": 240
+      },
+      "ghosts": {
+        "sites": ["cemetery", "worship", "hospital"],
+        "per_cemetery": [1, 2],
+        "undas_per_cemetery": [3, 6],
+        "undas_season": "all-saints",
+        "site_share": 0.5,
+        "range_m": [30, 50]
+      },
+      "manananggal": {
+        "window": {
+          "from": {
+            "month": 10,
+            "day": 31
+          },
+          "to": {
+            "month": 11,
+            "day": 30
+          }
+        },
+        "night_chance": 0.35
+      },
+      "sources": [
+        {
+          "title": "Maximo D. Ramos, Creatures of Philippine lower mythology (University of the Philippines Press, 1971)",
+          "url": "https://tuklas.up.edu.ph/Record/UP-1685594773861174626",
+          "note": "Philippine folklore figures, not claims about particular graves, churches or hospitals. The nightly hours, November window, densities and reactions are illustrative simulation choices."
+        }
+      ]
+    },
     "emergency": {
       "ambulance": {
         "max": 1,

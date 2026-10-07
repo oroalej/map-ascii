@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
 import type { ProcessionRun } from './life/simulate';
@@ -45,8 +45,16 @@ import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
+import type * as FolklorePassModule from './folklore-pass';
+import type { FolkloreQuad } from './folklore-pass';
+import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
 import { viewportFor } from './camera';
+
+const folkloreCapture = vi.hoisted(() => ({
+  quads: undefined as readonly FolkloreQuad[] | undefined,
+  packet: undefined as FolklorePacket | undefined,
+}));
 
 const vehicleBuffers = () => ({
   stampedVehicles: new Uint8Array(0),
@@ -76,6 +84,14 @@ vi.mock('./gpu-context', () => ({
   deleteLabelGlyphs: vi.fn(),
 }));
 vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
+vi.mock('./folklore-pass', async (load) => ({
+  ...(await load<typeof FolklorePassModule>()),
+  folklorePass: vi.fn<typeof FolklorePassModule.folklorePass>(
+    (_gl, _programs, _targets, _theme, _view, _grid, quads) => {
+      folkloreCapture.quads = quads;
+    },
+  ),
+}));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
   createCellTargets: (
@@ -95,7 +111,30 @@ vi.mock('./passes', async (load) => {
     cellPass: vi.fn(),
     crownPass: vi.fn(),
     selectPass: vi.fn(),
-    glyphPass: vi.fn(),
+    glyphPass: vi.fn<typeof PassesModule.glyphPass>(
+      (
+        _gl,
+        _programs,
+        _targets,
+        _themeRes,
+        _theme,
+        _view,
+        _grid,
+        _labelGrid,
+        _time,
+        _reduced,
+        _daylight,
+        _weather,
+        _lampShow,
+        _moon,
+        _sun,
+        _focus,
+        _lifeTime,
+        folklore,
+      ) => {
+        folkloreCapture.packet = folklore;
+      },
+    ),
     streetTextPass: vi.fn(),
     overlayPass: vi.fn(() => []),
     labelsInView: vi.fn(actual.labelsInView),
@@ -218,6 +257,73 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('keeps ordinary agents when Wind or Time changes clear folklore', () => {
+    atlas.destroy();
+    const original = Hosts.createInlineHost,
+      hosts: {
+        host: Hosts.LifeHost;
+        frame: MockInstance<() => void>;
+        folklore: MockInstance<() => void>;
+      }[] = [],
+      person = { kind: 'person' as const, lng: 0, lat: 0, flap: 0 };
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = original(...args);
+      const frame = vi.spyOn(host, 'invalidateFrame');
+      const folklore = vi.spyOn(host, 'invalidateFolklore');
+      hosts.push({ host, frame, folklore });
+      return host;
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    draw(100);
+    const { host, frame, folklore } = hosts[0]!;
+    expect(host.latest()?.agents).toEqual([person]);
+    atlas.setLife({ wind: 'storm' });
+    atlas.setLife({ time: 1320 });
+    expect(host.latest()?.agents).toEqual([person]);
+    expect(folklore).toHaveBeenCalledTimes(2);
+    expect(frame).not.toHaveBeenCalled();
+  });
+
+  it('draws a folklore-only packet and clears visibility and haunts on inactive lifecycle gates', () => {
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([]);
+    vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue({
+      sprites: [
+        {
+          id: 'g',
+          kind: 'ghost',
+          lng: 0,
+          lat: 0,
+          heading: 0,
+          pose: 'breath',
+          alpha: 0.5,
+          phase: 0,
+          wisp: 0,
+        },
+      ],
+      haunts: [{ id: 'g', lng: 0, lat: 0, radius: 8 }],
+    });
+    const changed = vi.fn();
+    atlas.on('folklorechange', changed);
+    draw(100);
+    expect(changed).toHaveBeenCalledWith(true);
+    expect(folkloreCapture.quads).toHaveLength(1);
+    atlas.setLife({ enabled: false });
+    expect(changed).toHaveBeenLastCalledWith(false);
+    draw(200);
+    expect(folkloreCapture.packet?.haunts ?? []).toEqual([]);
+    atlas.setLife({ enabled: true });
+    draw(300);
+    expect(changed).toHaveBeenLastCalledWith(true);
+    atlas.setReducedMotion(true);
+    expect(changed).toHaveBeenLastCalledWith(false);
+  });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
     atlas.on('fixtureschange', changed);
@@ -272,6 +378,8 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    folkloreCapture.quads = undefined;
+    folkloreCapture.packet = undefined;
     labelFixture.enabled = false;
     vi.mocked(overlayPass).mockReset().mockReturnValue([]);
     visibility.watched = true;
@@ -439,6 +547,10 @@ describe('live motion preference', () => {
       weekday: cityTime(date, zone).weekday,
       preview: true,
     });
+    expect(weather().folkloreDate).toEqual({
+      epochDay: cityTime(atCityMinutes(date, zone, 720), zone).day,
+      preview: 'preview',
+    });
     expect(weather().sunAltitude).toBe(
       solarPosition(atCityMinutes(date, zone, 720), 0, 0).altitude,
     );
@@ -492,6 +604,7 @@ describe('live motion preference', () => {
       false,
       false,
       true,
+      false,
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -600,6 +713,7 @@ describe('live motion preference', () => {
       expect.anything(),
       expect.any(Function),
       true,
+      false,
       false,
       false,
     );
@@ -718,6 +832,7 @@ describe('live motion preference', () => {
       latest = {
         generation,
         puffs: new Float64Array(0),
+        folklore: { sprites: [], haunts: [] },
         signalClock: clock,
         procession: undefined,
         cellGuard: () => undefined,
@@ -730,6 +845,7 @@ describe('live motion preference', () => {
     });
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -881,6 +997,7 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 1,
       cellGuard: () => undefined,
     };
@@ -888,6 +1005,7 @@ describe('live motion preference', () => {
     const request = vi.fn<(input: FrameInput) => boolean>(() => true);
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -912,6 +1030,7 @@ describe('live motion preference', () => {
     latest = {
       ...original,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 2,
       agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
       cellGuard: () => undefined,
@@ -940,11 +1059,13 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 0,
       cellGuard: () => undefined,
     };
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request: () => true,

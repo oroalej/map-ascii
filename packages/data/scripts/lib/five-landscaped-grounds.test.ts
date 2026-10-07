@@ -95,8 +95,9 @@ describe('five landscaped grounds', () => {
     }
   });
 
-  it('keeps trunks and low planting off standing roofs, full access widths and new paving', () => {
-    for (const [i, cover] of covers.entries()) {
+  it.each(covers.map((cover, i) => ({ cover, i, slug: slugs[i] })))(
+    'keeps $slug planting off standing roofs, access widths and paving',
+    ({ cover, i }) => {
       const parent = area(i),
         detail = details[i]!;
       const paths = approaches(detail);
@@ -124,7 +125,9 @@ describe('five landscaped grounds', () => {
       expect(cover.areas.some((a) => a.cover === 'grass')).toBe(true);
       expect(cover.areas.some((a) => a.cover === 'planting')).toBe(true);
       expect(cover.areas.some((a) => a.cover === 'woods')).toBe(false);
-    }
+    },
+  );
+  it('adds all grounds without tree placement warnings', () => {
     expect(landcoverFeatures(source, covers).warnings.filter((w) => w.includes('tree'))).toEqual(
       [],
     );

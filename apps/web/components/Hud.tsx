@@ -166,6 +166,9 @@ function LegendControls({
     [atlas],
   );
   const fixtures = hardware?.atlas === atlas ? hardware.fixtures : undefined;
+  const [haunted, setHaunted] = useState<{ atlas: Atlas; on: boolean } | null>(null);
+  useEffect(() => atlas?.on('folklorechange', (on) => setHaunted({ atlas, on })), [atlas]);
+  const folklore = haunted?.atlas === atlas && haunted.on;
   const season = useSeasonState();
   const emoji = useEmojiStore((s) => s.enabled);
   const entries = useMemo(
@@ -177,8 +180,9 @@ function LegendControls({
         fixtures,
         season,
         emoji,
+        folklore,
       }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season, emoji],
+    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season, emoji, folklore],
   );
   // Replacements start clean; cleanup touches only the instance it belongs to.
   useEffect(() => {

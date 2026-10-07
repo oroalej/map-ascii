@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classId, Flags, Marking, markingOf, variantCode } from '../classes';
-import { graveSeed, lifeTransferables } from '../life/geometry';
+import { graveSeed, lifeTransferables, unpackFootprints } from '../life/geometry';
 import { LabelRank } from '../labels';
 import { LifeLine, PLACE_CODES, PLACE_STRIDE } from '../life/geometry';
 import { pointInside } from '../life/occupancy';
@@ -26,6 +26,7 @@ import {
   streetLabel,
   tileToLngLat,
   ringCentroid,
+  insidePolygon,
   sidewalkLine,
   unpackId,
   type TileFeatureLike,
@@ -58,6 +59,74 @@ const square = (x: number, y: number, s: number): [number, number][] => [
   [x, y],
 ];
 const reversed = (ring: [number, number][]) => [...ring].reverse();
+
+it('extracts mapped hospital identities, field holes and solid roof anchors as sidecars', () => {
+  const roof = [square(300, 300, 200), reversed(square(350, 350, 100))];
+  const input = [
+    feature(1, { id: 'hospital/point', class: 'building_hospital' }, [[[100, 100]]]),
+    feature(3, { id: 'hospital/roof', class: 'building_hospital', height: 8 }, roof),
+    feature(3, { id: 'church', class: 'building_religious', height: 5 }, [square(700, 700, 100)]),
+    feature(3, { id: 'field', class: 'farmland' }, [
+      square(1000, 1000, 300),
+      reversed(square(1100, 1100, 50)),
+    ]),
+    feature(3, { id: 'ground', class: 'building', height: 0 }, [square(1500, 1500, 50)]),
+    feature(3, { id: 'burial', class: 'building_part', kind: 'burial=flush', height: 0.1 }, [
+      square(1600, 1600, 20),
+    ]),
+  ];
+  const geo = buildTileGeometry(
+    { map: layer(input) },
+    createIdRegistry(),
+    { z: 16, x: 55192, y: 30266 },
+    16,
+    false,
+    true,
+  ).life;
+  expect(geo.hospitals!.map((site) => site.id)).toEqual(['hospital/point', 'hospital/roof']);
+  expect(geo.places).toHaveLength(2 * PLACE_STRIDE); // worship and the existing farmland population
+  expect(geo.worshipIds).toEqual([[0, 'church']]);
+  const fields = unpackFootprints(geo.fields),
+    roofs = unpackFootprints(geo.roofs);
+  expect(fields[0]!.rings).toHaveLength(2);
+  expect(roofs.map((r) => r.id)).toEqual(['hospital/roof', 'church']);
+  for (const r of roofs) expect(insidePolygon(r.rings, r.anchor)).toBe(true);
+  expect(insidePolygon(roofs[0]!.rings, ringCentroid(roofs[0]!.rings[0]!))).toBe(false);
+  const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
+  expect(unpackFootprints(copy.roofs)).toEqual(roofs);
+  expect(unpackFootprints(copy.fields)).toEqual(fields);
+});
+
+it.each([
+  { folklore: false, z: 16 },
+  { folklore: true, z: 12 },
+])('skips observer sidecars with folklore=$folklore at z$z', ({ folklore, z }) => {
+  const input = {
+    map: layer([
+      feature(3, { id: 'field', class: 'farmland' }, [square(100, 100, 200)]),
+      feature(3, { id: 'hospital', class: 'building_hospital', height: 8 }, [
+        square(500, 500, 100),
+      ]),
+      feature(1, { id: 'hospital-point', class: 'building_hospital' }, [[[800, 800]]]),
+      feature(3, { id: 'church', class: 'building_religious', height: 8 }, [
+        square(1000, 1000, 100),
+      ]),
+      feature(3, { id: 'cemetery', class: 'grass', kind: 'landuse=cemetery' }, [
+        square(1500, 1500, 200),
+      ]),
+    ]),
+  };
+  const tile = { z, x: 1, y: 2 },
+    geometry = buildTileGeometry(input, createIdRegistry(), tile, 16, false, folklore).life,
+    enabled = buildTileGeometry(input, createIdRegistry(), tile, 16, false, true).life;
+  expect(geometry.fields).toBeUndefined();
+  expect(geometry.roofs).toBeUndefined();
+  expect(geometry.hospitals).toBeUndefined();
+  expect(geometry.places).toEqual(enabled.places);
+  expect(geometry.worshipIds).toEqual(enabled.worshipIds);
+  expect(geometry.cemeteryAreas).toEqual(enabled.cemeteryAreas);
+  if (z === 16) expect(geometry.cemeteryAreas).toHaveLength(1);
+});
 
 describe('seasonal cemetery and worship sidecars', () => {
   const tile = { z: 16, x: 55192, y: 30266 };

@@ -1,7 +1,8 @@
 import { SUB, unpackGlyph } from '../glyphs/select';
 import { pointerCell } from '../picking';
 import type { Readback } from '../readback';
-import { agentAt, describeAgent } from './describe';
+import { agentAt, describeAgent, describeFolklore } from './describe';
+import { folkloreHit, type FolkloreQuad } from '../folklore-pass';
 import type { VisibleAgent } from './simulate';
 import { LIFE_AGENT_MASK } from './turn-signals';
 import { canReadLifeSurface, readLifeSurface, type LifeSurfaceFrame } from './surface-visibility';
@@ -13,6 +14,7 @@ const HOVER_MAX_VALIDITY_MS = 1000;
 const HOVER_FRAME_INTERVAL_COUNT = 4;
 
 export type HoverFrame = LifeSurfaceFrame & {
+  folklore?: readonly FolkloreQuad[];
   generation?: number;
   revision: number;
 };
@@ -146,6 +148,20 @@ export class LifeHoverController {
       Math.max(HOVER_VALIDITY_MS, HOVER_FRAME_INTERVAL_COUNT * Math.max(0, ...this.intervals)),
     );
     this.frame = frame;
+    const overlay =
+      frame &&
+      this.point &&
+      !frame.labelsCover(this.point) &&
+      folkloreHit(frame.folklore ?? [], this.point, frame.dpr);
+    if (overlay) {
+      this.serial++;
+      this.pending = undefined;
+      this.confirmed = undefined;
+      this.held = undefined;
+      this.setInspection(false);
+      this.publish(describeFolklore(overlay));
+      return;
+    }
     const c = this.candidate();
     if (!c || !frame) {
       this.clear();

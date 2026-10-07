@@ -25,12 +25,14 @@ let maxZoom: number | undefined;
 let fireworks = false;
 let fireworksActive = false;
 let memorials = false;
+let folklore = false;
 const registry = createIdRegistry();
 
 async function handle(request: WorkerRequest) {
   if (request.type === 'init') {
     fireworks = request.fireworks === true;
     memorials = request.memorials === true;
+    folklore = request.folklore === true;
     fireworksActive = fireworks && request.fireworksActive === true;
     archive = new PMTiles(request.url);
     const h = await archive.getHeader();
@@ -71,7 +73,14 @@ async function handle(request: WorkerRequest) {
     ]);
     return;
   }
-  const geometry = buildTileGeometry(tile.layers, registry, { z, x, y }, maxZoom, fireworksActive);
+  const geometry = buildTileGeometry(
+    tile.layers,
+    registry,
+    { z, x, y },
+    maxZoom,
+    fireworksActive,
+    folklore,
+  );
   if (memorials && z === maxZoom) prepareMemorialSites({ z, x, y }, geometry.life);
   const decodeMs = performance.now() - start;
   scope.postMessage(

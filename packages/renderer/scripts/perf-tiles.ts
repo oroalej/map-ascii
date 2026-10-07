@@ -1,5 +1,5 @@
 /** Decode real archive tiles in Node; timings exclude file IO and PMTiles decompression. */
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { cpus, platform, release } from 'node:os';
 import { dirname, resolve } from 'node:path';
@@ -15,6 +15,10 @@ const arg = (name: string, fallback: string) =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const city = arg('city', 'naga');
 if (!/^[a-z0-9-]+$/.test(city)) throw new Error('Invalid city slug');
+const pack = JSON.parse(
+  await readFile(resolve(root, `packages/content/cities/${city}/city.json`), 'utf8'),
+) as { life?: { folklore?: unknown } };
+const folklore = !!pack.life?.folklore;
 const rounds = Number(arg('rounds', '5'));
 if (!Number.isInteger(rounds) || rounds < 1) throw new Error('Invalid round count');
 const sourceHash = await currentSourceHash(root);
@@ -71,7 +75,7 @@ try {
           const registry = createIdRegistry();
           const buildStart = performance.now();
           const tile = new VectorTile(new PbfReader(data));
-          buildTileGeometry(tile.layers, registry, { z, x, y }, header.maxZoom);
+          buildTileGeometry(tile.layers, registry, { z, x, y }, header.maxZoom, false, folklore);
           build.push(performance.now() - buildStart);
         }
         tiles.push({
@@ -119,7 +123,12 @@ try {
       os: release(),
       cpu: cpus()[0]?.model,
     },
-    parameters: { rounds, minZoom: Math.max(header.minZoom, 15), maxZoom: header.maxZoom },
+    parameters: {
+      rounds,
+      minZoom: Math.max(header.minZoom, 15),
+      maxZoom: header.maxZoom,
+      folklore,
+    },
     zooms,
     tiles,
   };

@@ -44,6 +44,7 @@ import {
 
 export type LegendEntryId =
   | 'info:emoji'
+  | 'info:folklore'
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
@@ -252,6 +253,7 @@ export function legendEntries(
   {
     life = false,
     emoji = false,
+    folklore = false,
     lights = false,
     sidewalksDerived = true,
     fixtures,
@@ -259,6 +261,7 @@ export function legendEntries(
   }: {
     life?: boolean;
     emoji?: boolean;
+    folklore?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
     fixtures?: Pick<
@@ -342,6 +345,23 @@ export function legendEntries(
       label: 'Moods (simulated)',
       glyphs: `${MOOD_GLYPHS.happy} ${MOOD_GLYPHS.sleeping}`,
       color: css(theme.label),
+    });
+  }
+  if (life && folklore) {
+    let simulated = -1;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      if (entry.id.startsWith('life:') || entry.id === 'info:emoji' || entry.id === 'info:fish') {
+        simulated = i;
+        break;
+      }
+    }
+    entries.splice(simulated < 0 ? entries.length : simulated + 1, 0, {
+      id: 'info:folklore',
+      classes: [],
+      label: 'Folklore (simulated)',
+      glyphs: theme.folkloreLegend.glyph,
+      color: css(theme.folkloreLegend.color),
     });
   }
   if (
