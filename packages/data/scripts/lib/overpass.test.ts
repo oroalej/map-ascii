@@ -43,6 +43,16 @@ describe('cacheAnswers', () => {
   it('always uses the saved download offline', () => {
     expect(cacheAnswers('old', city, { offline: true })).toBe(true);
   });
+
+  it('requires metadata, matching filters and coverage in strict offline mode', () => {
+    const strict = { offline: true, requireCoverage: true };
+    expect(cacheAnswers(undefined, city, strict)).toBe(false);
+    expect(cacheAnswers(downtown, city, strict)).toBe(false);
+    expect(cacheAnswers(city, downtown, strict)).toBe(true);
+    expect(cacheAnswers(city, q('13.602,123.17,13.64,123.213', 'node["place"];'), strict)).toBe(
+      false,
+    );
+  });
 });
 
 /**
@@ -268,6 +278,49 @@ describe('overpass', () => {
         /--offline: no cached download/,
       );
     });
+  });
+
+  it('omits bbox coverage text from bbox-free strict offline errors', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-bbox-free-'));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const file = join(dir, 'missing.osm.json');
+      await expect(
+        overpass('rel(1); out;', file, { offline: true, requireCoverage: true }),
+      ).rejects.toThrow(`--offline: no matching cached download at ${file}`);
+      await expect(overpass(city, file, { offline: true, requireCoverage: true })).rejects.toThrow(
+        ' covering [123.1,13.5,123.4,13.7]',
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it('rejects smaller lighter/region caches and missing metadata without an offline network fallback', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-coverage-'));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    try {
+      for (const name of ['detail-traffic.osm.json', 'region-part-1.osm.json']) {
+        const path = join(dir, name);
+        await writeFile(path, JSON.stringify({ elements: [] }));
+        await expect(
+          overpass(city, path, { offline: true, requireCoverage: true }),
+        ).rejects.toThrow('covering');
+        await writeFile(`${path}.query`, downtown);
+        await expect(
+          overpass(city, path, { offline: true, requireCoverage: true }),
+        ).rejects.toThrow(path);
+        await writeFile(`${path}.query`, city);
+        expect(await overpass(downtown, path, { offline: true, requireCoverage: true })).toEqual({
+          elements: [],
+        });
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('retries a dropped connection, on the next server, and saves the answer', async () => {

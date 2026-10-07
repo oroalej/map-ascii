@@ -11,7 +11,8 @@
   },
   "detail_buffer_km": 2,
   "region": {
-    "bbox": [123.1695, 13.602, 123.213, 13.64]
+    "bbox": [123.1695, 13.602, 123.213, 13.64],
+    "include_boundary": true
   },
   "subdivision": {
     "admin_level": 10,

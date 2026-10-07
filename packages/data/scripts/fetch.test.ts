@@ -1,7 +1,13 @@
 import type { City } from '@atlas/shared';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import {
   mergeResponses,
+  detailParts,
+  fetchDetail,
+  regionBounds,
   neighborhoodQuery,
   groundsQuery,
   poolsQuery,
@@ -62,6 +68,215 @@ const city = {
   languages: [],
   smoke_landmark: 'Fixture Plaza',
 } as City;
+
+describe('boundary-inclusive detail fetch', () => {
+  const expanded: City = { ...city, region: { bbox: [120, 10, 124, 14], include_boundary: true } };
+  const bounds = [120, 10, 126, 16] as const;
+  it('unions the configured bbox with the boundary only when requested', async () => {
+    expect(await regionBounds(expanded, '', { offline: true }, [122, 12, 126, 16])).toEqual(bounds);
+    expect(await regionBounds(city, '', { offline: true }, [122, 12, 126, 16])).toEqual([
+      120, 10, 124, 14,
+    ]);
+  });
+  it('uses stable quarter filenames and complete bbox coverage', () => {
+    expect(detailParts(expanded, [...bounds]).map((p) => p.file)).toEqual(
+      [1, 2, 3, 4].map((i) => `detail-part-${i}.osm.json`),
+    );
+    expect(
+      detailParts(expanded, [...bounds]).map((p) => p.query.match(/\[bbox:([^\]]+)\]/)![1]),
+    ).toEqual([
+      '10.000000,120.000000,13.000000,123.000000',
+      '10.000000,123.000000,13.000000,126.000000',
+      '13.000000,120.000000,16.000000,123.000000',
+      '13.000000,123.000000,16.000000,126.000000',
+    ]);
+  });
+  it('retains legacy offline reuse and rejects incomplete expanded coverage without networking', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-'));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    try {
+      await writeFile(
+        join(dir, 'detail.osm.json'),
+        JSON.stringify({ elements: [{ type: 'way', id: 1 }] }),
+      );
+      expect((await fetchDetail(city, [...bounds], dir, { offline: true })).elements).toHaveLength(
+        1,
+      );
+      await expect(fetchDetail(expanded, [...bounds], dir, { offline: true })).rejects.toThrow(
+        'detail-part-1',
+      );
+      const parts = detailParts(expanded, [...bounds]);
+      for (const part of parts.slice(0, 3)) {
+        await writeFile(
+          join(dir, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 1 }] }),
+        );
+        await writeFile(join(dir, `${part.file}.query`), part.query);
+      }
+      await expect(fetchDetail(expanded, [...bounds], dir, { offline: true })).rejects.toThrow(
+        'detail-part-4',
+      );
+      await writeFile(
+        join(dir, parts[3]!.file),
+        JSON.stringify({ elements: [{ type: 'way', id: 2 }] }),
+      );
+      await writeFile(join(dir, `${parts[3]!.file}.query`), parts[3]!.query);
+      expect(
+        (await fetchDetail(expanded, [...bounds], dir, { offline: true })).elements.map(
+          (e) => e.id,
+        ),
+      ).toEqual([1, 2]);
+      expect(await readFile(join(dir, 'detail.osm.json.query'), 'utf8')).toContain(
+        '[bbox:10.000000,120.000000,16.000000,126.000000]',
+      );
+      // Aggregate coverage is sufficient on the next offline run.
+      expect(
+        (await fetchDetail(expanded, [...bounds], dir, { offline: true })).elements,
+      ).toHaveLength(2);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it('reuses matching successful parts during an online retry', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-retry-'));
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ elements: [{ type: 'way', id: 2 }] })));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      for (const part of detailParts(expanded, [...bounds]).slice(0, 3)) {
+        await writeFile(
+          join(dir, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 1 }] }),
+        );
+        await writeFile(join(dir, `${part.file}.query`), part.query);
+      }
+      expect(
+        (await fetchDetail(expanded, [...bounds], dir, { offline: false })).elements,
+      ).toHaveLength(2);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it.each([false, true])(
+    'handles covering aggregate reuse online with refresh=%s',
+    async (refresh) => {
+      const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-aggregate-'));
+      const fetch = vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ elements: [{ type: 'way', id: 2 }] }))),
+      );
+      vi.stubGlobal('fetch', fetch);
+      try {
+        await writeFile(
+          join(dir, 'detail.osm.json'),
+          JSON.stringify({ elements: [{ type: 'way', id: 1 }] }),
+        );
+        await writeFile(
+          join(dir, 'detail.osm.json.query'),
+          detailParts(expanded, [119, 9, 135, 25])[0]!.query,
+        );
+        const result = await fetchDetail(expanded, [...bounds], dir, { offline: false, refresh });
+        expect(result.elements.map((e) => e.id)).toEqual([refresh ? 2 : 1]);
+        expect(fetch).toHaveBeenCalledTimes(refresh ? 4 : 0);
+      } finally {
+        vi.unstubAllGlobals();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+  it('adopts a covering peer aggregate online with response and query metadata intact', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-peer-'));
+    const peer = join(dir, 'peer');
+    await mkdir(peer);
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const query = detailParts(expanded, [119, 9, 135, 25])[0]!.query;
+    const response = {
+      version: 0.6,
+      generator: 'fixture',
+      osm3s: { timestamp_osm_base: new Date().toISOString() },
+      elements: [{ type: 'way', id: 777 }],
+    };
+    try {
+      await writeFile(join(peer, 'detail.osm.json'), JSON.stringify(response));
+      await writeFile(join(peer, 'detail.osm.json.query'), query);
+      expect(
+        await fetchDetail(expanded, [...bounds], dir, {
+          offline: false,
+          copies: (file) => [join(peer, basename(file))],
+        }),
+      ).toEqual(response);
+      expect(JSON.parse(await readFile(join(dir, 'detail.osm.json'), 'utf8'))).toEqual(response);
+      expect(await readFile(join(dir, 'detail.osm.json.query'), 'utf8')).toBe(query);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+  it('retries an interrupted refresh without the old aggregate or unfinished quarters', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-refresh-'));
+    const peer = join(dir, 'peer');
+    await mkdir(peer);
+    const copies = vi.fn((file: string) => [join(peer, basename(file))]);
+    const response = (id: number) =>
+      new Response(JSON.stringify({ elements: [{ type: 'way', id }] }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(201))
+      .mockResolvedValueOnce(response(202))
+      .mockResolvedValueOnce(new Response('failed refresh', { status: 400 }))
+      .mockResolvedValueOnce(response(203))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const parts = detailParts(expanded, [...bounds]);
+      for (const [i, part] of parts.entries()) {
+        await writeFile(
+          join(dir, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 101 + i }] }),
+        );
+        await writeFile(join(dir, `${part.file}.query`), part.query);
+        await writeFile(
+          join(peer, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 101 + i }] }),
+        );
+        await writeFile(join(peer, `${part.file}.query`), part.query);
+      }
+      await writeFile(
+        join(dir, 'detail.osm.json'),
+        JSON.stringify({ elements: [{ type: 'way', id: 901 }] }),
+      );
+      await writeFile(
+        join(dir, 'detail.osm.json.query'),
+        detailParts(expanded, [119, 9, 135, 25])[0]!.query,
+      );
+      await expect(
+        fetchDetail(expanded, [...bounds], dir, { offline: false, refresh: true, copies }),
+      ).rejects.toThrow('HTTP 400');
+      expect(fetch).toHaveBeenCalledTimes(3);
+      await expect(
+        fetchDetail(expanded, [...bounds], dir, { offline: true, copies }),
+      ).rejects.toThrow('detail-part-3');
+      expect(fetch).toHaveBeenCalledTimes(3);
+      const retry = await fetchDetail(expanded, [...bounds], dir, { offline: false, copies });
+      expect(retry.elements.map((e) => e.id)).toEqual([201, 202, 203, 204]);
+      expect(fetch).toHaveBeenCalledTimes(5);
+      expect(copies).not.toHaveBeenCalled();
+      expect((await fetchDetail(expanded, [...bounds], dir, { offline: true })).elements).toEqual(
+        retry.elements,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('splitBbox', () => {
   it('splits into n × n parts that tile the bbox', () => {
