@@ -1,3 +1,4 @@
+import { birdFixture } from './testing/bird-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { epochDay, emojiGlyph, expandSeasons, type RuntimeSeasonConfig } from '@atlas/shared';
 import {
@@ -1445,5 +1446,82 @@ describe('emoji ambient eligibility', () => {
     expect(memory.id()).toContain('emoji:0');
     memory.reset();
     expect(memory.id()).toContain('emoji:1');
+  });
+});
+
+describe('event-only bird fear', () => {
+  const bird = () => {
+    const { flock } = birdFixture();
+    const observer = new EmojiObserver(123, 1, { rng: () => 0 });
+    const o: EmojiObservation = { owner: flock, subject: 'bird', eligible: true, speaking: false };
+    const step = (clock: number, events: (typeof flock)[] = [], observations = [o]) =>
+      observer.step(
+        0.1,
+        19,
+        {
+          rain: 1,
+          clock,
+          minutes: 1200,
+          season: 'birds',
+          emojiSeasons: [{ id: 'birds', emoji: [{ mood: 'gift', subjects: ['bird'], weight: 1 }] }],
+        },
+        observations,
+        [],
+        [],
+        events,
+      );
+    return { flock, observer, o, step };
+  };
+  it('latches a first observation between ticks, expires after 2.5 seconds and respects cooldown', () => {
+    const f = bird();
+    f.step(0.1, [], []);
+    f.step(0.2, [f.flock]);
+    expect(f.observer.cue(f.flock)).toBeUndefined();
+    f.step(0.3);
+    f.step(0.4);
+    f.step(0.5);
+    expect(f.observer.cue(f.flock)).toMatchObject({ subject: 'bird', mood: 'scared' });
+    f.step(2.99);
+    expect(f.observer.cue(f.flock)).toBeDefined();
+    f.step(3);
+    expect(f.observer.cue(f.flock)).toBeUndefined();
+    f.step(3.1, [f.flock]);
+    f.step(3.5);
+    expect(f.observer.cue(f.flock)).toBeUndefined();
+    f.step(45.5, [f.flock]);
+    expect(f.observer.cue(f.flock)?.mood).toBe('scared');
+  });
+  it.each([false, true])('releases fear on eligibility loss (active=%s)', (active) => {
+    const f = bird();
+    f.step(0.1, [], []);
+    f.step(0.2, [f.flock]);
+    if (active) f.step(0.5);
+    f.o.eligible = false;
+    f.step(active ? 0.6 : 0.3);
+    expect(f.observer.cue(f.flock)).toBeUndefined();
+    expect(f.observer.memory.get(f.flock)!.edges.size).toBe(0);
+    f.o.eligible = true;
+    f.step(1);
+    expect(f.observer.cue(f.flock)).toBeUndefined();
+  });
+  it('never samples person, ambient or bird-subject seasonal moods', () => {
+    const f = bird();
+    for (let i = 1; i <= 1500; i++) f.step(i * 0.1);
+    expect(f.observer.size).toBe(0);
+    expect(f.observer.memory.get(f.flock)!.attemptAt).toBeUndefined();
+  });
+  it('keeps the shared tile capacity across simultaneous startled flocks', () => {
+    const f = bird();
+    const flocks = Array.from({ length: 8 }, () => birdFixture().flock);
+    const observations = flocks.map((owner): EmojiObservation => ({
+      owner,
+      subject: 'bird',
+      eligible: true,
+      speaking: false,
+    }));
+    f.step(0.5, flocks, observations);
+    expect(f.observer.size).toBe(EMOJI.capacity);
+    expect(flocks.filter((owner) => f.observer.cue(owner))).toHaveLength(EMOJI.capacity);
+    expect(flocks.every((owner) => !f.observer.memory.get(owner)!.edges.size)).toBe(true);
   });
 });

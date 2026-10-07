@@ -1036,7 +1036,7 @@ describe('ground bird views', () => {
     expect(views()).toEqual(rest);
   });
 
-  it('holds a rendered ground pose while its flock advances and releases the same bird identity', () => {
+  it('keeps a rendered ground bird moving through selection and release with the same identity', () => {
     const { world, flock } = viewFixture();
     const bird = flock.birds[0]!;
     const views = () => world.visible(21, 1, tileToLngLat(tile, point(0, 0)));
@@ -1048,9 +1048,10 @@ describe('ground bird views', () => {
     const before = groundState(flock);
     for (let i = 0; i < 8; i++) {
       world.step(0.1);
-      expect(views()[0]).toEqual(first);
+      expect(views()[0]!.inspectionId).toBe(first.inspectionId);
     }
     expect(groundState(flock)).not.toEqual(before);
+    expect(views()[0]).not.toEqual(first);
     world.inspection!.select({ id: null, revision: 2, time: 0.8 }, 0.8);
     world.step(0.1);
     expect(views()[0]!.inspectionId).toBe(first.inspectionId);

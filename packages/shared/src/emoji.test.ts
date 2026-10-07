@@ -24,3 +24,7 @@ it('resolves every mood to an allowed single-code-point system emoji', () => {
   expect(emojiGlyph('person', 'melting')).toBe('😵');
   expect(emojiGlyph('person', 'moved')).toBe('😢');
 });
+
+it('uses the existing fear glyph for birds', () => {
+  expect(emojiGlyph('bird', 'scared')).toBe('😨');
+});

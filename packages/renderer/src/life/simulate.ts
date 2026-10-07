@@ -23,6 +23,12 @@ import {
 import type { SimulationSeason } from './seasonal-simulation';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
+import {
+  birdFlightMargin,
+  stepBirdFlight,
+  type BirdFlight,
+  type BirdFlightStep,
+} from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import {
@@ -101,6 +107,9 @@ import {
   DOG,
   isWalker,
   PERCH,
+  BIRD_POINTER,
+  BIRD_TAKEOFF,
+  BIRD_FLIGHT,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   FILTER,
@@ -570,6 +579,8 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
+  pointer?: { lngLat: readonly [number, number]; cellMeters: number };
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -592,6 +603,8 @@ export type LifeEnv = {
   rain: number;
   wind?: { dir: readonly [number, number]; strength: number };
 };
+
+type FlockPointer = Point & { cellMeters: number; radius?: number };
 
 /**
  * One of a group walking together (config.ts `PEOPLE`): an adult or a child, their shirt, their
@@ -770,6 +783,10 @@ export type Bird = {
   phase: number;
   /** Rendered offset retained when departing, independent of a replacement landing layout. */
   departure?: Point;
+  /** Mouse-flushed birds retain their own position until their reaction begins. */
+  takeoff?: Point & { delay: number; seconds: number; face: number };
+  /** Independent airborne cursor avoidance, retaining position, heading and speed. */
+  flight?: BirdFlight;
 } & Partial<GroundForager>;
 
 export type Flock = {
@@ -804,6 +821,10 @@ export type Flock = {
   landingBlend: number;
   /** Departure offset blend from 1 to 0, independent of approach preparation. */
   departureBlend?: number;
+  /** Individual mouse-flush transitions share an elapsed clock, not a displacement. */
+  takeoff?: Point & { age: number; seconds: number; extent: number };
+  /** Bounds of independently flying members; absent during ordinary flock flight. */
+  flightBounds?: { minX: number; minY: number; maxX: number; maxY: number };
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -813,6 +834,70 @@ export type Flock = {
   rank: number;
   birds: Bird[];
 };
+
+/** Smooth acceleration after this bird's own mouse-flush reaction delay. */
+function takeoffProgress(flock: Flock, bird: Bird) {
+  if (!flock.takeoff || !bird.takeoff) return 1;
+  const t = Math.max(
+    0,
+    Math.min(1, (flock.takeoff.age - bird.takeoff.delay) / bird.takeoff.seconds),
+  );
+  return t * t * (3 - 2 * t);
+}
+
+/** Scale of the current resting or scattered flight formation. */
+function birdSpread(flock: Flock) {
+  return flock.perched
+    ? PERCH.spread / BIRD_SPECIES[flock.species].spread[1]
+    : flock.landed
+      ? 1
+      : 1 + (3 * flock.scatter) / PERCH.scatter;
+}
+
+function birdTurn(flock: Flock, bird: Bird, wobble: number) {
+  return flock.perched || flock.landed ? bird.phase * 6 : wobble + bird.phase * 6;
+}
+
+/** One bird's rendered offset from its flock centre, written into caller-owned storage. */
+function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
+  if (bird.flight) {
+    out.x = bird.flight.x - flock.x;
+    out.y = bird.flight.y - flock.y;
+    return;
+  }
+  birdFormationOffset(flock, bird, turn, spread, out);
+}
+
+/** Navigation and regrouping retain the normal formation while members fly independently. */
+function birdFormationOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
+  const cos = Math.cos(turn) * spread;
+  const sin = Math.sin(turn) * spread;
+  const ground = isForager(bird) && flock.landed;
+  const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
+  const ox = bird.ox * cos - bird.oy * sin;
+  const oy = bird.ox * sin + bird.oy * cos;
+  let x = ox + ((bird.gx ?? ox) - ox) * blend;
+  let y = oy + ((bird.gy ?? oy) - oy) * blend;
+  if (bird.departure && flock.departureBlend) {
+    x += (bird.departure.x - x) * flock.departureBlend;
+    y += (bird.departure.y - y) * flock.departureBlend;
+  }
+  if (bird.takeoff && flock.takeoff) {
+    const progress = takeoffProgress(flock, bird);
+    x = (bird.takeoff.x - flock.x) * (1 - progress) + x * progress;
+    y = (bird.takeoff.y - flock.y) * (1 - progress) + y * progress;
+  }
+  out.x = x;
+  out.y = y;
+}
+
+function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
+  if (flock.flightBounds)
+    for (const bird of flock.birds) {
+      if (bird.flight && near(bird.flight.x, bird.flight.y)) return true;
+    }
+  return false;
+}
 
 /** The agents of one tile. */
 export class TileLife {
@@ -923,6 +1008,10 @@ export class TileLife {
   private inspected?: object;
   readonly momentHost: MomentHost;
   readonly emoji: EmojiObserver;
+  /** Observer events and ownership never enter physical flock state. */
+  readonly startled: Flock[] = [];
+  readonly birdEmojiOwners = new Set<Flock>();
+  private pointerInside?: WeakSet<Flock>;
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -1008,6 +1097,11 @@ export class TileLife {
   readonly pending: PendingSeed[] = [];
   birthCredit = 0;
   readonly flocks: Flock[] = [];
+  private readonly flockPointer: FlockPointer = { x: 0, y: 0, cellMeters: 0 };
+  private readonly flockDetour: Point = { x: 0, y: 0 };
+  private readonly birdOffset: Point = { x: 0, y: 0 };
+  private readonly birdFlightStep: BirdFlightStep = { dt: 0, targetX: 0, targetY: 0, speed: 0 };
+  private readonly birdFlightPointer = { x: 0, y: 0, reach: 0 };
   readonly parked: Parked[] = [];
   /** Trains standing by on sidings: one entry per car (`spawnStandby`). */
   readonly standby: Parked[] = [];
@@ -5958,7 +6052,7 @@ export class TileLife {
     input.owner = owner;
     input.subject = subject;
     input.eligible = eligible;
-    input.speaking = this.momentHost.speaking(owner);
+    input.speaking = subject === 'bird' ? false : this.momentHost.speaking(owner);
     // Required fields are populated before lending this pooled record to the observer.
     const observation = input as EmojiObservation;
     this.emojiInputs.push(observation);
@@ -6017,7 +6111,29 @@ export class TileLife {
       input.vendor = true;
       input.held = input.arrival = input.still = undefined;
     }
+    for (const flock of this.birdEmojiOwners) {
+      const spec = BIRD_SPECIES[flock.species];
+      const share = levels ? (spec.nocturnal ? levels.night : levels.bird) : 1;
+      const admitted = eligible(flock) && flock.rank < share * crowd;
+      this.emojiInput(flock, 'bird', admitted);
+    }
     return observations;
+  }
+  /** Freeze pending/active cues, but never replay an undelivered physical event. */
+  freezeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.emoji.freeze();
+  }
+  private clearBirdEmojiOwners() {
+    for (const flock of this.birdEmojiOwners) this.emoji.memory.get(flock)?.edges.clear();
+    this.birdEmojiOwners.clear();
+  }
+  disposeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.clearBirdEmojiOwners();
+    this.emoji.dispose();
   }
   visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
     return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
@@ -6070,6 +6186,7 @@ export class TileLife {
     pedestrianTarget?: (m: Mover, target: number) => { target: number; held: boolean },
   ) {
     if (dt <= 0) return;
+    if (!env?.pointer) this.pointerInside = undefined;
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -6156,7 +6273,9 @@ export class TileLife {
     );
     const emojiEnv = env ?? { rain: 0, clock };
     const emojiZoom = momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0);
-    if (this.emoji.observes(emojiZoom))
+    const observing = this.emoji.observes(emojiZoom);
+    if (observing) {
+      for (const flock of this.startled) this.birdEmojiOwners.add(flock);
       this.emoji.step(
         dt,
         emojiZoom,
@@ -6164,8 +6283,17 @@ export class TileLife {
         this.emojiObservations(emojiEnv, near, pass?.owns),
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
+        this.startled,
       );
-    else this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      for (const flock of this.birdEmojiOwners) {
+        const track = this.emoji.memory.get(flock);
+        if (!track?.edges.has('scared') && !track?.group) this.birdEmojiOwners.delete(flock);
+      }
+    } else {
+      this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      this.clearBirdEmojiOwners();
+    }
+    this.startled.length = 0;
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
@@ -7193,7 +7321,7 @@ export class TileLife {
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
-    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env, observing);
     if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
     if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
@@ -7893,6 +8021,7 @@ export class TileLife {
     gustAt?: (x: number, y: number) => number,
     near?: (x: number, y: number) => boolean,
     env?: LifeEnv,
+    observing = false,
   ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
@@ -7901,21 +8030,42 @@ export class TileLife {
     const wind = env?.wind;
     const wx = wind ? wind.dir[0] * wind.strength : 0;
     const wy = wind ? wind.dir[1] * wind.strength : 0;
+    let pointer: FlockPointer | undefined;
+    this.birdFlightStep.dt = dt;
+    if (env?.pointer) {
+      pointer = this.flockPointer;
+      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
+      pointer.x = at.x;
+      pointer.y = at.y;
+      pointer.cellMeters = env.pointer.cellMeters;
+      this.pointerInside ??= new WeakSet();
+    }
     for (const flock of this.flocks) {
-      if (near && !near(flock.x, flock.y)) continue;
+      if (pointer) pointer.radius = undefined;
+      if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (flock.takeoff) {
+        flock.takeoff.age += dt;
+        if (flock.takeoff.age >= flock.takeoff.seconds) {
+          delete flock.takeoff;
+          for (const bird of flock.birds) delete bird.takeoff;
+        }
+      }
       if (flock.departureBlend)
         flock.departureBlend = Math.max(0, flock.departureBlend - dt / FORAGE.settleSeconds);
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
+      if (pointer && !sitting && !flock.takeoff) this.beginBirdFlights(flock, pointer, observing);
       flock.scatter = Math.max(0, flock.scatter - dt);
       // Sitting out the rain, a flock doesn't count down its stay.
       const committed = flock.landing || (flock.home >= 0 && flock.perch >= 0 && !flock.perched);
       if (!(sheltering && sitting) && !committed) flock.stay -= dt;
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
-        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels);
+        const pointerFlush = pointer ? this.pointerNear(flock, pointer) : false;
+        if (pointerFlush) this.recordStartle(flock, observing);
+        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels) || pointerFlush;
         if (flushed || (!sheltering && flock.stay <= 0)) {
           if (!flushed && flock.perched && flock.home >= 0) {
             flock.roost = flock.home;
@@ -7924,9 +8074,11 @@ export class TileLife {
               this.prepareLanding(flock, { x: flock.lx, y: flock.ly })
             ) {
               flock.home = -1;
+              if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
               continue;
             }
           }
+          if (pointerFlush) this.beginPointerTakeoff(flock);
           this.beginDeparture(flock);
           flock.perched = false;
           flock.landed = false;
@@ -7942,6 +8094,7 @@ export class TileLife {
         } else if (flock.landed && !sheltering) {
           this.stepGroundFlock(flock, dt);
         }
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
       if (
@@ -7962,18 +8115,38 @@ export class TileLife {
       if (flock.landing)
         flock.landingBlend = Math.min(1, flock.landingBlend + dt / FORAGE.settleSeconds);
       // Flying to a tree or prepared ground patch: straight there, nudged downwind, then settle.
-      const to =
+      let to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
           : flock.landing && count > 0
             ? { x: flock.lx, y: flock.ly }
             : undefined;
+      if (pointer && to && this.pointerNear(flock, pointer, to, true)) {
+        this.recordStartle(flock, observing);
+        pointer.radius = undefined;
+        this.beginDeparture(flock);
+        flock.scatter = PERCH.scatter;
+        this.pickDestination(flock, { prepare: false });
+        flock.perch = -1;
+        flock.landing = false;
+        flock.landingAttempted = false;
+        to = undefined;
+      }
       if (to) {
         const dx = to.x - flock.x;
         const dy = to.y - flock.y;
         const distance = Math.hypot(dx, dy);
         const step = speed * 1.4 * dt;
-        if (distance <= step) {
+        const detour =
+          pointer && distance > step
+            ? this.pointerDetour(flock, pointer, step, dx / distance, dy / distance)
+            : undefined;
+        if (detour) {
+          flock.x += detour.x * step;
+          flock.y += detour.y * step;
+          [flock.hx, flock.hy] = [detour.x, detour.y];
+        } else if (distance <= step) {
+          if (pointer) pointer.radius = undefined;
           flock.x = to.x;
           flock.y = to.y;
           if (flock.perch >= 0) {
@@ -8001,10 +8174,16 @@ export class TileLife {
           flock.x += (dx / distance) * step + wx * nudge;
           flock.y += (dy / distance) * step + wy * nudge;
         }
-        if (distance > 0) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (distance > 0 && !detour) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
-      if (count === 0) continue;
+      if (count === 0) {
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
+        continue;
+      }
       // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
       // circle a little faster than it moves, so it catches up after moving on to another roost.
       const drift = BIRD_WEATHER.drift * this.perMeter;
@@ -8030,7 +8209,226 @@ export class TileLife {
         flock.y += (dy / distance) * reach;
         [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
+      if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+      if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
     }
+  }
+
+  /** Nearby airborne birds retain their velocity and respond individually, without RNG draws. */
+  private beginBirdFlights(flock: Flock, pointer: FlockPointer, observing: boolean) {
+    const spec = BIRD_SPECIES[flock.species];
+    const speed = spec.speed * this.perMeter * 1.4;
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin = birdFlightMargin(speed, BIRD_FLIGHT);
+    const bound = this.flockBound(flock);
+    const bounds = flock.flightBounds;
+    if (
+      (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2 > (reach + margin + bound) ** 2 &&
+      (!bounds ||
+        pointer.x < bounds.minX - reach - margin ||
+        pointer.x > bounds.maxX + reach + margin ||
+        pointer.y < bounds.minY - reach - margin ||
+        pointer.y > bounds.maxY + reach + margin)
+    )
+      return;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      if (bird.flight) continue;
+      birdOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      const x = flock.x + this.birdOffset.x;
+      const y = flock.y + this.birdOffset.y;
+      const distance2 = (x - pointer.x) ** 2 + (y - pointer.y) ** 2;
+      if (distance2 >= (reach + margin) ** 2) continue;
+      bird.flight = {
+        x,
+        y,
+        hx: flock.hx,
+        hy: flock.hy,
+        speed,
+        phase: (bird.phase + i * 0.61803398875) % 1,
+      };
+      flock.flightBounds ??= { minX: x, minY: y, maxX: x, maxY: y };
+      if (distance2 < reach * reach) this.recordStartle(flock, observing);
+    }
+  }
+
+  /** Follow independent escape curves, then rejoin the moving formation when the route is clear. */
+  private stepBirdFlights(flock: Flock, pointer?: FlockPointer) {
+    const step = this.birdFlightStep;
+    const spec = BIRD_SPECIES[flock.species];
+    step.speed = spec.speed * this.perMeter * 1.4;
+    step.resting = flock.perched || flock.landed;
+    if (pointer) {
+      step.pointer = this.birdFlightPointer;
+      step.pointer.x = pointer.x;
+      step.pointer.y = pointer.y;
+      step.pointer.reach =
+        Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    } else step.pointer = undefined;
+    const bounds = flock.flightBounds!;
+    bounds.minX = bounds.minY = Infinity;
+    bounds.maxX = bounds.maxY = -Infinity;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (const bird of flock.birds) {
+      if (!bird.flight) continue;
+      birdFormationOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      step.targetX = flock.x + this.birdOffset.x;
+      step.targetY = flock.y + this.birdOffset.y;
+      if (stepBirdFlight(bird.flight, step, BIRD_FLIGHT)) {
+        delete bird.flight;
+        continue;
+      }
+      bounds.minX = Math.min(bounds.minX, bird.flight.x);
+      bounds.minY = Math.min(bounds.minY, bird.flight.y);
+      bounds.maxX = Math.max(bounds.maxX, bird.flight.x);
+      bounds.maxY = Math.max(bounds.maxY, bird.flight.y);
+    }
+    if (bounds.minX === Infinity) delete flock.flightBounds;
+  }
+
+  /** Preserve each bird's position through a staggered, smoothly accelerated mouse flush. */
+  private beginPointerTakeoff(flock: Flock) {
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    let seconds = 0;
+    let extent = 0;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      if (bird.flight) continue;
+      const turn = birdTurn(flock, bird, wobble);
+      birdOffset(flock, bird, turn, spread, this.birdOffset);
+      // Existing phase plus slot identity separates even coincident birds without RNG draws.
+      const reaction = (bird.phase + i * 0.61803398875) % 1;
+      const delay = reaction * BIRD_TAKEOFF.stagger;
+      const duration =
+        BIRD_TAKEOFF.seconds[0] +
+        (BIRD_TAKEOFF.seconds[1] - BIRD_TAKEOFF.seconds[0]) * ((reaction * 1.7) % 1);
+      bird.takeoff = {
+        x: flock.x + this.birdOffset.x,
+        y: flock.y + this.birdOffset.y,
+        delay,
+        seconds: duration,
+        face: isForager(bird) && flock.landed ? bird.face : bird.phase * 2 * Math.PI,
+      };
+      extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
+      seconds = Math.max(seconds, delay + duration);
+    }
+    flock.takeoff = { x: flock.x, y: flock.y, age: 0, seconds, extent };
+  }
+
+  /** Rendered offsets are evaluated only near the mouse or its target. */
+  private flockExtent(flock: Flock, formation = false) {
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    let extent = 0;
+    for (const bird of flock.birds) {
+      const turn = birdTurn(flock, bird, wobble);
+      if (formation) birdFormationOffset(flock, bird, turn, spread, this.birdOffset);
+      else birdOffset(flock, bird, turn, spread, this.birdOffset);
+      extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
+    }
+    return extent;
+  }
+
+  /** Conservative formation envelope, including resting birds still waiting to take off. */
+  private flockBound(flock: Flock) {
+    const spec = BIRD_SPECIES[flock.species];
+    let bound =
+      Math.max(4 * spec.spread[1], 2 * (FORAGE_SPECIES[flock.species]?.patch ?? 0), PERCH.spread) *
+      this.perMeter;
+    if (flock.takeoff)
+      bound = Math.max(
+        bound,
+        Math.hypot(flock.x - flock.takeoff.x, flock.y - flock.takeoff.y) + flock.takeoff.extent,
+      );
+    return bound;
+  }
+
+  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
+    const spec = BIRD_SPECIES[flock.species];
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin =
+      flock.flightBounds && (!target || destination)
+        ? birdFlightMargin(spec.speed * this.perMeter * 1.4, BIRD_FLIGHT)
+        : 0;
+    const bound = this.flockBound(flock);
+    const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
+    if (
+      distance2 > (reach + margin + bound) ** 2 &&
+      (!target ||
+        (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + margin + bound) ** 2)
+    )
+      return 0;
+    // The navigation anchor stays clear, while each independent bird steers around the mouse.
+    return (
+      (pointer.radius ??= reach + this.flockExtent(flock, flock.flightBounds !== undefined)) +
+      margin
+    );
+  }
+
+  private pointerNear(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
+    const radius = this.pointerRadius(flock, pointer, target, destination);
+    const at = target ?? flock;
+    return radius > 0 && (at.x - pointer.x) ** 2 + (at.y - pointer.y) ** 2 < radius ** 2;
+  }
+
+  private recordStartle(flock: Flock, observing: boolean) {
+    if (observing && !this.startled.includes(flock)) this.startled.push(flock);
+  }
+
+  private avoidPointer(
+    flock: Flock,
+    pointer: FlockPointer,
+    dt: number,
+    speed: number,
+    observing: boolean,
+  ) {
+    const radius = this.pointerRadius(flock, pointer);
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (radius <= 0 || distance2 >= radius * radius) {
+      this.pointerInside!.delete(flock);
+      return;
+    }
+    if (!this.pointerInside!.has(flock)) this.recordStartle(flock, observing);
+    this.pointerInside!.add(flock);
+    const distance = Math.sqrt(distance2);
+    const hx = distance > 1e-8 ? dx / distance : flock.hx;
+    const hy = distance > 1e-8 ? dy / distance : flock.hy;
+    const move = Math.min(radius - distance, BIRD_POINTER.flee * speed * 1.4 * dt);
+    flock.x += hx * move;
+    flock.y += hy * move;
+    [flock.hx, flock.hy] = [hx, hy];
+  }
+
+  /** A blocked target leg spends its normal flight step tangentially instead of stalling. */
+  private pointerDetour(
+    flock: Flock,
+    pointer: FlockPointer,
+    step: number,
+    hx: number,
+    hy: number,
+  ): Point | undefined {
+    const radius = this.pointerRadius(flock, pointer);
+    if (radius === 0) return;
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (distance2 < radius * radius) {
+      // Independent flyers need room to bank, even before the navigation anchor clears that margin.
+      const physical = this.pointerRadius(flock, pointer, flock);
+      if (!flock.flightBounds || distance2 < physical * physical || dx * hx + dy * hy >= 0) return;
+    } else if ((dx + hx * step) ** 2 + (dy + hy * step) ** 2 >= radius * radius) return;
+    const distance = Math.sqrt(distance2);
+    const cross = dx * hy - dy * hx;
+    const side = Math.abs(cross) > 1e-8 ? Math.sign(cross) : flock.rank < 0.5 ? 1 : -1;
+    this.flockDetour.x = (-dy / distance) * side;
+    this.flockDetour.y = (dx / distance) * side;
+    return this.flockDetour;
   }
 
   /** Seconds simulated so far. */
@@ -8267,6 +8665,7 @@ export class LifeWorld {
   private effectCellMeters = 0;
   private readonly puffSources = new Map<number, number>();
   private readonly actorSources = new Map<VisibleAgent, number>();
+  private readonly birdOffset: Point = { x: 0, y: 0 };
   private readonly puffSelector = new PuffSelector();
   /** Reply-owned storage: transferring a frame cannot detach simulation state. */
   get visiblePuffs() {
@@ -8774,8 +9173,8 @@ export class LifeWorld {
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
     this.releaseEventActors(false, true);
-    for (const tile of this.tiles.values()) tile.emoji.dispose();
-    for (const { life } of this.retired.values()) life.emoji.dispose();
+    for (const tile of this.tiles.values()) tile.disposeEmoji();
+    for (const { life } of this.retired.values()) life.disposeEmoji();
     this.emojiMemory.reset();
     this.emojiView = undefined;
     this.puffPacket = EMPTY_PUFFS;
@@ -8821,11 +9220,10 @@ export class LifeWorld {
   private pruneRetired(cap = true) {
     for (const [key, entry] of this.retired)
       if (this.clock - entry.at >= RETIRE.seconds) {
-        this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
         for (const owner of [...entry.life.movers, ...entry.life.gatherers])
           entry.life.crossingWaits.release(owner);
-        entry.life.emoji.dispose();
+        entry.life.disposeEmoji();
         if (this.emergencyDispatch)
           for (const mover of [...entry.life.residentMovers()])
             if (mover.emergency) this.releaseEmergency({ life: entry.life, mover });
@@ -8835,21 +9233,14 @@ export class LifeWorld {
       while (this.retired.size > RETIRE.max) {
         const key = this.retired.keys().next().value!;
         const life = this.retired.get(key)!.life;
-        this.forgetBirds(life);
         life.momentHost.clear();
         for (const owner of [...life.movers, ...life.gatherers]) life.crossingWaits.release(owner);
-        life.emoji.dispose();
+        life.disposeEmoji();
         if (this.emergencyDispatch)
           for (const mover of [...life.residentMovers()])
             if (mover.emergency) this.releaseEmergency({ life, mover });
         this.retired.delete(key);
       }
-  }
-
-  private forgetBirds(life: TileLife) {
-    if (!this.inspection?.birds && !this.inspection?.recoveringBirds) return;
-    for (const flock of life.flocks)
-      for (const bird of flock.birds) this.inspection.forgetBird(bird);
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
@@ -8931,7 +9322,7 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
-          life.emoji.freeze();
+          life.freezeEmoji();
           life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
           this.appliedCrowds.delete(life);
           this.retired.set(key, { life, at: this.clock });
@@ -10705,6 +11096,7 @@ export class LifeWorld {
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
+    pointer?: readonly [number, number],
   ) {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
@@ -10758,6 +11150,7 @@ export class LifeWorld {
       cityLife: this.cityLife,
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
+      ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
     };
     const event = this.procession();
     const eventScene = event && this.scenes.get(event.id);
@@ -11742,18 +12135,17 @@ export class LifeWorld {
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const normalPush: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number =
-      inspection
-        ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
-        : (_owner, agent) => out.push(agent);
+    const normalPush: (owner: object, agent: VisibleAgent) => number = inspection
+      ? (owner, agent) => out.push(inspection.present(owner, agent))
+      : (_owner, agent) => out.push(agent);
     const present = diagnostics
-      ? (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
-          const n = normalPush(owner, agent, birdSpeed);
+      ? (owner: object, agent: VisibleAgent) => {
+          const n = normalPush(owner, agent);
           diagnostics.view(owner, out[n - 1]!);
           return n;
         }
       : normalPush;
-    const push = (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+    const push = (owner: object, agent: VisibleAgent) => {
       const cue = this.emojiMemory.cue(owner);
       if (
         cue &&
@@ -11765,8 +12157,9 @@ export class LifeWorld {
         agent.vehicle !== 'carabao'
       )
         agent.emoji = cue;
-      return present(owner, agent, birdSpeed);
+      return present(owner, agent);
     };
+    let birdCues: Map<VisibleAgent, Flock> | undefined;
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -12107,43 +12500,30 @@ export class LifeWorld {
       for (const flock of life.flocks) {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
+        const flockCue = this.emojiMemory.cue(flock);
         const out_ = spec.nocturnal ? levels.night : levels.bird;
         if (
           flock.rank >= out_ * crowd ||
-          (!inView(flock.x, flock.y) &&
-            !(inspection?.recoveringBirds && flock.birds.some((bird) => inspection.hasBird(bird))))
+          (!inView(flock.x, flock.y) && !flyingBirdNear(flock, inView))
         )
           continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
         // Tree perching and scattered flight keep their original spread; ground has its own layout.
-        const perchSpread = PERCH.spread / spec.spread[1];
-        const spread = flock.perched
-          ? perchSpread
-          : flock.landed
-            ? 1
-            : 1 + (3 * flock.scatter) / PERCH.scatter;
+        const spread = birdSpread(flock);
         for (const bird of flock.birds) {
-          const turn = sitting ? bird.phase * 6 : wobble + bird.phase * 6;
-          const cos = Math.cos(turn) * spread;
-          const sin = Math.sin(turn) * spread;
-          const ground = isForager(bird) && flock.landed;
-          const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
-          const ox = bird.ox * cos - bird.oy * sin;
-          const oy = bird.ox * sin + bird.oy * cos;
-          let x = ox + ((bird.gx ?? ox) - ox) * blend;
-          let y = oy + ((bird.gy ?? oy) - oy) * blend;
-          if (bird.departure && flock.departureBlend) {
-            x += (bird.departure.x - x) * flock.departureBlend;
-            y += (bird.departure.y - y) * flock.departureBlend;
-          }
-          x += flock.x;
-          y += flock.y;
+          const turn = birdTurn(flock, bird, wobble);
+          const ground = isForager(bird) && flock.landed && !bird.flight;
+          birdOffset(flock, bird, turn, spread, this.birdOffset);
+          const x = this.birdOffset.x + flock.x;
+          const y = this.birdOffset.y + flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
-          const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
-          const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
+          const birdTime = life.elapsed;
+          const waiting = bird.takeoff !== undefined && takeoffProgress(flock, bird) === 0;
+          const resting = (sitting && !bird.flight) || waiting;
+          const flap = resting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
+          const pose = resting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
           const peck =
             ground && flock.feeding && bird.wait > 0 && weather.rain < BIRD_WEATHER.shelter
@@ -12151,23 +12531,48 @@ export class LifeWorld {
                 ? 0.25
                 : -0.25
               : 0;
-          const face = ground
-            ? bird.face + peck
-            : sitting
-              ? bird.phase * 2 * Math.PI
-              : heading + (bird.phase - 0.5) * 0.6;
+          const face = bird.flight
+            ? Math.atan2(bird.flight.hy, bird.flight.hx)
+            : bird.takeoff && flock.takeoff
+              ? takeoffProgress(flock, bird) === 0
+                ? bird.takeoff.face
+                : Math.atan2(y - bird.takeoff.y, x - bird.takeoff.x)
+              : ground
+                ? bird.face + peck
+                : sitting
+                  ? bird.phase * 2 * Math.PI
+                  : heading + (bird.phase - 0.5) * 0.6;
           const ahead = tileToLngLat(tile, {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          push(
-            bird,
-            { kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } },
-            spec.speed,
-          );
+          const n = push(bird, {
+            kind: 'bird',
+            lng,
+            lat,
+            ahead,
+            flap,
+            bird: { species: flock.species, pose },
+          });
+          if (flockCue) (birdCues ??= new Map()).set(out[n - 1]!, flock);
         }
       }
     }
+    const withBirdCues = (admitted: VisibleAgent[]) => {
+      if (!birdCues) return admitted;
+      const anchors = new Map<Flock, VisibleAgent>();
+      const inside = (a: VisibleAgent) =>
+        !bounds ||
+        (a.lng >= bounds[0] && a.lng <= bounds[2] && a.lat >= bounds[1] && a.lat <= bounds[3]);
+      for (const agent of admitted) {
+        const flock = birdCues.get(agent);
+        if (!flock) continue;
+        const prior = anchors.get(flock);
+        if (!prior || (!inside(prior) && inside(agent))) anchors.set(flock, agent);
+      }
+      for (const [flock, agent] of anchors) agent.emoji = this.emojiMemory.cue(flock);
+      return admitted;
+    };
     const withBalls = (admitted: VisibleAgent[]) => {
       if (!balls.length) return admitted;
       const kept = new Set(admitted);
@@ -12193,7 +12598,7 @@ export class LifeWorld {
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
+      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       return admitted;
@@ -12225,7 +12630,7 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBalls(kept), center, bounds);
+    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     return admitted;
