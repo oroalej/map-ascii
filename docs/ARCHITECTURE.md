@@ -403,6 +403,8 @@ type AtlasState = {
 
 Zod stays out of the browser bundle: the pipeline validates each generated file with its schema when it writes it, the web app checks only their shape (`apps/web/lib/guards.ts`), and `packages/shared` keeps the plain values the browser needs (class list, camera ranges, search options) in zod-free modules and is marked side-effect free. CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, the separate renderer chunk, each `<city>.pmtiles`, and gzip-compressed `<city>.processions.json`). The tile worker and legacy `nomodule` polyfills are excluded from initial JS. Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
 
+Naga extent regeneration gate (2026-10-07): the current pinned downtown archive is 2,862,278 bytes. Expanded downloads remain incomplete after repeated public Overpass HTTP 504 responses, so there is no measured expanded archive yet. Publication requires its final byte count below the enforced 40 MiB cap (41,943,040 bytes); existing experiment measurements below remain historical.
+
 ### Roof review acceptance (2026-10-01)
 
 The original roof handoff did not clear performance acceptance: decode median was 8.895 to 12.406 ms (+39.5%), its control p95 was unstable, and hardware select-pass timing was unavailable. The neighborhood-identity GPU figures in the roadmap were measured at `c229e02`, before party walls, and are historical.

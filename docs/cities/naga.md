@@ -6,6 +6,8 @@ This brief holds everything Naga-specific. The generic docs (`SPEC.md`, `ARCHITE
 
 ## 1. City config
 
+Whole-city extent policy (2026-10-07): the pack opts into the retained downtown rectangle plus the whole city boundary. Regeneration and publication are still gated by repeated public Overpass HTTP 504 responses; the currently pinned archive remains the downtown snapshot. The extent and viewport behavior below describe the opt-in output after regeneration, rather than claiming the expanded archive has shipped.
+
 Ambient dialogue contains 100 illustrative scenes (40 independent utterances and 60 exchanges) in fifteen scene categories, with Bikol first and optional English/Tagalog translations. Catalog text and context metadata live in `packages/content/cities/naga/dialogue.json`; `dialogue-review.md` records linguistic references and the outstanding native-speaker review. The catalog includes greetings, reunions, farewells, directions, courtesy, weather, food, school, daily plans, vendor orders/thanks, transit, companions, ball play and place reactions. It uses existing inhabitants and mapped anchors, and makes no claim about actual residents, businesses, fares or schedules. Changes need a web build for production, not tile regeneration.
 
 | Field | Value |
@@ -14,8 +16,8 @@ Ambient dialogue contains 100 illustrative scenes (40 independent utterances and
 | Display name | Naga City |
 | Country | Philippines (Geofabrik `philippines` extract) |
 | Boundary lookup | `relation["boundary"="administrative"]["name"="Naga City"]["admin_level"="6"]` within **Bicol Region** (OSM relation 3084673, verified 2026-09-29). Not within Camarines Sur: as an independent component city, Naga is cut out of the province polygon in OSM. |
-| Detail buffer | 2 km around the city boundary, clipped to the region bbox below |
-| Region | **Downtown only for now:** bbox `[123.1695, 13.602, 123.213, 13.640]` (about 4.7 × 4.2 km: Balatas to the Felix Plazo St side, Liboton and Queborac Dr down to Almeda Hwy and the Milaor boundary). The whole Bicol Region view (OSM relation 3561455, which includes Masbate and Catanduanes) was too much to start with. The camera is clamped to the bbox, and detail data and search are limited to it. To widen it later, set `region` back to `{ "name": "Bicol Region", "osm_relation": "3561455" }`. |
+| Detail buffer | 2 km around the city boundary, intersected with the expanded camera rectangle |
+| Region | Below the viewport minimum at 1920×1080; generated territory-clipped terrain bands retain their Region-only zoom band |
 | Subdivision | admin_level 10, local label **"barangay"** |
 | Content languages | `en` (required), `fil` (Filipino), `bcl` (Bikol) |
 | Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |
@@ -32,9 +34,9 @@ Seed landmarks (location and name only, sourced to OSM; dates and stories wait f
 
 | Level | Naga content |
 |---|---|
-| Region | *(Not reachable while the map is limited to downtown.)* Bicol coastline, Mt. Isarog, major lakes and rivers, terrain shading; province and major city labels |
-| City | *(Mostly not reachable while the map is limited to downtown.)* Naga boundary, barangay outlines, Naga River, highways |
-| District | The Centro, all roads, building blocks, parks |
+| Region | Below the viewport minimum at 1920×1080; generated territory-clipped terrain bands retain their Region-only zoom band |
+| City | Below the viewport minimum at 1920×1080; city/barangay outlines and river/highway geography remain available at closer levels |
+| District | Whole city from Centro to Panicuason. At 1920×1080 the minimum is about z13.3; the region fills the viewport vertically and requires east–west panning |
 | Street | Individual buildings and key street names (Magsaysay, Panganiban, Peñafrancia Avenue, Elias Angeles, General Luna…) in the Centro and the barangays |
 | Place | Detailed landmarks such as the Basilica, the Cathedral, and the plazas: landmark names and walls, building outlines, and the named statues and memorials from OSM (e.g. Jose Rizal and Quince Martires in the plazas; St. John the Evangelist, St. Pedro Calungsod, and St. Peter Baptist in the Cathedral Grounds); roof ridges on pitched roofs; and draft plan-view parts (`packages/content/cities/naga/plans/`): the Cathedral's two front belfries, crossing dome, and cupolas, San Francisco Parish's dome and tower, the Quince Martires and Rizal monuments' tiered bases, the Coliseum's crown, and the Cathedral Grounds statues' pedestals; draft curated land cover (`packages/content/cities/naga/landcover/`, traced from Esri World Imagery because OSM maps none of it yet): trees in the Cathedral grounds and plaza, the Universidad de Santa Isabel courtyards, and the Archdiocese of Cáceres grounds (the grove south of the Archbishop's Residence as separate crowns), and the Cathedral's parking lot and plaza lawns |
 
@@ -49,7 +51,7 @@ The pack has sourced facts for exactly twelve landmarks: Plaza Rizal, Plaza Quin
 1. **Traslación route.** The procession path from the Old Shrine of Our Lady of Peñafrancia to the Naga Metropolitan Cathedral, then the fluvial procession along the Naga River.
 2. **Heritage Centro walk.** Plaza Quince Martires, Plaza Rizal, the Cathedral, and the old commercial streets.
 3. **Campus belt.** Ateneo de Naga University, the University of Nueva Caceres, and the surrounding streets.
-4. **From Isarog to the river.** A single flight from Region level down to street level. *Removed while the map is limited to downtown (its cameras leave the region). It's in git history, and it comes back when the map extends past downtown.*
+4. **From Isarog to the river.** Future city-spanning tour remains out of scope for this extension. A replacement must use cameras compatible with the expanded bounds and current viewport minimum; Region and City bands remain below the desktop limit.
 
 Tour 2 is in the city pack (`packages/content/cities/naga/tours/`) as a draft: its camera path comes from the OSM data, and all narration is marked `TODO(verify)`. Tours 1 and 3 are Phase 5.
 
@@ -131,8 +133,8 @@ Tacolod schools and St. John Hospital follow-up (draft, 2026-10-04): distinct Ma
 - Local life scenes use mapped bus stops, jeepney terminals, and gazebos. The pack identifies the mapped Milaor, Dinaga, Carolina/Panicuason, and Pacol terminals as jeepney sites, with links to their OSM nodes. Tricycle stands, covered entrances near the Centro, and terminal curb positions still need sourced surveys; unmapped sites are not guessed. Terminal service and animal presence are illustrative, not live transport or wildlife data.
 
 - Check OpenHistoricalMap coverage for Naga, and contribute back.
-- **Barangay boundaries are mostly unmapped (checked 2026-09-29).** Of the 27 barangays, only 3 (Abella, Dinaga, Santa Cruz) have admin_level 10 boundary relations. The rest are `place` nodes only. OSM also has admin_level 11 "Zone" relations. Point-in-polygon subdivision lookup covers only part of the city until this is solved (see ROADMAP open decisions).
-- Copernicus DEM is used for the Mt. Isarog relief at Region level (not visible while the map is limited to downtown).
+- **Barangay boundaries are mostly unmapped (checked 2026-09-29).** At that snapshot, only 3 of the 27 barangays (Abella, Dinaga, Santa Cruz) had admin_level 10 boundary relations; the rest were place nodes. OSM also has admin_level 11 "Zone" relations. The expanded pipeline constructs mapped areas clipped to the city and approximate Voronoi cells for the other city place nodes. Acceptance requires all 27 areas and search entries; the refreshed mapped count and names remain unmeasured while downloads are incomplete.
+- Copernicus DEM bands cover the expanded camera rectangle and are clipped to retained territory. Their Region-only zoom band remains below the approximately z13.3 desktop minimum, so this extension does not make relief visible there.
 - Possible archive sources: local libraries, universities (Ateneo de Naga, UNC), the Archdiocese of Caceres and parish archives, and private collections. Written permission is required for anything that isn't public domain.
 Traffic signals (project-owner atlas annotations and follow-ups, 2026-10-01): within the current map, retain Elias Angeles Street at Arana Street (OSM node `254716165`) and at P. Burgos Street (OSM node `254715532`), the two circled junctions beside Plaza Quince Martires. The owner's follow-up adds Elias Angeles/Santonja Street beside Naga Metropolitan Cathedral, anchored to the shared OSM vertex of ways `724187422` and `282035194`. A further instruction restores the Magsaysay Avenue intersections on either side of its bridge (OSM way `30518281`): Peñafrancia/M. T. Villanueva on the northwest side (OSM node `254709879`) and Dayangdang/Balatas-Cararayan on the southeast side (OSM node `254713607`). The three Panganiban Drive images add four more locations: Blumentritt (image 1 western circle; ways `23519483`/`23520880`), Misericordia/Lerma (image 1 eastern circle; restored OSM node `254716718`), Ninoy and Cory Avenue opposite the slightly offset Palomares approach (image 2; anchored to ways `23519483`/`836685805`/`23520484`), and Mayon Avenue east of Seton Road (image 3; ways `836685800`/`23522098`). `life.signals` in the city pack disables inferred signals, removes the remaining unwanted Bagumbayan Norte signal node, and adds the four curated junctions. There are now 9 configured locations: 5 OSM-mapped and 4 curated. The owner-approved reanalysis links the Palomares vertex at `[123.1898794, 13.6226393]` to the Ninoy-Cory controller. The nine controllers now have 29 legal incoming arms: two each at Arana and P. Burgos; three each at the cathedral, Blumentritt and Mayon; four each at both Magsaysay junctions, Misericordia/Lerma and the combined Ninoy-Cory/Palomares junction. Heads, stop lines and vehicle gates use these arms after the road-direction overrides; timing stays unchanged. The corrections are owner-supplied, not an official traffic survey; phases and fixture dimensions remain simulated. Mapped pedestrian crossings remain; crossings and stop lines inferred solely from removed signals disappear when the pipeline rebuilds. Recheck the policy when expanding beyond the current bounds or refreshing mapped signal data.
 

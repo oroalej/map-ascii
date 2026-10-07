@@ -24,12 +24,13 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
 1. **`01-fetch`**
    - Read `city.json`, then download OSM data for two bounding boxes:
      - **Detail bbox:** the city boundary plus the configured buffer (`detail_buffer_km`). The boundary relation is found via Overpass using the config's `boundary` lookup (name, admin_level, and parent area). Fail loudly if the lookup matches zero relations or more than one. The detail bbox is then clipped to the region bounds, because the camera can't leave the region. The search index likewise drops entries outside the region.
-     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, railways, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`.
+     - **Region bbox:** the configured `region`, fetched with low-detail filters only (coastline, major roads, railways, water, place nodes). A whole region is too much for one Overpass request, so each heavy layer is fetched per quarter of the region (cached separately) and the results are merged into `region.osm.json`. A bbox region can set `include_boundary: true` to union its rectangle with the whole city boundary. Detail queries then use four stable quarter caches, merged into `detail.osm.json`. For this opt-in, offline reuse requires saved response files and matching query filters with enough bbox coverage for every detail and regional query; retry without `--refresh` to reuse successful parts.
      - **Railways** (track and stations in the detail bbox) are a small query of their own, saved as `detail-rail.osm.json`, and the region's railway queries come after its other parts. Adding them left the big saved downloads valid, and the servers answer the small query when the big one times out. `overpass()` retries 5xx answers and dropped connections, rotating through three public instances (`OVERPASS_URL` pins one).
    - Download DEM tiles for the Region bbox.
    - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
    - Transit stops, terminals, shelters, and covered entrances are fetched separately into `detail-life.osm.json`. Step 02 merges that optional download with the detail data; older cached downloads remain usable. Step 03 writes `life_site`, `life_modes` (bus 1, jeepney 2, tricycle 4), `life_covered`, and a stable `life_lng`/`life_lat` anchor. Rail and ferry platforms are excluded. Site metadata is retained from tile zoom 13 even while furniture glyphs stay hidden at smaller display zooms.
 2. **`02-convert`**
+   - Write `territory.geojson`: the camera rectangle, retained territory (configured bbox union city polygon), and void (rectangle minus territory). Without `include_boundary`, both geometries are null and existing rectangular behavior remains.
    - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF). The railway download is merged into the detail download first (if there is one).
    - DEM → hillshade/luminance raster (`gdaldem hillshade`) → grayscale PNG tiles.
 3. **`03-normalize`**
@@ -37,7 +38,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Drop untagged or irrelevant features.
    - Compute building `height` (`height` tag, else `building:levels × 3`, else a class default) for features with `building=*` only. Grounds that share a building class (e.g. `amenity=school` on a campus polygon) get no height.
    - Assign stable ids: `osm:<type>/<id>`.
-   - Compute `subdivision` for each feature by point-in-polygon against the boundaries at the city's `subdivision.admin_level`. Only mapped boundary polygons count; features outside them get no subdivision (see the city brief for coverage, e.g. `naga.md` §5).
+   - Compute `subdivision` using mapped boundaries at the city's `subdivision.admin_level`, then approximate Voronoi cells for city place nodes without mapped boundaries. With `include_boundary`, accept mapped relations only when their original uncut centroid is inside the city, intersect their HUD areas with the city, and retain original source rings for display outlines. Rejected relations contribute neither areas nor outlines. Complete roads and footprints remain intact for all derivation.
 4. **`04-merge-content`**
    - Load and validate the city's pack (`packages/content/cities/<slug>/`) with zod, including checking that localized fields use only the city's declared languages.
    - Apply sourced `city.streets.exclusions` to exact OSM road ways before merging content or deriving traffic, utilities and site details. Each entry supplies `osm_id` and `source`; duplicate, missing detail-data and non-road/non-LineString targets fail the build. Remove matching region copies too. Saved OSM downloads and normalized inputs remain intact. Exclusions are display corrections, not historical demolition dates or edits to OSM.
@@ -49,6 +50,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Give named landmarks and monuments a label anchor (`label_lng`, `label_lat`: a point's position or an area's centroid), computed before tiling so labels land in the same place in every tile.
    - After a successful merge, save `detail-layouts.json` beside `merged.geojsonl`, binding the detail fingerprints to the city-pack inputs and merged bytes.
 5. **`05-tiles`**
+   - With `include_boundary`, subtract the void only from completed display features, before roof tile records. Preserve IDs, complete source roof plans and geometry beyond the camera rectangle; repair invalidated label/shop/Life anchors on surviving geometry. `merged.geojsonl` stays complete for search and generated layers. Admit utility supports after offsets and reject spans crossing the void; admit whole seasonal records including embedded geometry. Tours and explicit Life positions must lie in retained territory; step 07 validates emitted event geography against the void.
    - Validate and consume step 04's layout snapshot before compiling tiles. Starting with `--from 05` requires unchanged city-pack inputs and merged bytes; if either differs or the snapshot is missing, rerun from step 04.
    - Run tippecanoe (or Planetiler), with one layer per class group: `water, roads, buildings, landuse, poi, admin, labels, events`.
    - Exclude pipeline-only `highway`, `foot`, `access`, `vehicle`, `motor_vehicle`, `motorcar`, `motorcycle`, `hgv`, `bridge` and `event_path_width` properties from ordinary tiles. Explicit path widths inform event routing without changing legacy walking-line widths; ordinary road widths remain in the archive. For cities opting into utilities, read retained lamp supports from that base archive, bake the network from the complete merged features, tile a separate max-zoom `utilities` layer, and merge/audit it before copying the final archive.
@@ -134,7 +136,7 @@ City {                           // cities/<slug>/city.json
   country: string;               // ISO 3166-1 alpha-2, e.g. "PH"
   boundary: { name: string; admin_level: number; within?: string };  // Overpass lookup
   detail_buffer_km: number;
-  region: { name: string; osm_relation?: string } | { bbox: [number, number, number, number] };
+  region: { name: string; osm_relation?: string } | { bbox: [number, number, number, number]; include_boundary?: true };
   subdivision: { admin_level: number; label: LocalizedText };        // e.g. 10, "barangay"
   languages: string[];           // extra content languages besides "en", e.g. ["fil", "bcl"]
   smoke_landmark: string;        // name the e2e test searches for
