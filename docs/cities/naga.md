@@ -98,6 +98,8 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 ## 5. Data notes
 
+Emergency vehicles (2026-10-07): illustrative OSM-derived episodes, without live dispatch data. The pack permits one ambulance, two police cars and one fire truck; their intervals and dwell/call durations are simulation settings. Hospital destinations use `building_hospital`, and station destinations use retained `amenity=police` / `amenity=fire_station` tags. The two mapped Guard Houses are excluded from police dispatch origins: [way 222404483](https://www.openstreetmap.org/way/222404483) and [way 222405532](https://www.openstreetmap.org/way/222405532). The generated graph retains legal road directions and snapped roadside terminals; building samples represent decorative incident destinations.
+
 As of 2026-10-04, the city pack contains 70 landmark records, 67 landcover packs and 64 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
 
 St. John Hospital and STI College correction (2026-10-04): the owner's new close-up references supersede their earlier schematic outdoor layouts. Remove St. John's added grounds, three trees, grass/planting/shrubs and two walking/paving routes. Remove STI's broad estimated grounds envelope, ten trees, all supplemental grass/planting and six paving strips. Both retain their curated landmark identities, complete mapped roofs, source access geometry and hospital/school classification. The Hospital legend category remains. No new geometry is inferred from these references and no raster ships. This supersedes the earlier landscaping descriptions for these two sites; the other school and hospital layouts remain.
