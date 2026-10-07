@@ -1268,6 +1268,7 @@ export const SeasonEmojiEntrySchema = z
     subjects: z
       .array(EmojiSubjectSchema)
       .min(1)
+      .refine((subjects) => !subjects.includes('bird'), 'birds do not support seasonal emoji')
       .refine((subjects) => new Set(subjects).size === subjects.length, 'duplicate emoji subject'),
     hours: z
       .tuple([z.int().min(0).max(1439), z.int().min(0).max(1440)])

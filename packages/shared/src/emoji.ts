@@ -3,7 +3,7 @@ import { SPEECH_ZOOM } from './zoom';
 
 export const EMOJI_ZOOM = SPEECH_ZOOM;
 export const EMOJI_EVENING = { start: 16 * 60, end: 6 * 60 } as const;
-export const EMOJI_SUBJECTS = ['person', 'driver', 'dog', 'cat'] as const;
+export const EMOJI_SUBJECTS = ['person', 'driver', 'dog', 'cat', 'bird'] as const;
 export type EmojiSubject = (typeof EMOJI_SUBJECTS)[number];
 export const EMOJI_MOODS = [
   'impatient',
@@ -136,6 +136,7 @@ export const MOOD_GLYPHS: Readonly<Record<EmojiMood, string>> = {
 };
 export const SUBJECT_GLYPHS: Readonly<Record<EmojiSubject, Partial<Record<EmojiMood, string>>>> = {
   person: {},
+  bird: {},
   driver: { rained: '😣' },
   dog: { angry: '💢', happy: '💕', hot: '💦', scared: '❗' },
   cat: { angry: '😾', happy: '😺', hot: '💦', scared: '🙀' },

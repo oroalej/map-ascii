@@ -1,21 +1,16 @@
-import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  beginOperation,
   contained,
   atomicJson,
-  capture,
-  finishOperation,
   loadState,
   hash,
   parseState,
   recover,
-  restoreOwned,
   selectState,
-  sourcePath,
   startReview,
   updateState,
 } from './pr-review-checkpoint';
@@ -73,7 +68,39 @@ describe('review checkpoints', () => {
     expect(() => selectState({ ...setup.options, resume: state.run, pr: 13 })).toThrow(
       'does not match',
     );
-    expect(() => sourcePath(setup.directory, '../escape')).toThrow('Invalid source path');
+  });
+
+  it('reads checkpoints written with per-operation tracking and drops those fields', async () => {
+    const { state } = await startReview(setup.options);
+    const old = {
+      ...loadState(state.run),
+      baseline: { headSha: state.headSha, status: '', indexHash: '', treeHash: '', files: {} },
+      current: { headSha: state.headSha, status: '', indexHash: '', treeHash: '', files: {} },
+      owned: { 'file.txt': { baseHash: null, hash: null, content: null, mode: 420 } },
+      operations: [{ id: 'fix-1', phase: 'fixes', round: 1, before: {}, after: null }],
+    };
+    const parsed = parseState(old);
+    expect(parsed).not.toHaveProperty('operations');
+    expect(parsed).not.toHaveProperty('owned');
+    expect(parsed.round).toBe(1);
+  });
+
+  it('keeps a clean result at its head and reviews source CI fixes still pending review', async () => {
+    const { state } = await startReview(setup.options);
+    await updateState(state.run, (saved) => {
+      saved.phase = 'complete';
+      saved.status = 'clean';
+      saved.ci.status = 'green';
+    });
+    expect(recover(loadState(state.run), setup.options, () => false).phase).toBe('complete');
+    await updateState(state.run, (saved) => {
+      saved.phase = 'ci';
+      saved.ci.needsReview = true;
+    });
+    expect(recover(loadState(state.run), setup.options, () => false)).toMatchObject({
+      phase: 'review',
+      round: 2,
+    });
   });
 
   it.skipIf(process.platform !== 'win32')(
@@ -202,62 +229,27 @@ describe('review checkpoints', () => {
     expect(changed.phase).toBe('review');
     expect(changed.reusable).toEqual([]);
     git(setup.directory, 'checkout', '--detach', setup.options.remoteSha); // Isolated fixture, never a user checkout.
-    expect(recover(loadState(state.run), setup.options, () => false).phase).toBe('sync');
+    // Main moving no longer sends a saved result back to sync: $merge-pr owns the final sync.
+    expect(recover(loadState(state.run), setup.options, () => false).phase).toBe('complete');
   });
 
-  it('saves owned bytes and refuses edits whose ownership or restore base is unknown', async () => {
+  it('pushes unpushed local commits first, then reviews them as a new round', async () => {
     const { state } = await startReview(setup.options);
-    await beginOperation(state.run, 'fix-1', 'fixes', ['file.txt']);
-    writeFileSync(join(setup.directory, 'file.txt'), 'owned\n');
-    const fixed = await finishOperation(state.run, 'fix-1', 'verify', 'Run checks');
-    expect(capture(setup.directory, ['file.txt']).treeHash).toBe(fixed.current.treeHash);
-    writeFileSync(join(setup.directory, 'file.txt'), 'unfamiliar\n');
-    await expect(beginOperation(state.run, 'fix-2', 'fixes', ['file.txt'])).rejects.toThrow(
-      'outside the checkpoint',
-    );
-    expect(() => restoreOwned(fixed, setup.directory)).toThrow('Restore base differs');
-    expect(readFileSync(join(setup.directory, 'file.txt'), 'utf8')).toBe('unfamiliar\n');
-    writeFileSync(join(setup.directory, 'file.txt'), 'before\n');
-    expect(restoreOwned(fixed, setup.directory)).toEqual(['file.txt']);
-    expect(readFileSync(join(setup.directory, 'file.txt'), 'utf8')).toBe('owned\n');
-  });
-
-  it('keeps baseline edits and partial uncheckpointed fixes out of owned changes', async () => {
-    writeFileSync(join(setup.directory, 'file.txt'), 'another session\n');
-    const { state } = await startReview(setup.options);
-    await expect(beginOperation(state.run, 'unsafe', 'fixes', ['file.txt'])).rejects.toThrow(
-      'Unfamiliar baseline edit',
-    );
-    expect(state.owned).toEqual({});
-  });
-
-  it('recognizes a commit made before the completion checkpoint and a push already on the remote', async () => {
-    const { state } = await startReview(setup.options);
-    await beginOperation(state.run, 'fix', 'fixes', ['file.txt']);
-    writeFileSync(join(setup.directory, 'file.txt'), 'fixed\n');
-    await finishOperation(state.run, 'fix', 'commit', 'Commit fix');
-    git(setup.directory, 'add', '--', 'file.txt');
-    await beginOperation(state.run, 'commit', 'commit');
+    await artifact(state, 'review');
+    writeFileSync(join(setup.directory, 'file.txt'), 'local fix\n');
     const head = commit(setup.directory);
-    await updateState(state.run, (saved) => {
-      const operation = saved.operations.find((op) => op.id === 'commit');
-      if (!operation) throw new Error('Expected pending commit');
-      delete operation.expectedParents; // Older checkpoints have single-parent evidence only.
+    expect(recover(loadState(state.run), setup.options, () => false)).toMatchObject({
+      phase: 'push',
+      round: 2,
     });
-    const second = await startReview(setup.options);
-    expect(second.recoveredCommit).toBe(head);
-    expect(second.state.phase).toBe('push');
-    expect(git(setup.directory, 'rev-list', '--count', 'HEAD')).toBe('2');
-    await beginOperation(second.state.run, 'push', 'push');
-    const third = await startReview({ ...setup.options, remoteSha: head });
-    expect(third.pushCompleted).toBe(true);
-    expect(third.state.phase).toBe('review');
-    expect(third.state.round).toBe(2);
-    expect(third.state.operations.find((op) => op.id === 'push')?.after).not.toBeNull();
-    await artifact(third.state, 'review');
-    const fourth = await startReview({ ...setup.options, remoteSha: head });
-    expect(fourth.state.round).toBe(2);
-    expect(fourth.state.phase).toBe('validation');
-    expect(fourth.pushCompleted).toBe(false);
+    await startReview(setup.options);
+    const pushed = await startReview({ ...setup.options, remoteSha: head });
+    expect(pushed.state.phase).toBe('review');
+    expect(pushed.state.round).toBe(2);
+    expect(pushed.reusable).toEqual([]);
+    await artifact(pushed.state, 'review');
+    const resumed = await startReview({ ...setup.options, remoteSha: head });
+    expect(resumed.state.round).toBe(2);
+    expect(resumed.state.phase).toBe('validation');
   });
 });

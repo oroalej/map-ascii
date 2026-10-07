@@ -284,6 +284,45 @@ describe('inactive walkers', () => {
 });
 
 describe('laneOffset', () => {
+  it.each([-1, 1])('uses the full carriageway in one-way direction %s', (oneway) => {
+    expect(laneOffset(3.2, 1.8, 0.9, false, oneway)).toBe(0);
+    expect(laneOffset(6.4, 1.8, 0, false, oneway)).toBeCloseTo(-1.6);
+    expect(laneOffset(6.4, 1.8, 1, false, oneway)).toBeCloseTo(1.6);
+    for (const [lane, expected] of [
+      [0.1, -3.2],
+      [0.5, 0],
+      [0.9, 3.2],
+    ])
+      expect(laneOffset(9.6, 1.8, lane!, false, oneway)).toBeCloseTo(expected!);
+    expect(laneOffset(6.4, 0.6, 0, true, oneway)).toBeCloseTo(2.7);
+    expect(laneOffset(2, 2.5, 0, false, oneway)).toBe(0);
+    expect(laneOffset(4, 3, -1, false, oneway)).toBe(0);
+  });
+
+  it('keeps distinct terrain profiles for every full-width lane and the curb', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2048 },
+        { x: 4095, y: 2048 },
+      ],
+      LifeLine.roadMinor,
+      32,
+      1,
+      1,
+    );
+    const life = new TileLife(tile, b.finish(), 42);
+    life.setLaneTerrain({ near: () => true, hits: () => false });
+    const query = life as unknown as {
+      laneBendOf(m: Mover, line: number, dir: 1 | -1): unknown;
+      laneBends: Map<number, unknown>;
+    };
+    for (const lane of [0.05, 0.75, 0.95])
+      query.laneBendOf({ kind: 'vehicle', vehicle: 'car', lane } as Mover, 0, 1);
+    query.laneBendOf({ kind: 'vehicle', vehicle: 'bicycle', lane: 0.95 } as Mover, 0, 1);
+    expect(query.laneBends.size).toBe(4);
+  });
+
   it('drives down the middle of the right half of a two-lane street', () => {
     expect(laneOffset(6, 1.8, 0.3)).toBeCloseTo(1.5);
     expect(laneOffset(6, 1.8, 0.9)).toBeCloseTo(1.5);
@@ -1103,7 +1142,7 @@ describe('vehicles and boats', () => {
 describe('parked vehicles', () => {
   const wide = geometry([
     [
-      LifeLine.roadMajor,
+      LifeLine.roadMid,
       [
         [0, 2048],
         [4095, 2048],
@@ -1135,7 +1174,7 @@ describe('parked vehicles', () => {
           { x: a!, y: 2048 },
           { x: z!, y: 2048 },
         ],
-        LifeLine.roadMajor,
+        LifeLine.roadMid,
         14,
         77,
       );

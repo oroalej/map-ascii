@@ -1,6 +1,6 @@
 # Merge origin/main into a branch
 
-Every flow merges `main` with this one procedure: `$review-pr` step 1.7 before reviewing, `$implement-handoff` "Pull main", `$sync-review` when the remote branch moved, and `$merge-pr` gate 3. Work in `<checkout>`, the caller's checkout for the branch. The caller says which baseline applies and what to record (`$review-pr` sets `mainMerge` and checkpoints; callers without a baseline treat it as empty).
+Every flow merges `main` with this one procedure: `$implement-handoff` "Pull main" before implementing, `$review-pr` step 1.7 only when GitHub reports the PR conflicting, and `$merge-pr` gate 3 once before the merge. Work in `<checkout>`, the caller's checkout for the branch. The caller says which baseline applies and what to record (`$review-pr` sets `mainMerge` and checkpoints; callers without a baseline treat it as empty).
 
 1. `git -C <checkout> fetch origin main` (Retry), and record the fetched SHA. If `git -C <checkout> merge-base --is-ancestor origin/main HEAD` succeeds, the branch is current (`mainMerge: current`); skip the remaining items.
 2. If the merge would touch a file in the baseline (another session's uncommitted edits), never merge over it. Switch to a detached work tree (shared.md, Shared patterns) with an empty baseline, use it as `<checkout>` from now on, and merge there.

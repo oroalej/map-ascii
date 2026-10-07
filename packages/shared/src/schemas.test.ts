@@ -5,6 +5,7 @@ import {
   City,
   CityLife,
   EmergencyConfigSchema,
+  EmojiSubjectSchema,
   Season,
   SeasonEmojiEntrySchema,
   contentSchemas,
@@ -54,6 +55,27 @@ describe('seasonal emoji', () => {
     emoji: [entry],
     window: { from: { month: 12, day: 1 }, to: { month: 1, day: 6 } },
   };
+  it.each([['bird'], ['person', 'bird']])('rejects unsupported bird subjects %j', (...subjects) => {
+    const result = SeasonEmojiEntrySchema.safeParse({ ...entry, subjects });
+    expect(result.success).toBe(false);
+    if (!result.success)
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          path: ['subjects'],
+          message: 'birds do not support seasonal emoji',
+        }),
+      );
+    expect(Season.safeParse({ ...season, emoji: [{ ...entry, subjects }] }).success).toBe(false);
+  });
+  it('preserves existing seasonal subjects and runtime bird fear cues', () => {
+    expect(
+      SeasonEmojiEntrySchema.safeParse({
+        ...entry,
+        subjects: ['person', 'driver', 'cat', 'dog'],
+      }).success,
+    ).toBe(true);
+    expect(EmojiSubjectSchema.parse('bird')).toBe('bird');
+  });
   it('accepts emoji-only seasons, supplies weights and preserves strict fields', () => {
     expect(Season.parse(season).emoji![0]!.weight).toBe(1);
     expect(SeasonEmojiEntrySchema.safeParse({ ...entry, extra: true }).success).toBe(false);

@@ -7,7 +7,7 @@ import { makeScenario, worldTiles } from './testing/scenarios';
 import { bounded } from './testing/scenario-checks';
 import { createInlineHost } from './host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
-import { RETIRE, UMBRELLA_MOTION } from './config';
+import { UMBRELLA_MOTION } from './config';
 
 class ItemWorld extends LifeWorld {
   constructor(traffic?: TrafficMix) {
@@ -89,7 +89,6 @@ describe('per-item inspection', () => {
     const bb = inspection.present(b, person(1));
     inspection.finish([aa, bb]);
     inspection.select({ id: aa.inspectionId!, revision: 1, time: 10 }, 2);
-    expect(inspection.birds).toBe(false);
     inspection.select({ id: aa.inspectionId!, revision: 2, time: 15 }, 7);
     expect(inspection.clock(a, 7)).toBe(2);
     expect(inspection.clock(b, 7)).toBe(7);
@@ -104,109 +103,31 @@ describe('per-item inspection', () => {
     expect(inspection.clock(a, 8)).toBe(3);
   });
 
-  it('holds one bird while its flock moves and releases it at species speed', () => {
-    const inspection = new LifeInspection(),
-      owner = {},
-      other = {};
-    const bird = (): VisibleAgent => ({
-      kind: 'bird',
-      lng: 0,
-      lat: 0,
-      flap: 1,
-      ahead: [0.00001, 0],
-    });
-    inspection.begin(0);
-    const first = inspection.present(owner, bird());
-    inspection.present(other, bird());
-    inspection.finish([first]);
-    inspection.select({ id: first.inspectionId!, revision: 1, time: 0 }, 0);
-    expect(inspection.birds).toBe(true);
-    inspection.begin(10);
-    const held = inspection.present(owner, { ...bird(), lng: 0.001, flap: 0 }, 5);
-    expect(pose(held)).toEqual(pose(first));
-    expect(inspection.present(other, { ...bird(), lng: 0.001 }, 5).lng).toBe(0.001);
-    inspection.finish([held]);
-    inspection.select({ id: null, revision: 2, time: 10 }, 10);
-    inspection.begin(10.1);
-    const released = inspection.present(owner, { ...bird(), lng: 0.001 }, 5);
-    expect(released.lng * 111_320).toBeCloseTo(0.5);
-    expect(inspection.recoveringBirds).toBe(true);
-    // Recover to a reachable pose while preserving the ten-second gait offset.
-    inspection.begin(11);
-    inspection.present(owner, bird(), 5);
-    expect(inspection.recoveringBirds).toBe(false);
-    expect(inspection.birds).toBe(true);
-    expect(inspection.clock(owner, 11)).toBe(1);
-    inspection.forgetBird(owner);
-    inspection.forgetBird(owner);
-    expect(inspection.birds).toBe(false);
-    expect(inspection.recoveringBirds).toBe(false);
-  });
-
-  it('counts bird renewals once and clears held/recovering identities on retirement or reset', () => {
+  it('presents current bird poses through selection and release with stable identity', () => {
     const inspection = new LifeInspection(),
       owner = {};
     inspection.begin(0);
-    const bird = inspection.present(owner, { kind: 'bird', lng: 0, lat: 0, flap: 0 });
-    inspection.finish([bird]);
-    inspection.select({ id: bird.inspectionId!, revision: 1, time: 0 }, 0);
-    inspection.select({ id: bird.inspectionId!, revision: 2, time: 1 }, 1);
-    inspection.forgetBird(owner);
+    const first = inspection.present(owner, { kind: 'bird', lng: 0, lat: 0, flap: 0 });
+    inspection.finish([first]);
+    inspection.select({ id: first.inspectionId!, revision: 1, time: 0 }, 0);
     expect(inspection.ack.id).toBeNull();
-    expect(inspection.birds).toBe(false);
-    expect(inspection.recoveringBirds).toBe(false);
-    inspection.begin(2);
-    inspection.finish([inspection.present(owner, bird)]);
-    inspection.select({ id: bird.inspectionId!, revision: 3, time: 2 }, 2);
-    inspection.clear();
-    inspection.forgetBird(owner);
-    expect(inspection.birds).toBe(false);
-    expect(inspection.recoveringBirds).toBe(false);
-  });
-
-  it('preserves bird history during tile revival and removes it on permanent tile retirement', () => {
-    const s = makeScenario('rain', 1, false, 1, ItemWorld);
-    const owner = { ox: 0, oy: 0, phase: 0 };
-    [...worldTiles(s.world).values()][0]!.flocks.push({
-      species: 'maya',
-      x: 0,
-      y: 0,
-      hx: 1,
-      hy: 0,
-      roost: 0,
-      perch: -1,
-      perched: false,
-      landing: false,
-      landed: false,
-      feeding: false,
-      bout: 0,
-      lx: NaN,
-      ly: NaN,
-      home: -1,
-      landingAttempted: false,
-      landingBlend: 0,
-      scatter: 0,
-      angle: 0,
-      radius: 1,
-      stay: 1,
-      rank: 0,
-      birds: [owner],
-    });
-    const inspection = s.world.inspection!;
-    inspection.begin(0);
-    const view = inspection.present(owner, { kind: 'bird', lng: 0, lat: 0, flap: 0 });
-    inspection.finish([view]);
-    inspection.select({ id: view.inspectionId!, revision: 1, time: 0 }, 0);
-    inspection.select({ id: null, revision: 2, time: 1 }, 1);
-    s.world.sync([]);
-    expect(inspection.birds).toBe(true);
-    expect(inspection.recoveringBirds).toBe(true);
-    s.world.sync(s.tiles);
-    expect(inspection.clock(owner, 2)).toBe(1);
-    s.world.sync([]);
-    for (let frame = 0; frame <= RETIRE.seconds * 30; frame++) s.world.step(1 / 30);
-    expect(inspection.birds).toBe(false);
-    expect(inspection.recoveringBirds).toBe(false);
+    expect(inspection.held(owner)).toBe(false);
+    for (let frame = 1; frame <= 3; frame++) {
+      inspection.begin(frame);
+      const current: VisibleAgent = {
+        kind: 'bird',
+        lng: frame,
+        lat: frame,
+        flap: frame & 1,
+        ahead: [frame + 1, frame],
+      };
+      const view = inspection.present(owner, { ...current });
+      expect(pose(view)).toEqual(pose(current));
+      expect(view.inspectionId).toBe(first.inspectionId);
+      expect(inspection.clock(owner, frame)).toBe(frame);
+      inspection.finish([view]);
+      inspection.select({ id: null, revision: frame + 1, time: frame }, frame);
+    }
   });
 
   it('holds the actual mover state while other actors and traffic clocks continue', () => {

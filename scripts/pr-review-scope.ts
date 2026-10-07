@@ -5,7 +5,7 @@ import type { Json } from './pr-review-checkpoint';
 import { git, gitRaw, gitSucceeds } from './git';
 
 /** A larger change gets the full review; a fix-sized one is reviewed as a delta. */
-export const deltaLineLimit = 400;
+export const deltaLineLimit = 800;
 /** Dependencies, build/CI configuration and agent instructions always get a full review. */
 const structural = [
   /(^|\/)package\.json$/,
@@ -98,14 +98,37 @@ function select(
   if (since === head) return full('No commits since the last reviewed commit', since);
   if (!gitSucceeds(checkout, 'merge-base', '--is-ancestor', since, head))
     return full('The last reviewed commit is not an ancestor of HEAD', since);
-  if (git(checkout, 'rev-list', '--merges', `${since}..${head}`))
-    return full('A merge (main synchronization) happened since the last review', since);
+  // Main moves every hour while several tasks run; a clean synchronization merge is not new
+  // branch work. Only a merge that combined both sides' edits to the same file needs a full look.
+  const merges = git(checkout, 'rev-list', '--merges', `${since}..${head}`);
+  for (const merge of merges ? merges.split('\n') : []) {
+    const names = (parent: string) =>
+      new Set(git(checkout, 'diff', '--name-only', `${merge}^${parent}`, merge).split('\n'));
+    const shared = [...names('1')].filter((file) => file && names('2').has(file)).sort();
+    if (shared.length)
+      return full(
+        `Main synchronization ${merge.slice(0, 7)} combined both sides' changes to ${shared.join(', ')}`,
+        since,
+      );
+  }
   let changedLines = 0;
   const files: string[] = [];
-  for (const line of gitRaw(checkout, 'diff', '--numstat', '-z', since, head).split('\0')) {
+  const numstat = merges
+    ? gitRaw(
+        checkout,
+        'log',
+        '--numstat',
+        '--first-parent',
+        '--no-merges',
+        '--format=',
+        '-z',
+        `${since}..${head}`,
+      )
+    : gitRaw(checkout, 'diff', '--numstat', '-z', since, head);
+  for (const line of numstat.split(/\0|\n/)) {
     const [added, deleted, path] = line.split('\t');
     if (!path) continue;
-    files.push(path);
+    if (!files.includes(path)) files.push(path);
     if (added === '-' || deleted === '-') return full(`Binary change in ${path}`, since);
     changedLines += Number(added) + Number(deleted);
   }
@@ -122,10 +145,28 @@ function select(
     mode: 'delta',
     head,
     since,
-    reason: `Fixes since round ${prior.round}`,
+    reason: merges
+      ? `Fix commits since round ${prior.round}; a clean main synchronization is left out`
+      : `Fixes since round ${prior.round}`,
     files,
     changedLines,
   };
+}
+
+/** The patch a delta round reviews: the branch's own commits, never what a synchronization merged in. */
+function deltaPatch(checkout: string, since: string, head: string): string {
+  return git(checkout, 'rev-list', '--merges', `${since}..${head}`)
+    ? gitRaw(
+        checkout,
+        'log',
+        '-p',
+        '--first-parent',
+        '--no-merges',
+        '--reverse',
+        '--format=commit %H%n%s%n',
+        `${since}..${head}`,
+      )
+    : gitRaw(checkout, 'diff', since, head);
 }
 
 /**
@@ -143,9 +184,7 @@ export function reviewScope(run: string, round: number): ReviewScope & ScopeFile
   const ledgerText = renderLedger(state.history, state.rejected);
   const ledger = ledgerText === null ? null : join(folder, 'ledger.md');
   const patch =
-    chosen.mode === 'delta' && chosen.since
-      ? gitRaw(state.checkout, 'diff', chosen.since, head)
-      : null;
+    chosen.mode === 'delta' && chosen.since ? deltaPatch(state.checkout, chosen.since, head) : null;
   const delta = patch === null ? null : join(folder, 'delta.patch');
   mkdirSync(folder, { recursive: true });
   if (ledger && ledgerText !== null) writeFileSync(ledger, ledgerText, 'utf8');

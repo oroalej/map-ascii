@@ -5,18 +5,22 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
-  readlinkSync,
   realpathSync,
   renameSync,
   writeFileSync,
-  unlinkSync,
-  chmodSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { acquire } from './file-lock';
-import { git, gitRaw, gitSucceeds, mainCheckout } from './git';
+import { git, gitSucceeds, mainCheckout } from './git';
 import type { ClaudeUsage } from './pr-review-usage';
 
+/**
+ * Checkpoints are round-level: a run records which phase of which round it is in, the receipts of
+ * its native processes, and the rounds' records. Per-fix ownership tracking was removed on
+ * 2026-10-07: PR #46's coordinator made 352 begin/finish calls in one run, and every real resume
+ * restarted at a round boundary anyway (receipts make a finished review or validation reusable;
+ * uncommitted fixes are committed as task leftovers and reviewed in the next round).
+ */
 export const phases = [
   'sync',
   'review',
@@ -40,31 +44,6 @@ export function parseClaudeEffort(value: unknown): ClaudeEffort {
 }
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Identity = { repository: string; pr: number; branch: string };
-export type Snapshot = {
-  headSha: string;
-  status: string;
-  indexHash: string;
-  treeHash: string;
-  files: Record<string, string | null>;
-};
-export type OwnedFile = {
-  baseHash: string | null;
-  hash: string | null;
-  content: string | null;
-  mode: number;
-};
-export type Operation = {
-  id: string;
-  phase: Phase;
-  round: number;
-  before: Snapshot;
-  after: Snapshot | null;
-  paths: string[];
-  expectedTree: string | null;
-  expectedParents?: string[] | null;
-  commit: string | null;
-  data: Json;
-};
 export type ReviewState = Identity & {
   version: 1;
   revision: number;
@@ -83,16 +62,13 @@ export type ReviewState = Identity & {
   headSha: string;
   remoteSha: string;
   mainSha: string | null;
-  baseline: Snapshot;
-  current: Snapshot;
-  owned: Record<string, OwnedFile>;
-  operations: Operation[];
   receipts: string[];
   history: Json[];
   rejected: string;
   report: { [key: string]: Json };
   ci: {
-    status: 'not-run' | 'pending' | 'green' | 'fixed';
+    /** As observed by `$review-pr`, or `fixed` once `$merge-pr`'s gate repaired it. */
+    status: 'not-run' | 'pending' | 'green' | 'failing' | 'fixed';
     headSha: string | null;
     needsReview: boolean;
     data: Json;
@@ -125,6 +101,10 @@ export type Receipt = Identity & {
   /** Claude session pinned with `--session-id`, and its token totals read after exit. */
   sessionId?: string | null;
   usage?: ClaudeUsage | null;
+  /** Where the report came from: the process output, or its Claude transcript when the process never printed. */
+  reportSource?: 'stdout' | 'file' | 'transcript' | null;
+  /** Set when the wrapper ended the child: it had finished but never exited, or it hit the time cap. */
+  terminatedBy?: 'idle-watchdog' | 'time-cap' | null;
   valid: boolean;
   quota: { reason: string; reset: string | null } | null;
   error: string | null;
@@ -152,14 +132,9 @@ const identity = (v: Record<string, unknown>) =>
   v.pr !== 0 &&
   typeof v.branch === 'string' &&
   v.branch.length > 0;
-const snapshotShape = (v: unknown): boolean =>
-  record(v) &&
-  sha(v.headSha) &&
-  typeof v.status === 'string' &&
-  typeof v.indexHash === 'string' &&
-  typeof v.treeHash === 'string' &&
-  record(v.files) &&
-  Object.values(v.files).every(nullableString);
+
+/** Fields older checkpoints carry from per-operation tracking; read and dropped, never trusted. */
+const retiredFields = ['baseline', 'current', 'owned', 'operations'];
 
 /** Internal workflow state: validate persisted JSON before trusting it as a typed checkpoint. */
 export function parseState(v: unknown): ReviewState {
@@ -181,49 +156,13 @@ export function parseState(v: unknown): ReviewState {
     !sha(v.headSha) ||
     !sha(v.remoteSha) ||
     !(v.mainSha === null || sha(v.mainSha)) ||
-    !snapshotShape(v.baseline) ||
-    !snapshotShape(v.current) ||
-    !record(v.owned) ||
-    !Object.values(v.owned).every(
-      (file) =>
-        record(file) &&
-        nullableString(file.baseHash) &&
-        nullableString(file.hash) &&
-        nullableString(file.content) &&
-        integer(file.mode) &&
-        (file.content === null
-          ? file.hash === null
-          : typeof file.content === 'string' &&
-            file.hash === hash(Buffer.from(file.content, 'base64'))),
-    ) ||
-    !Array.isArray(v.operations) ||
-    !v.operations.every(
-      (op: unknown) =>
-        record(op) &&
-        typeof op.id === 'string' &&
-        phase(op.phase) &&
-        integer(op.round) &&
-        snapshotShape(op.before) &&
-        (op.after === null || snapshotShape(op.after)) &&
-        strings(op.paths) &&
-        nullableString(op.expectedTree) &&
-        (op.expectedParents === undefined ||
-          op.expectedParents === null ||
-          (strings(op.expectedParents) &&
-            op.expectedParents.length > 0 &&
-            op.expectedParents.every(sha) &&
-            record(op.before) &&
-            op.expectedParents[0] === op.before.headSha)) &&
-        nullableString(op.commit) &&
-        json(op.data),
-    ) ||
     !strings(v.receipts) ||
     !Array.isArray(v.history) ||
     !v.history.every(json) ||
     !record(v.report) ||
     !json(v.report) ||
     !record(v.ci) ||
-    !['not-run', 'pending', 'green', 'fixed'].includes(String(v.ci.status)) ||
+    !['not-run', 'pending', 'green', 'failing', 'fixed'].includes(String(v.ci.status)) ||
     !nullableString(v.ci.headSha) ||
     typeof v.ci.needsReview !== 'boolean' ||
     !json(v.ci.data) ||
@@ -235,8 +174,10 @@ export function parseState(v: unknown): ReviewState {
     )
   )
     throw new Error('Invalid review checkpoint');
+  const state = { ...v } as Record<string, unknown>;
+  for (const key of retiredFields) delete state[key];
   // Version 1 predates effort selection; normalize without changing the source object/file.
-  return { ...v, claudeEffort: v.claudeEffort ?? 'high' } as ReviewState;
+  return { ...state, claudeEffort: v.claudeEffort ?? 'high' } as ReviewState;
 }
 
 export function parseReceipt(v: unknown): Receipt {
@@ -276,6 +217,17 @@ export function parseReceipt(v: unknown): Receipt {
     ) ||
     !(v.sessionId === undefined || nullableString(v.sessionId)) ||
     !(v.usage === undefined || v.usage === null || record(v.usage)) ||
+    !(
+      v.reportSource === undefined ||
+      v.reportSource === null ||
+      (typeof v.reportSource === 'string' &&
+        ['stdout', 'file', 'transcript'].includes(v.reportSource))
+    ) ||
+    !(
+      v.terminatedBy === undefined ||
+      v.terminatedBy === null ||
+      (typeof v.terminatedBy === 'string' && ['idle-watchdog', 'time-cap'].includes(v.terminatedBy))
+    ) ||
     typeof v.valid !== 'boolean' ||
     !nullableString(v.error) ||
     !(
@@ -314,17 +266,6 @@ export function contained(root: string, file: string): string {
   return target;
 }
 
-export function sourcePath(checkout: string, name: string): string {
-  if (
-    !name ||
-    isAbsolute(name) ||
-    name.split(/[\\/]/).some((p) => p === '..' || p.includes(':')) ||
-    /^(?:\.git|\.plans)(?:[\\/]|$)/.test(name)
-  )
-    throw new Error(`Invalid source path: ${name}`);
-  return contained(checkout, resolve(checkout, name));
-}
-
 export function atomicJson(file: string, value: unknown): void {
   mkdirSync(dirname(file), { recursive: true });
   const temporary = `${file}.${randomUUID()}.tmp`;
@@ -360,48 +301,6 @@ function assertCheckout(checkout: string, expected: Identity): void {
   ) {
     throw new Error('Review checkout no longer belongs to the PR branch');
   }
-}
-
-function dirtyPaths(status: string): string[] {
-  const entries = status.split('\0'),
-    paths: string[] = [];
-  for (let i = 0; i < entries.length; i++) {
-    const entry = entries[i];
-    if (!entry) continue;
-    paths.push(entry.slice(3));
-    if (/[RC]/.test(entry.slice(0, 2))) {
-      const old = entries[++i];
-      if (old) paths.push(old);
-    }
-  }
-  return paths;
-}
-
-function fileHash(checkout: string, name: string): string | null {
-  const file = resolve(checkout, name);
-  if (!existsSync(file)) return null;
-  const info = lstatSync(file);
-  return info.isSymbolicLink() ? hash(`link:${readlinkSync(file)}`) : hash(readFileSync(file));
-}
-
-export function capture(checkout: string, paths: string[] = []): Snapshot {
-  const status = gitRaw(checkout, 'status', '--porcelain=v1', '-z', '--untracked-files=all');
-  const files = Object.fromEntries(
-    [...new Set([...dirtyPaths(status), ...paths])]
-      .sort()
-      .map((name) => [name, fileHash(checkout, name)]),
-  );
-  const indexHash = hash(gitRaw(checkout, 'diff', '--cached', '--binary'));
-  const headSha = git(checkout, 'rev-parse', 'HEAD');
-  return {
-    headSha,
-    status,
-    indexHash,
-    files,
-    treeHash: hash(
-      JSON.stringify([headSha, indexHash, gitRaw(checkout, 'diff', '--binary', 'HEAD'), files]),
-    ),
-  };
 }
 
 export function loadState(run: string): ReviewState {
@@ -463,8 +362,10 @@ export function receiptValid(receipt: Receipt, state: Identity, headSha: string)
     receipt.branch !== state.branch ||
     receipt.headSha !== headSha ||
     receipt.status !== 'completed' ||
-    receipt.exitCode !== 0 ||
-    receipt.signal !== null ||
+    // A report recovered from the session transcript is complete even though the hung process
+    // had to be ended by the wrapper; the wrapper only marks it valid for a finished session.
+    (receipt.reportSource !== 'transcript' &&
+      (receipt.exitCode !== 0 || receipt.signal !== null)) ||
     !receipt.valid ||
     receipt.quota !== null ||
     !receipt.reportHash
@@ -505,13 +406,10 @@ export type Recovery = {
   state: ReviewState;
   reusable: Receipt[];
   active: Receipt[];
-  workingTreeMatches: boolean;
-  recoveredCommit: string | null;
-  pushCompleted: boolean;
   reason: string;
 };
 
-/** Selection is read-only. The caller imports legacy evidence if this finds no checkpoint. */
+/** Selection is read-only. */
 export function selectState(options: StartOptions): ReviewState | null {
   if (options.claudeEffort !== undefined) parseClaudeEffort(options.claudeEffort);
   if (options.fresh && options.resume) throw new Error('--fresh and --resume cannot be combined');
@@ -542,12 +440,17 @@ export function selectState(options: StartOptions): ReviewState | null {
   );
 }
 
+/**
+ * Where a saved run continues. A finished review or validation receipt at the same head is
+ * reused; a changed head starts a new round; a saved clean result stays clean for its head
+ * (main synchronization and the CI gate belong to `$merge-pr`).
+ */
 export function recover(
   state: ReviewState,
   options: StartOptions,
   isActive: (receipt: Receipt) => boolean,
 ): Omit<Recovery, 'state'> & { phase: Phase; round: number } {
-  const now = capture(options.checkout, Object.keys(state.owned));
+  const head = git(options.checkout, 'rev-parse', 'HEAD');
   const receipts = state.receipts
     .flatMap((file) => {
       try {
@@ -563,59 +466,25 @@ export function recover(
       (r) => r.repository === state.repository && r.pr === state.pr && r.branch === state.branch,
     );
   const active = receipts.filter((r) => r.status === 'running' && isActive(r));
-  const pending = [...state.operations].reverse().find((op) => op.after === null);
-  let recoveredCommit: string | null = null;
-  if (
-    pending?.phase === 'commit' &&
-    pending.expectedTree &&
-    git(options.checkout, 'rev-parse', 'HEAD^{tree}') === pending.expectedTree &&
-    git(options.checkout, 'rev-list', '--parents', '-n', '1', 'HEAD') ===
-      [now.headSha, ...(pending.expectedParents ?? [pending.before.headSha])].join(' ')
-  )
-    recoveredCommit = now.headSha;
-  const pushCompleted =
-    pending?.phase === 'push' &&
-    gitSucceeds(
-      options.checkout,
-      'merge-base',
-      '--is-ancestor',
-      pending.before.headSha,
-      options.remoteSha,
-    );
-  const expectedHead = recoveredCommit ?? state.headSha;
-  const unchanged = now.headSha === expectedHead && options.remoteSha === expectedHead;
-  const workingTreeMatches = now.treeHash === state.current.treeHash;
-  const verified = receipts.filter((r) => receiptValid(r, state, expectedHead));
+  const unchanged = head === state.headSha && options.remoteSha === state.headSha;
+  const verified = receipts.filter((r) => receiptValid(r, state, state.headSha));
   let next = state.phase,
     round = state.round,
     reason = 'Continue saved phase';
-  if (!gitSucceeds(options.checkout, 'merge-base', '--is-ancestor', 'origin/main', now.headSha)) {
-    next = 'sync';
-    reason = 'Current main must be synchronized before consuming saved review results';
-  } else if (recoveredCommit) {
-    if (options.remoteSha === recoveredCommit) {
-      next = 'review';
-      round = Math.max(round, (pending?.round ?? state.round) + 1);
-      reason = 'Pending commit already reached the remote; review it without another push';
-    } else {
-      next = 'push';
-      reason = 'Pending commit already exists; push it instead of committing again';
-    }
-  } else if (
-    now.headSha === state.headSha &&
-    options.remoteSha !== state.headSha &&
-    gitSucceeds(options.checkout, 'merge-base', '--is-ancestor', options.remoteSha, now.headSha)
-  ) {
+  const ahead =
+    head !== options.remoteSha &&
+    gitSucceeds(options.checkout, 'merge-base', '--is-ancestor', options.remoteSha, head);
+  if (ahead) {
     next = 'push';
-    reason = 'Local commits must be pushed before consuming saved results';
+    if (head !== state.headSha) round++;
+    reason = 'Local commits must be pushed before they are reviewed';
   } else if (!unchanged) {
     next = 'review';
     round++;
     reason = 'Reviewed commit changed; retain history and review the new commit';
-  } else if (pushCompleted) {
+  } else if (state.phase === 'push') {
     next = 'review';
-    round = Math.max(round, pending.round + 1);
-    reason = 'Pending push already reached the remote; review the pushed fixes';
+    reason = 'Pending push reached the remote; review the pushed commits';
   }
   const review = [...verified].reverse().find((r) => r.round === round && r.phase === 'review');
   const reusable = verified.filter(
@@ -635,10 +504,6 @@ export function recover(
     reusable.some((r) => r.phase === 'review')
   )
     next = 'fixes';
-  if (next === 'complete') {
-    next = 'ci';
-    reason = 'Recheck GitHub CI against the current remote head before reusing a clean result';
-  }
   if (next === 'ci' && state.ci.needsReview) {
     next = 'review';
     round++;
@@ -657,20 +522,7 @@ export function recover(
     next = 'validation';
     reason = 'Completed validation provenance could not be verified';
   }
-  if (!workingTreeMatches && ['verify', 'commit'].includes(next)) {
-    next = 'fixes';
-    reason = 'Working changes differ from the checkpoint; inspect ownership before continuing';
-  }
-  return {
-    reusable: unchanged ? reusable : [],
-    active,
-    workingTreeMatches,
-    recoveredCommit,
-    pushCompleted,
-    reason,
-    phase: next,
-    round,
-  };
+  return { reusable: unchanged ? reusable : [], active, reason, phase: next, round };
 }
 
 export async function startReview(
@@ -694,16 +546,7 @@ export async function startReview(
     throw new Error('Checkpoint identity mismatch');
   const recovery = previous
     ? recover(previous, options, isActive)
-    : {
-        reusable: [],
-        active: [],
-        workingTreeMatches: true,
-        recoveredCommit: null,
-        pushCompleted: false,
-        reason: 'New review',
-        phase: 'sync' as Phase,
-        round: 1,
-      };
+    : { reusable: [], active: [], reason: 'New review', phase: 'sync' as Phase, round: 1 };
   if (recovery.active.length)
     throw new Error(
       `Review process still active; observe ${recovery.active.map((r) => r.report).join(', ')}`,
@@ -739,7 +582,7 @@ export async function startReview(
   mkdirSync(root, { recursive: true });
   const run = contained(root, join(root, `run-${Date.now()}-${randomUUID()}`));
   mkdirSync(run);
-  const current = capture(options.checkout, previous ? Object.keys(previous.owned) : []);
+  const headSha = git(options.checkout, 'rev-parse', 'HEAD');
   const state: ReviewState = previous
     ? structuredClone(previous)
     : {
@@ -758,13 +601,9 @@ export async function startReview(
         round: recovery.round,
         status: 'running',
         nextAction: recovery.reason,
-        headSha: current.headSha,
+        headSha,
         remoteSha: options.remoteSha,
         mainSha: null,
-        baseline: current,
-        current,
-        owned: {},
-        operations: [],
         receipts: [],
         history: [],
         rejected: '',
@@ -786,45 +625,12 @@ export async function startReview(
     round: recovery.round,
     status: 'running',
     nextAction: recovery.reason,
-    headSha: current.headSha,
+    headSha,
     remoteSha: options.remoteSha,
-    current,
     interruption: null,
   });
-  if (
-    previous &&
-    (current.headSha !== previous.headSha || options.remoteSha !== previous.remoteSha)
-  ) {
+  if (previous && (headSha !== previous.headSha || options.remoteSha !== previous.remoteSha))
     state.ci = { ...state.ci, status: 'not-run', headSha: null };
-  }
-  if (previous && !recovery.workingTreeMatches) state.ci.status = 'not-run';
-  if (previous) {
-    const dirty = new Set(dirtyPaths(current.status));
-    state.baseline = {
-      ...current,
-      files: Object.fromEntries(
-        Object.entries(current.files).filter(
-          ([name, digest]) =>
-            dirty.has(name) && (!state.owned[name] || state.owned[name].hash !== digest),
-        ),
-      ),
-    };
-  }
-  if (recovery.recoveredCommit) {
-    const op = [...state.operations]
-      .reverse()
-      .find((o) => o.phase === 'commit' && o.after === null);
-    if (op) {
-      op.commit = recovery.recoveredCommit;
-      retireCommittedOwnership(state, op.before.headSha, recovery.recoveredCommit);
-      op.after = capture(options.checkout, Object.keys(state.owned));
-    }
-    state.current = capture(options.checkout, Object.keys(state.owned));
-  }
-  if (recovery.pushCompleted) {
-    const op = [...state.operations].reverse().find((o) => o.phase === 'push' && o.after === null);
-    if (op) op.after = current;
-  }
   const release = await acquire([contained(run, join(run, 'checkpoint.lock'))]);
   try {
     persist(state);
@@ -832,190 +638,4 @@ export async function startReview(
     await release();
   }
   return { ...recovery, state };
-}
-
-/** Protect newly observed foreign edits without claiming or changing their contents. */
-export async function protectChanges(run: string): Promise<ReviewState> {
-  return updateState(run, (state) => {
-    const observed = capture(state.checkout, Object.keys(state.owned));
-    const dirty = new Set(dirtyPaths(observed.status));
-    state.baseline = {
-      ...observed,
-      files: Object.fromEntries(
-        Object.entries(observed.files).filter(
-          ([name, digest]) =>
-            dirty.has(name) && (!state.owned[name] || state.owned[name].hash !== digest),
-        ),
-      ),
-    };
-  });
-}
-
-/** A commit may cover only one area; untouched fixes retain their original ownership proof. */
-function retireCommittedOwnership(state: ReviewState, parent: string, commit: string): void {
-  const committed = gitRaw(
-    state.checkout,
-    'diff',
-    '--no-renames',
-    '--name-only',
-    '-z',
-    parent,
-    commit,
-    '--',
-  )
-    .split('\0')
-    .filter(Boolean);
-  for (const name of committed) delete state.owned[name];
-}
-
-/** Merge ancestry belongs to a recorded synchronization, not just an observed MERGE_HEAD. */
-function expectedCommitParents(state: ReviewState, head: string): string[] {
-  const mergeFile = resolve(
-    state.checkout,
-    git(state.checkout, 'rev-parse', '--git-path', 'MERGE_HEAD'),
-  );
-  if (!existsSync(mergeFile)) return [head];
-  const mergeHeads = readFileSync(mergeFile, 'utf8').trim().split(/\s+/);
-  const synchronization = state.operations.some(
-    (op) =>
-      op.phase === 'sync' &&
-      op.before.headSha === head &&
-      record(op.data) &&
-      strings(op.data.mergeHeads) &&
-      op.data.mergeHeads.length === mergeHeads.length &&
-      op.data.mergeHeads.every((parent, i) => parent === mergeHeads[i]),
-  );
-  if (!mergeHeads.every(sha) || !synchronization)
-    throw new Error('Merge parents have no matching owned synchronization');
-  return [head, ...mergeHeads];
-}
-
-export async function beginOperation(
-  run: string,
-  id: string,
-  step: Phase,
-  paths: string[] = [],
-  data: Json = null,
-): Promise<ReviewState> {
-  return updateState(run, (state) => {
-    assertCheckout(state.checkout, state);
-    if (state.operations.some((op) => op.id === id))
-      throw new Error(`Operation already recorded: ${id}`);
-    for (const name of paths) {
-      sourcePath(state.checkout, name);
-      if (name in state.baseline.files && !(name in state.owned))
-        throw new Error(`Unfamiliar baseline edit: ${name}`);
-      const owned = state.owned[name];
-      if (owned && fileHash(state.checkout, name) !== owned.hash)
-        throw new Error(`Owned file changed outside the checkpoint: ${name}`);
-      if (
-        !owned &&
-        gitRaw(
-          state.checkout,
-          'status',
-          '--porcelain=v1',
-          '-z',
-          '--untracked-files=all',
-          '--',
-          name,
-        )
-      )
-        throw new Error(`Unrecorded edit: ${name}`);
-    }
-    if (step === 'commit') {
-      const staged = gitRaw(state.checkout, 'diff', '--cached', '--no-renames', '--name-only', '-z')
-        .split('\0')
-        .filter(Boolean);
-      for (const name of staged) {
-        const owned = state.owned[name];
-        if (
-          !owned ||
-          fileHash(state.checkout, name) !== owned.hash ||
-          gitRaw(state.checkout, 'diff', '--name-only', '--', name).trim()
-        )
-          throw new Error(`Commit includes unowned or partially staged bytes: ${name}`);
-      }
-    }
-    const before = capture(state.checkout, [...new Set([...Object.keys(state.owned), ...paths])]);
-    const expectedTree =
-      step === 'commit' && gitSucceeds(state.checkout, 'write-tree')
-        ? git(state.checkout, 'write-tree')
-        : null;
-    const expectedParents = step === 'commit' ? expectedCommitParents(state, before.headSha) : null;
-    state.phase = step;
-    state.current = before;
-    state.headSha = before.headSha;
-    state.status = 'running';
-    state.operations.push({
-      id,
-      phase: step,
-      round: state.round,
-      before,
-      after: null,
-      paths,
-      expectedTree,
-      expectedParents,
-      commit: null,
-      data,
-    });
-  });
-}
-
-export async function finishOperation(
-  run: string,
-  id: string,
-  next: Phase,
-  nextAction: string,
-  data: Json = null,
-): Promise<ReviewState> {
-  return updateState(run, (state) => {
-    assertCheckout(state.checkout, state);
-    const op = state.operations.find((entry) => entry.id === id);
-    if (!op || op.after !== null) throw new Error(`No pending operation: ${id}`);
-    for (const name of op.paths) {
-      const file = sourcePath(state.checkout, name),
-        old = state.owned[name];
-      const content = existsSync(file) ? readFileSync(file).toString('base64') : null;
-      state.owned[name] = {
-        baseHash: old ? old.baseHash : (op.before.files[name] ?? null),
-        hash: content === null ? null : hash(Buffer.from(content, 'base64')),
-        content,
-        mode: existsSync(file) ? lstatSync(file).mode : (old?.mode ?? 0o644),
-      };
-    }
-    op.after = capture(state.checkout, Object.keys(state.owned));
-    op.data = data;
-    if (op.phase === 'commit') {
-      op.commit = op.after.headSha;
-      retireCommittedOwnership(state, op.before.headSha, op.commit);
-      op.after = capture(state.checkout, Object.keys(state.owned));
-    }
-    state.current = op.after;
-    state.headSha = op.after.headSha;
-    state.phase = next;
-    state.nextAction = nextAction;
-  });
-}
-
-/** Replay only saved owned bytes, and only onto the exact base bytes they replaced. */
-export function restoreOwned(state: ReviewState, checkout: string): string[] {
-  if (repository(checkout) !== state.repository)
-    throw new Error('Restore checkout is from another repository');
-  const entries = Object.entries(state.owned);
-  for (const [name, file] of entries) {
-    sourcePath(checkout, name);
-    if (fileHash(checkout, name) !== file.baseHash)
-      throw new Error(`Restore base differs: ${name}`);
-  }
-  for (const [name, file] of entries) {
-    const path = sourcePath(checkout, name);
-    if (file.content === null) {
-      if (existsSync(path)) unlinkSync(path);
-    } else {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, Buffer.from(file.content, 'base64'), { mode: file.mode });
-      chmodSync(path, file.mode);
-    }
-  }
-  return entries.map(([name]) => name);
 }

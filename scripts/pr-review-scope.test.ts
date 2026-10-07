@@ -100,7 +100,7 @@ describe('review scope', () => {
     expect(readFileSync(reviewScope(state.run, 2).path, 'utf8')).toBe(first);
   });
 
-  it('falls back to a full review after a main merge', async () => {
+  it('reviews only the fix commits after a clean main merge', async () => {
     const reviewed = setup.options.remoteSha;
     git(setup.directory, 'checkout', '-q', '-b', 'side');
     change({ 'other.txt': 'main\n' }, 'main change');
@@ -108,7 +108,30 @@ describe('review scope', () => {
     change({ 'file.txt': 'after\n' });
     git(setup.directory, 'merge', '-q', '--no-ff', '-m', 'merge main', 'side');
     const state = await secondRound(reviewed);
-    expect(reviewScope(state.run, 2)).toMatchObject({ mode: 'full', reason: /merge/ });
+    const scope = reviewScope(state.run, 2);
+    expect(scope).toMatchObject({
+      mode: 'delta',
+      reason: /clean main synchronization/,
+      files: ['file.txt'],
+      changedLines: 2,
+    });
+    const patch = readFileSync(scope.delta!, 'utf8');
+    expect(patch).toContain('+after');
+    expect(patch).not.toContain('other.txt');
+  });
+
+  it('falls back to a full review when a main merge combined both sides of a file', async () => {
+    const reviewed = setup.options.remoteSha;
+    git(setup.directory, 'checkout', '-q', '-b', 'side');
+    change({ 'file.txt': 'top\nbefore\n' }, 'main change');
+    git(setup.directory, 'checkout', '-q', 'codex/test');
+    change({ 'file.txt': 'before\nafter\n' });
+    git(setup.directory, 'merge', '-q', '--no-ff', '-m', 'merge main', 'side');
+    const state = await secondRound(reviewed);
+    expect(reviewScope(state.run, 2)).toMatchObject({
+      mode: 'full',
+      reason: /combined both sides' changes to file\.txt/,
+    });
   });
 
   it('falls back to a full review when the reviewed commit is not an ancestor', async () => {
