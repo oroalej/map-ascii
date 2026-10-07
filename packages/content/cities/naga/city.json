@@ -1395,7 +1395,7 @@
       },
       "police": {
         "max": 2,
-        "interval_s": [90, 240],
+        "interval_s": [5, 15],
         "call_every_s": [60, 180],
         "call_s": [30, 75]
       },
