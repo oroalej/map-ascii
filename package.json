@@ -35,7 +35,8 @@
     "worktree:remove": "tsx scripts/worktree-remove.ts",
     "worktree:stop": "tsx scripts/worktree-stop.ts",
     "cli:latest": "tsx scripts/latest-cli.ts",
-    "review:state": "tsx scripts/pr-review-state.ts"
+    "review:state": "tsx scripts/pr-review-state.ts",
+    "handoff:apply": "tsx scripts/handoff-apply.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9",

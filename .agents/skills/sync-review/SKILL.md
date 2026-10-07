@@ -24,10 +24,9 @@ Don't ask for confirmation between steps or branches. Follow [shared.md](../revi
 
 | Role | Model | Effort | Speed | How |
 | --- | --- | --- | --- | --- |
-| Loop session (this session): commits, conflicts, PRs, CI fixes, merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
-| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by `$review-pr` |
-| Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
-| Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
+| Loop session (this session): commits, conflicts, PRs, the `$review-pr` loop (rounds, fixes), the `$merge-pr` gates (one main sync, the CI gate) and merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
+| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by the `$review-pr` steps |
+| Codex #1: validates Claude's round-1 blockers and should-fix items (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | high | `<speed>` | started by the `$review-pr` steps |
 
 `$review-pr` resolves its own `codex` and `claude`. `--fast` and `--claude-effort` apply to every listed branch's review.
 
@@ -56,7 +55,7 @@ shared.md's Rules apply, plus:
 5. `<skill-dir>` is the absolute folder of this `SKILL.md`. `<review-pr-skill>` is `<skill-dir>/../review-pr/SKILL.md` and `<merge-pr-skill>` is `<skill-dir>/../merge-pr/SKILL.md`. Confirm both files exist. If one doesn't, end with a missing tool. Then resolve `<codex>` (shared.md, Binaries).
 
 Then process the branches one at a time, in the order given. `<slug>` is the branch name with `/` replaced by `-`.
-For a branch whose existing PR has a saved incomplete review, inspect it with the review recovery reference before step 1. Skip steps 1 and 3 and continue at step 4: the review coordinator owns its unfinished fixes and verification. Do not commit that WIP through the generic commit step. A live saved coordinator is awaited.
+For a branch whose existing PR has a saved incomplete review, run the recovery reference's `inspect` before step 1: a live child process is awaited; otherwise step 1 commits whatever is uncommitted and the resumed review covers it.
 
 ## 1. Commit and push
 
@@ -74,32 +73,24 @@ No action: `$review-pr` merges `origin/main` first (its step 1.7), and `$merge-p
    - Title: a gitmoji + conventional header summarizing the branch's commits since `main`.
    - Body: what the branch does, taken from its commits and its handoff, plus a test plan listing the checks the handoff names. Don't invent claims about tests that weren't run.
 
-## 4. Review (up to 3 rounds), with the CI gate ($review-pr)
+## 4. Review (up to 2 rounds) ($review-pr)
 
-`$review-pr` runs the review loop and CI gate itself. Start Codex #2 with the delegated review call (shared.md), using `resultFile: "<run>/<slug>-review.json"`:
-
-```
-pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-input.json
-```
-
-If the result file is missing, use the canonical checkpoint result, or else the `review-pr-result` block at the end of the `-o` file.
+Run the review loop in this session (shared.md, "Running $review-pr from another skill"), writing the result copy to `<run>/<slug>-review.json`.
 
 - `clean` → step 5.
 - `error` → the branch ends with its `stopReason`; apply "Keep going".
 - `interrupted` → end the loop with saved progress, leaving later branches unprocessed ("Interrupted review").
 
-## 5. Confirm CI
+## 5. CI
 
-1. Confirm the result's `ci.status` is `green` or `fixed`.
-2. Confirm `gh pr checks <N>` passes on the PR's current head SHA (`gh pr view <N> --json headRefOid`). If checks are still running, wait with `gh pr checks <N> --watch`.
-3. If either check fails, run `<review-pr-skill>` step 6 (the CI gate) yourself in the branch's worktree until CI is green, including its review round when a CI fix touched non-test source code. Use the new head from then on.
+Nothing to do here: `$merge-pr` gate 4 is the workflow's one CI gate (it waits, reruns flakes, fixes real failures and reviews source fixes). The review result's `ci.status` is only what was observed.
 
 ## 6. Merge into main
 
-1. Check that `$review-pr` ended `clean` and step 5 passed on the PR's current head SHA. Held-back files were never committed, so they don't block the merge.
+1. Check that `$review-pr` ended `clean` on the PR's current head SHA. Held-back files were never committed, so they don't block the merge.
 
    Don't check whether the PR is behind `main` or conflicting: if `main` moved, `$merge-pr` merges `origin/main` into it (its gate 3).
-2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>` and `--claude-effort <review-result.claudeEffort>`, where `<sha>` is the review result's `headSha` (or, after a step-6.3 retry, the head its CI gate passed on), with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). If an older result lacks effort, read its checkpoint or use the original fixed `high`. It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, stops processes left running in the worktree with `pnpm worktree:stop`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
+2. Follow `<merge-pr-skill>` exactly for `<branch>` with `Head: <sha>` and `--claude-effort <review-result.claudeEffort>`, where `<sha>` is the review result's `headSha`, with `<main-checkout>` as the working directory (never `<wt>`: its folder gets deleted). If an older result lacks effort, read its checkpoint or use the original fixed `high`. It re-checks the gate, merges `origin/main` into the branch whenever `main` moved, waits for CI, merges with `gh pr merge <N> --merge --match-head-commit <gated-sha>`, updates the task's `.plans` rows, deletes the scratch with `pnpm plans:clean`, stops processes left running in the worktree with `pnpm worktree:stop`, and removes the local branch and worktree with `pnpm worktree:remove`. The remote branch stays.
 3. Read its `merge-pr-result`.
    - `merged` → done. A cleanup failure after a merge is reported in step 8 but doesn't stop the loop.
    - `error` → the branch ends with its `stopReason` (an "Ends" case); apply "Keep going". `$merge-pr` fixes CI and syncs `main` itself, so nothing else comes back.
@@ -113,6 +104,6 @@ When a branch ended with `error` or `interrupted` before merging: in `<main-chec
 
 After each branch, print one line:
 
-`<branch>: commit <sha|none> · main <mainMerge from the review result> · PR #N · review <roundCount> rounds, <status>, <n> open · CI <ci.status> · <merged <sha>, cleanup <done|failed: what> | error: <reason>>`
+`<branch>: commit <sha|none> · PR #N · review <roundCount> rounds, <status>, <n> open · main syncs <mainSyncs> · CI <final state from merge-pr> · <merged <sha>, cleanup <done|failed: what> | error: <reason>>`
 
 At the end, print a table of every listed branch (branch / commit / main merge / PR / review / CI / result). It includes skipped and not-processed branches, created worktrees and detached work trees, held-back files, open review entries, aborted merges with the missing tool and their files, conflict decisions, cleanup failures, and errors. Print the `codex` version from step 0.5 under it. Leave `<run>` in the OS temp folder and print its path: Codex rejects recursive shell deletes as "blocked by policy".

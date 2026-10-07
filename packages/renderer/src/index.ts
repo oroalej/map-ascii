@@ -1015,6 +1015,38 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return bounds.at;
   };
 
+  /** Keep a geographic mouse point while its input, camera and CSS size stay unchanged. */
+  let pointerProjection: {
+    point: readonly [number, number];
+    camera: CameraState;
+    width: number;
+    height: number;
+    at: readonly [number, number];
+  } | null = null;
+  const lifePointer = (size: { width: number; height: number }) => {
+    const point = lifeHover.pointerPoint;
+    if (!point) {
+      pointerProjection = null;
+      return undefined;
+    }
+    if (
+      pointerProjection?.point !== point ||
+      pointerProjection.camera !== camera ||
+      pointerProjection.width !== size.width ||
+      pointerProjection.height !== size.height
+    ) {
+      const at = viewportFor(camera, size).unproject([...point]);
+      pointerProjection = {
+        point,
+        camera,
+        width: size.width,
+        height: size.height,
+        at: [at[0]!, at[1]!],
+      };
+    }
+    return pointerProjection.at;
+  };
+
   /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
   let lifeAgents: VisibleAgent[] = [];
   const drawLife = (at: number, wind: WindNow) => {
@@ -1027,6 +1059,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
+      const pointer = lifePointer(size);
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1056,6 +1089,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
+            ...(pointer ? { pointer } : {}),
           },
           visible: [
             camera.zoom,

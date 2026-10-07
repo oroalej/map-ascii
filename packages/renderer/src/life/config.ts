@@ -61,6 +61,14 @@ export { DEFAULT_ROAD_WIDTH_M } from '@atlas/shared';
 /** Vehicles keep at least this far inside the road's edge, m. */
 export const ROAD_MARGIN_M = 0.2;
 
+/** Travel-relative directional carriageway; reverse one-way flow uses the same offsets. */
+export function laneLayout(roadWidth: number, oneway = 0) {
+  const span = oneway ? roadWidth : roadWidth / 2;
+  // Decimal 9.6 / 3.2 can land just below 3 in a JS number; preserve the two-way formula.
+  const count = Math.max(1, Math.floor((span + (oneway ? 1e-8 : 0)) / LANE_WIDTH_M));
+  return { count, start: oneway ? -roadWidth / 2 : 0, span, width: span / count };
+}
+
 /**
  * How far right of a road's center line a vehicle drives, m, so two-way traffic passes: down
  * the middle of one of the lanes on its half of the road (`lane`, 0–1, picks which), or by the
@@ -71,10 +79,17 @@ export function laneOffset(
   vehicleWidth: number,
   lane: number,
   curb = false,
+  oneway = 0,
 ): number {
   const half = roadWidth / 2;
   if (curb) return Math.max(0, half - vehicleWidth / 2 - ROAD_MARGIN_M);
-  const lanes = Math.max(1, Math.floor(half / LANE_WIDTH_M));
+  const layout = laneLayout(roadWidth, oneway);
+  const lanes = layout.count;
+  if (oneway) {
+    const index = Math.max(0, Math.min(lanes - 1, Math.floor(lane * lanes)));
+    const edge = Math.max(0, half - vehicleWidth / 2 - ROAD_MARGIN_M);
+    return Math.max(-edge, Math.min(edge, layout.start + (index + 0.5) * layout.width));
+  }
   const index = Math.min(lanes - 1, Math.floor(lane * lanes));
   const offset = ((index + 0.5) * half) / lanes;
   return Math.max(0, Math.min(offset, half - vehicleWidth / 2 - ROAD_MARGIN_M));
@@ -114,6 +129,10 @@ export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
  * Recovery steering can retreat while stopped; road edge allowance for inferred widths is in m.
  */
 export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
+/** Passing uses actor-active seconds and metre/m/s limits, with deterministic lane preference. */
+export const LANE = { lateral: 1, gain: 1.5, patience: 2, clear: 30, cooldown: 6 } as const;
+/** Two-wheelers retain a physically clear queue corridor until a safe return. */
+export const FILTER = { enter: 1.5, leave: 4, gain: 3, max: 5, clear: 15, retry: 3 } as const;
 /**
  * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
  * or the movement guard has refused it for any reason this long.
@@ -213,11 +232,12 @@ export const JUNCTION = {
 export const TRAIN_FOLLOW = { minGap: 30, lookahead: 400, tolerance: 2.5 } as const;
 
 /**
- * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of the roads at least
+ * Parked vehicles: shown from `zoom`; along both curbs of about `chance` of secondary/minor roads at least
  * `minWidth` m wide, in a strip `strip` m wide, one every vehicle length plus `gap` m with
  * `taken` of the places filled; and on `lotTaken` of parking lots' stalls.
  */
 export const PARKED = {
+  classes: [LifeLine.roadMid, LifeLine.roadMinor],
   zoom: { min: 17 } as ZoomBand,
   minWidth: 10,
   chance: 0.5,
@@ -520,6 +540,20 @@ export const FORAGE = {
  * seconds before they regroup.
  */
 export const PERCH = { spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
+
+/** Mouse reach in CSS cells, and escape speed relative to a normal flight step. */
+export const BIRD_POINTER = { cells: 3, flee: 2 } as const;
+
+/** Individual mouse-flush reaction delays and acceleration into flight, in seconds. */
+export const BIRD_TAKEOFF = { stagger: 0.18, seconds: [0.4, 0.7] } as const;
+
+/** Airborne escape: radians/s of turning, acceleration in cruise speeds/s, regroup speed. */
+export const BIRD_FLIGHT = {
+  flee: BIRD_POINTER.flee,
+  turn: 5,
+  accelerate: 3,
+  regroup: 1.4,
+} as const;
 
 /**
  * Birds and the weather: from `shelter` rain (0–1) flocks that perch head for the trees and sit

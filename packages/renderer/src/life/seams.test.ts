@@ -26,6 +26,51 @@ function fixture(entries: LifeTile[]) {
 }
 
 describe('runtime geographic seam handover', () => {
+  it.each(['lane', 'filter'] as const)(
+    'preserves accepted %s state through detached seam previews and refused admission',
+    (kind) => {
+      const entries = [left, right].map((tile) =>
+        continuityTile(tile, LifeLine.roadMajor, 77, 0, 1),
+      );
+      for (const entry of entries) entry.life.widths[0] = 9.6;
+      const { lives } = fixture(entries),
+        source = lives[0]!,
+        target = lives[1]!;
+      const m = continuityMover(source, 4095);
+      Object.assign(m, {
+        lane: 0.9,
+        chosenLane: 0.9,
+        lat: -0.4,
+        latYaw: -0.1,
+        maneuver: {
+          kind,
+          target: 0.5,
+          corridor: kind === 'filter' ? 2 / 3 : undefined,
+          queueSpeed: 1,
+        },
+        laneSignal: 'left',
+        laneCooldown: 6,
+        filterRetry: 3,
+      });
+      source.movers.push(m);
+      const before = structuredClone(m),
+        old = source.pose(m),
+        frame = frameBetween(left, right);
+      const seam = seamAhead(source, m, [], 10 * source.perMeter)!;
+      expect(seam.preview.maneuver).toBe(m.maneuver);
+      const preview = target.projectFrom(m, source)!;
+      expect(target.pose(preview).y).toBeCloseTo(frame.y + old.y * frame.scale);
+      expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source)).toBe(true);
+      expect(m.lat).toBeCloseTo(before.lat!);
+      expect(m.latYaw).toBe(before.latYaw);
+      expect(m.laneSignal).toBe(before.laneSignal);
+      expect(m.laneCooldown).toBe(6);
+      expect(m.filterRetry).toBe(3);
+    },
+  );
+
   it('previews a unique turnable future exit and discovers both junctions without choosing a route', () => {
     const pm = 1 / metersPerUnit(left),
       builder = new LifeBuilder(),

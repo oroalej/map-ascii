@@ -5,12 +5,7 @@ import { copyFile, mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CityMeta, SubdivisionAreas, normalizeCredits, type City } from '@atlas/shared';
 import type { Geography } from './02-convert';
-import {
-  EVENT_ACCESS_TAGS,
-  TILE_ZOOMS,
-  type AtlasProperties,
-  type AtlasFeature,
-} from './03-normalize';
+import { EVENT_ACCESS_TAGS, TILE_ZOOMS, type AtlasFeature } from './03-normalize';
 import { readFeatures, readJson, writeJson, writeFeatures } from './lib/io';
 import { roofTileRecords } from './lib/roof-tiles';
 import { landcoverCredits } from './lib/landcover';
@@ -20,12 +15,18 @@ import { detailCredits } from './lib/site-detail';
 import { publishDetailLayouts, readDetailLayouts } from './lib/detail-layout';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
+import { Territory, type Territory as TerritoryType } from './lib/territory';
+import { displayFeatures } from './lib/display';
+
+/** Pure production tile-input path, before the external tile compiler. */
+export const tileRecords = (features: readonly AtlasFeature[], territory: TerritoryType) =>
+  displayFeatures(features, territory).flatMap(roofTileRecords);
 
 /** Earliest dated year in the data (or `now` if nothing is dated) through `now`. */
-async function yearRange(mergedPath: string, now: number): Promise<[number, number]> {
+export function yearRange(records: readonly AtlasFeature[], now: number): [number, number] {
   let earliest = now;
-  for await (const f of readFeatures(mergedPath)) {
-    const { start_year, end_year } = f.properties as AtlasProperties;
+  for (const f of records) {
+    const { start_year, end_year } = f.properties;
     for (const year of [start_year, end_year]) {
       if (year !== undefined && year < earliest) earliest = year;
     }
@@ -63,8 +64,12 @@ export const step: Step = {
     const { city, content, buildDir, outDir } = ctx;
     const layouts = await readDetailLayouts(ctx);
     const merged = join(buildDir, files.merged);
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
     const geography = await readJson<Geography>(join(buildDir, files.geography));
-    const years = await yearRange(merged, new Date().getFullYear());
+    const features: AtlasFeature[] = [];
+    for await (const feature of readFeatures(merged)) features.push(feature as AtlasFeature);
+    const records = tileRecords(features, territory);
+    const years = yearRange(records, new Date().getFullYear());
     const meta = buildMeta(city, geography, years, [
       ...landcoverCredits(content.landcover),
       ...cemeteryCredits(content.cemeteries),
@@ -82,9 +87,6 @@ export const step: Step = {
         : pmtiles;
     const utilityOutput = seasonal ? join(buildDir, `${city.slug}.utility-base.pmtiles`) : pmtiles;
     const tileInput = join(buildDir, 'tile-input.geojsonseq');
-    const records: AtlasFeature[] = [];
-    for await (const feature of readFeatures(merged))
-      records.push(...roofTileRecords(feature as AtlasFeature));
     await writeFeatures(tileInput, records);
     tippecanoe(tileInput, base, [
       '-o',
@@ -108,6 +110,7 @@ export const step: Step = {
         merged,
         utilityCoverageBounds(geography.bounds, geography.regionBounds),
         buildDir,
+        territory,
       );
 
     if (seasonal)
@@ -117,6 +120,7 @@ export const step: Step = {
         merged,
         city.life?.seasons,
         buildDir,
+        territory,
       );
 
     await mkdir(outDir, { recursive: true });

@@ -26,6 +26,12 @@ import type { RuntimeFolklore } from './folklore-config';
 import { FOLKLORE } from './folklore-config';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
+import {
+  birdFlightMargin,
+  stepBirdFlight,
+  type BirdFlight,
+  type BirdFlightStep,
+} from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import {
@@ -104,10 +110,15 @@ import {
   DOG,
   isWalker,
   PERCH,
+  BIRD_POINTER,
+  BIRD_TAKEOFF,
+  BIRD_FLIGHT,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  FILTER,
   DRIVE,
   frontClearance,
+  laneLayout,
   LANE_WIDTH_M,
   TERMINAL,
   PEDESTRIAN,
@@ -139,6 +150,7 @@ import {
   SEASON_CROWD,
   ROAD_MARGIN_M,
   ROAD_AVOID,
+  LANE,
   RECOVERY,
   spawnRules,
   TRAIN,
@@ -458,6 +470,17 @@ const handoffHalf = (a: number, b: number) =>
     ? 0
     : Math.min(LANE_BEND.handoffMaxM / 2, Math.max(1, (0.75 * Math.abs(b - a)) / LANE_BEND.slope));
 
+/** Replaced as a whole, so a shallow movement snapshot retains the accepted maneuver. */
+export type RoadManeuver = Readonly<{
+  kind: 'lane' | 'filter' | 'return';
+  target: number;
+  /** Filtering boundary as a fraction of the directional carriageway. */
+  corridor?: number;
+  queueSpeed?: number;
+  blocked?: number;
+  returning?: boolean;
+}>;
+
 /** Something that moves along lines: a vehicle, a person, a dog, or a boat. */
 export type Mover = {
   emergency?: EmergencyState;
@@ -483,6 +506,18 @@ export type Mover = {
   paint: number;
   /** Vehicles: which of the lanes on its side of the road it keeps to, 0–1 (`laneOffset`). */
   lane: number;
+  /** Normalized lane intent; lane remains the original spawn draw. */
+  chosenLane?: number;
+  /** Accepted maneuver displacement in metres, added to the ordinary routed offset. */
+  lat?: number;
+  /** Accepted maneuver heading slope, bounded to tan(15 degrees). */
+  latYaw?: number;
+  maneuver?: RoadManeuver;
+  laneSignal?: 'left' | 'right';
+  lanePatience?: number;
+  laneCooldown?: number;
+  filterRetry?: number;
+  roadScan?: number;
   /** Checked within-road steering, in metres, relative to the seeded lane. */
   roadShift?: number;
   /** Retained direction of accepted steering during a forward-blocked episode. */
@@ -547,6 +582,8 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
+  pointer?: { lngLat: readonly [number, number]; cellMeters: number };
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -571,6 +608,8 @@ export type LifeEnv = {
   rain: number;
   wind?: { dir: readonly [number, number]; strength: number };
 };
+
+type FlockPointer = Point & { cellMeters: number; radius?: number };
 
 /**
  * One of a group walking together (config.ts `PEOPLE`): an adult or a child, their shirt, their
@@ -749,6 +788,10 @@ export type Bird = {
   phase: number;
   /** Rendered offset retained when departing, independent of a replacement landing layout. */
   departure?: Point;
+  /** Mouse-flushed birds retain their own position until their reaction begins. */
+  takeoff?: Point & { delay: number; seconds: number; face: number };
+  /** Independent airborne cursor avoidance, retaining position, heading and speed. */
+  flight?: BirdFlight;
 } & Partial<GroundForager>;
 
 export type Flock = {
@@ -783,6 +826,10 @@ export type Flock = {
   landingBlend: number;
   /** Departure offset blend from 1 to 0, independent of approach preparation. */
   departureBlend?: number;
+  /** Individual mouse-flush transitions share an elapsed clock, not a displacement. */
+  takeoff?: Point & { age: number; seconds: number; extent: number };
+  /** Bounds of independently flying members; absent during ordinary flock flight. */
+  flightBounds?: { minX: number; minY: number; maxX: number; maxY: number };
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -792,6 +839,70 @@ export type Flock = {
   rank: number;
   birds: Bird[];
 };
+
+/** Smooth acceleration after this bird's own mouse-flush reaction delay. */
+function takeoffProgress(flock: Flock, bird: Bird) {
+  if (!flock.takeoff || !bird.takeoff) return 1;
+  const t = Math.max(
+    0,
+    Math.min(1, (flock.takeoff.age - bird.takeoff.delay) / bird.takeoff.seconds),
+  );
+  return t * t * (3 - 2 * t);
+}
+
+/** Scale of the current resting or scattered flight formation. */
+function birdSpread(flock: Flock) {
+  return flock.perched
+    ? PERCH.spread / BIRD_SPECIES[flock.species].spread[1]
+    : flock.landed
+      ? 1
+      : 1 + (3 * flock.scatter) / PERCH.scatter;
+}
+
+function birdTurn(flock: Flock, bird: Bird, wobble: number) {
+  return flock.perched || flock.landed ? bird.phase * 6 : wobble + bird.phase * 6;
+}
+
+/** One bird's rendered offset from its flock centre, written into caller-owned storage. */
+function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
+  if (bird.flight) {
+    out.x = bird.flight.x - flock.x;
+    out.y = bird.flight.y - flock.y;
+    return;
+  }
+  birdFormationOffset(flock, bird, turn, spread, out);
+}
+
+/** Navigation and regrouping retain the normal formation while members fly independently. */
+function birdFormationOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
+  const cos = Math.cos(turn) * spread;
+  const sin = Math.sin(turn) * spread;
+  const ground = isForager(bird) && flock.landed;
+  const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
+  const ox = bird.ox * cos - bird.oy * sin;
+  const oy = bird.ox * sin + bird.oy * cos;
+  let x = ox + ((bird.gx ?? ox) - ox) * blend;
+  let y = oy + ((bird.gy ?? oy) - oy) * blend;
+  if (bird.departure && flock.departureBlend) {
+    x += (bird.departure.x - x) * flock.departureBlend;
+    y += (bird.departure.y - y) * flock.departureBlend;
+  }
+  if (bird.takeoff && flock.takeoff) {
+    const progress = takeoffProgress(flock, bird);
+    x = (bird.takeoff.x - flock.x) * (1 - progress) + x * progress;
+    y = (bird.takeoff.y - flock.y) * (1 - progress) + y * progress;
+  }
+  out.x = x;
+  out.y = y;
+}
+
+function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
+  if (flock.flightBounds)
+    for (const bird of flock.birds) {
+      if (bird.flight && near(bird.flight.x, bird.flight.y)) return true;
+    }
+  return false;
+}
 
 /** The agents of one tile. */
 export class TileLife {
@@ -902,6 +1013,10 @@ export class TileLife {
   private inspected?: object;
   readonly momentHost: MomentHost;
   readonly emoji: EmojiObserver;
+  /** Observer events and ownership never enter physical flock state. */
+  readonly startled: Flock[] = [];
+  readonly birdEmojiOwners = new Set<Flock>();
+  private pointerInside?: WeakSet<Flock>;
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -931,6 +1046,7 @@ export class TileLife {
   private readonly carriedReady = (movement: Movement) =>
     this.junctionAllowed(movement, this.junctionRoom);
   private readonly trafficGroups = new Map<number, number[]>();
+  private roadRearReachM = 0;
   private urgentCount = 0;
   private readonly emergencyYielders = new Map<
     Mover,
@@ -986,6 +1102,11 @@ export class TileLife {
   readonly pending: PendingSeed[] = [];
   birthCredit = 0;
   readonly flocks: Flock[] = [];
+  private readonly flockPointer: FlockPointer = { x: 0, y: 0, cellMeters: 0 };
+  private readonly flockDetour: Point = { x: 0, y: 0 };
+  private readonly birdOffset: Point = { x: 0, y: 0 };
+  private readonly birdFlightStep: BirdFlightStep = { dt: 0, targetX: 0, targetY: 0, speed: 0 };
+  private readonly birdFlightPointer = { x: 0, y: 0, reach: 0 };
   readonly parked: Parked[] = [];
   /** Trains standing by on sidings: one entry per car (`spawnStandby`). */
   readonly standby: Parked[] = [];
@@ -1171,6 +1292,26 @@ export class TileLife {
     m.v = preview.v;
     m.roadShift = preview.roadShift;
     m.roadSteering = preview.roadSteering;
+    if (
+      m.chosenLane !== undefined ||
+      m.lat !== undefined ||
+      m.latYaw !== undefined ||
+      m.maneuver ||
+      m.lanePatience !== undefined ||
+      m.laneCooldown !== undefined ||
+      m.filterRetry !== undefined ||
+      m.roadScan !== undefined
+    ) {
+      m.chosenLane = preview.chosenLane;
+      m.lat = preview.lat;
+      m.latYaw = preview.latYaw;
+      m.maneuver = preview.maneuver;
+      m.laneSignal = preview.laneSignal;
+      m.lanePatience = preview.lanePatience;
+      m.laneCooldown = preview.laneCooldown;
+      m.filterRetry = preview.filterRetry;
+      m.roadScan = preview.roadScan;
+    }
     m.curveLengthM = preview.curveLengthM;
     m.curveCorner = preview.curveCorner;
     m.next = preview.next;
@@ -1244,6 +1385,8 @@ export class TileLife {
   private caps = new Float64Array(0);
   private progress = new Float64Array(0);
   private offsets = new Float64Array(0);
+  private followLeaders = new Int32Array(0);
+  private followTargets = new Float64Array(0);
   /** How people look and where vendors stand: its own stream, so no one else moves for it. */
   private readonly looks: () => number;
   /** People at places: their own stream, so no one else moves for them. */
@@ -1365,6 +1508,12 @@ export class TileLife {
   private readonly pedestrianPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly followingPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
   private readonly leaderPose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly envelopePose: Pose = { x: 0, y: 0, hx: 1, hy: 0 };
+  private readonly followingEnvelopes: { length: number; width: number }[] = [];
+  private readonly followingEnvelopeEpochs: number[] = [];
+  private followingEnvelopeEpoch = 0;
+  private readonly followingManeuverOffsets: number[] = [];
+  private readonly followingManeuverEpochs: number[] = [];
   /** Borrowed only by the synchronous physical query; generator/cache results remain detached. */
   private readonly straightSegments: PedestrianSegment[] = [
     { x: 0, y: 0, hx: 1, hy: 0, length: 0, ahead: 0, line: 0 },
@@ -1383,7 +1532,12 @@ export class TileLife {
         | 'dir'
         | 'd'
         | 'lane'
+        | 'chosenLane'
+        | 'lat'
+        | 'latYaw'
+        | 'maneuver'
         | 'roadShift'
+        | 'roadYaw'
         | 'came'
         | 'next'
         | 'curveLengthM'
@@ -1770,6 +1924,11 @@ export class TileLife {
     return this.parkingLines.has(line) ? width - 2 * PARKED.strip : width;
   }
 
+  /** The same driving width used by poses, including retained parking strip decisions. */
+  directionalLanes(line: number) {
+    return laneLayout(this.roadWidth(line), this.geo.oneway?.[line] ?? 0);
+  }
+
   private shiftedOffset(m: Mover, offset: number, line = m.line): number {
     if (m.roadShift === undefined) return offset;
     const [minimum, maximum] = this.roadShiftBounds(m, line);
@@ -1868,15 +2027,17 @@ export class TileLife {
     if (this.laneNear[line] === 1) return;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(line);
-    const lanes = Math.max(1, Math.floor(road / 2 / LANE_WIDTH_M));
-    const index = spec.curb ? lanes : Math.min(lanes - 1, Math.floor(m.lane * lanes));
+    const oneway = this.geo.oneway?.[line] ?? 0;
+    const lanes = laneLayout(road, oneway).count;
+    const preference = m.chosenLane ?? m.lane;
+    const index = spec.curb ? lanes : Math.min(lanes - 1, Math.floor(preference * lanes));
     const key =
-      ((line * 2 + (dir === 1 ? 1 : 0)) * VEHICLE_KINDS.length + VEHICLE_KINDS.indexOf(m.vehicle)) *
-        8 +
-      Math.min(7, index);
+      (line * 2 + (dir === 1 ? 1 : 0)) * VEHICLE_KINDS.length +
+      VEHICLE_KINDS.indexOf(m.vehicle) +
+      index / (lanes + 1);
     let bend = this.laneBends.get(key);
     if (bend === undefined) {
-      const base = laneOffset(road, spec.width, m.lane, spec.curb);
+      const base = laneOffset(road, spec.width, preference, spec.curb, oneway);
       const [lo, hi] = this.laneBounds(spec.width, line);
       bend =
         laneBend(
@@ -1975,7 +2136,8 @@ export class TileLife {
   /** Whether lane variation can affect this entire metre interval around a vehicle. */
   offsetVaries(m: Mover, ahead = 0, behind = 0): boolean {
     if (m.kind !== 'vehicle' || !m.vehicle || m.train) return false;
-    if (m.roadShift !== undefined) return true;
+    if (m.roadShift !== undefined || m.lat !== undefined || m.latYaw !== undefined || m.maneuver)
+      return true;
     const profile = this.laneTerrain ? this.laneBendOf(m, m.line, m.dir) : undefined;
     const next = m.routing?.plan?.exit ?? m.next;
     if (!profile && (next === undefined || next < 0) && m.came === undefined) return false;
@@ -2029,22 +2191,34 @@ export class TileLife {
     const next = m.routing?.plan?.exit ?? m.next;
     const normal =
       !this.laneTerrain && m.came === undefined && (next === undefined || next < 0)
-        ? laneOffset(road, spec.width, m.lane, spec.curb)
+        ? laneOffset(
+            road,
+            spec.width,
+            m.chosenLane ?? m.lane,
+            spec.curb,
+            this.geo.oneway?.[m.line] ?? 0,
+          )
         : this.routeLane(m, m.line, m.dir, this.travelled(m), m.came, next);
-    if (!this.scenes.hasCurbScenes) return this.shiftedOffset(m, normal);
+    if (!this.scenes.hasCurbScenes) return this.shiftedOffset(m, normal) + (m.lat ?? 0);
     const curb = Math.max(0, road / 2 - spec.width / 2 - ROAD_MARGIN_M);
     const offset =
       identity === m
         ? this.scenes.offset(m, normal, curb)
         : this.scenes.offsetAt(identity, m, normal, curb);
-    return this.shiftedOffset(m, offset);
+    return this.shiftedOffset(m, offset) + (m.lat ?? 0);
   }
 
   private vehicleLane(m: Mover, line: number) {
     const spec = VEHICLES[m.vehicle!],
       road = this.roadWidth(line);
-    const normal = laneOffset(road, spec.width, m.lane, spec.curb);
-    return this.shiftedOffset(m, normal, line);
+    const normal = laneOffset(
+      road,
+      spec.width,
+      m.chosenLane ?? m.lane,
+      spec.curb,
+      this.geo.oneway?.[line] ?? 0,
+    );
+    return this.shiftedOffset(m, normal, line) + (m.lat ?? 0);
   }
 
   /** A straight neighbor leaves room for a long vehicle to begin turning before the midpoint. */
@@ -2220,9 +2394,14 @@ export class TileLife {
     }
     if (this.cornerNear[vertex] === 1) return curve;
     const site = this.scenes.curbSite(identity);
-    const steady = m.roadShift === undefined && m.curveLengthM === undefined && site === undefined;
+    const steady =
+      m.roadShift === undefined &&
+      m.lat === undefined &&
+      !m.maneuver &&
+      m.curveLengthM === undefined &&
+      site === undefined;
     const key =
-      `${vertex}/${inLine}/${outLine}/${m.vehicle}/${m.line}/${m.dir}/${m.lane}/${m.came}/${m.routing?.plan?.exit ?? m.next}/${m.roadShift}/${curve.x0}/${curve.y0}/${curve.x1}/${curve.y1}/${curve.x2}/${curve.y2}/${curve.before}/${curve.after}/${longest}` +
+      `${vertex}/${inLine}/${outLine}/${m.vehicle}/${m.line}/${m.dir}/${m.lane}/${m.chosenLane}/${m.lat}/${m.latYaw}/${m.maneuver?.target}/${m.maneuver?.corridor}/${m.came}/${m.routing?.plan?.exit ?? m.next}/${m.roadShift}/${curve.x0}/${curve.y0}/${curve.x1}/${curve.y1}/${curve.x2}/${curve.y2}/${curve.before}/${curve.after}/${longest}` +
       (site ? `/${site.x}/${site.y}/${m.x}/${m.y}` : '');
     if (steady && this.clearCorners.has(key)) return this.clearCorners.get(key) ?? undefined;
     if (!steady) {
@@ -2280,7 +2459,10 @@ export class TileLife {
     out.hy = m.hy;
     if (m.kind === 'vehicle' && m.vehicle && !m.train) {
       // Where the lane moves sideways, the nose points along the way the body actually goes.
-      const slope = (m.roadYaw ?? 0) + (this.offsetVaries(m, 0.5, 0.5) ? this.laneSlope(m) : 0);
+      const slope =
+        (m.roadYaw ?? 0) +
+        (m.latYaw ?? 0) +
+        (this.offsetVaries(m, 0.5, 0.5) ? this.laneSlope(m) : 0);
       if (Math.abs(slope) > 1e-4) {
         const hx = m.hx - m.hy * slope,
           hy = m.hy + m.hx * slope;
@@ -2474,6 +2656,11 @@ export class TileLife {
     cursor.hx = m.hx;
     cursor.hy = m.hy;
     cursor.lane = m.lane;
+    cursor.chosenLane = m.chosenLane;
+    cursor.lat = m.lat;
+    cursor.latYaw = m.latYaw;
+    cursor.maneuver = m.maneuver;
+    cursor.roadYaw = m.roadYaw;
     cursor.roadShift = m.roadShift;
     cursor.came = m.came;
     cursor.curveLengthM = m.curveLengthM;
@@ -2632,6 +2819,11 @@ export class TileLife {
       at.dir === m.dir &&
       at.d === m.d &&
       at.lane === m.lane &&
+      at.chosenLane === m.chosenLane &&
+      at.lat === m.lat &&
+      at.latYaw === m.latYaw &&
+      at.roadYaw === m.roadYaw &&
+      at.maneuver === m.maneuver &&
       at.roadShift === m.roadShift &&
       at.came === m.came &&
       at.next === m.next &&
@@ -2660,7 +2852,12 @@ export class TileLife {
         dir: m.dir,
         d: m.d,
         lane: m.lane,
+        chosenLane: m.chosenLane,
+        lat: m.lat,
+        latYaw: m.latYaw,
+        maneuver: m.maneuver,
         roadShift: m.roadShift,
+        roadYaw: m.roadYaw,
         came: m.came,
         next: m.next,
         curveLengthM: m.curveLengthM,
@@ -3601,6 +3798,7 @@ export class TileLife {
       if (a.kind === 'blocked' || a.kind === 'vehicle-blocked' || a.kind === 'parking-exclusion')
         yield* excluded.addSteps(transformPolygon(a.rings, 0, 0, 1 / perMeter));
     const sample: Body[] = [];
+    const curbSources = new Map<Parked, number>();
     const bodyOf = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => ({
       x,
       y,
@@ -3609,7 +3807,14 @@ export class TileLife {
       length: VEHICLES[vehicle].length * perMeter,
       width: VEHICLES[vehicle].width * perMeter,
     });
-    const park = (x: number, y: number, hx: number, hy: number, vehicle: CraftType) => {
+    const park = (
+      x: number,
+      y: number,
+      hx: number,
+      hy: number,
+      vehicle: CraftType,
+      line?: number,
+    ) => {
       if (
         this.parked.length + (this.suppressedGround?.parked.hidden.length ?? 0) >=
           MAX_TILE_AGENTS ||
@@ -3644,7 +3849,9 @@ export class TileLife {
         })
       )
         return;
-      this.parked.push({ x, y, hx, hy, vehicle, paint });
+      const record = { x, y, hx, hy, vehicle, paint };
+      this.parked.push(record);
+      if (line !== undefined) curbSources.set(record, line);
     };
     const lots = geo.areas?.filter((a) => a.kind === 'parking');
     for (let i = 0; i < geo.spots.length; i += 4) {
@@ -3709,10 +3916,19 @@ export class TileLife {
           });
           if (!fits) continue;
           // Right of the line's own direction for `side` 1, facing along it; left, facing back.
-          park(p.x - p.hy * offset, p.y + p.hx * offset, p.hx * side, p.hy * side, vehicle);
+          park(p.x - p.hy * offset, p.y + p.hx * offset, p.hx * side, p.hy * side, vehicle, line);
         }
       }
     }
+    // Finish every legacy placement and conditional RNG draw before changing live parking.
+    const eligible = (line: number) => PARKED.classes.some((kind) => kind === geo.kinds[line]);
+    let kept = 0;
+    for (const record of this.parked) {
+      const line = curbSources.get(record);
+      if (line === undefined || eligible(line)) this.parked[kept++] = record;
+    }
+    this.parked.length = kept;
+    for (const line of this.parkingLines) if (!eligible(line)) this.parkingLines.delete(line);
   }
 
   /** Shared vertices, T-junctions and crossings; two continuation arms are just a bend. */
@@ -4724,14 +4940,28 @@ export class TileLife {
       this.caps = new Float64Array(size);
       this.progress = new Float64Array(size);
       this.offsets = new Float64Array(size);
+      this.followLeaders = new Int32Array(size);
+      this.followTargets = new Float64Array(size);
     }
     for (const group of this.trafficGroups.values()) group.length = 0;
+    this.roadRearReachM = 0;
     this.urgentCount = 0;
     this.emergencyYielders.clear();
     this.emergencyOffsets.clear();
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       if (!m.vehicle || !active(m)) continue;
+      if (m.kind === 'vehicle') {
+        // Include a possible burst/call start and residual accepted speed before later movers step.
+        const velocity = Math.max(m.speed * DRIVE.rush.pace[1], m.v ?? m.speed) / pm;
+        const spec = VEHICLES[m.vehicle];
+        this.roadRearReachM = Math.max(
+          this.roadRearReachM,
+          FOLLOW.minGap +
+            velocity ** 2 / (2 * kinematicsOf(m.vehicle).brake) +
+            (spec.length + spec.width) / 2,
+        );
+      }
       if (isUrgent(m)) this.urgentCount++;
       this.prepareTurn(m, i);
       if (this.junctionIndex.hasLinked) this.prepareSignalRoute(m);
@@ -4949,22 +5179,562 @@ export class TileLife {
     const length = this.lineLength(m.line) / this.perMeter;
     const at = Math.min(length, this.travelled(m) + FOLLOW.laneAheadM);
     const next = m.routing?.plan?.exit ?? m.next;
-    return this.shiftedOffset(m, this.routeLane(m, m.line, m.dir, at, m.came, next));
+    return this.shiftedOffset(m, this.routeLane(m, m.line, m.dir, at, m.came, next)) + (m.lat ?? 0);
   }
 
   /** A vehicle's ordinary lane on `line`, m right of centre. */
   private mergeLane(m: Mover, line = m.line): number {
     const spec = VEHICLES[m.vehicle!];
-    return laneOffset(this.roadWidth(line), spec.width, m.lane, spec.curb);
+    return laneOffset(
+      this.roadWidth(line),
+      spec.width,
+      m.chosenLane ?? m.lane,
+      spec.curb,
+      this.geo.oneway?.[line] ?? 0,
+    );
   }
 
-  private mergingOverlap(i: number, j: number, lane: number): boolean {
+  /** Prospective routed pose, without changing the accepted actor or its seeded lane. */
+  private maneuverOffset(m: Mover): number {
+    const state = m.maneuver;
+    if (!state) return this.offsetOf(m);
+    const cursor = { ...m, chosenLane: state.target, lat: undefined, maneuver: undefined };
+    const normal = this.offsetOf(cursor, m);
+    if (state.kind !== 'filter' || state.corridor === undefined) return normal;
+    const layout = this.directionalLanes(m.line);
+    return normal + layout.start + layout.span * state.corridor - this.mergeLane(cursor);
+  }
+
+  /** Complete-rider corridor fit shared by entry and detached continuity previews. */
+  filterCorridor(m: Mover, candidate: RoadManeuver) {
+    if (!m.vehicle || candidate.corridor === undefined) return;
+    const layout = this.directionalLanes(m.line);
+    const target = this.maneuverOffset({ ...m, maneuver: candidate });
+    const half = VEHICLES[m.vehicle].width / 2;
+    const offset = layout.count === 1 ? layout.start + layout.span - half - ROAD_MARGIN_M : target;
+    if (
+      offset - half < layout.start + ROAD_MARGIN_M ||
+      offset + half > layout.start + layout.span - ROAD_MARGIN_M
+    )
+      return;
+    return {
+      offset,
+      maneuver:
+        layout.count === 1
+          ? { ...candidate, corridor: candidate.corridor + (offset - target) / layout.span }
+          : candidate,
+    };
+  }
+
+  private tickRoadTimers(m: Mover, dt: number) {
+    if (m.laneCooldown !== undefined) m.laneCooldown = Math.max(0, m.laneCooldown - dt);
+    if (m.filterRetry !== undefined) m.filterRetry = Math.max(0, m.filterRetry - dt);
+    if (m.roadScan !== undefined) m.roadScan = Math.max(0, m.roadScan - dt);
+  }
+
+  /** Propose once per trial; retries start from the same immutable accepted state. */
+  private proposeLateral(m: Mover, before: Mover, distance: number, dt: number, share = 1) {
+    if (!before.maneuver) return 0;
+    const difference = this.maneuverOffset(before) - this.offsetOf(before, m);
+    if (before.maneuver.returning && before.maneuver.kind !== 'return') return 0;
+    const limit = Math.min(
+      LANE.lateral * dt * share,
+      (distance / this.perMeter) * Math.sin(Math.PI / 12),
+    );
+    const change = Math.max(-limit, Math.min(limit, difference));
+    m.lat = (before.lat ?? 0) + change;
+    return Math.abs(change) * this.perMeter;
+  }
+
+  private finishLateral(m: Mover, _before: Mover) {
+    const state = m.maneuver;
+    if (!state) return;
+    if (state.kind === 'filter') return;
+    // Completion and retained displacement share the continuity numerical-noise tolerance.
+    if (Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-8 || m.latYaw !== undefined)
+      return;
+    const accepted = this.offsetOf(m);
+    m.chosenLane = state.target;
+    m.lat = undefined;
+    const residual = accepted - this.offsetOf(m);
+    m.lat = Math.abs(residual) > 1e-8 ? residual : undefined;
+    m.maneuver = undefined;
+    m.laneSignal = undefined;
+    m.laneCooldown = LANE.cooldown;
+  }
+
+  /** Next protected approach in metres; following room is deliberately excluded. */
+  private roadProtectedRoom(m: Mover, table: JunctionTable): number {
+    let room = this.lineLength(m.line) / this.perMeter - this.travelled(m);
+    room = Math.min(room, this.signals.protectedRoom(m) / this.perMeter);
+    for (const r of table.holds(m)) {
+      if (r.inside) return 0;
+      if (r.movement.ahead >= -JUNCTION.insideToleranceM * this.perMeter)
+        room = Math.min(room, Math.max(0, r.movement.ahead / this.perMeter));
+    }
+    const site = this.scenes.services.get(m)?.site;
+    if (site?.road === m.line && site.direction === m.dir) {
+      const ahead = ((site.x - m.x) * m.hx + (site.y - m.y) * m.hy) / this.perMeter;
+      if (ahead >= 0) room = Math.min(room, ahead);
+    }
+    return room;
+  }
+
+  /** Project the accepted physical body onto its current travel axes. */
+  private roadEnvelope(m: Mover, out = { length: 0, width: 0 }, future?: number) {
+    const spec = VEHICLES[m.vehicle!],
+      pose = this.pose(m, this.envelopePose);
+    const length = spec.length;
+    const width = spec.width;
+    const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
+    const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
+    const lateral =
+      !!m.maneuver &&
+      (Math.abs((future ?? this.maneuverOffset(m)) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
+    out.length = Math.max(
+      (along * length + across * width) / 2,
+      lateral ? (Math.cos(Math.PI / 12) * length + Math.sin(Math.PI / 12) * width) / 2 : 0,
+    );
+    out.width = Math.max(
+      (along * width + across * length) / 2,
+      lateral ? (Math.cos(Math.PI / 12) * width + Math.sin(Math.PI / 12) * length) / 2 : 0,
+    );
+    return out;
+  }
+
+  /** Full lateral sweep plus both longitudinal gaps, in metres and m/s. */
+  private roadGapSafe(m: Mover, target: number, continuing = false): boolean {
+    const at = this.offsetOf(m),
+      body = this.roadEnvelope(m);
+    const progress = (m.dir * this.along[m.from]! + m.d) / this.perMeter;
+    const velocity = Math.max(0, (m.v ?? m.speed) / this.perMeter);
+    for (const index of this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? []) {
+      const other = this.movers[index]!;
+      if (other === m || other.line !== m.line || other.dir !== m.dir) continue;
+      const separation = (other.dir * this.along[other.from]! + other.d) / this.perMeter - progress;
+      if (!this.roadGapClear(m, other, separation, at, target, body, velocity, continuing))
+        return false;
+    }
+    // All passed junctions matter, including interior vertices and routes the mover did not take.
+    // The road population's stopping/body bound excludes distant approaches before pose queries.
+    const exit = m.line * 2 + (m.dir === 1 ? 0 : 1);
+    const start = m.dir === 1 ? this.first(m.line) : this.last(m.line);
+    for (let vertex = m.from; m.dir === 1 ? vertex >= start : vertex <= start; vertex -= m.dir) {
+      const travelled = (m.dir * (this.along[m.from]! - this.along[vertex]!) + m.d) / this.perMeter;
+      if (travelled > body.length + this.roadRearReachM + 1e-6) break;
+      for (const arm of this.roadVertices.get(this.endKey(vertex)) ?? []) {
+        if (arm.code >> 1 === m.line) continue;
+        for (const index of this.trafficGroups.get(arm.code) ?? []) {
+          const other = this.movers[index]!;
+          if ((other.routing?.plan?.exit ?? other.next) !== exit) continue;
+          const remaining =
+            (other.dir * (this.along[arm.vertex]! - this.along[other.from]!) - other.d) /
+            this.perMeter;
+          if (remaining < -JUNCTION.insideToleranceM) continue;
+          if (
+            !this.roadGapClear(
+              m,
+              other,
+              -remaining - travelled,
+              at,
+              target,
+              body,
+              velocity,
+              continuing,
+              true,
+            )
+          )
+            return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  private roadGapClear(
+    m: Mover,
+    other: Mover,
+    separation: number,
+    at: number,
+    target: number,
+    body: { length: number; width: number },
+    velocity: number,
+    continuing: boolean,
+    incoming = false,
+  ): boolean {
+    const peerVelocity =
+      this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+    const required =
+      FOLLOW.minGap +
+      (separation >= 0
+        ? continuing
+          ? Math.max(0, (velocity ** 2 - peerVelocity ** 2) / (2 * kinematicsOf(m.vehicle).brake))
+          : FOLLOW.headway * velocity
+        : Math.max(
+            0,
+            (peerVelocity ** 2 - velocity ** 2) / (2 * kinematicsOf(other.vehicle).brake),
+          ));
+    const spec = VEHICLES[other.vehicle!];
+    // A projected half-length cannot exceed half the sum of the physical sides at any yaw.
+    // This bounds the exact gap inequalities before constructing a distant actor's pose.
+    if (Math.abs(separation) > required + body.length + (spec.length + spec.width) / 2 + 1e-6)
+      return true;
+    const peerPose = incoming ? this.pose(other, this.leaderPose) : undefined;
+    const offset = peerPose
+        ? ((peerPose.x - m.x) * -m.hy + (peerPose.y - m.y) * m.hx) / this.perMeter
+        : this.offsetOf(other),
+      peer = this.roadEnvelope(other);
+    let future = other.maneuver ? this.maneuverOffset(other) : offset;
+    if (incoming) {
+      const state = other.maneuver;
+      future = state
+        ? this.vehicleLane({ ...other, chosenLane: state.target }, m.line)
+        : this.vehicleLane(other, m.line) + (other.lat ?? 0);
+      if (state?.kind === 'filter' && state.corridor !== undefined) {
+        const layout = this.directionalLanes(m.line);
+        future =
+          layout.count === 1
+            ? layout.start + layout.span - spec.width / 2 - ROAD_MARGIN_M
+            : layout.start + layout.span * state.corridor;
+      }
+      future += other.roadShift ?? 0;
+      const along = Math.abs(other.hx * m.hx + other.hy * m.hy),
+        across = Math.abs(other.hy * m.hx - other.hx * m.hy);
+      const length = peer.length,
+        width = peer.width;
+      peer.length = Math.max(length, along * length + across * width);
+      peer.width = Math.max(width, along * width + across * length);
+    }
+    const lateral = Math.max(
+      Math.min(at, target) - Math.max(offset, future),
+      Math.min(offset, future) - Math.max(at, target),
+    );
+    if (lateral >= body.width + peer.width + FOLLOW.roadGap) return true;
+    const gap = Math.abs(separation) - body.length - peer.length;
+    if (gap < FOLLOW.minGap) return false;
+    if (separation >= 0) {
+      if (!continuing && gap + 1e-8 < FOLLOW.minGap + FOLLOW.headway * velocity) return false;
+      const lead =
+        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+      if (
+        continuing &&
+        approach(gap - FOLLOW.minGap, lead, kinematicsOf(m.vehicle).brake) + 1e-8 < velocity
+      )
+        return false;
+    } else {
+      const rearSpeed =
+        this.inspected === other ? 0 : Math.max(0, (other.v ?? other.speed) / this.perMeter);
+      if (
+        approach(gap - FOLLOW.minGap, velocity, kinematicsOf(other.vehicle).brake) + 1e-8 <
+        rearSpeed
+      )
+        return false;
+    }
+    return true;
+  }
+
+  private laneTargetOffset(m: Mover, preference: number): number {
+    return this.offsetOf({ ...m, chosenLane: preference, lat: undefined, maneuver: undefined }, m);
+  }
+
+  private filterCap(m: Mover): number {
+    return (
+      Math.min(m.speed / this.perMeter, (m.maneuver?.queueSpeed ?? 0) + FILTER.gain, FILTER.max) *
+      this.perMeter
+    );
+  }
+
+  /** An inherited too-small source gap already fails every full-sweep entry check. */
+  private roadSourceBlocked(index: number): boolean {
+    if (this.caps[index] !== 0) return false;
+    const m = this.movers[index]!,
+      j = this.followLeaders[index]!;
+    if (j < 0) return false;
+    const leader = this.movers[j]!;
+    if (leader.line !== m.line || leader.dir !== m.dir) return false;
+    // This cheap branch is only for straight accepted poses. Curves and existing maneuvers
+    // retain the full projection/sweep query, including every source and rear follower.
+    if (
+      m.maneuver ||
+      leader.maneuver ||
+      m.roadYaw ||
+      leader.roadYaw ||
+      m.latYaw ||
+      leader.latYaw ||
+      m.came !== undefined ||
+      leader.came !== undefined ||
+      m.routing?.plan ||
+      leader.routing?.plan ||
+      m.next !== undefined ||
+      leader.next !== undefined ||
+      this.last(m.line) - this.first(m.line) !== 1
+    )
+      return false;
+    const gap =
+      (leader.dir * this.along[leader.from]! + leader.d - m.dir * this.along[m.from]! - m.d) /
+        this.perMeter -
+      (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2;
+    return gap < FOLLOW.minGap - 1e-6;
+  }
+
+  /** Queue identity can change as the rider passes; its velocity remains meaningful meanwhile. */
+  private updateFilter(index: number, table: JunctionTable) {
+    const m = this.movers[index]!;
+    if (m.kind !== 'vehicle' || (m.vehicle !== 'motorcycle' && m.vehicle !== 'bicycle')) return;
+    let state = m.maneuver;
+    if (state && state.corridor === undefined && state.kind !== 'filter') return;
+    if (!state && this.roadSourceBlocked(index)) return;
+    if (
+      !state &&
+      (this.followLeaders[index]! < 0 ||
+        (m.filterRetry ?? 0) > 0 ||
+        (m.roadScan ?? 0) > 0 ||
+        (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+        m.roadShift !== undefined ||
+        m.curveLengthM !== undefined ||
+        this.scenes.merging(m) ||
+        this.roadProtectedRoom(m, table) <= FILTER.clear)
+    )
+      return;
+    const refresh = !state || (m.roadScan ?? 0) <= 0;
+    if (refresh) m.roadScan = 0.5;
+    const group = this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? [];
+    const at = this.offsetOf(m),
+      layout = this.directionalLanes(m.line);
+    const original = this.laneTargetOffset(m, m.chosenLane ?? m.lane);
+    const progress = (m.dir * this.along[m.from]! + m.d) / this.perMeter;
+    let queue: Mover | undefined,
+      nearest = Infinity;
+    const reference = state ? original : at;
+    if (refresh)
+      for (const j of group) {
+        const peer = this.movers[j]!;
+        if (
+          peer === m ||
+          peer.line !== m.line ||
+          peer.dir !== m.dir ||
+          peer.vehicle === 'bicycle' ||
+          peer.vehicle === 'motorcycle'
+        )
+          continue;
+        const separation = Math.abs(
+          (peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress,
+        );
+        if (
+          separation > 60 ||
+          separation >= nearest ||
+          Math.abs(reference - this.offsetOf(peer)) >=
+            (VEHICLES[m.vehicle].width + VEHICLES[peer.vehicle!].width) / 2 + FOLLOW.roadGap
+        )
+          continue;
+        nearest = separation;
+        queue = peer;
+      }
+    const velocity = queue
+      ? this.inspected === queue
+        ? 0
+        : Math.max(0, (queue.v ?? queue.speed) / this.perMeter)
+      : state?.queueSpeed;
+    if (state) {
+      if (velocity !== undefined && velocity !== state.queueSpeed) {
+        state = { ...state, queueSpeed: velocity };
+        m.maneuver = state;
+      }
+      const transit = this.scenes.services.get(m)?.site;
+      const request =
+        state.returning ||
+        (velocity ?? 0) > FILTER.leave ||
+        (transit?.road === m.line && this.roadProtectedRoom(m, table) < FILTER.clear);
+      if (request && state.kind === 'filter') {
+        if (this.roadGapSafe(m, original)) {
+          m.maneuver = {
+            ...state,
+            kind: 'return',
+            target: m.chosenLane ?? m.lane,
+            returning: true,
+          };
+          if (Math.abs(original - at) > 1e-6) m.laneSignal = original < at ? 'left' : 'right';
+        } else if (!state.returning) m.maneuver = { ...state, returning: true };
+      } else if (state.kind === 'return' && !this.roadGapSafe(m, original, true)) {
+        m.maneuver = { ...state, kind: 'filter', returning: true };
+      }
+      return;
+    }
+    const leaderIndex = this.followLeaders[index]!;
+    if (
+      leaderIndex < 0 ||
+      !queue ||
+      velocity === undefined ||
+      velocity >= FILTER.enter ||
+      (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+      (m.filterRetry ?? 0) > 0 ||
+      m.roadShift !== undefined ||
+      m.curveLengthM !== undefined ||
+      this.scenes.merging(m) ||
+      this.roadProtectedRoom(m, table) <= FILTER.clear
+    )
+      return;
+    const actual = Math.max(
+      0,
+      Math.min(layout.count - 1, Math.floor((at - layout.start) / layout.width)),
+    );
+    const boundaries =
+      layout.count > 1
+        ? Array.from({ length: layout.count - 1 }, (_, n) => n + 1)
+            .sort((a, b) => Math.abs(a - actual) - Math.abs(b - actual) || a - b)
+            .map((n) => n / layout.count)
+        : [1];
+    for (const corridor of boundaries) {
+      const candidate: RoadManeuver = {
+        kind: 'filter',
+        target: m.chosenLane ?? m.lane,
+        corridor,
+        queueSpeed: velocity,
+      };
+      const fit = this.filterCorridor(m, candidate);
+      if (!fit) continue;
+      const half = VEHICLES[m.vehicle].width / 2;
+      const { offset, maneuver: chosen } = fit;
+      let clear = true;
+      for (const j of group) {
+        const peer = this.movers[j]!;
+        if (
+          peer === m ||
+          Math.abs((peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress) > 60
+        )
+          continue;
+        if (
+          Math.abs(offset - this.offsetOf(peer)) <
+          half + this.roadEnvelope(peer).width + FOLLOW.roadGap
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear || !this.roadGapSafe(m, offset)) continue;
+      m.maneuver = chosen;
+      m.laneSignal = offset < at ? 'left' : 'right';
+      m.lanePatience = undefined;
+      return;
+    }
+  }
+
+  /** Count final simulation outcomes once, including a step whose every guard trial failed. */
+  private recordFilterStep(m: Mover, before: Mover) {
+    const state = m.maneuver;
+    if (state?.kind !== 'filter') return;
+    const displaced =
+      Math.abs((m.lat ?? 0) - (before.lat ?? 0)) > 1e-8 ||
+      Math.hypot(m.x - before.x, m.y - before.y) > 1e-8 * this.perMeter;
+    const blocked = displaced ? 0 : (state.blocked ?? 0) + 1;
+    if (blocked !== (state.blocked ?? 0) || (blocked >= 2 && !state.returning))
+      m.maneuver = { ...state, blocked, returning: state.returning || blocked >= 2 };
+    if (blocked >= 2) m.filterRetry = FILTER.retry;
+  }
+
+  private updateLane(index: number, dt: number, table: JunctionTable, otherLimited: boolean) {
+    const m = this.movers[index]!;
+    if (!m.vehicle || m.kind !== 'vehicle') return;
+    const state = m.maneuver;
+    if (state) {
+      if (state.kind === 'filter' || state.corridor !== undefined) return;
+      const target = this.maneuverOffset(m),
+        delta = Math.abs(target - this.offsetOf(m));
+      const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+      const room = this.roadProtectedRoom(m, table);
+      if (
+        !state.returning &&
+        room >= LANE.clear + (bound * delta) / LANE.lateral &&
+        this.roadGapSafe(m, target, true)
+      )
+        return;
+      const preference = m.chosenLane ?? m.lane;
+      if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true)) {
+        m.maneuver = { ...state, kind: 'return', target: preference, returning: true };
+        const goal = this.laneTargetOffset(m, preference),
+          at = this.offsetOf(m);
+        if (Math.abs(goal - at) > 1e-6) m.laneSignal = goal < at ? 'left' : 'right';
+      } else if (state.kind === 'return' || !state.returning)
+        m.maneuver = { ...state, kind: 'lane', returning: true };
+      return;
+    }
+    if (this.roadSourceBlocked(index)) {
+      m.lanePatience = undefined;
+      return;
+    }
+    if (
+      !hasTurnSignals(m.vehicle) ||
+      m.vehicle === 'tricycle' ||
+      m.roadShift !== undefined ||
+      m.curveLengthM !== undefined ||
+      (m.guardWait ?? 0) > 0 ||
+      this.scenes.merging(m) ||
+      otherLimited ||
+      (m.laneCooldown ?? 0) > 0 ||
+      this.roadWidth(m.line) < (this.geo.oneway?.[m.line] ? 2 : 4) * LANE_WIDTH_M
+    ) {
+      m.lanePatience = undefined;
+      return;
+    }
+    const leaderIndex = this.followLeaders[index]!,
+      leader = leaderIndex >= 0 ? this.movers[leaderIndex] : undefined;
+    if (
+      !leader ||
+      leader.line !== m.line ||
+      leader.dir !== m.dir ||
+      (m.speed - this.followTargets[index]!) / this.perMeter + 1e-8 < LANE.gain
+    ) {
+      m.lanePatience = undefined;
+      return;
+    }
+    m.lanePatience = (m.lanePatience ?? 0) + dt;
+    if (m.lanePatience + 1e-8 < LANE.patience || (m.roadScan ?? 0) > 0) return;
+    m.roadScan = 0.5;
+    const layout = this.directionalLanes(m.line);
+    const lane = Math.max(
+      0,
+      Math.min(layout.count - 1, Math.floor((m.chosenLane ?? m.lane) * layout.count)),
+    );
+    const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+    for (const candidate of [lane - 1, lane + 1]) {
+      if (candidate < 0 || candidate >= layout.count) continue;
+      const preference = (candidate + 0.5) / layout.count;
+      const target = this.laneTargetOffset(m, preference);
+      const duration = Math.abs(target - this.offsetOf(m)) / LANE.lateral;
+      if (
+        this.roadProtectedRoom(m, table) + 1e-8 < LANE.clear + bound * duration ||
+        !this.roadGapSafe(m, target)
+      )
+        continue;
+      m.maneuver = { kind: 'lane', target: preference };
+      m.laneSignal = candidate < lane ? 'left' : 'right';
+      m.lanePatience = undefined;
+      return;
+    }
+  }
+
+  private mergingOverlap(
+    i: number,
+    j: number,
+    lane: number,
+    envelope: (index: number) => { length: number; width: number },
+    futureOffset: (index: number) => number,
+  ): boolean {
     const { movers, offsets } = this;
     const a = movers[i]!,
       b = movers[j]!;
     // Terrain recovery can use the clear part of the road and then return to the lane.
     // Keep a following gap throughout that maneuver, including both lateral directions.
     if (a.roadShift !== undefined || b.roadShift !== undefined) return true;
+    if (a.maneuver || b.maneuver) {
+      const futureA = a.maneuver ? futureOffset(i) : lane;
+      const futureB = b.maneuver ? futureOffset(j) : offsets[j]!;
+      const gap = Math.max(
+        Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
+        Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
+      );
+      if (gap < envelope(i).width + envelope(j).width + FOLLOW.roadGap) return true;
+    }
     const mergingA = this.scenes.merging(a),
       mergingB = this.scenes.merging(b);
     // A lane that bends or meets a narrower road moves sideways: compare where it goes next.
@@ -5008,9 +5778,28 @@ export class TileLife {
     diagnostics?: LifeDiagnostics,
   ): Float64Array {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
+    const epoch = ++this.followingEnvelopeEpoch;
+    const futureOffset = (index: number) => {
+      if (this.followingManeuverEpochs[index] !== epoch) {
+        this.followingManeuverOffsets[index] = this.maneuverOffset(movers[index]!);
+        this.followingManeuverEpochs[index] = epoch;
+      }
+      return this.followingManeuverOffsets[index]!;
+    };
+    const envelope = (index: number) => {
+      const out = (this.followingEnvelopes[index] ??= { length: 0, width: 0 });
+      if (this.followingEnvelopeEpochs[index] !== epoch) {
+        const m = movers[index]!;
+        this.roadEnvelope(m, out, m.maneuver ? futureOffset(index) : undefined);
+        this.followingEnvelopeEpochs[index] = epoch;
+      }
+      return out;
+    };
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
       speeds[i] = this.cruise(m);
+      this.followLeaders[i] = -1;
+      this.followTargets[i] = speeds[i]!;
       caps[i] = Infinity;
       const yielding = this.urgentCount && this.emergencyYielders.get(m);
       if (yielding && yielding.feasible) {
@@ -5031,12 +5820,27 @@ export class TileLife {
       }
     }
     const limit = (i: number, j: number, separation: number) => {
+      const previous = speeds[i]!;
       const m = movers[i]!,
         leader = movers[j]!;
       const spec = VEHICLES[m.vehicle!],
         leaderSpec = VEHICLES[leader.vehicle!];
       let gap = separation - (spec.length + leaderSpec.length) / 2;
-      if (m.roadShift !== undefined || leader.roadShift !== undefined) {
+      if (
+        m.chosenLane !== undefined ||
+        leader.chosenLane !== undefined ||
+        m.maneuver ||
+        leader.maneuver ||
+        m.lat !== undefined ||
+        leader.lat !== undefined
+      )
+        gap = Math.min(gap, separation - envelope(i).length - envelope(j).length);
+      if (
+        m.roadShift !== undefined ||
+        leader.roadShift !== undefined ||
+        m.latYaw ||
+        leader.latYaw
+      ) {
         // Offset turns compress centreline progress. Leave room behind the actual rear
         // footprint so a following vehicle cannot pin a terrain recovery against its curb.
         const at = this.pose(m, this.followingPose),
@@ -5077,22 +5881,38 @@ export class TileLife {
           ? target
           : Math.min(target, approach(targetRoom, lead, kinematicsOf(m.vehicle).brake * pm));
       caps[i] = Math.min(caps[i]!, room / dt);
+      this.followLeaders[i] = j;
+      if (speeds[i] + 1e-9 < previous) this.followTargets[i] = speeds[i]!;
     };
     const curbScenes =
       this.scenes.hasCurbScenes || movers.some((m) => this.offsetVaries(m, FOLLOW.laneAheadM));
-    const overlaps = (i: number, j: number, lane = offsets[i]!) =>
-      Math.abs(lane - offsets[j]!) <
-        (VEHICLES[movers[i]!.vehicle!].width + VEHICLES[movers[j]!.vehicle!].width) / 2 +
-          (movers[i]!.kind === 'vehicle' && movers[j]!.kind === 'vehicle'
-            ? FOLLOW.roadGap
-            : -FOLLOW.squeeze) ||
-      (curbScenes &&
-        !(
-          this.urgentCount &&
-          ((isUrgent(movers[i]!) && this.emergencyYielders.get(movers[j]!)?.source === movers[i]) ||
-            (isUrgent(movers[j]!) && this.emergencyYielders.get(movers[i]!)?.source === movers[j]))
-        ) &&
-        this.mergingOverlap(i, j, lane));
+    const overlaps = (i: number, j: number, lane = offsets[i]!) => {
+      const a = movers[i]!,
+        b = movers[j]!;
+      const width =
+        a.kind === 'vehicle' &&
+        b.kind === 'vehicle' &&
+        (a.chosenLane !== undefined ||
+          b.chosenLane !== undefined ||
+          a.maneuver ||
+          b.maneuver ||
+          a.lat !== undefined ||
+          b.lat !== undefined)
+          ? envelope(i).width + envelope(j).width
+          : (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
+      return (
+        Math.abs(lane - offsets[j]!) <
+          width +
+            (a.kind === 'vehicle' && b.kind === 'vehicle' ? FOLLOW.roadGap : -FOLLOW.squeeze) ||
+        (curbScenes &&
+          !(
+            this.urgentCount &&
+            ((isUrgent(a) && this.emergencyYielders.get(b)?.source === a) ||
+              (isUrgent(b) && this.emergencyYielders.get(a)?.source === b))
+          ) &&
+          this.mergingOverlap(i, j, lane, envelope, futureOffset))
+      );
+    };
     for (const group of this.trafficGroups.values())
       for (let k = 0; k < group.length; k++) {
         const i = group[k]!,
@@ -5237,7 +6057,7 @@ export class TileLife {
     input.owner = owner;
     input.subject = subject;
     input.eligible = eligible;
-    input.speaking = this.momentHost.speaking(owner);
+    input.speaking = subject === 'bird' ? false : this.momentHost.speaking(owner);
     // Required fields are populated before lending this pooled record to the observer.
     const observation = input as EmojiObservation;
     this.emojiInputs.push(observation);
@@ -5296,7 +6116,29 @@ export class TileLife {
       input.vendor = true;
       input.held = input.arrival = input.still = undefined;
     }
+    for (const flock of this.birdEmojiOwners) {
+      const spec = BIRD_SPECIES[flock.species];
+      const share = levels ? (spec.nocturnal ? levels.night : levels.bird) : 1;
+      const admitted = eligible(flock) && flock.rank < share * crowd;
+      this.emojiInput(flock, 'bird', admitted);
+    }
     return observations;
+  }
+  /** Freeze pending/active cues, but never replay an undelivered physical event. */
+  freezeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.emoji.freeze();
+  }
+  private clearBirdEmojiOwners() {
+    for (const flock of this.birdEmojiOwners) this.emoji.memory.get(flock)?.edges.clear();
+    this.birdEmojiOwners.clear();
+  }
+  disposeEmoji() {
+    this.startled.length = 0;
+    this.pointerInside = undefined;
+    this.clearBirdEmojiOwners();
+    this.emoji.dispose();
   }
   visibleMover(m: Mover, levels: Activity | undefined, crowd: number) {
     return moverAttendance(m, levels, crowd) && !this.scenes.hidden(m);
@@ -5349,6 +6191,7 @@ export class TileLife {
     pedestrianTarget?: (m: Mover, target: number) => { target: number; held: boolean },
   ) {
     if (dt <= 0) return;
+    if (!env?.pointer) this.pointerInside = undefined;
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -5435,7 +6278,9 @@ export class TileLife {
     );
     const emojiEnv = env ?? { rain: 0, clock };
     const emojiZoom = momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0);
-    if (this.emoji.observes(emojiZoom))
+    const observing = this.emoji.observes(emojiZoom);
+    if (observing) {
+      for (const flock of this.startled) this.birdEmojiOwners.add(flock);
       this.emoji.step(
         dt,
         emojiZoom,
@@ -5443,8 +6288,17 @@ export class TileLife {
         this.emojiObservations(emojiEnv, near, pass?.owns),
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
+        this.startled,
       );
-    else this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      for (const flock of this.birdEmojiOwners) {
+        const track = this.emoji.memory.get(flock);
+        if (!track?.edges.has('scared') && !track?.group) this.birdEmojiOwners.delete(flock);
+      }
+    } else {
+      this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      this.clearBirdEmojiOwners();
+    }
+    this.startled.length = 0;
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
@@ -5507,9 +6361,14 @@ export class TileLife {
         continue;
       }
       let intentionalHold = false;
+      let otherRoadLimit = false;
       if (m.kind === 'vehicle') {
+        if (!this.scenes.held(m)) this.updateFilter(i, table);
         if (m.vehicle) {
-          limit.target = speeds[i]!;
+          limit.target =
+            m.maneuver?.corridor !== undefined
+              ? Math.min(speeds[i]!, this.filterCap(m))
+              : speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
           if (m.emergency?.target) {
@@ -5773,6 +6632,7 @@ export class TileLife {
           if (decision.held) env?.diagnostics?.hold(m, 'signal');
         }
 
+        otherRoadLimit = intentionalHold || speeds[i]! + 1e-9 < this.followTargets[i]!;
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
         if (m.kind === 'vehicle') {
@@ -5798,7 +6658,7 @@ export class TileLife {
         speeds[i] = Math.min(next, this.caps[i]!);
         if (seam) speeds[i] = Math.min(speeds[i], Math.max(0, seam.room) / dt);
       }
-      const distance = speeds[i]! * dt;
+      let distance = speeds[i]! * dt;
       if (pass?.recoveredNow?.has(m)) {
         m.v = 0;
         continue;
@@ -5818,8 +6678,17 @@ export class TileLife {
         continue;
       }
       this.enteredExits.clear();
+      if (m.kind === 'vehicle') {
+        this.tickRoadTimers(m, dt);
+        this.updateLane(i, dt, table, otherRoadLimit);
+        if (m.maneuver && m.maneuver.kind !== 'filter' && m.maneuver.corridor === undefined)
+          distance = Math.min(
+            distance,
+            Math.max(0, this.roadProtectedRoom(m, table) - LANE.clear) * this.perMeter,
+          );
+      }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
-      if (m.vehicle && (!guard || m.kind !== 'vehicle')) {
+      if (m.vehicle && (!guard || m.kind !== 'vehicle') && !m.maneuver && !m.latYaw) {
         m.v =
           distance === 0 && m.v === 0 ? 0 : this.advance(m, distance, true, this.enteredExits) / dt;
         m.waiting = 0;
@@ -5860,6 +6729,7 @@ export class TileLife {
         if (change) m.roadShift = old + Math.sign(delta) * change;
       } else if (
         m.kind === 'vehicle' &&
+        !m.maneuver &&
         m.speed > 0 &&
         m.roadShift !== undefined &&
         m.roadSteering === undefined &&
@@ -5875,6 +6745,18 @@ export class TileLife {
         m.roadShift -= Math.sign(m.roadShift) * change;
         if (Math.abs(m.roadShift) < 1e-8) m.roadShift = undefined;
       }
+      // A safe return can straighten at a stop without advancing past its forward cap.
+      // Unsafe returning lanes retain their accepted pose until the full sweep opens.
+      const lateralBudget =
+        before.maneuver?.corridor !== undefined
+          ? Math.max(distance, this.filterCap(before) * dt)
+          : before.maneuver?.kind === 'return' ||
+              (before.maneuver?.kind === 'lane' &&
+                !before.maneuver.returning &&
+                Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8)
+            ? Math.max(distance, before.speed * dt)
+            : distance;
+      const lateral = this.proposeLateral(m, before, lateralBudget, dt);
       if (walking) {
         if (m.momentFacing) faceGroup(m, m.hx, m.hy);
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
@@ -5883,7 +6765,9 @@ export class TileLife {
         m.kind === 'vehicle' && before.roadShift !== m.roadShift
           ? Math.abs(this.offsetOf(m) - this.offsetOf(before, m)) * this.perMeter
           : 0;
-      const forwardDistance = Math.sqrt(Math.max(0, distance * distance - restored * restored));
+      const forwardDistance = Math.sqrt(
+        Math.max(0, distance * distance - (restored + lateral) ** 2),
+      );
       let moved =
         distance === 0 && m.vehicle && m.v === 0
           ? 0
@@ -5902,8 +6786,8 @@ export class TileLife {
         for (let retry = 0; retry < 3; retry++) {
           const pose = this.pose(m);
           const travel = Math.hypot(pose.x - origin.x, pose.y - origin.y);
-          if (travel <= distance + 1e-8 * this.perMeter || travel === 0) break;
-          m.d = before.d + ((m.d - before.d) * distance) / travel;
+          if (travel <= lateralBudget + 1e-8 * this.perMeter || travel === 0) break;
+          m.d = before.d + ((m.d - before.d) * lateralBudget) / travel;
           this.advance(m, 0, false);
           moved = Math.max(0, m.d - before.d);
         }
@@ -5912,7 +6796,7 @@ export class TileLife {
       terrainRejected = false;
 
       if (m.kind === 'vehicle' || walking) {
-        this.trialYaw(m, before, moved);
+        this.trialYaw(m, before, moved, lateralBudget, dt);
         let fits = this.motionFits(
           m,
           before,
@@ -5980,6 +6864,7 @@ export class TileLife {
           const steeringSpeed = Math.min(ROAD_AVOID.steer, m.speed / this.perMeter / Math.SQRT2);
           if (
             m.kind === 'vehicle' &&
+            !before.maneuver &&
             m.vehicle &&
             this.curvable[m.line] &&
             distance > 1e-8 * this.perMeter &&
@@ -6070,6 +6955,7 @@ export class TileLife {
             ];
           } else if (
             m.kind === 'vehicle' &&
+            !before.maneuver &&
             m.vehicle &&
             distance > 1e-8 * this.perMeter &&
             !intentionalHold &&
@@ -6079,7 +6965,14 @@ export class TileLife {
             const spec = VEHICLES[m.vehicle];
             const effectiveShift =
               this.vehicleLane(before, before.line) -
-              laneOffset(this.roadWidth(before.line), spec.width, before.lane, spec.curb);
+              laneOffset(
+                this.roadWidth(before.line),
+                spec.width,
+                before.chosenLane ?? before.lane,
+                spec.curb,
+                this.geo.oneway?.[before.line] ?? 0,
+              ) -
+              (before.lat ?? 0);
             if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
               const behind = this.cornerWithin(before, before.from, before.d, m);
               const remaining = this.segment(before.from, before.from + before.dir) - before.d;
@@ -6122,14 +7015,29 @@ export class TileLife {
                 if (this.matchesCurve(m, vertex) && !this.corner(m, vertex)) continue;
               }
             }
+            const retryLateral = before.maneuver
+              ? this.proposeLateral(m, before, lateralBudget * share!, dt, share)
+              : 0;
             if (!walking && share! < 0) {
               const retreat = Math.min(m.d, dt * this.perMeter * steeringSpeed);
               if (retreat <= 1e-8 * this.perMeter) continue;
               m.d -= retreat;
               this.advance(m, 0, false);
               moved = -retreat;
-            } else moved = this.advance(m, distance * share!, true, this.enteredExits);
-            this.trialYaw(m, before, moved);
+            } else
+              moved = this.advance(
+                m,
+                Math.sqrt(Math.max(0, (distance * share!) ** 2 - retryLateral ** 2)),
+                true,
+                this.enteredExits,
+              );
+            this.trialYaw(
+              m,
+              before,
+              moved,
+              lateralBudget * Math.max(0, share!),
+              dt * Math.max(0, share!),
+            );
             if (side && !walking && !this.bodyCentresOwned(m, pass?.owns)) continue;
             if (
               (fits = this.motionFits(
@@ -6184,6 +7092,7 @@ export class TileLife {
           restoreMover(m, before);
           moved = 0;
         } else if (m.kind === 'vehicle') this.clearPastCurve(m);
+        if (m.kind === 'vehicle') this.finishLateral(m, before);
         if (walking && fits) m.walked = (before.walked ?? 0) + Math.max(0, moved) / this.perMeter;
         if (m.kind === 'vehicle' && !intentionalHold) {
           const refused = distance > 1e-8 * this.perMeter && (!fits || moved <= distance * 1e-6);
@@ -6356,6 +7265,9 @@ export class TileLife {
         }
         if (
           m.kind === 'vehicle' &&
+          // An unsafe lateral return holds its accepted body until the sweep opens;
+          // ordinary give-up recovery would abandon that reserved pose mid-maneuver.
+          !m.maneuver &&
           m.waiting >= JUNCTION.giveUp &&
           !intentionalHold &&
           !pass?.recoveryAttempts?.has(m) &&
@@ -6385,6 +7297,7 @@ export class TileLife {
         m.v = travelled / dt;
       }
       const walkingRecovery = isWalker(m.kind) ? this.walkerRecoveryProgress.get(m) : undefined;
+      this.recordFilterStep(m, before);
       if (walkingRecovery !== undefined) {
         if (moved > 0) {
           walkingRecovery.travelled += moved / this.perMeter;
@@ -6413,13 +7326,52 @@ export class TileLife {
       if (m.vehicle && (m.waiting ?? 0) > 0) this.motionStats.waiting++;
     }
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
-    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env);
+    if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env, observing);
     if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
     if (!pass) this.finishEffects(clock, dt, env?.wind);
   }
 
   /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
-  private trialYaw(m: Mover, before: Mover, moved: number) {
+  private trialYaw(m: Mover, before: Mover, moved: number, lateralBudget = 0, lateralDt = 0) {
+    if (m.kind === 'vehicle' && (m.maneuver || before.latYaw !== undefined)) {
+      const forward = Math.abs(moved) / this.perMeter;
+      const sideways = (m.lat ?? 0) - (before.lat ?? 0);
+      const bound = Math.tan(Math.PI / 12);
+      const target = forward > 1e-8 ? Math.max(-bound, Math.min(bound, sideways / forward)) : 0;
+      let yaw = (before.latYaw ?? 0) + (target - (before.latYaw ?? 0)) * Math.min(1, forward * 1.5);
+      if (
+        Math.abs(yaw) <= 1e-3 &&
+        m.maneuver?.kind !== 'filter' &&
+        Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) <= 1e-6 &&
+        m.vehicle
+      ) {
+        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
+        const remaining = Math.max(
+          0,
+          (before.speed * lateralDt) / this.perMeter - Math.hypot(forward, sideways),
+        );
+        if (radius * Math.abs(Math.atan(yaw)) <= remaining) yaw = 0;
+      }
+      if (
+        forward <= 1e-8 &&
+        m.vehicle &&
+        (before.maneuver?.kind === 'return' ||
+          (before.maneuver?.kind === 'lane' &&
+            !before.maneuver.returning &&
+            Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8))
+      ) {
+        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
+        const remaining = Math.max(0, lateralBudget / this.perMeter - Math.abs(sideways));
+        const angle = Math.atan(before.latYaw ?? 0);
+        const change = Math.min(
+          Math.abs(angle),
+          remaining / radius,
+          (LANE.lateral * lateralDt) / radius,
+        );
+        yaw = Math.tan(angle - Math.sign(angle) * change);
+      }
+      m.latYaw = Math.abs(yaw) > 1e-6 ? yaw : undefined;
+    }
     m.roadYaw = before.roadYaw;
     if (
       !(m.kind === 'vehicle' && (m.roadShift !== undefined || before.roadYaw !== undefined)) &&
@@ -7079,6 +8031,7 @@ export class TileLife {
     gustAt?: (x: number, y: number) => number,
     near?: (x: number, y: number) => boolean,
     env?: LifeEnv,
+    observing = false,
   ) {
     const { roosts, perches } = this.geo;
     const count = roosts.length / 2;
@@ -7090,21 +8043,43 @@ export class TileLife {
     const folklore =
       env?.folkloreDisturber &&
       lngLatToTile(this.tile, env.folkloreDisturber.lng, env.folkloreDisturber.lat);
+    let pointer: FlockPointer | undefined;
+    this.birdFlightStep.dt = dt;
+    if (env?.pointer) {
+      pointer = this.flockPointer;
+      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
+      pointer.x = at.x;
+      pointer.y = at.y;
+      pointer.cellMeters = env.pointer.cellMeters;
+      this.pointerInside ??= new WeakSet();
+    }
     for (const flock of this.flocks) {
-      if (near && !near(flock.x, flock.y)) continue;
+      if (pointer) pointer.radius = undefined;
+      if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (flock.takeoff) {
+        flock.takeoff.age += dt;
+        if (flock.takeoff.age >= flock.takeoff.seconds) {
+          delete flock.takeoff;
+          for (const bird of flock.birds) delete bird.takeoff;
+        }
+      }
       if (flock.departureBlend)
         flock.departureBlend = Math.max(0, flock.departureBlend - dt / FORAGE.settleSeconds);
       const spec = BIRD_SPECIES[flock.species];
       const speed = spec.speed * this.perMeter;
       const sitting = flock.perched || flock.landed;
+      if (pointer && !sitting && !flock.takeoff) this.beginBirdFlights(flock, pointer, observing);
       flock.scatter = Math.max(0, flock.scatter - dt);
       // Sitting out the rain, a flock doesn't count down its stay.
       const committed = flock.landing || (flock.home >= 0 && flock.perch >= 0 && !flock.perched);
       if (!(sheltering && sitting) && !committed) flock.stay -= dt;
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
-        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels, folklore);
+        const pointerFlush = pointer ? this.pointerNear(flock, pointer) : false;
+        if (pointerFlush) this.recordStartle(flock, observing);
+        const flushed =
+          gust >= PERCH.flush || this.disturbed(flock, env?.levels, folklore) || pointerFlush;
         if (flushed || (!sheltering && flock.stay <= 0)) {
           if (!flushed && flock.perched && flock.home >= 0) {
             flock.roost = flock.home;
@@ -7113,9 +8088,11 @@ export class TileLife {
               this.prepareLanding(flock, { x: flock.lx, y: flock.ly })
             ) {
               flock.home = -1;
+              if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
               continue;
             }
           }
+          if (pointerFlush) this.beginPointerTakeoff(flock);
           this.beginDeparture(flock);
           flock.perched = false;
           flock.landed = false;
@@ -7131,6 +8108,7 @@ export class TileLife {
         } else if (flock.landed && !sheltering) {
           this.stepGroundFlock(flock, dt);
         }
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
       if (
@@ -7151,18 +8129,38 @@ export class TileLife {
       if (flock.landing)
         flock.landingBlend = Math.min(1, flock.landingBlend + dt / FORAGE.settleSeconds);
       // Flying to a tree or prepared ground patch: straight there, nudged downwind, then settle.
-      const to =
+      let to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
           : flock.landing && count > 0
             ? { x: flock.lx, y: flock.ly }
             : undefined;
+      if (pointer && to && this.pointerNear(flock, pointer, to, true)) {
+        this.recordStartle(flock, observing);
+        pointer.radius = undefined;
+        this.beginDeparture(flock);
+        flock.scatter = PERCH.scatter;
+        this.pickDestination(flock, { prepare: false });
+        flock.perch = -1;
+        flock.landing = false;
+        flock.landingAttempted = false;
+        to = undefined;
+      }
       if (to) {
         const dx = to.x - flock.x;
         const dy = to.y - flock.y;
         const distance = Math.hypot(dx, dy);
         const step = speed * 1.4 * dt;
-        if (distance <= step) {
+        const detour =
+          pointer && distance > step
+            ? this.pointerDetour(flock, pointer, step, dx / distance, dy / distance)
+            : undefined;
+        if (detour) {
+          flock.x += detour.x * step;
+          flock.y += detour.y * step;
+          [flock.hx, flock.hy] = [detour.x, detour.y];
+        } else if (distance <= step) {
+          if (pointer) pointer.radius = undefined;
           flock.x = to.x;
           flock.y = to.y;
           if (flock.perch >= 0) {
@@ -7190,10 +8188,16 @@ export class TileLife {
           flock.x += (dx / distance) * step + wx * nudge;
           flock.y += (dy / distance) * step + wy * nudge;
         }
-        if (distance > 0) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (distance > 0 && !detour) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
         continue;
       }
-      if (count === 0) continue;
+      if (count === 0) {
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+        if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
+        continue;
+      }
       // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
       // circle a little faster than it moves, so it catches up after moving on to another roost.
       const drift = BIRD_WEATHER.drift * this.perMeter;
@@ -7219,7 +8223,226 @@ export class TileLife {
         flock.y += (dy / distance) * reach;
         [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
+      if (pointer) this.avoidPointer(flock, pointer, dt, speed, observing);
+      if (flock.flightBounds) this.stepBirdFlights(flock, pointer);
     }
+  }
+
+  /** Nearby airborne birds retain their velocity and respond individually, without RNG draws. */
+  private beginBirdFlights(flock: Flock, pointer: FlockPointer, observing: boolean) {
+    const spec = BIRD_SPECIES[flock.species];
+    const speed = spec.speed * this.perMeter * 1.4;
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin = birdFlightMargin(speed, BIRD_FLIGHT);
+    const bound = this.flockBound(flock);
+    const bounds = flock.flightBounds;
+    if (
+      (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2 > (reach + margin + bound) ** 2 &&
+      (!bounds ||
+        pointer.x < bounds.minX - reach - margin ||
+        pointer.x > bounds.maxX + reach + margin ||
+        pointer.y < bounds.minY - reach - margin ||
+        pointer.y > bounds.maxY + reach + margin)
+    )
+      return;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      if (bird.flight) continue;
+      birdOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      const x = flock.x + this.birdOffset.x;
+      const y = flock.y + this.birdOffset.y;
+      const distance2 = (x - pointer.x) ** 2 + (y - pointer.y) ** 2;
+      if (distance2 >= (reach + margin) ** 2) continue;
+      bird.flight = {
+        x,
+        y,
+        hx: flock.hx,
+        hy: flock.hy,
+        speed,
+        phase: (bird.phase + i * 0.61803398875) % 1,
+      };
+      flock.flightBounds ??= { minX: x, minY: y, maxX: x, maxY: y };
+      if (distance2 < reach * reach) this.recordStartle(flock, observing);
+    }
+  }
+
+  /** Follow independent escape curves, then rejoin the moving formation when the route is clear. */
+  private stepBirdFlights(flock: Flock, pointer?: FlockPointer) {
+    const step = this.birdFlightStep;
+    const spec = BIRD_SPECIES[flock.species];
+    step.speed = spec.speed * this.perMeter * 1.4;
+    step.resting = flock.perched || flock.landed;
+    if (pointer) {
+      step.pointer = this.birdFlightPointer;
+      step.pointer.x = pointer.x;
+      step.pointer.y = pointer.y;
+      step.pointer.reach =
+        Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    } else step.pointer = undefined;
+    const bounds = flock.flightBounds!;
+    bounds.minX = bounds.minY = Infinity;
+    bounds.maxX = bounds.maxY = -Infinity;
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    for (const bird of flock.birds) {
+      if (!bird.flight) continue;
+      birdFormationOffset(flock, bird, birdTurn(flock, bird, wobble), spread, this.birdOffset);
+      step.targetX = flock.x + this.birdOffset.x;
+      step.targetY = flock.y + this.birdOffset.y;
+      if (stepBirdFlight(bird.flight, step, BIRD_FLIGHT)) {
+        delete bird.flight;
+        continue;
+      }
+      bounds.minX = Math.min(bounds.minX, bird.flight.x);
+      bounds.minY = Math.min(bounds.minY, bird.flight.y);
+      bounds.maxX = Math.max(bounds.maxX, bird.flight.x);
+      bounds.maxY = Math.max(bounds.maxY, bird.flight.y);
+    }
+    if (bounds.minX === Infinity) delete flock.flightBounds;
+  }
+
+  /** Preserve each bird's position through a staggered, smoothly accelerated mouse flush. */
+  private beginPointerTakeoff(flock: Flock) {
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    let seconds = 0;
+    let extent = 0;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      if (bird.flight) continue;
+      const turn = birdTurn(flock, bird, wobble);
+      birdOffset(flock, bird, turn, spread, this.birdOffset);
+      // Existing phase plus slot identity separates even coincident birds without RNG draws.
+      const reaction = (bird.phase + i * 0.61803398875) % 1;
+      const delay = reaction * BIRD_TAKEOFF.stagger;
+      const duration =
+        BIRD_TAKEOFF.seconds[0] +
+        (BIRD_TAKEOFF.seconds[1] - BIRD_TAKEOFF.seconds[0]) * ((reaction * 1.7) % 1);
+      bird.takeoff = {
+        x: flock.x + this.birdOffset.x,
+        y: flock.y + this.birdOffset.y,
+        delay,
+        seconds: duration,
+        face: isForager(bird) && flock.landed ? bird.face : bird.phase * 2 * Math.PI,
+      };
+      extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
+      seconds = Math.max(seconds, delay + duration);
+    }
+    flock.takeoff = { x: flock.x, y: flock.y, age: 0, seconds, extent };
+  }
+
+  /** Rendered offsets are evaluated only near the mouse or its target. */
+  private flockExtent(flock: Flock, formation = false) {
+    const spread = birdSpread(flock);
+    const wobble = this.time * 0.8;
+    let extent = 0;
+    for (const bird of flock.birds) {
+      const turn = birdTurn(flock, bird, wobble);
+      if (formation) birdFormationOffset(flock, bird, turn, spread, this.birdOffset);
+      else birdOffset(flock, bird, turn, spread, this.birdOffset);
+      extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
+    }
+    return extent;
+  }
+
+  /** Conservative formation envelope, including resting birds still waiting to take off. */
+  private flockBound(flock: Flock) {
+    const spec = BIRD_SPECIES[flock.species];
+    let bound =
+      Math.max(4 * spec.spread[1], 2 * (FORAGE_SPECIES[flock.species]?.patch ?? 0), PERCH.spread) *
+      this.perMeter;
+    if (flock.takeoff)
+      bound = Math.max(
+        bound,
+        Math.hypot(flock.x - flock.takeoff.x, flock.y - flock.takeoff.y) + flock.takeoff.extent,
+      );
+    return bound;
+  }
+
+  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
+    const spec = BIRD_SPECIES[flock.species];
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const margin =
+      flock.flightBounds && (!target || destination)
+        ? birdFlightMargin(spec.speed * this.perMeter * 1.4, BIRD_FLIGHT)
+        : 0;
+    const bound = this.flockBound(flock);
+    const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
+    if (
+      distance2 > (reach + margin + bound) ** 2 &&
+      (!target ||
+        (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + margin + bound) ** 2)
+    )
+      return 0;
+    // The navigation anchor stays clear, while each independent bird steers around the mouse.
+    return (
+      (pointer.radius ??= reach + this.flockExtent(flock, flock.flightBounds !== undefined)) +
+      margin
+    );
+  }
+
+  private pointerNear(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
+    const radius = this.pointerRadius(flock, pointer, target, destination);
+    const at = target ?? flock;
+    return radius > 0 && (at.x - pointer.x) ** 2 + (at.y - pointer.y) ** 2 < radius ** 2;
+  }
+
+  private recordStartle(flock: Flock, observing: boolean) {
+    if (observing && !this.startled.includes(flock)) this.startled.push(flock);
+  }
+
+  private avoidPointer(
+    flock: Flock,
+    pointer: FlockPointer,
+    dt: number,
+    speed: number,
+    observing: boolean,
+  ) {
+    const radius = this.pointerRadius(flock, pointer);
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (radius <= 0 || distance2 >= radius * radius) {
+      this.pointerInside!.delete(flock);
+      return;
+    }
+    if (!this.pointerInside!.has(flock)) this.recordStartle(flock, observing);
+    this.pointerInside!.add(flock);
+    const distance = Math.sqrt(distance2);
+    const hx = distance > 1e-8 ? dx / distance : flock.hx;
+    const hy = distance > 1e-8 ? dy / distance : flock.hy;
+    const move = Math.min(radius - distance, BIRD_POINTER.flee * speed * 1.4 * dt);
+    flock.x += hx * move;
+    flock.y += hy * move;
+    [flock.hx, flock.hy] = [hx, hy];
+  }
+
+  /** A blocked target leg spends its normal flight step tangentially instead of stalling. */
+  private pointerDetour(
+    flock: Flock,
+    pointer: FlockPointer,
+    step: number,
+    hx: number,
+    hy: number,
+  ): Point | undefined {
+    const radius = this.pointerRadius(flock, pointer);
+    if (radius === 0) return;
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (distance2 < radius * radius) {
+      // Independent flyers need room to bank, even before the navigation anchor clears that margin.
+      const physical = this.pointerRadius(flock, pointer, flock);
+      if (!flock.flightBounds || distance2 < physical * physical || dx * hx + dy * hy >= 0) return;
+    } else if ((dx + hx * step) ** 2 + (dy + hy * step) ** 2 >= radius * radius) return;
+    const distance = Math.sqrt(distance2);
+    const cross = dx * hy - dy * hx;
+    const side = Math.abs(cross) > 1e-8 ? Math.sign(cross) : flock.rank < 0.5 ? 1 : -1;
+    this.flockDetour.x = (-dy / distance) * side;
+    this.flockDetour.y = (dx / distance) * side;
+    return this.flockDetour;
   }
 
   /** Seconds simulated so far. */
@@ -7524,6 +8747,7 @@ export class LifeWorld {
   private effectCellMeters = 0;
   private readonly puffSources = new Map<number, number>();
   private readonly actorSources = new Map<VisibleAgent, number>();
+  private readonly birdOffset: Point = { x: 0, y: 0 };
   private readonly puffSelector = new PuffSelector();
   /** Reply-owned storage: transferring a frame cannot detach simulation state. */
   get visiblePuffs() {
@@ -8035,8 +9259,8 @@ export class LifeWorld {
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
     this.releaseEventActors(false, true);
-    for (const tile of this.tiles.values()) tile.emoji.dispose();
-    for (const { life } of this.retired.values()) life.emoji.dispose();
+    for (const tile of this.tiles.values()) tile.disposeEmoji();
+    for (const { life } of this.retired.values()) life.disposeEmoji();
     this.emojiMemory.reset();
     this.emojiView = undefined;
     this.puffPacket = EMPTY_PUFFS;
@@ -8082,11 +9306,10 @@ export class LifeWorld {
   private pruneRetired(cap = true) {
     for (const [key, entry] of this.retired)
       if (this.clock - entry.at >= RETIRE.seconds) {
-        this.forgetBirds(entry.life);
         entry.life.momentHost.clear();
         for (const owner of [...entry.life.movers, ...entry.life.gatherers])
           entry.life.crossingWaits.release(owner);
-        entry.life.emoji.dispose();
+        entry.life.disposeEmoji();
         if (this.emergencyDispatch)
           for (const mover of [...entry.life.residentMovers()])
             if (mover.emergency) this.releaseEmergency({ life: entry.life, mover });
@@ -8096,21 +9319,14 @@ export class LifeWorld {
       while (this.retired.size > RETIRE.max) {
         const key = this.retired.keys().next().value!;
         const life = this.retired.get(key)!.life;
-        this.forgetBirds(life);
         life.momentHost.clear();
         for (const owner of [...life.movers, ...life.gatherers]) life.crossingWaits.release(owner);
-        life.emoji.dispose();
+        life.disposeEmoji();
         if (this.emergencyDispatch)
           for (const mover of [...life.residentMovers()])
             if (mover.emergency) this.releaseEmergency({ life, mover });
         this.retired.delete(key);
       }
-  }
-
-  private forgetBirds(life: TileLife) {
-    if (!this.inspection?.birds && !this.inspection?.recoveringBirds) return;
-    for (const flock of life.flocks)
-      for (const bird of flock.birds) this.inspection.forgetBird(bird);
   }
 
   private owns(life: TileLife, p: { x: number; y: number }) {
@@ -8193,7 +9409,7 @@ export class LifeWorld {
           const life = this.tiles.get(key)!;
           this.roadCache.forget(life);
           life.effects.pause(this.clock);
-          life.emoji.freeze();
+          life.freezeEmoji();
           life.clearSeasonalGatherers((owner) => this.inspection?.forgetOwner(owner, this.clock));
           this.appliedCrowds.delete(life);
           this.retired.set(key, { life, at: this.clock });
@@ -9971,6 +11187,7 @@ export class LifeWorld {
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
+    pointer?: readonly [number, number],
   ) {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
@@ -10028,6 +11245,7 @@ export class LifeWorld {
       cityLife: this.cityLife,
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
+      ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
     };
     this.sampleFolklore(weather, Math.max(0, dt));
     const folklore = this.folklore.manananggal;
@@ -11016,18 +12234,17 @@ export class LifeWorld {
     const inspection = this.inspection;
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
-    const normalPush: (owner: object, agent: VisibleAgent, birdSpeed?: number) => number =
-      inspection
-        ? (owner, agent, birdSpeed) => out.push(inspection.present(owner, agent, birdSpeed))
-        : (_owner, agent) => out.push(agent);
+    const normalPush: (owner: object, agent: VisibleAgent) => number = inspection
+      ? (owner, agent) => out.push(inspection.present(owner, agent))
+      : (_owner, agent) => out.push(agent);
     const present = diagnostics
-      ? (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
-          const n = normalPush(owner, agent, birdSpeed);
+      ? (owner: object, agent: VisibleAgent) => {
+          const n = normalPush(owner, agent);
           diagnostics.view(owner, out[n - 1]!);
           return n;
         }
       : normalPush;
-    const push = (owner: object, agent: VisibleAgent, birdSpeed?: number) => {
+    const push = (owner: object, agent: VisibleAgent) => {
       const cue = this.emojiMemory.cue(owner);
       if (
         cue &&
@@ -11039,8 +12256,9 @@ export class LifeWorld {
         agent.vehicle !== 'carabao'
       )
         agent.emoji = cue;
-      return present(owner, agent, birdSpeed);
+      return present(owner, agent);
     };
+    let birdCues: Map<VisibleAgent, Flock> | undefined;
     const owners = zoom >= MOMENTS.zoom ? new Map<object, VisibleAgent>() : undefined;
     const balls: { agent: VisibleAgent; a: object; b: object }[] = [];
     const umbrellas = umbrellaShare(weather.rain, weather.sunAltitude);
@@ -11140,7 +12358,11 @@ export class LifeWorld {
             paint: m.paint,
             turnSignal:
               m.kind === 'vehicle' && lamps?.kind !== 'hazard'
-                ? visibleTurnSignal(m.routing, inspection?.clock(m, this.clock) ?? this.clock)
+                ? visibleTurnSignal(
+                    m.routing,
+                    inspection?.clock(m, this.clock) ?? this.clock,
+                    m.laneSignal,
+                  )
                 : undefined,
             flap: 0,
           };
@@ -11389,43 +12611,30 @@ export class LifeWorld {
       for (const flock of life.flocks) {
         if (!this.owns(life, flock)) continue;
         const spec = BIRD_SPECIES[flock.species];
+        const flockCue = this.emojiMemory.cue(flock);
         const out_ = spec.nocturnal ? levels.night : levels.bird;
         if (
           flock.rank >= out_ * crowd ||
-          (!inView(flock.x, flock.y) &&
-            !(inspection?.recoveringBirds && flock.birds.some((bird) => inspection.hasBird(bird))))
+          (!inView(flock.x, flock.y) && !flyingBirdNear(flock, inView))
         )
           continue;
         const wobble = life.elapsed * 0.8;
         const sitting = flock.perched || flock.landed;
         const heading = Math.atan2(flock.hy, flock.hx);
         // Tree perching and scattered flight keep their original spread; ground has its own layout.
-        const perchSpread = PERCH.spread / spec.spread[1];
-        const spread = flock.perched
-          ? perchSpread
-          : flock.landed
-            ? 1
-            : 1 + (3 * flock.scatter) / PERCH.scatter;
+        const spread = birdSpread(flock);
         for (const bird of flock.birds) {
-          const turn = sitting ? bird.phase * 6 : wobble + bird.phase * 6;
-          const cos = Math.cos(turn) * spread;
-          const sin = Math.sin(turn) * spread;
-          const ground = isForager(bird) && flock.landed;
-          const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
-          const ox = bird.ox * cos - bird.oy * sin;
-          const oy = bird.ox * sin + bird.oy * cos;
-          let x = ox + ((bird.gx ?? ox) - ox) * blend;
-          let y = oy + ((bird.gy ?? oy) - oy) * blend;
-          if (bird.departure && flock.departureBlend) {
-            x += (bird.departure.x - x) * flock.departureBlend;
-            y += (bird.departure.y - y) * flock.departureBlend;
-          }
-          x += flock.x;
-          y += flock.y;
+          const turn = birdTurn(flock, bird, wobble);
+          const ground = isForager(bird) && flock.landed && !bird.flight;
+          birdOffset(flock, bird, turn, spread, this.birdOffset);
+          const x = this.birdOffset.x + flock.x;
+          const y = this.birdOffset.y + flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
-          const birdTime = inspection?.birds ? inspection.clock(bird, life.elapsed) : life.elapsed;
-          const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
-          const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
+          const birdTime = life.elapsed;
+          const waiting = bird.takeoff !== undefined && takeoffProgress(flock, bird) === 0;
+          const resting = (sitting && !bird.flight) || waiting;
+          const flap = resting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
+          const pose = resting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
           const peck =
             ground && flock.feeding && bird.wait > 0 && weather.rain < BIRD_WEATHER.shelter
@@ -11433,23 +12642,48 @@ export class LifeWorld {
                 ? 0.25
                 : -0.25
               : 0;
-          const face = ground
-            ? bird.face + peck
-            : sitting
-              ? bird.phase * 2 * Math.PI
-              : heading + (bird.phase - 0.5) * 0.6;
+          const face = bird.flight
+            ? Math.atan2(bird.flight.hy, bird.flight.hx)
+            : bird.takeoff && flock.takeoff
+              ? takeoffProgress(flock, bird) === 0
+                ? bird.takeoff.face
+                : Math.atan2(y - bird.takeoff.y, x - bird.takeoff.x)
+              : ground
+                ? bird.face + peck
+                : sitting
+                  ? bird.phase * 2 * Math.PI
+                  : heading + (bird.phase - 0.5) * 0.6;
           const ahead = tileToLngLat(tile, {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,
           });
-          push(
-            bird,
-            { kind: 'bird', lng, lat, ahead, flap, bird: { species: flock.species, pose } },
-            spec.speed,
-          );
+          const n = push(bird, {
+            kind: 'bird',
+            lng,
+            lat,
+            ahead,
+            flap,
+            bird: { species: flock.species, pose },
+          });
+          if (flockCue) (birdCues ??= new Map()).set(out[n - 1]!, flock);
         }
       }
     }
+    const withBirdCues = (admitted: VisibleAgent[]) => {
+      if (!birdCues) return admitted;
+      const anchors = new Map<Flock, VisibleAgent>();
+      const inside = (a: VisibleAgent) =>
+        !bounds ||
+        (a.lng >= bounds[0] && a.lng <= bounds[2] && a.lat >= bounds[1] && a.lat <= bounds[3]);
+      for (const agent of admitted) {
+        const flock = birdCues.get(agent);
+        if (!flock) continue;
+        const prior = anchors.get(flock);
+        if (!prior || (!inside(prior) && inside(agent))) anchors.set(flock, agent);
+      }
+      for (const [flock, agent] of anchors) agent.emoji = this.emojiMemory.cue(flock);
+      return admitted;
+    };
     const withBalls = (admitted: VisibleAgent[]) => {
       if (!balls.length) return admitted;
       const kept = new Set(admitted);
@@ -11475,7 +12709,7 @@ export class LifeWorld {
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBalls([...staged, ...out]), center, bounds);
+      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       return admitted;
@@ -11507,7 +12741,7 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBalls(kept), center, bounds);
+    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     return admitted;

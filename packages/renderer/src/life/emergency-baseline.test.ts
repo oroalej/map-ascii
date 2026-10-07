@@ -21,14 +21,16 @@ function legacy(world: LifeWorld) {
       expect(Object.hasOwn(m, 'emergency')).toBe(false);
   for (const a of world.visible(18, 1, [0, 0])) expect(Object.hasOwn(a, 'beacon')).toBe(false);
 }
-it('pins PRE state and preserves absent/all-zero complete property sets through retire and revive', () => {
+it('pins ordinary state and preserves absent/all-zero complete property sets through retire and revive', () => {
   const a = makeScenario('junction', 1),
     b = makeScenario('junction', 1);
+  // Road behavior changes the ordinary snapshot from emergency PRE's 43fb4a79224f475fa2ece4b2c17abf7145749499aaa648d7aa4018d70f0b652f.
+  // This hash also matches the reviewed road head before main integration (878d27a).
   expect(
     createHash('sha256')
       .update(JSON.stringify(completeScenarioState(a.world)))
       .digest('hex'),
-  ).toBe('43fb4a79224f475fa2ece4b2c17abf7145749499aaa648d7aa4018d70f0b652f');
+  ).toBe('99aee3c8ca8cfeacf5f7e9e0a51c8a53d94e504b6554a36569ae7e5fe044b939');
   b.world.configureEmergency(zero, emergencyFixture().data);
   for (let i = 0; i < 20; i++) {
     if (i === 5 || i === 10) {

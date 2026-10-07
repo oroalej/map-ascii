@@ -60,7 +60,7 @@ function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
     hy,
     speed: 4 * pm,
     v: 4 * pm,
-    lane: 0,
+    lane: oneway ? 0.75 : 0,
     paint: 0,
     pause: 0,
     rank: 0,
@@ -69,6 +69,60 @@ function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
 }
 
 describe('terrain-blocked road vehicles', () => {
+  it('steers equivalent seeded and completed-lane actors from the same physical offset', () => {
+    const shifts: number[] = [];
+    for (const chosen of [false, true]) {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 0, y: 2000 },
+          { x: 4095, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        9.6,
+        1,
+        1,
+      );
+      const { life } = bareRoad(b);
+      life.setLaneTerrain(undefined);
+      const m: Mover = {
+        kind: 'vehicle',
+        vehicle: 'car',
+        line: 0,
+        from: 0,
+        dir: 1,
+        d: 50 * pm,
+        x: 50 * pm,
+        y: 2000,
+        hx: 1,
+        hy: 0,
+        speed: 4 * pm,
+        v: 4 * pm,
+        lane: chosen ? 0.9 : 0.5,
+        chosenLane: chosen ? 0.5 : undefined,
+        lat: 0.25,
+        paint: 0,
+        pause: 0,
+        rank: 0,
+        routing: { seed: 123, turns: 0 },
+      };
+      life.movers.push(m);
+      const initial = life.offsetOf(m);
+      let lateralTrials = 0;
+      life.step(0.1, undefined, undefined, undefined, undefined, (owner, before) => {
+        if (!('kind' in owner) || !before || !('kind' in before)) return true;
+        if (owner.roadShift === undefined) return false;
+        lateralTrials++;
+        return owner.roadShift < 0;
+      });
+      expect(lateralTrials).toBeGreaterThan(0);
+      expect(m.roadShift).toBeLessThan(0);
+      expect(initial - life.offsetOf(m)).toBeLessThanOrEqual(ROAD_AVOID.steer * 0.1 + 1e-8);
+      shifts.push(m.roadShift!);
+    }
+    expect(shifts[1]).toBeCloseTo(shifts[0]!);
+  });
+
   it.each([0, 1] as const)('plans around a parked footprint on a road with oneway %s', (oneway) => {
     const point = (x: number, y = 0) => ({ x: 1000 + x * pm, y: 2000 + y * pm });
     const builder = new LifeBuilder();
@@ -189,7 +243,7 @@ describe('terrain-blocked road vehicles', () => {
     const p = (x: number) => ({ x: 1000 + x * pm, y: 2000 });
     const b = new LifeBuilder();
     b.line([p(0), p(100)], LifeLine.roadMid, 8, 1, 1);
-    b.line([p(100), p(400)], LifeLine.roadMajor, 20, 2, 1);
+    b.line([p(100), p(400)], LifeLine.roadMajor, 32, 2, 1);
     const { life } = bareRoad(b);
     const m: Mover = {
       kind: 'vehicle',
@@ -211,7 +265,7 @@ describe('terrain-blocked road vehicles', () => {
     const queries = life as unknown as LaneQueries;
     expect(life.offsetVaries(m, 10)).toBe(false);
     expect([...queries.pedestrianPath(m, 10)]).toHaveLength(1);
-    const before = { ...m, line: 0, from: 0, came: undefined, next: 2, d: 80 * pm, ...p(80) };
+    const before = { ...m, line: 0, from: 0, came: undefined, next: 2, d: 75 * pm, ...p(75) };
     expect(life.offsetVaries(before)).toBe(false);
     expect(life.offsetVaries(before, 10)).toBe(true);
     const chords = [...queries.pedestrianPath(before, 10)];
@@ -322,7 +376,7 @@ describe('terrain-blocked road vehicles', () => {
     b.line([p(0), p(100)], LifeLine.roadMid, 8, 1, 1);
     b.line([p(100), p(100, 30)], LifeLine.roadMid, 8, 2, 1);
     b.line([p(100, 30), p(100, 130)], LifeLine.roadMid, 8, 3, 1);
-    b.line([p(100, 30), p(200, 30)], LifeLine.roadMajor, 20, 4, 1);
+    b.line([p(100, 30), p(200, 30)], LifeLine.roadMajor, 32, 4, 1);
     const { life } = bareRoad(b);
     const polygon = [
       [p(91.875, 0.875), p(92.125, 0.875), p(92.125, 1.125), p(91.875, 1.125), p(91.875, 0.875)],

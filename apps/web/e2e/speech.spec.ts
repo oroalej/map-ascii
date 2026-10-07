@@ -2,46 +2,50 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import type { DialogueCatalog } from '@atlas/shared';
 import { cities, mapReady } from './helpers';
-test('naga: natural emoji appears at the central z19 view', async ({ page }) => {
-  test.skip(!cities.some((city) => city.slug === 'naga' && city.hasMeta));
-  // Bound software-WebGL work while retaining the desktop controls and reported camera.
-  await page.setViewportSize({ width: 641, height: 480 });
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.addInitScript(() => {
-    // Remember a real visible cue from the first render. A short cue can disappear
-    // while the test waits for the HUD or sends another software-WebGL poll.
-    const seenEmoji = new MutationObserver(() => {
-      if (
-        [...document.querySelectorAll('[data-emoji-bubble]')].some(
-          (bubble) =>
-            getComputedStyle(bubble).visibility === 'visible' &&
-            bubble.getBoundingClientRect().width > 0 &&
-            bubble.getBoundingClientRect().height > 0,
-        )
-      ) {
-        document.documentElement.dataset.e2eEmojiSeen = 'true';
-        seenEmoji.disconnect();
-      }
+test.describe('natural emoji', () => {
+  // Keep the full high-quality population, with less software-GPU pixel work.
+  test.use({ deviceScaleFactor: 0.75 });
+  test('naga: natural emoji appears at the central z19 view', async ({ page }) => {
+    test.skip(!cities.some((city) => city.slug === 'naga' && city.hasMeta));
+    // Bound software-WebGL work while retaining the desktop controls and reported camera.
+    await page.setViewportSize({ width: 641, height: 480 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.addInitScript(() => {
+      // Remember a real visible cue from the first render. A short cue can disappear
+      // while the test waits for the HUD or sends another software-WebGL poll.
+      const seenEmoji = new MutationObserver(() => {
+        if (
+          [...document.querySelectorAll('[data-emoji-bubble]')].some(
+            (bubble) =>
+              getComputedStyle(bubble).visibility === 'visible' &&
+              bubble.getBoundingClientRect().width > 0 &&
+              bubble.getBoundingClientRect().height > 0,
+          )
+        ) {
+          document.documentElement.dataset.e2eEmojiSeen = 'true';
+          seenEmoji.disconnect();
+        }
+      });
+      seenEmoji.observe(document, { childList: true, subtree: true, attributes: true });
+      localStorage.setItem(
+        'atlas.life',
+        JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
+      );
+      localStorage.setItem('atlas.quality', JSON.stringify('high'));
+      localStorage.setItem('atlas.emoji.naga', JSON.stringify({ enabled: true }));
+      localStorage.setItem(
+        'atlas.speech.naga',
+        JSON.stringify({ enabled: false, translation: null }),
+      );
     });
-    seenEmoji.observe(document, { childList: true, subtree: true, attributes: true });
-    localStorage.setItem(
-      'atlas.life',
-      JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
-    );
-    localStorage.setItem('atlas.quality', JSON.stringify('high'));
-    localStorage.setItem('atlas.emoji.naga', JSON.stringify({ enabled: true }));
-    localStorage.setItem(
-      'atlas.speech.naga',
-      JSON.stringify({ enabled: false, translation: null }),
-    );
-  });
-  await page.goto('/naga?lat=13.623407&lng=123.184867&z=19');
-  await mapReady(page);
-  // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
-  await page.getByText('Legend', { exact: true }).press('Enter');
-  await expect(page.getByRole('list', { name: 'What the glyphs on screen mean' })).toBeHidden();
-  await expect(page.locator('html')).toHaveAttribute('data-e2e-emoji-seen', 'true', {
-    timeout: 30_000,
+    await page.goto('/naga?lat=13.623407&lng=123.184867&z=19');
+    await mapReady(page);
+    // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
+    await page.getByText('Legend', { exact: true }).press('Enter');
+    await expect(page.getByRole('list', { name: 'What the glyphs on screen mean' })).toBeHidden();
+    await expect(page.locator('html')).toHaveAttribute('data-e2e-emoji-seen', 'true', {
+      timeout: 30_000,
+    });
   });
 });
 

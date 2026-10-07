@@ -1,3 +1,4 @@
+import { birdFixture, birdPoint, birdLngLat } from './testing/bird-fixture';
 import { afterEach, expect, it, vi } from 'vitest';
 import { epochDay, expandSeasons, type RuntimeSeasonConfig } from '@atlas/shared';
 import { LifeBuilder, LifeLine } from './geometry';
@@ -329,4 +330,21 @@ it('preserves complete mixed-world and speech state through real pairs, seasons 
   }
   expect(paired).toBe(true);
   expect(spoke).toBe(true);
+});
+
+it('keeps actual pointer-flushed flock state identical with the observer enabled or disabled', () => {
+  const on = birdFixture('pigeon', { observer: true });
+  const off = birdFixture('pigeon', { observer: false });
+  for (const f of [on, off]) Object.assign(f.flock, birdPoint(50, 0), { perched: true, perch: 0 });
+  let seen = false;
+  for (let frame = 0; frame < 120; frame++) {
+    const pointer = frame < 60 ? birdLngLat(50, 0) : undefined;
+    on.step(pointer);
+    off.step(pointer);
+    expect(completeScenarioState(on.world)).toEqual(completeScenarioState(off.world));
+    seen ||= on.visible().some((a) => a.emoji?.subject === 'bird' && a.emoji.mood === 'scared');
+    expect(off.visible().some((a) => a.emoji)).toBe(false);
+    if (frame === 0) expect(on.flock.perched).toBe(false);
+  }
+  expect(seen).toBe(true);
 });

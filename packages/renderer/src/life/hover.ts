@@ -50,6 +50,10 @@ export class LifeHoverController {
     return this.point !== null;
   }
 
+  get pointerPoint(): readonly [number, number] | null {
+    return this.point;
+  }
+
   clear() {
     this.lastUpdate = undefined;
     this.intervals.length = 0;
@@ -184,7 +188,7 @@ export class LifeHoverController {
         (c.agent.inspectionId !== undefined && held.agent.inspectionId === c.agent.inspectionId)) &&
       held.identity === c.identity &&
       now - held.at < validity;
-    this.setInspection(holding, c.agent);
+    this.setInspection(holding && c.agent.kind !== 'bird', c.agent);
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
     else this.publish(holding ? held.label : null);
     if (this.pending) return;

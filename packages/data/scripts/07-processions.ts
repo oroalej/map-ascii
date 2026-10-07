@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { CityProcessions, type ProcessionRoute } from '@atlas/shared';
 import type { Feature, Geometry } from 'geojson';
-import { readFeatures, writeJson } from './lib/io';
+import { readFeatures, readJson, writeJson } from './lib/io';
+import { Territory, geometryOutsideVoid } from './lib/territory';
 import { routeProcessions } from './lib/procession';
 import { files, type Step } from './step';
 
@@ -38,6 +39,37 @@ export function quantizeGroundRoutes(routes: readonly ProcessionRoute[]): Proces
   });
 }
 
+export function validateRouteTerritory(routes: readonly ProcessionRoute[], territory: Territory) {
+  const point = (coordinates: number[]): Geometry => ({ type: 'Point', coordinates });
+  const line = (coordinates: number[][]): Geometry => ({ type: 'LineString', coordinates });
+  const polygons = (rings: number[][][]): Geometry[] =>
+    rings.map((r) => ({ type: 'Polygon', coordinates: [r] }));
+  for (const route of routes) {
+    const geometries: Geometry[] =
+      route.kind === 'mass'
+        ? [
+            point(route.site.location),
+            point(route.site.anchor),
+            ...polygons(route.site.grounds),
+            ...polygons(route.site.blocked),
+            ...route.site.approaches.map(line),
+            ...route.site.roads.map((r) => line(r.line)),
+          ]
+        : [
+            line(route.route),
+            ...(route.kind === 'fluvial'
+              ? []
+              : [
+                  ...polygons(route.blocked),
+                  ...polygons(route.water ?? []),
+                  ...polygons(route.bridges ?? []),
+                ]),
+          ];
+    if (geometries.some((g) => !geometryOutsideVoid(g, territory)))
+      throw new Error(`Procession ${route.id}: emitted geography crosses the territory void`);
+  }
+}
+
 // Build <city>.processions.json: river and street routes, and outdoor Mass permissions.
 export const step: Step = {
   name: '07-processions',
@@ -52,9 +84,14 @@ export const step: Step = {
     }
     const { routes, warnings } = routeProcessions(features, content.processions);
     for (const warning of warnings) console.warn(`  warning: ${warning}`);
+    const emitted = quantizeGroundRoutes(routes);
+    validateRouteTerritory(
+      emitted,
+      Territory.parse(await readJson(join(buildDir, files.territory))),
+    );
     await writeJson(
       join(outDir, `${city.slug}.processions.json`),
-      CityProcessions.parse({ processions: quantizeGroundRoutes(routes) }),
+      CityProcessions.parse({ processions: emitted }),
     );
     for (const r of routes) {
       console.log(

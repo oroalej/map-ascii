@@ -49,6 +49,7 @@ import type * as FolklorePassModule from './folklore-pass';
 import type { FolkloreQuad } from './folklore-pass';
 import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
+import { viewportFor } from './camera';
 
 const folkloreCapture = vi.hoisted(() => ({
   quads: undefined as readonly FolkloreQuad[] | undefined,
@@ -754,6 +755,68 @@ describe('live motion preference', () => {
     draw(150);
     draw(200);
   };
+
+  it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', () => {
+    const frames: FrameInput[] = [];
+    const createInline = Hosts.createInlineHost;
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = createInline(...args);
+      const request = host.request.bind(host);
+      host.request = (frame) => {
+        frames.push(frame);
+        return request(frame);
+      };
+      return host;
+    });
+    usePauseMode('item');
+    draw(100);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(150);
+    const frame = frames.at(-1)!;
+    expect(frame.step.pointer).toEqual(
+      viewportFor(frame.gust.camera, frame.gust.size).unproject([120, 90]),
+    );
+    draw(200);
+    expect(frames.at(-1)!.step.pointer).toBe(frame.step.pointer);
+    Object.defineProperty(canvas, 'clientWidth', { value: 500, configurable: true });
+    resized([], {} as ResizeObserver);
+    draw(250);
+    const resizedFrame = frames.at(-1)!;
+    expect(resizedFrame.step.pointer).not.toBe(frame.step.pointer);
+    expect(resizedFrame.step.pointer).toEqual(
+      viewportFor(resizedFrame.gust.camera, resizedFrame.gust.size).unproject([120, 90]),
+    );
+    expect(frame.step.pointer).toEqual(
+      viewportFor(frame.gust.camera, frame.gust.size).unproject([120, 90]),
+    );
+    // Press and leave both clear hover in attachInput; the renderer receives null.
+    input.intents!.hover(null);
+    draw(300);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(350);
+    input.intents!.pan(1, 0);
+    draw(400);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(450);
+    const movedFrame = frames.at(-1)!;
+    expect(movedFrame.step.pointer).not.toBe(resizedFrame.step.pointer);
+    expect(movedFrame.step.pointer).toEqual(
+      viewportFor(movedFrame.gust.camera, movedFrame.gust.size).unproject([120, 90]),
+    );
+    atlas.flyTo({ lng: 0.01 }, { duration: 1000 });
+    draw(500);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    draw(1600);
+    input.intents!.hover([120, 90]);
+    atlas.setLife({ enabled: false });
+    draw(1650);
+    atlas.setLife({ enabled: true });
+    draw(1700);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+  });
 
   it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
     atlas.destroy();

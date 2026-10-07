@@ -47,6 +47,45 @@ function assertUnique(world: LifeWorld) {
 }
 
 describe('tile retirement', () => {
+  it('revives accepted maneuver pose and active timers without aging them while retired', () => {
+    const source = continuityTile(parent, LifeLine.roadMajor, 77, 0, 1);
+    source.life.widths[0] = 9.6;
+    const world = new LifeWorld({ road_major: { car: 1 } });
+    world.sync([source]);
+    const life = worldTiles(world).get(source.key)!,
+      m = continuityMover(life, 1500);
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    Object.assign(m, {
+      vehicle: 'motorcycle',
+      lane: 0.9,
+      chosenLane: 0.9,
+      lat: -0.2,
+      latYaw: -0.1,
+      v: 0,
+      maneuver: { kind: 'filter', target: 0.9, corridor: 2 / 3, queueSpeed: 0 },
+      laneSignal: 'left',
+      laneCooldown: 6,
+      filterRetry: 3,
+    });
+    const queued = continuityMover(life, m.x + 30 * life.perMeter);
+    Object.assign(queued, { lane: 0.9, v: 0, speed: 0 });
+    life.movers.push(m, queued);
+    world.visible(18, activityLevels(1), tileToLngLat(parent, m));
+    const before = structuredClone(m);
+    world.sync([]);
+    for (let frame = 0; frame < 30; frame++) world.step(0.1);
+    expect(m).toEqual(before);
+    world.sync([structuredClone(source)]);
+    expect(worldTiles(world).get(source.key)).toBe(life);
+    expect(life.movers).toContain(m);
+    expect(m).toEqual(before);
+    world.step(0.1, undefined, 18);
+    expect(m.lat).toBeLessThan(before.lat!);
+    expect(m.laneCooldown).toBeCloseTo(5.9);
+    expect(m.filterRetry).toBeCloseTo(2.9);
+  });
+
   it('freezes retired state, draws nothing, and revives original motion after cloned geometry returns', () => {
     const { world, life, source } = fixture();
     world.step(0.1);
@@ -106,6 +145,187 @@ describe('tile retirement', () => {
 });
 
 describe('cross-zoom continuity', () => {
+  it('returns material displacement after a genuine parking-width change without teleporting', () => {
+    const a = continuityTile(left, LifeLine.roadMinor, 77, 0, 1),
+      b = continuityTile(right, LifeLine.roadMinor, 77, 0, 1);
+    a.life.widths[0] = b.life.widths[0] = 14;
+    const source = new TileLife(left, a.life, 2),
+      target = new TileLife(right, b.life, 1);
+    for (const life of [source, target]) {
+      life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+      life.scenes.sites.length = 0;
+    }
+    expect(source.directionalLanes(0).span).toBe(14);
+    expect(target.directionalLanes(0).span).toBeCloseTo(9.2);
+    const m = continuityMover(source, 4095);
+    Object.assign(m, { lane: 0.9, chosenLane: 0.1 });
+    source.movers.push(m);
+    const before = structuredClone(m),
+      pose = source.pose(m),
+      frame = frameBetween(left, right),
+      preview = target.projectFrom(m, source)!;
+    expect(target.pose(preview).y).toBeCloseTo(frame.y + pose.y * frame.scale);
+    expect(preview.lat).toBeCloseTo(-2.95);
+    expect(preview.maneuver?.kind).toBe('return');
+    expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+    expect(m).toEqual(before);
+    expect(target.adoptFrom(m, source)).toBe(true);
+    for (let step = 0; step < 10 * 30 && m.maneuver; step++) target.step(1 / 30);
+    expect(m.maneuver).toBeUndefined();
+    expect(m.lat).toBeUndefined();
+    expect(m.latYaw).toBeUndefined();
+    expect(m.laneSignal).toBeUndefined();
+    expect(target.offsetOf(m)).toBeCloseTo(-2.3);
+  });
+
+  it('does not retain floating-point lateral noise on identical geometry', () => {
+    const a = continuityTile(left, LifeLine.roadMajor, 77, 0, 1),
+      b = continuityTile(right, LifeLine.roadMajor, 77, 0, 1);
+    a.life.widths[0] = b.life.widths[0] = 9.6;
+    const source = new TileLife(left, a.life, 2),
+      target = new TileLife(right, b.life, 1),
+      m = continuityMover(source, 4095);
+    Object.assign(m, { lane: 0.9, chosenLane: 0.1 });
+    const preview = target.projectFrom(m, source)!;
+    expect(preview.lat).toBeUndefined();
+    expect(preview.maneuver).toBeUndefined();
+    expect(target.offsetVaries(preview)).toBe(false);
+  });
+
+  it.each([
+    { width: 5.5, oneway: 1 as const, offset: 2.15 },
+    { width: 11, oneway: 0 as const, offset: 4.9 },
+  ])(
+    'preserves a legal single-lane edge filter on a $width m road',
+    ({ width, oneway, offset }) => {
+      const a = continuityTile(left, LifeLine.roadMajor, 77, 0, oneway),
+        b = continuityTile(right, LifeLine.roadMajor, 77, 0, oneway);
+      a.life.widths[0] = b.life.widths[0] = width;
+      const source = new TileLife(left, a.life, 2),
+        target = new TileLife(right, b.life, 1);
+      for (const life of [source, target]) {
+        life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+        life.scenes.sites.length = 0;
+      }
+      const m = continuityMover(source, 4095);
+      Object.assign(m, { vehicle: 'motorcycle', lane: 0.5, chosenLane: 0.5, v: 0 });
+      const fit = source.filterCorridor(m, {
+        kind: 'filter',
+        target: 0.5,
+        corridor: 1,
+        queueSpeed: 0,
+      })!;
+      m.lat = fit.offset - source.offsetOf(m);
+      m.maneuver = fit.maneuver;
+      m.laneSignal = 'right';
+      source.movers.push(m);
+      const before = structuredClone(m),
+        old = source.pose(m),
+        preview = target.projectFrom(m, source)!;
+      expect(target.directionalLanes(0).count).toBe(1);
+      expect(target.offsetOf(preview)).toBeCloseTo(offset);
+      expect(target.pose(preview).y).toBeCloseTo(old.y);
+      expect(preview.maneuver?.kind).toBe('filter');
+      expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source)).toBe(true);
+      const queued = continuityMover(target, m.x + 30 * target.perMeter);
+      Object.assign(queued, { lane: 0.5, speed: 0, v: 0 });
+      target.movers.push(queued);
+      target.step(0.1);
+      expect(m.maneuver?.kind).toBe('filter');
+      target.movers.splice(target.movers.indexOf(queued), 1);
+      // Exercise an admitted return after transfer, independently of the carried queue-loss trigger.
+      m.maneuver = { ...m.maneuver, returning: true };
+      for (let step = 0; step < 10 * 30 && m.maneuver; step++) target.step(1 / 30);
+      expect(m.maneuver).toBeUndefined();
+      expect(m.lat).toBeUndefined();
+      expect(m.latYaw).toBeUndefined();
+      expect(m.laneSignal).toBeUndefined();
+    },
+  );
+
+  it('converts an unsupported corridor to a guarded return while refusal preserves the source', () => {
+    const a = continuityTile(left, LifeLine.roadMajor, 77, 0, 1),
+      b = continuityTile(right, LifeLine.roadMajor, 77, 0, 1);
+    a.life.widths[0] = 5.5;
+    b.life.widths[0] = 0.9;
+    const source = new TileLife(left, a.life, 2),
+      target = new TileLife(right, b.life, 1),
+      m = continuityMover(source, 4095);
+    Object.assign(m, { vehicle: 'motorcycle', lane: 0.5, chosenLane: 0.5 });
+    const fit = source.filterCorridor(m, { kind: 'filter', target: 0.5, corridor: 1 })!;
+    m.lat = fit.offset - source.offsetOf(m);
+    m.maneuver = fit.maneuver;
+    source.movers.push(m);
+    const before = structuredClone(m),
+      old = source.pose(m),
+      preview = target.projectFrom(m, source)!;
+    expect(target.pose(preview).y).toBeCloseTo(old.y);
+    expect(preview.maneuver?.kind).toBe('return');
+    expect(preview.maneuver?.corridor).toBeUndefined();
+    expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+    expect(m).toEqual(before);
+  });
+
+  it.each(['lane', 'filter'] as const)(
+    'rebases an active %s maneuver across differing lane counts without teleporting',
+    (kind) => {
+      const a = continuityTile(parent, LifeLine.roadMajor, 77, 0, 1);
+      const b = continuityTile(left, LifeLine.roadMajor, 77, 0, 1);
+      a.life.widths[0] = 9.6;
+      b.life.widths[0] = 6.4;
+      const source = new TileLife(parent, a.life, 1),
+        target = new TileLife(left, b.life, 2);
+      source.movers.length = target.movers.length = 0;
+      const m = continuityMover(source, 1500);
+      Object.assign(m, {
+        lane: 0.9,
+        chosenLane: 0.9,
+        lat: kind === 'lane' ? -2 : -1.6,
+        latYaw: -0.1,
+        roadShift: 0.2,
+        roadYaw: 0.03,
+        maneuver: {
+          kind,
+          target: 0.5,
+          corridor: kind === 'filter' ? 2 / 3 : undefined,
+          queueSpeed: 1,
+        },
+        laneSignal: 'left',
+        lanePatience: 1.4,
+        laneCooldown: 6,
+        filterRetry: 3,
+        roadScan: 0.3,
+      });
+      source.movers.push(m);
+      const before = structuredClone(m),
+        old = source.pose(m),
+        frame = frameBetween(parent, left);
+      const preview = target.projectFrom(m, source)!;
+      const pose = target.pose(preview);
+      expect(pose.x).toBeCloseTo(frame.x + old.x * frame.scale);
+      expect(pose.y).toBeCloseTo(frame.y + old.y * frame.scale);
+      expect(pose.hx).toBeCloseTo(old.hx);
+      expect(preview.maneuver?.kind).toBe(kind === 'lane' ? 'return' : 'filter');
+      if (kind === 'filter') expect(preview.maneuver?.corridor).toBe(0.5);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source)).toBe(true);
+      expect(m.speed / target.perMeter).toBe(before.speed / source.perMeter);
+      for (const field of [
+        'laneSignal',
+        'lanePatience',
+        'laneCooldown',
+        'filterRetry',
+        'roadScan',
+      ] as const)
+        expect(m[field]).toBe(before[field]);
+      expect(m.lat).toBeCloseTo(preview.lat!);
+    },
+  );
+
   for (const kind of [LifeLine.roadMajor, LifeLine.river, LifeLine.rail])
     it(`carries identity, rendered pose and physical velocity on line kind ${kind}`, () => {
       const { world, life, movers } = fixture(kind);

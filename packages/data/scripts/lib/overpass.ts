@@ -48,6 +48,8 @@ export type FetchOptions = {
   offline: boolean;
   /** Download again, replacing saved copies. */
   refresh?: boolean;
+  /** Require matching query filters and bbox coverage even when offline. */
+  requireCoverage?: boolean;
   /** Where other checkouts keep the same download (`copiesElsewhere`), tried before Overpass. */
   copies?: (file: string) => string[];
 };
@@ -55,14 +57,16 @@ export type FetchOptions = {
 /**
  * Whether a saved download, made with the query `saved`, answers `query`. Saved data is kept until it is
  * refreshed, and it answers the same query, or the same query over a bbox inside the saved one
- * (the pipeline clips to the region). Offline, any saved download is used.
+ * (the pipeline clips to the region). Offline, any saved download is used unless `requireCoverage`
+ * requires matching query metadata, filters and bbox coverage.
  */
 export function cacheAnswers(
   saved: string | undefined,
   query: string,
-  { offline, refresh = false }: FetchOptions,
+  { offline, refresh = false, requireCoverage = false }: FetchOptions,
 ): boolean {
-  if (offline) return true;
+  if (offline)
+    return requireCoverage ? cacheAnswers(saved, query, { offline: false, refresh: false }) : true;
   if (refresh || saved === undefined) return false;
   if (saved === query) return true;
   const [a, b] = [splitOverpassBbox(saved), splitOverpassBbox(query)];
@@ -120,20 +124,13 @@ async function adopt(
   }
 }
 
-/**
- * Run an Overpass query, saving the response at `cacheFile` (see `cacheAnswers`). Lagging mirrors
- * answer with old data, or with nothing for an area their index lacks, as successful responses.
- * So a response that is `lagging` or fails `check` is never saved: it is retried on the next
- * server, and a saved one is downloaded again (offline, a lagging one is still used).
- * Without a usable saved download, another checkout's (`options.copies`) is copied in before
- * asking Overpass, so a worktree downloads only what its queries changed.
- */
-export async function overpass(
+/** Read admitted local or peer downloads, preserving coverage, checks, lag policy and logging. */
+export async function readCached(
   query: string,
   cacheFile: string,
   options: FetchOptions,
   check?: ResponseCheck,
-): Promise<OverpassResponse> {
+): Promise<OverpassResponse | undefined> {
   const { offline } = options;
   const saved = await stat(cacheFile).catch(() => undefined);
   const savedQuery = await readFile(queryFile(cacheFile), 'utf8').catch(() => undefined);
@@ -158,7 +155,29 @@ export async function overpass(
       }
     }
   }
-  if (offline) throw new Error(`--offline: no cached download at ${cacheFile}`);
+  return undefined;
+}
+
+/**
+ * Run an Overpass query, saving only answers that pass `check` and the mirror lag check.
+ * Saved downloads and other checkouts' copies are tried first (see `readCached`).
+ */
+export async function overpass(
+  query: string,
+  cacheFile: string,
+  options: FetchOptions,
+  check?: ResponseCheck,
+): Promise<OverpassResponse> {
+  const { offline } = options;
+  const saved = await readCached(query, cacheFile, options, check);
+  if (saved) return saved;
+  if (offline) {
+    const bbox = options.requireCoverage ? splitOverpassBbox(query)?.bbox : undefined;
+    throw new Error(
+      `--offline: no ${options.requireCoverage ? 'matching ' : ''}cached download at ${cacheFile}` +
+        (bbox ? ` covering ${JSON.stringify(bbox)}` : ''),
+    );
+  }
 
   for (let attempt = 1; ; attempt++) {
     const current = endpoints.filter((url) => !behind.has(url));

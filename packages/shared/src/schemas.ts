@@ -1269,6 +1269,7 @@ export const SeasonEmojiEntrySchema = z
     subjects: z
       .array(EmojiSubjectSchema)
       .min(1)
+      .refine((subjects) => !subjects.includes('bird'), 'birds do not support seasonal emoji')
       .refine((subjects) => new Set(subjects).size === subjects.length, 'duplicate emoji subject'),
     hours: z
       .tuple([z.int().min(0).max(1439), z.int().min(0).max(1440)])
@@ -1837,7 +1838,11 @@ export const City = z
         name: z.string().min(1),
         osm_relation: z.string().regex(/^\d+$/, 'expected a numeric relation id').optional(),
       }),
-      z.strictObject({ bbox: BBox }),
+      z.strictObject({
+        bbox: BBox,
+        /** Also take in the whole city boundary. Land outside both is left empty. */
+        include_boundary: z.literal(true).optional(),
+      }),
     ]),
     subdivision: z.strictObject({
       admin_level: z.int().min(2).max(11),
