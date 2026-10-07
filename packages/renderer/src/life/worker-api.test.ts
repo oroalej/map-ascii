@@ -339,6 +339,19 @@ describe('life worker protocol', () => {
     inline.request(input);
     expect(remote.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
     expect(local.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
+    for (const world of [remote, local]) {
+      const life = world.resident(entry.key)!;
+      life.flocks.splice(1);
+      Object.assign(life.flocks[0]!, {
+        species: 'pigeon',
+        x: 2048,
+        y: 2048,
+        rank: 0,
+        perch: 0,
+        perched: true,
+        stay: 1000,
+      });
+    }
     const a = vi.spyOn(remote, 'step');
     const b = vi.spyOn(local, 'step');
     for (const pointer of [center, center, undefined]) {
@@ -348,6 +361,8 @@ describe('life worker protocol', () => {
       expect(a.mock.calls.at(-1)![9]).toEqual(pointer);
       expect(b.mock.calls.at(-1)![9]).toEqual(pointer);
       expect(actual.agents).toEqual(inline.latest()!.agents);
+      expect(remote.resident(entry.key)!.flocks[0]!.perched).toBe(false);
+      expect(remote.resident(entry.key)!.flocks).toEqual(local.resident(entry.key)!.flocks);
     }
     inline.dispose();
   });

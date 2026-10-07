@@ -77,6 +77,7 @@ import {
   DOG,
   isWalker,
   PERCH,
+  BIRD_POINTER,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   frontClearance,
@@ -6713,6 +6714,9 @@ export class TileLife {
     const wind = env?.wind;
     const wx = wind ? wind.dir[0] * wind.strength : 0;
     const wy = wind ? wind.dir[1] * wind.strength : 0;
+    const pointer = env?.pointer
+      ? { ...lngLatToTile(this.tile, ...env.pointer.lngLat), cellMeters: env.pointer.cellMeters }
+      : undefined;
     for (const flock of this.flocks) {
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
@@ -6727,7 +6731,8 @@ export class TileLife {
       if (!(sheltering && sitting) && !committed) flock.stay -= dt;
       if (sitting) {
         const gust = flock.perched ? (gustAt?.(flock.x, flock.y) ?? 0) : 0;
-        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels);
+        const pointerFlush = pointer ? this.pointerNear(flock, pointer) : false;
+        const flushed = gust >= PERCH.flush || this.disturbed(flock, env?.levels) || pointerFlush;
         if (flushed || (!sheltering && flock.stay <= 0)) {
           if (!flushed && flock.perched && flock.home >= 0) {
             flock.roost = flock.home;
@@ -6774,18 +6779,35 @@ export class TileLife {
       if (flock.landing)
         flock.landingBlend = Math.min(1, flock.landingBlend + dt / FORAGE.settleSeconds);
       // Flying to a tree or prepared ground patch: straight there, nudged downwind, then settle.
-      const to =
+      let to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
           : flock.landing && count > 0
             ? { x: flock.lx, y: flock.ly }
             : undefined;
+      if (pointer && to && this.pointerNear(flock, pointer, to)) {
+        this.beginDeparture(flock);
+        flock.scatter = PERCH.scatter;
+        this.pickDestination(flock, { prepare: false });
+        flock.perch = -1;
+        flock.landing = false;
+        flock.landingAttempted = false;
+        to = undefined;
+      }
       if (to) {
         const dx = to.x - flock.x;
         const dy = to.y - flock.y;
         const distance = Math.hypot(dx, dy);
         const step = speed * 1.4 * dt;
-        if (distance <= step) {
+        const detour =
+          pointer && distance > step
+            ? this.pointerDetour(flock, pointer, step, dx / distance, dy / distance)
+            : undefined;
+        if (detour) {
+          flock.x += detour.x * step;
+          flock.y += detour.y * step;
+          [flock.hx, flock.hy] = [detour.x, detour.y];
+        } else if (distance <= step) {
           flock.x = to.x;
           flock.y = to.y;
           if (flock.perch >= 0) {
@@ -6813,10 +6835,14 @@ export class TileLife {
           flock.x += (dx / distance) * step + wx * nudge;
           flock.y += (dy / distance) * step + wy * nudge;
         }
-        if (distance > 0) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (distance > 0 && !detour) [flock.hx, flock.hy] = [dx / distance, dy / distance];
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed);
         continue;
       }
-      if (count === 0) continue;
+      if (count === 0) {
+        if (pointer) this.avoidPointer(flock, pointer, dt, speed);
+        continue;
+      }
       // Circle the roost, its circle pushed downwind; the flock's center chases the point on the
       // circle a little faster than it moves, so it catches up after moving on to another roost.
       const drift = BIRD_WEATHER.drift * this.perMeter;
@@ -6842,7 +6868,105 @@ export class TileLife {
         flock.y += (dy / distance) * reach;
         [flock.hx, flock.hy] = [dx / distance, dy / distance];
       }
+      if (pointer) this.avoidPointer(flock, pointer, dt, speed);
     }
+  }
+
+  /** Same offset arithmetic as visible(); evaluated only near the mouse or its target. */
+  private flockExtent(flock: Flock) {
+    const spec = BIRD_SPECIES[flock.species];
+    const sitting = flock.perched || flock.landed;
+    const spread = flock.perched
+      ? PERCH.spread / spec.spread[1]
+      : flock.landed
+        ? 1
+        : 1 + (3 * flock.scatter) / PERCH.scatter;
+    let extent = 0;
+    for (const bird of flock.birds) {
+      const turn = sitting ? bird.phase * 6 : this.time * 0.8 + bird.phase * 6;
+      const cos = Math.cos(turn) * spread;
+      const sin = Math.sin(turn) * spread;
+      const ground = isForager(bird) && flock.landed;
+      const blend = ground ? 1 : flock.landing ? flock.landingBlend : 0;
+      const ox = bird.ox * cos - bird.oy * sin;
+      const oy = bird.ox * sin + bird.oy * cos;
+      let x = ox + ((bird.gx ?? ox) - ox) * blend;
+      let y = oy + ((bird.gy ?? oy) - oy) * blend;
+      if (bird.departure && flock.departureBlend) {
+        x += (bird.departure.x - x) * flock.departureBlend;
+        y += (bird.departure.y - y) * flock.departureBlend;
+      }
+      extent = Math.max(extent, Math.hypot(x, y));
+    }
+    return extent;
+  }
+
+  private pointerRadius(flock: Flock, pointer: Point & { cellMeters: number }, target?: Point) {
+    const spec = BIRD_SPECIES[flock.species];
+    const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
+    const bound =
+      Math.max(4 * spec.spread[1], 2 * (FORAGE_SPECIES[flock.species]?.patch ?? 0), PERCH.spread) *
+      this.perMeter;
+    const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
+    if (
+      distance2 > (reach + bound) ** 2 &&
+      (!target || (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + bound) ** 2)
+    )
+      return 0;
+    return reach + this.flockExtent(flock);
+  }
+
+  private pointerNear(
+    flock: Flock,
+    pointer: Point & { cellMeters: number },
+    target: Point = flock,
+  ) {
+    const radius = this.pointerRadius(flock, pointer, target);
+    return radius > 0 && (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 < radius ** 2;
+  }
+
+  private avoidPointer(
+    flock: Flock,
+    pointer: Point & { cellMeters: number },
+    dt: number,
+    speed: number,
+  ) {
+    const radius = this.pointerRadius(flock, pointer);
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (radius <= 0 || distance2 >= radius * radius) return;
+    const distance = Math.sqrt(distance2);
+    const hx = distance > 1e-8 ? dx / distance : flock.hx;
+    const hy = distance > 1e-8 ? dy / distance : flock.hy;
+    const move = Math.min(radius - distance, BIRD_POINTER.flee * speed * 1.4 * dt);
+    flock.x += hx * move;
+    flock.y += hy * move;
+    [flock.hx, flock.hy] = [hx, hy];
+  }
+
+  /** A blocked target leg spends its normal flight step tangentially instead of stalling. */
+  private pointerDetour(
+    flock: Flock,
+    pointer: Point & { cellMeters: number },
+    step: number,
+    hx: number,
+    hy: number,
+  ): Point | undefined {
+    const radius = this.pointerRadius(flock, pointer);
+    if (radius === 0) return;
+    const dx = flock.x - pointer.x;
+    const dy = flock.y - pointer.y;
+    const distance2 = dx * dx + dy * dy;
+    if (
+      distance2 < radius * radius ||
+      (dx + hx * step) ** 2 + (dy + hy * step) ** 2 >= radius * radius
+    )
+      return;
+    const distance = Math.sqrt(distance2);
+    const cross = dx * hy - dy * hx;
+    const side = Math.abs(cross) > 1e-8 ? Math.sign(cross) : flock.rank < 0.5 ? 1 : -1;
+    return { x: (-dy / distance) * side, y: (dx / distance) * side };
   }
 
   /** Seconds simulated so far. */
