@@ -20,6 +20,8 @@ pnpm data:build -- --city naga --from 03     # rerun from a step (earlier output
 | `04-merge-content` | Join landmarks by `osm_id`, add plan-view parts from `plans/`, merge landcover and site details, then place cemetery rows around reserved obstacles; write `<city>.art.json` from `art/` and stage the detail-layout fingerprints |
 | `05-tiles` | Build `<city>.pmtiles` (z6–z16) with tippecanoe, and publish it with `<city>.meta.json`, `<city>.subdivisions.json` and the smoke-only `<city>.detail-layouts.json` in `apps/web/public/tiles/` |
 | `06-search-index` | Build `<city>.search-index.json`: entries plus a serialized MiniSearch index |
+| `07-processions` | Bake optional event routes, widths and ground permissions into `<city>.processions.json` |
+| `08-emergency` | Bake optional `<city>.emergency.json`: the main directed road SCC, contracted source chains, hospital/station curb terminals and thinned building targets; validate and enforce 32 KiB gzip |
 
 `raw/` and `build/` are gitignored. Never hand-edit generated tiles.
 

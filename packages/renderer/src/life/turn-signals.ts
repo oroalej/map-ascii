@@ -1,4 +1,3 @@
-import type { VehicleType } from '@atlas/shared';
 import { CellBit } from './config';
 import type { CraftType } from './vehicles';
 
@@ -9,7 +8,10 @@ export const SIGNAL_VEHICLES = [
   'jeepney',
   'bus',
   'truck',
-] as const satisfies readonly VehicleType[];
+  'ambulance',
+  'police',
+  'firetruck',
+] as const satisfies readonly CraftType[];
 type MotorVehicle = (typeof SIGNAL_VEHICLES)[number];
 const motorVehicles = new Set<CraftType>(SIGNAL_VEHICLES);
 export const hasTurnSignals = (vehicle: CraftType | undefined): vehicle is MotorVehicle =>

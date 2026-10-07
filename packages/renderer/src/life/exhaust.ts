@@ -50,6 +50,9 @@ const EXHAUST_KIND: Record<(typeof SIGNAL_VEHICLES)[number], PuffKind | undefine
   truck: 'diesel',
   motorcycle: 'twoStroke',
   tricycle: 'twoStroke',
+  ambulance: undefined,
+  police: undefined,
+  firetruck: 'diesel',
 };
 export const exhaustKind = (vehicle: CraftType | undefined): PuffKind | undefined =>
   hasTurnSignals(vehicle) ? EXHAUST_KIND[vehicle] : undefined;

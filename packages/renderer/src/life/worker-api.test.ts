@@ -16,6 +16,7 @@ import { activityLevels } from './config';
 import { ensureVehicleEffects } from './vehicle-effects';
 import { emitter } from './exhaust';
 import { BRAKE } from './lamps';
+import { emergencyConfig, emergencyFixture } from './testing/emergency';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 
 vi.mock('./moments', async (load) => {
@@ -95,6 +96,34 @@ describe('life worker protocol', () => {
     },
   );
 
+  it('installs initial and late emergency geography without replacing ordinary owners', () => {
+    const world = new LifeWorld(),
+      api = createLifeWorkerApi(undefined, () => world),
+      { data } = emergencyFixture();
+    api.init({ processions: [], emergencyConfig });
+    expect(world.emergencyRouter).toBeUndefined();
+    world.sync(makeScenario('sparse', 1).tiles);
+    const life = [...worldTiles(world).values()][0]!,
+      movers = life.movers.slice(),
+      terrain = world.cellTerrain();
+    api.setEmergency(data);
+    expect(world.emergencyRouter?.targets.has('fire')).toBe(true);
+    expect(life.emergencyRouter).toBe(world.emergencyRouter);
+    api.setEmergency(undefined);
+    expect(world.emergencyRouter).toBeUndefined();
+    expect(life.movers).toEqual(movers);
+    expect(world.cellTerrain()?.version).toBe(terrain?.version);
+    api.init({ processions: [], emergencyConfig, emergency: data });
+    expect(world.emergencyRouter).toBeDefined();
+    api.init({ processions: [], emergency: data });
+    expect(world.emergencyRouter).toBeUndefined();
+    api.init({
+      processions: [],
+      emergencyConfig: { ambulance: { ...emergencyConfig.ambulance!, max: 0 }, source: 'zero' },
+      emergency: data,
+    });
+    expect(world.emergencyRouter).toBeUndefined();
+  });
   it.each([0.1, 1])(
     'emits natural emoji equally through worker and inline %s-second frames',
     (dt) => {
