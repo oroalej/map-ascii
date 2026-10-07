@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BirdPose } from './birds';
+import { BIRD_SPECIES, BirdPose } from './birds';
 import { BIRD_POINTER, BIRD_TAKEOFF } from './config';
 import { birdFixture, birdLngLat, birdPoint, birdPerMeter, birdTile } from './testing/bird-fixture';
-import { lngLatToTile } from '../raster/geometry';
+import { lngLatToTile, tileToLngLat } from '../raster/geometry';
 
 function sitting(ground = false) {
   const f = birdFixture();
@@ -31,6 +31,24 @@ const positions = (f: ReturnType<typeof sitting>) =>
   f.visible().map((view) => lngLatToTile(birdTile, view.lng, view.lat));
 
 describe('individual pointer takeoffs', () => {
+  it('keeps flying birds moving when the mouse cancels their target', () => {
+    const f = birdFixture('maya');
+    f.flock.perch = 0;
+    f.flock.birds[0]!.phase = 0.4;
+    f.flock.birds.push({ ...f.flock.birds[0]!, phase: 0.8 });
+    let before = positions(f);
+    for (let frame = 0; frame < 20; frame++) {
+      f.step(birdLngLat(50, 0), 1 / 60);
+      expect(f.flock.takeoff).toBeUndefined();
+      expect(f.flock.birds.every((bird) => bird.takeoff === undefined)).toBe(true);
+      const after = positions(f);
+      for (const [i, at] of after.entries())
+        expect(Math.hypot(at.x - before[i]!.x, at.y - before[i]!.y)).toBeGreaterThan(1e-6);
+      before = after;
+    }
+    expect(f.flock.perch).toBe(-1);
+  });
+
   it.each([false, true])('preserves each resting position at the flush (ground=%s)', (ground) => {
     const f = sitting(ground);
     const before = positions(f);
@@ -60,11 +78,40 @@ describe('individual pointer takeoffs', () => {
     const moving = positions(f);
     const displacements = moving.map((p, i) => Math.hypot(p.x - before[i]!.x, p.y - before[i]!.y));
     expect(new Set(displacements.map((d) => d.toFixed(3))).size).toBe(4);
-    const extent = f.life as unknown as { flockExtent(flock: typeof f.flock): number };
-    expect(extent.flockExtent(f.flock)).toBeCloseTo(
-      Math.max(...moving.map((p) => Math.hypot(p.x - f.flock.x, p.y - f.flock.y))),
-      5,
-    );
+  });
+
+  it.each([true, false])(
+    'uses active takeoff positions for pointer clearance (inside=%s)',
+    (inside) => {
+      const control = sitting();
+      const f = sitting();
+      for (const fixture of [control, f]) {
+        fixture.step(birdLngLat(50, 0), 1 / 60);
+        for (let i = 0; i < 12; i++) fixture.step(birdLngLat(50, 0), 1 / 60);
+        expect(fixture.flock.takeoff).toBeDefined();
+      }
+      // Sample the normal movement at this age, then put the mouse either side of its
+      // clearance boundary. The response must include birds still catching up from rest.
+      control.step(undefined, 1 / 60);
+      const extent = Math.max(
+        ...positions(control).map((p) => Math.hypot(p.x - control.flock.x, p.y - control.flock.y)),
+      );
+      const reach =
+        Math.max(BIRD_SPECIES.pigeon.wary, BIRD_POINTER.cells * f.cellMeters(19)) * birdPerMeter;
+      const pointer = tileToLngLat(birdTile, {
+        x: control.flock.x + reach + extent + (inside ? -0.01 : 0.01) * birdPerMeter,
+        y: control.flock.y,
+      });
+      f.step(pointer, 1 / 60);
+      expect(f.flock.takeoff).toBeDefined();
+      if (inside) expect(f.flock.x).toBeLessThan(control.flock.x);
+      else expect(f.flock.x).toBeCloseTo(control.flock.x, 8);
+      expect(f.flock.y).toBeCloseTo(control.flock.y, 8);
+    },
+  );
+
+  it('bounds the longest individual takeoff below one second', () => {
+    expect(BIRD_TAKEOFF.stagger + BIRD_TAKEOFF.seconds[1]).toBeLessThan(1);
   });
 
   it.each([true, false])('finishes takeoff after mouse departure (keep pointer=%s)', (keep) => {
@@ -82,6 +129,5 @@ describe('individual pointer takeoffs', () => {
           BIRD_POINTER.cells * f.cellMeters(19),
         );
     }
-    expect(BIRD_TAKEOFF.stagger + BIRD_TAKEOFF.seconds[1]).toBeLessThan(1);
   });
 });
