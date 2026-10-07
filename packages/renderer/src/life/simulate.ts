@@ -78,6 +78,7 @@ import {
   isWalker,
   PERCH,
   BIRD_POINTER,
+  BIRD_TAKEOFF,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
   frontClearance,
@@ -719,6 +720,8 @@ export type Bird = {
   phase: number;
   /** Rendered offset retained when departing, independent of a replacement landing layout. */
   departure?: Point;
+  /** Mouse-flushed birds retain their own position until their reaction begins. */
+  takeoff?: Point & { delay: number; seconds: number; face: number; sitting: boolean };
 } & Partial<GroundForager>;
 
 export type Flock = {
@@ -753,6 +756,8 @@ export type Flock = {
   landingBlend: number;
   /** Departure offset blend from 1 to 0, independent of approach preparation. */
   departureBlend?: number;
+  /** Individual mouse-flush transitions share an elapsed clock, not a displacement. */
+  takeoff?: Point & { age: number; seconds: number; extent: number };
   /** Seconds left of scattering, after a gust flushed it out of a tree. */
   scatter: number;
   /** Circling: angle (radians), radius (tile units), and seconds until it moves on. */
@@ -762,6 +767,16 @@ export type Flock = {
   rank: number;
   birds: Bird[];
 };
+
+/** Smooth acceleration after this bird's own mouse-flush reaction delay. */
+function takeoffProgress(flock: Flock, bird: Bird) {
+  if (!flock.takeoff || !bird.takeoff) return 1;
+  const t = Math.max(
+    0,
+    Math.min(1, (flock.takeoff.age - bird.takeoff.delay) / bird.takeoff.seconds),
+  );
+  return t * t * (3 - 2 * t);
+}
 
 /** One bird's rendered offset from its flock centre, written into caller-owned storage. */
 function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out: Point) {
@@ -776,6 +791,11 @@ function birdOffset(flock: Flock, bird: Bird, turn: number, spread: number, out:
   if (bird.departure && flock.departureBlend) {
     x += (bird.departure.x - x) * flock.departureBlend;
     y += (bird.departure.y - y) * flock.departureBlend;
+  }
+  if (bird.takeoff && flock.takeoff) {
+    const progress = takeoffProgress(flock, bird);
+    x = (bird.takeoff.x - flock.x) * (1 - progress) + x * progress;
+    y = (bird.takeoff.y - flock.y) * (1 - progress) + y * progress;
   }
   out.x = x;
   out.y = y;
@@ -6789,6 +6809,13 @@ export class TileLife {
       if (pointer) pointer.radius = undefined;
       if (near && !near(flock.x, flock.y)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (flock.takeoff) {
+        flock.takeoff.age += dt;
+        if (flock.takeoff.age >= flock.takeoff.seconds) {
+          delete flock.takeoff;
+          for (const bird of flock.birds) delete bird.takeoff;
+        }
+      }
       if (flock.departureBlend)
         flock.departureBlend = Math.max(0, flock.departureBlend - dt / FORAGE.settleSeconds);
       const spec = BIRD_SPECIES[flock.species];
@@ -6814,6 +6841,7 @@ export class TileLife {
               continue;
             }
           }
+          if (pointerFlush) this.beginPointerTakeoff(flock);
           this.beginDeparture(flock);
           flock.perched = false;
           flock.landed = false;
@@ -6858,6 +6886,7 @@ export class TileLife {
       if (pointer && to && this.pointerNear(flock, pointer, to)) {
         this.recordStartle(flock, observing);
         pointer.radius = undefined;
+        this.beginPointerTakeoff(flock);
         this.beginDeparture(flock);
         flock.scatter = PERCH.scatter;
         this.pickDestination(flock, { prepare: false });
@@ -6945,6 +6974,46 @@ export class TileLife {
     }
   }
 
+  /** Preserve each bird's position through a staggered, smoothly accelerated mouse flush. */
+  private beginPointerTakeoff(flock: Flock) {
+    const spec = BIRD_SPECIES[flock.species];
+    const sitting = flock.perched || flock.landed;
+    const spread = flock.perched
+      ? PERCH.spread / spec.spread[1]
+      : flock.landed
+        ? 1
+        : 1 + (3 * flock.scatter) / PERCH.scatter;
+    let seconds = 0;
+    let extent = 0;
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!;
+      const turn = sitting ? bird.phase * 6 : this.time * 0.8 + bird.phase * 6;
+      birdOffset(flock, bird, turn, spread, this.birdOffset);
+      // Existing phase plus slot identity separates even coincident birds without RNG draws.
+      const reaction = (bird.phase + i * 0.61803398875) % 1;
+      const delay = reaction * BIRD_TAKEOFF.stagger;
+      const duration =
+        BIRD_TAKEOFF.seconds[0] +
+        (BIRD_TAKEOFF.seconds[1] - BIRD_TAKEOFF.seconds[0]) * ((reaction * 1.7) % 1);
+      bird.takeoff = {
+        x: flock.x + this.birdOffset.x,
+        y: flock.y + this.birdOffset.y,
+        delay,
+        seconds: duration,
+        face:
+          isForager(bird) && flock.landed
+            ? bird.face
+            : sitting
+              ? bird.phase * 2 * Math.PI
+              : Math.atan2(flock.hy, flock.hx) + (bird.phase - 0.5) * 0.6,
+        sitting,
+      };
+      extent = Math.max(extent, Math.hypot(this.birdOffset.x, this.birdOffset.y));
+      seconds = Math.max(seconds, delay + duration);
+    }
+    flock.takeoff = { x: flock.x, y: flock.y, age: 0, seconds, extent };
+  }
+
   /** Rendered offsets are evaluated only near the mouse or its target. */
   private flockExtent(flock: Flock) {
     const spec = BIRD_SPECIES[flock.species];
@@ -6966,9 +7035,14 @@ export class TileLife {
   private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point) {
     const spec = BIRD_SPECIES[flock.species];
     const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
-    const bound =
+    let bound =
       Math.max(4 * spec.spread[1], 2 * (FORAGE_SPECIES[flock.species]?.patch ?? 0), PERCH.spread) *
       this.perMeter;
+    if (flock.takeoff)
+      bound = Math.max(
+        bound,
+        Math.hypot(flock.x - flock.takeoff.x, flock.y - flock.takeoff.y) + flock.takeoff.extent,
+      );
     const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
     if (
       distance2 > (reach + bound) ** 2 &&
@@ -10801,8 +10875,10 @@ export class LifeWorld {
           const y = this.birdOffset.y + flock.y;
           const [lng, lat] = tileToLngLat(tile, { x, y });
           const birdTime = life.elapsed;
-          const flap = sitting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
-          const pose = sitting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
+          const waiting = bird.takeoff?.sitting && takeoffProgress(flock, bird) === 0;
+          const resting = sitting || waiting;
+          const flap = resting ? 0 : Math.floor(birdTime * spec.flap + bird.phase * 2) & 1;
+          const pose = resting ? BirdPose.perched : flap === 1 ? BirdPose.raised : BirdPose.spread;
           // Flying, each faces a little off the flock's way; sitting, each its own way.
           const peck =
             ground && flock.feeding && bird.wait > 0 && weather.rain < BIRD_WEATHER.shelter
@@ -10810,11 +10886,16 @@ export class LifeWorld {
                 ? 0.25
                 : -0.25
               : 0;
-          const face = ground
-            ? bird.face + peck
-            : sitting
-              ? bird.phase * 2 * Math.PI
-              : heading + (bird.phase - 0.5) * 0.6;
+          const face =
+            bird.takeoff && flock.takeoff
+              ? takeoffProgress(flock, bird) === 0
+                ? bird.takeoff.face
+                : Math.atan2(y - bird.takeoff.y, x - bird.takeoff.x)
+              : ground
+                ? bird.face + peck
+                : sitting
+                  ? bird.phase * 2 * Math.PI
+                  : heading + (bird.phase - 0.5) * 0.6;
           const ahead = tileToLngLat(tile, {
             x: x + Math.cos(face) * perMeter,
             y: y + Math.sin(face) * perMeter,

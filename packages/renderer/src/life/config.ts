@@ -510,6 +510,9 @@ export const PERCH = { spread: 2.5, flush: 0.7, scatter: 1.2 } as const;
 /** Mouse reach in CSS cells, and escape speed relative to a normal flight step. */
 export const BIRD_POINTER = { cells: 3, flee: 2 } as const;
 
+/** Individual mouse-flush reaction delays and acceleration into flight, in seconds. */
+export const BIRD_TAKEOFF = { stagger: 0.18, seconds: [0.4, 0.7] } as const;
+
 /**
  * Birds and the weather: from `shelter` rain (0–1) flocks that perch head for the trees and sit
  * it out; a flock's circle drifts `drift` m downwind at full wind strength, and circling it
