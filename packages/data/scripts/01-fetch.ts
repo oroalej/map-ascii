@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import type { BBox, City } from '@atlas/shared';
+import { copiesElsewhere } from './lib/checkouts';
 import { downloadDem } from './lib/dem';
 import { bufferBbox, fromOverpassBounds, intersectBbox, toOverpassBbox } from './lib/geo';
 import { writeJson } from './lib/io';
@@ -11,7 +12,7 @@ import {
   type OsmElement,
   type OverpassResponse,
 } from './lib/overpass';
-import { files, type Step } from './step';
+import { files, paths, type Step } from './step';
 
 const boundaryQuery = ({ boundary }: City) => {
   const parent = boundary.within
@@ -183,16 +184,16 @@ async function regionBounds(city: City, rawDir: string, cache: FetchOptions): Pr
   const selector = osm_relation
     ? `rel(${osm_relation})`
     : `rel["boundary"="administrative"]["name"=${quote(name)}]`;
+  const tags: Record<string, string> = osm_relation ? {} : { name };
   const region = await overpass(
     `[out:json][timeout:120];
 ${selector};
 out tags bb;`,
     join(rawDir, files.rawRegionRelation),
     cache,
+    (data) => void onlyRelation(data, 'Region', tags),
   );
-  const match = osm_relation
-    ? onlyRelation(region, 'Region', {})
-    : onlyRelation(region, 'Region', { name });
+  const match = onlyRelation(region, 'Region', tags);
   if (!match.bounds) throw new Error('Region relation came back without bounds');
   console.log(`  region: relation/${match.id}`);
   return fromOverpassBounds(match.bounds);
@@ -203,17 +204,20 @@ out tags bb;`,
 export const step: Step = {
   name: '01-fetch',
   async run({ city, rawDir, offline, refresh }) {
-    const cache: FetchOptions = { offline, refresh };
+    const copies = copiesElsewhere(paths.raw);
+    const cache: FetchOptions = { offline, refresh, copies };
+    const boundaryTags = {
+      boundary: 'administrative',
+      name: city.boundary.name,
+      admin_level: String(city.boundary.admin_level),
+    };
     const boundaryData = await overpass(
       boundaryQuery(city),
       join(rawDir, files.rawBoundary),
       cache,
+      (data) => void onlyRelation(data, 'Boundary', boundaryTags),
     );
-    const boundary = onlyRelation(boundaryData, 'Boundary', {
-      boundary: 'administrative',
-      name: city.boundary.name,
-      admin_level: String(city.boundary.admin_level),
-    });
+    const boundary = onlyRelation(boundaryData, 'Boundary', boundaryTags);
     if (!boundary.bounds) throw new Error('Boundary relation came back without bounds');
     console.log(`  boundary: relation/${boundary.id}`);
 
@@ -280,7 +284,7 @@ export const step: Step = {
     await writeJson(join(rawDir, files.rawRegion), region);
     console.log(`  region: ${region.elements.length} elements (${parts.length} queries)`);
 
-    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline });
+    const dem = await downloadDem(regionBbox, join(rawDir, files.rawDem), { offline, copies });
     console.log(`  DEM: ${dem.length} tiles`);
   },
 };
