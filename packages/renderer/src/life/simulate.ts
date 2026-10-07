@@ -5058,12 +5058,46 @@ export class TileLife {
     );
   }
 
+  /** An inherited too-small source gap already fails every full-sweep entry check. */
+  private roadSourceBlocked(index: number): boolean {
+    if (this.caps[index] !== 0) return false;
+    const m = this.movers[index]!,
+      j = this.followLeaders[index]!;
+    if (j < 0) return false;
+    const leader = this.movers[j]!;
+    if (leader.line !== m.line || leader.dir !== m.dir) return false;
+    // This cheap branch is only for straight accepted poses. Curves and existing maneuvers
+    // retain the full projection/sweep query, including every source and rear follower.
+    if (
+      m.maneuver ||
+      leader.maneuver ||
+      m.roadYaw ||
+      leader.roadYaw ||
+      m.latYaw ||
+      leader.latYaw ||
+      m.came !== undefined ||
+      leader.came !== undefined ||
+      m.routing?.plan ||
+      leader.routing?.plan ||
+      m.next !== undefined ||
+      leader.next !== undefined ||
+      this.last(m.line) - this.first(m.line) !== 1
+    )
+      return false;
+    const gap =
+      (leader.dir * this.along[leader.from]! + leader.d - m.dir * this.along[m.from]! - m.d) /
+        this.perMeter -
+      (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2;
+    return gap < FOLLOW.minGap - 1e-6;
+  }
+
   /** Queue identity can change as the rider passes; its velocity remains meaningful meanwhile. */
   private updateFilter(index: number, table: JunctionTable) {
     const m = this.movers[index]!;
     if (m.kind !== 'vehicle' || (m.vehicle !== 'motorcycle' && m.vehicle !== 'bicycle')) return;
     let state = m.maneuver;
     if (state && state.corridor === undefined && state.kind !== 'filter') return;
+    if (!state && this.roadSourceBlocked(index)) return;
     if (
       !state &&
       (this.followLeaders[index]! < 0 ||
@@ -5178,7 +5212,7 @@ export class TileLife {
         layout.count === 1 ? layout.start + layout.span - half - ROAD_MARGIN_M : target;
       const chosen =
         layout.count === 1
-          ? { ...candidate, corridor: (offset - layout.start) / layout.span }
+          ? { ...candidate, corridor: 1 + (offset - target) / layout.span }
           : candidate;
       if (
         offset - half < layout.start + ROAD_MARGIN_M ||
@@ -5242,6 +5276,10 @@ export class TileLife {
       if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true))
         m.maneuver = { ...state, kind: 'return', target: preference, returning: true };
       else if (!state.returning) m.maneuver = { ...state, returning: true };
+      return;
+    }
+    if (this.roadSourceBlocked(index)) {
+      m.lanePatience = undefined;
       return;
     }
     if (
