@@ -1491,6 +1491,7 @@ it.each([false, true])(
       1,
     );
     const m = mover('vehicle', 70, 1);
+    m.lane = 0.75;
     if (reactive) reactiveRoadRecovery(world);
     life.movers.push(m);
     let backward = false;
