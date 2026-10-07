@@ -6,6 +6,15 @@ import type { VisibleAgent } from './simulate';
 
 const person: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 };
 it('names every craft, species, pet and figure as simulated', () => {
+  for (const [vehicle, name] of [
+    ['ambulance', 'Ambulance'],
+    ['police', 'Police car'],
+    ['firetruck', 'Fire truck'],
+  ] as const)
+    expect(describeAgent({ ...person, kind: 'vehicle', vehicle })).toBe(`${name} (simulated)`);
+  expect(describeAgent({ ...person, kind: 'vehicle', vehicle: 'ambulance', parked: true })).toBe(
+    'Parked ambulance (simulated)',
+  );
   for (const vehicle of Object.keys(VEHICLES) as (keyof typeof VEHICLES)[]) {
     expect(describeAgent({ ...person, kind: 'vehicle', vehicle })).toMatch(/^.+ \(simulated\)$/);
   }

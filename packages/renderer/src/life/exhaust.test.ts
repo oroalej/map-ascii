@@ -58,9 +58,18 @@ function replay(hz: number, kind: PuffKind = 'diesel', idle = false, seed = 42) 
 
 describe('exhaust scheduling', () => {
   it('limits exhaust to the illustrative diesel and small-engine fleet', () => {
-    for (const v of ['bus', 'truck', 'jeepney'] as const) expect(exhaustKind(v)).toBe('diesel');
+    for (const v of ['bus', 'truck', 'jeepney', 'firetruck'] as const)
+      expect(exhaustKind(v)).toBe('diesel');
     for (const v of ['tricycle', 'motorcycle'] as const) expect(exhaustKind(v)).toBe('twoStroke');
-    for (const v of ['car', 'bicycle', 'motorboat', 'locomotive', 'cart'] as const)
+    for (const v of [
+      'car',
+      'bicycle',
+      'motorboat',
+      'locomotive',
+      'cart',
+      'ambulance',
+      'police',
+    ] as const)
       expect(exhaustKind(v)).toBeUndefined();
   });
   it('emits 2–4 pull-away puffs and half as many for smaller engines', () => {

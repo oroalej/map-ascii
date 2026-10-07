@@ -58,7 +58,22 @@ export type LifeSchedules = {
   shops?: ShopSchedule;
 };
 
+/** Rare illustrative runs; seconds of accepted simulation time, independently seeded. */
+export type EmergencyConfig = {
+  ambulance?: { max: number; interval_s: [number, number]; dwell_s: [number, number] };
+  police?: {
+    max: number;
+    interval_s: [number, number];
+    call_every_s: [number, number];
+    call_s: [number, number];
+  };
+  fire?: { max: number; interval_s: [number, number]; dwell_s: [number, number] };
+  exclude?: string[];
+  source: string;
+};
+
 export type CityLifeConfig = {
+  emergency?: EmergencyConfig;
   /** Sourced annual calendars and their illustrative map decorations. */
   seasons?: SeasonConfig[];
   signals?: {

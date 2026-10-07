@@ -8,6 +8,22 @@ test('naga: natural emoji appears at the central z19 view', async ({ page }) => 
   await page.setViewportSize({ width: 641, height: 480 });
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.addInitScript(() => {
+    // Remember a real visible cue from the first render. A short cue can disappear
+    // while the test waits for the HUD or sends another software-WebGL poll.
+    const seenEmoji = new MutationObserver(() => {
+      if (
+        [...document.querySelectorAll('[data-emoji-bubble]')].some(
+          (bubble) =>
+            getComputedStyle(bubble).visibility === 'visible' &&
+            bubble.getBoundingClientRect().width > 0 &&
+            bubble.getBoundingClientRect().height > 0,
+        )
+      ) {
+        document.documentElement.dataset.e2eEmojiSeen = 'true';
+        seenEmoji.disconnect();
+      }
+    });
+    seenEmoji.observe(document, { childList: true, subtree: true, attributes: true });
     localStorage.setItem(
       'atlas.life',
       JSON.stringify({ enabled: true, time: 'noon', wind: 'calm' }),
@@ -24,13 +40,9 @@ test('naga: natural emoji appears at the central z19 view', async ({ page }) => 
   // Make room to observe sparse natural cues; obstacle suppression is covered in unit tests.
   await page.getByText('Legend', { exact: true }).press('Enter');
   await expect(page.getByRole('list', { name: 'What the glyphs on screen mean' })).toBeHidden();
-  // Layout can hide a moving cue between 200 ms updates; one-second samples can miss it.
-  await expect
-    .poll(() => page.locator('[data-emoji-bubble]:visible').count(), {
-      timeout: 30_000,
-      intervals: [100],
-    })
-    .toBeGreaterThan(0);
+  await expect(page.locator('html')).toHaveAttribute('data-e2e-emoji-seen', 'true', {
+    timeout: 30_000,
+  });
 });
 
 test('naga: natural moment speech appears at the reported monument view', async ({ page }) => {
