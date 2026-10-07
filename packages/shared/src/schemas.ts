@@ -1797,7 +1797,11 @@ export const City = z
         name: z.string().min(1),
         osm_relation: z.string().regex(/^\d+$/, 'expected a numeric relation id').optional(),
       }),
-      z.strictObject({ bbox: BBox }),
+      z.strictObject({
+        bbox: BBox,
+        /** Also take in the whole city boundary. Land outside both is left empty. */
+        include_boundary: z.literal(true).optional(),
+      }),
     ]),
     subdivision: z.strictObject({
       admin_level: z.int().min(2).max(11),

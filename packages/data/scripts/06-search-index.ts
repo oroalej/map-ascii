@@ -17,11 +17,24 @@ import type { AtlasFeature, AtlasProperties } from './03-normalize';
 import { inBbox } from './lib/geo';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { files, type Step } from './step';
+import { Territory, inTerritory } from './lib/territory';
+import { displayFeatures, territoryAnchor } from './lib/display';
 
 /** How far apart (degrees, ~220 m) two same-named ways can be and still be one street. */
 const STREET_GAP = 0.002;
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
+
+/** Admit exact opt-in anchors before rounding, retaining precision at territory edges. */
+function searchPoint(
+  lng: number,
+  lat: number,
+  territory?: Territory,
+): [number, number] | undefined {
+  if (territory?.territory && !inTerritory(lng, lat, territory)) return undefined;
+  const rounded: [number, number] = [round6(lng), round6(lat)];
+  return territory?.territory && !inTerritory(...rounded, territory) ? [lng, lat] : rounded;
+}
 
 /** Zoom that fits a bbox of this many degrees in about 800 px (512-px tiles). */
 export const zoomForSpan = (span: number, lo: number, hi: number) =>
@@ -71,10 +84,20 @@ const altNamesOf = (p: AtlasProperties): string[] =>
     .filter((v) => v && v !== p.name);
 
 /** Prefer the stable label anchor; otherwise use a point, line midpoint or area centroid. */
-function pointOn(geometry: Geometry, feature: Feature): Position {
+function pointOn(
+  geometry: Geometry,
+  feature: Feature,
+  territory?: Territory,
+): Position | undefined {
   const properties = feature.properties as AtlasProperties | null;
-  if (Number.isFinite(properties?.label_lng) && Number.isFinite(properties?.label_lat))
+  if (
+    Number.isFinite(properties?.label_lng) &&
+    Number.isFinite(properties?.label_lat) &&
+    (!territory?.territory ||
+      inTerritory(properties!.label_lng!, properties!.label_lat!, territory))
+  )
     return [properties!.label_lng!, properties!.label_lat!];
+  if (territory?.territory) return territoryAnchor(geometry, territory);
   if (geometry.type === 'Point') return geometry.coordinates;
   const line =
     geometry.type === 'LineString'
@@ -132,6 +155,7 @@ export function searchEntries(
   features: readonly AtlasFeature[],
   areas: readonly SubdivisionArea[],
   content: ContentBundle,
+  territory?: Territory,
 ): SearchEntry[] {
   const entries = new Map<string, SearchEntry>();
   const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
@@ -155,11 +179,22 @@ export function searchEntries(
     for (const group of cluster(list, gap)) {
       // Represent the group by its largest member (the longest way, the grounds over a hall).
       const size = (c: Candidate) => (c.bbox[2] - c.bbox[0]) * 1e3 + (c.bbox[3] - c.bbox[1]);
-      const main = group.reduce((a, b) => (size(b) > size(a) ? b : a));
+      let main: Candidate | undefined;
+      let position: Position | undefined;
+      for (const candidate of [...group].sort((a, b) => size(b) - size(a))) {
+        position = pointOn(candidate.feature.geometry, candidate.feature, territory);
+        if (position) {
+          main = candidate;
+          break;
+        }
+      }
+      if (!main || !position) continue;
       const p = main.feature.properties;
       if (entries.has(p.id)) continue;
       const bbox = group.map((c) => c.bbox).reduce(join2);
-      const [lng, lat] = pointOn(main.feature.geometry, main.feature) as [number, number];
+      const [lng, lat] = position as [number, number];
+      const point = searchPoint(lng, lat, territory);
+      if (!point) continue;
       const landmark = p.landmark_id ? landmarks.get(p.landmark_id) : undefined;
       const localized = landmark
         ? Object.entries(landmark.name)
@@ -174,8 +209,8 @@ export function searchEntries(
         type: main.type,
         ...(p.subdivision && { subdivision: p.subdivision }),
         ...(p.subdivision_approx && { approximate: true }),
-        lat: round6(lat),
-        lng: round6(lng),
+        lat: point[1],
+        lng: point[0],
         zoomHint: main.type === 'street' ? zoomForSpan(span, 14, 17) : zoomHints[main.type],
         ...entryBbox(bbox),
         ...(group.length > 1 && { featureIds: group.map((c) => c.feature.properties.id) }),
@@ -195,9 +230,16 @@ export function searchEntries(
     );
     const id = node?.properties.id ?? outline?.properties.id ?? `subdivision/${area.name}`;
     if (entries.has(id)) continue;
-    const [lng, lat] = (
+    let [lng, lat] = (
       node ? pointOn(node.geometry, node) : turfCentroid(feature).geometry.coordinates
     ) as [number, number];
+    if (territory?.territory && !inTerritory(lng, lat, territory)) {
+      const position = territoryAnchor(feature.geometry, territory);
+      if (!position) continue;
+      [lng, lat] = position as [number, number];
+    }
+    const point = searchPoint(lng, lat, territory);
+    if (!point) continue;
     entries.set(id, {
       id,
       name: area.name,
@@ -205,8 +247,8 @@ export function searchEntries(
       type: 'subdivision',
       subdivision: area.name,
       ...(area.approximate && { approximate: true }),
-      lat: round6(lat),
-      lng: round6(lng),
+      lat: point[1],
+      lng: point[0],
       zoomHint: zoomHints.subdivision,
       ...entryBbox(turfBbox(feature) as BBox),
     });
@@ -236,7 +278,15 @@ export const step: Step = {
     const areas = await readJson<SubdivisionArea[]>(join(buildDir, files.subdivisions));
     // Overpass returns whole ways that cross the detail bbox; keep results the camera can reach.
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
-    const entries = inRegion(searchEntries(features, areas, content), regionBounds);
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const candidates = searchEntries(
+      displayFeatures(features, territory),
+      areas,
+      content,
+      territory,
+    );
+    // Opt-in anchors are admitted at full precision above; legacy packs keep round-then-bbox behavior.
+    const entries = territory.territory ? candidates : inRegion(candidates, regionBounds);
     const counts = new Map<string, number>();
     for (const e of entries) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     await writeJson(join(outDir, `${city.slug}.search-index.json`), buildSearchIndex(entries));

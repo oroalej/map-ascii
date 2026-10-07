@@ -69,6 +69,8 @@ export const files = {
   /** Features built from other data, already classified: sea, terrain, province labels. */
   derived: 'derived.geojson',
   geography: 'geography.json',
+  /** Internal JSON metadata with geometry fields, not a GeoJSON feature or collection. */
+  territory: 'territory.geojson',
   normalized: 'normalized.geojsonl',
   subdivisions: 'subdivisions.json',
   merged: 'merged.geojsonl',
