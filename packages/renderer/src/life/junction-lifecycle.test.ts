@@ -96,73 +96,138 @@ for (const reversed of [false, true])
         admitted[i] ||= rows.some((r) => table.canEnter(m, r.movement.key));
         released[i] ||= held[i]! && rows.length === 0;
       }
+      if (admitted.every(Boolean) && released.every(Boolean)) break;
     }
     expect(admitted).toEqual([true, true]);
     expect(released).toEqual([true, true]);
   });
 
-it('allows complete storage along a committed 30 degree bend before a denied box', () => {
-  const tile = { z: 16, x: 55192, y: 30266 },
-    pm = 1 / metersPerUnit(tile),
-    a = { x: 2000, y: 2000 },
-    bend = { x: a.x + 20 * pm, y: a.y },
-    hx = Math.cos(Math.PI / 6),
-    hy = Math.sin(Math.PI / 6),
-    z = { x: bend.x + 25 * pm * hx, y: bend.y + 25 * pm * hy },
-    b = new LifeBuilder();
-  b.line(
-    [{ x: a.x - 100 * pm, y: a.y }, a, bend, z, { x: z.x + 100 * pm * hx, y: z.y + 100 * pm * hy }],
-    0,
-    4,
-  );
-  for (const point of [a, z])
+for (const [angle, bendMeters, linkMeters, allowed] of [
+  [30, 20, 25, true],
+  [60, 4, 8.3, false],
+] as const)
+  it(`${allowed ? 'allows' : 'holds upstream of'} storage along a ${angle} degree bend before a denied box`, () => {
+    const tile = { z: 16, x: 55192, y: 30266 },
+      pm = 1 / metersPerUnit(tile),
+      a = { x: 2000, y: 2000 },
+      bend = { x: a.x + bendMeters * pm, y: a.y },
+      hx = Math.cos((angle * Math.PI) / 180),
+      hy = Math.sin((angle * Math.PI) / 180),
+      z = { x: bend.x + linkMeters * pm * hx, y: bend.y + linkMeters * pm * hy },
+      b = new LifeBuilder();
     b.line(
-      [{ x: point.x, y: point.y - 100 * pm }, point, { x: point.x, y: point.y + 100 * pm }],
+      [
+        { x: a.x - 100 * pm, y: a.y },
+        a,
+        bend,
+        z,
+        { x: z.x + 100 * pm * hx, y: z.y + 100 * pm * hy },
+      ],
       0,
       4,
     );
-  const life = new TileLife(tile, b.finish(), 1),
-    table = new JunctionTable(),
-    m = car();
-  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
-  life.scenes.sites.length = 0;
-  Object.assign(m, {
-    x: a.x - 6.8 * pm,
-    y: a.y,
-    d: (100 - 6.8) * pm,
-    speed: 8 * pm,
-    v: 0,
-    lane: 0,
-    paint: 0,
-    pause: 0,
-    rank: 0,
-  });
-  life.movers.push(m);
-  const motions = life.junctionIndex.movements(m, 60 * pm, (line, dir) =>
-      life.seamExit(m, line, dir),
-    ),
-    first = motions[0]!.key,
-    next = motions[1]!.key,
-    radius = motions[0]!.junction.radius;
-  const gate = vi.spyOn(life, 'junctionClear').mockImplementation((p) => p.key !== next);
-  for (let frame = 0; frame < 20 * 30; frame++) {
-    life.prepareTraffic(() => true);
-    table.begin(new Set([life]));
-    life.requestJunctions(table, () => true, frame / 30);
-    table.resolve(frame / 30);
-    if (frame === 2) {
-      expect(table.canEnter(m, first)).toBe(true);
-      expect(table.granted(m, next)).toBe(false);
-    }
-    life.step(1 / 30, undefined, undefined, undefined, { clock: frame / 30, rain: 0 }, undefined, {
-      junctions: table,
+    for (const point of [a, z])
+      b.line(
+        [{ x: point.x, y: point.y - 100 * pm }, point, { x: point.x, y: point.y + 100 * pm }],
+        0,
+        4,
+      );
+    const life = new TileLife(tile, b.finish(), 1),
+      table = new JunctionTable(),
+      m = car();
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    life.scenes.sites.length = 0;
+    Object.assign(m, {
+      x: a.x - 6.8 * pm,
+      y: a.y,
+      d: (100 - 6.8) * pm,
+      speed: 8 * pm,
+      v: 0,
+      lane: 0,
+      paint: 0,
+      pause: 0,
+      rank: 0,
     });
-  }
-  expect(m.x - 2.2 * pm).toBeGreaterThan(a.x + radius);
-  expect(table.movement(m, first)).toBeUndefined();
-  expect(table.granted(m, next)).toBe(false);
-  gate.mockRestore();
-});
+    life.movers.push(m);
+    const motions = life.junctionIndex.movements(m, 60 * pm, (line, dir) =>
+        life.seamExit(m, line, dir),
+      ),
+      first = motions[0]!.key,
+      next = motions[1]!.key,
+      radius = motions[0]!.junction.radius;
+    const gate = vi.spyOn(life, 'junctionClear').mockImplementation((p) => p.key !== next);
+    for (let frame = 0; frame < 20 * 30; frame++) {
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, frame / 30);
+      table.resolve(frame / 30);
+      if (frame === 2) {
+        expect(table.canEnter(m, first)).toBe(allowed);
+        expect(table.granted(m, next)).toBe(false);
+      }
+      life.step(
+        1 / 30,
+        undefined,
+        undefined,
+        undefined,
+        { clock: frame / 30, rain: 0 },
+        undefined,
+        {
+          junctions: table,
+        },
+      );
+    }
+    if (allowed) {
+      expect(m.x - 2.2 * pm).toBeGreaterThan(a.x + radius);
+      expect(table.movement(m, first)).toBeUndefined();
+    } else {
+      expect(m.x + 2.2 * pm).toBeLessThan(a.x - radius);
+      expect(table.canEnter(m, first)).toBe(false);
+    }
+    expect(table.granted(m, next)).toBe(false);
+    const cross = car();
+    Object.assign(cross, {
+      x: a.x,
+      y: a.y - 6.8 * pm,
+      hx: 0,
+      hy: 1,
+      line: 1,
+      from: life.geo.starts[1]!,
+      d: (100 - 6.8) * pm,
+      speed: 8 * pm,
+      v: 0,
+      lane: 0,
+      paint: 0,
+      pause: 0,
+      rank: 0,
+    });
+    life.movers.push(cross);
+    let entered = false,
+      released = false;
+    for (let frame = 20 * 30; frame < 40 * 30; frame++) {
+      life.prepareTraffic(() => true);
+      table.begin(new Set([life]));
+      life.requestJunctions(table, () => true, frame / 30);
+      table.resolve(frame / 30);
+      entered ||= table.canEnter(cross, first);
+      released ||= entered && table.movement(cross, first) === undefined;
+      if (released) break;
+      life.step(
+        1 / 30,
+        undefined,
+        undefined,
+        undefined,
+        { clock: frame / 30, rain: 0 },
+        undefined,
+        {
+          junctions: table,
+        },
+      );
+    }
+    expect(entered).toBe(true);
+    expect(released).toBe(true);
+    gate.mockRestore();
+  });
 
 for (const linked of [false, true])
   it(`uses final-exit projections conservatively for ${linked ? 'linked' : 'carried'} storage`, () => {

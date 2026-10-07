@@ -584,17 +584,15 @@ export class JunctionTable {
     if (a.life !== b.life) return false;
     const half = (VEHICLES[a.m.vehicle!].length * a.life.perMeter) / 2;
     if (!a.carried && !b.carried && !first.junction.linked) {
-      // Indexed distances follow the committed polyline, including bends. A linked
-      // final exit or a carried physical projection needs the conservative fallback.
+      // Indexed distances follow the committed polyline, including bends. The
+      // stopping pose must also clear the first box's projected rear-release plane.
       const setback =
         first.entry?.stopAlong !== undefined
           ? first.dir * (first.entry.along - first.entry.stopAlong) + half
           : first.junction.radius + JUNCTION.gap * a.life.perMeter + half;
-      return (
-        next.ahead - ((first.boxAhead ?? first.ahead) + setback) >= first.junction.radius + half
-      );
-    }
-    if (first.outHx * next.inHx + first.outHy * next.inHy <= COS20) return false;
+      if (next.ahead - ((first.boxAhead ?? first.ahead) + setback) < first.junction.radius + half)
+        return false;
+    } else if (first.outHx * next.inHx + first.outHy * next.inHy <= COS20) return false;
     const entry = next.entry,
       offset =
         entry?.stopAlong !== undefined
