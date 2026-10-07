@@ -25,15 +25,19 @@ export function birdFixture(
 ) {
   const builder = new LifeBuilder();
   if (options.water)
-    builder.area('water', [
+    builder.area(
+      'blocked',
       [
-        birdPoint(-100, -100),
-        birdPoint(100, -100),
-        birdPoint(100, 0),
-        birdPoint(-100, 0),
-        birdPoint(-100, -100),
+        [
+          birdPoint(-100, -100),
+          birdPoint(100, -100),
+          birdPoint(100, 0),
+          birdPoint(-100, 0),
+          birdPoint(-100, -100),
+        ],
       ],
-    ]);
+      true,
+    );
   if (options.roost !== false)
     builder.roost(birdPoint(0, 0), options.water ? Habitat.water : Habitat.park);
   if (options.perch !== false) builder.perch(birdPoint(50, 0));

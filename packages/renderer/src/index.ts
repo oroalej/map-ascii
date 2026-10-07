@@ -997,6 +997,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
+      const pointer = lifeHover.pointerPoint
+        ? viewportFor(camera, size).unproject([...lifeHover.pointerPoint])
+        : undefined;
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1025,9 +1028,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
-            ...(lifeHover.pointerPoint
-              ? { pointer: viewportFor(camera, size).unproject([...lifeHover.pointerPoint]) }
-              : {}),
+            ...(pointer ? { pointer: [pointer[0]!, pointer[1]!] as const } : {}),
           },
           visible: [
             camera.zoom,
