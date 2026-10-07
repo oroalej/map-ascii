@@ -177,6 +177,9 @@ export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
   motorboat: { accel: 0.8, brake: 0.8, maxBrake: 1.5, lateral: 1.5 },
   banca: { accel: 0.5, brake: 0.6, maxBrake: 1.2, lateral: 1.2 },
   locomotive: { accel: 0.8, brake: 0.9, maxBrake: 1.5, lateral: 1 },
+  ambulance: { accel: 1.6, brake: 2.5, maxBrake: 5.5, lateral: 2 },
+  police: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5 },
+  firetruck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
 };
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;
