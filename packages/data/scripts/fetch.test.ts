@@ -163,6 +163,32 @@ describe('boundary-inclusive detail fetch', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+  it.each([false, true])(
+    'handles covering aggregate reuse online with refresh=%s',
+    async (refresh) => {
+      const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-aggregate-'));
+      const fetch = vi.fn(() =>
+        Promise.resolve(new Response(JSON.stringify({ elements: [{ type: 'way', id: 2 }] }))),
+      );
+      vi.stubGlobal('fetch', fetch);
+      try {
+        await writeFile(
+          join(dir, 'detail.osm.json'),
+          JSON.stringify({ elements: [{ type: 'way', id: 1 }] }),
+        );
+        await writeFile(
+          join(dir, 'detail.osm.json.query'),
+          detailParts(expanded, [119, 9, 135, 25])[0]!.query,
+        );
+        const result = await fetchDetail(expanded, [...bounds], dir, { offline: false, refresh });
+        expect(result.elements.map((e) => e.id)).toEqual([refresh ? 2 : 1]);
+        expect(fetch).toHaveBeenCalledTimes(refresh ? 4 : 0);
+      } finally {
+        vi.unstubAllGlobals();
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe('splitBbox', () => {

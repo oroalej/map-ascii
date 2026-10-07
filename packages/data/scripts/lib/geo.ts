@@ -1,4 +1,4 @@
-import { DEFAULT_ROAD_WIDTH_M, type BBox, type LngLat } from '@atlas/shared';
+import { DEFAULT_ROAD_WIDTH_M, type BBox, type City, type LngLat } from '@atlas/shared';
 import type { Position } from 'geojson';
 
 export const METERS_PER_DEGREE = 111_320;
@@ -61,6 +61,18 @@ export const unionBbox = (a: BBox, b: BBox): BBox => [
   Math.max(a[2], b[2]),
   Math.max(a[3], b[3]),
 ];
+
+/** Whether a configured rectangle also retains the full city boundary. */
+export const includesBoundary = (
+  city: Pick<City, 'region'>,
+): city is Pick<City, 'region'> & { region: { bbox: BBox; include_boundary: true } } =>
+  'bbox' in city.region && city.region.include_boundary === true;
+
+/** Shared configured-region policy for fetching and conversion. */
+export const configuredRegionBounds = (
+  region: Extract<City['region'], { bbox: BBox }>,
+  boundary: BBox,
+): BBox => (includesBoundary({ region }) ? unionBbox(region.bbox, boundary) : region.bbox);
 
 /** The overlap of two bboxes. Throws when they don't overlap. */
 export function intersectBbox(a: BBox, b: BBox): BBox {

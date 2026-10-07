@@ -48,7 +48,8 @@ export type FetchOptions = {
 /**
  * Whether a saved download, made with the query `saved`, answers `query`. Saved data is kept until it is
  * refreshed, and it answers the same query, or the same query over a bbox inside the saved one
- * (the pipeline clips to the region). Offline, any saved download is used.
+ * (the pipeline clips to the region). Offline, any saved download is used unless `requireCoverage`
+ * requires matching query metadata, filters and bbox coverage.
  */
 export function cacheAnswers(
   saved: string | undefined,

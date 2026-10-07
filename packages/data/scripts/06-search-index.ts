@@ -26,6 +26,17 @@ const STREET_GAP = 0.002;
 
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
+/** Admit exact opt-in anchors before rounding, retaining precision at territory edges. */
+function searchPoint(
+  lng: number,
+  lat: number,
+  territory?: Territory,
+): [number, number] | undefined {
+  if (territory?.territory && !inTerritory(lng, lat, territory)) return undefined;
+  const rounded: [number, number] = [round6(lng), round6(lat)];
+  return territory?.territory && !inTerritory(...rounded, territory) ? [lng, lat] : rounded;
+}
+
 /** Zoom that fits a bbox of this many degrees in about 800 px (512-px tiles). */
 export const zoomForSpan = (span: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, Math.round(Math.log2(562.5 / Math.max(span, 1e-6)) * 10) / 10));
@@ -172,6 +183,8 @@ export function searchEntries(
         number,
         number,
       ];
+      const point = searchPoint(lng, lat, territory);
+      if (!point) continue;
       const landmark = p.landmark_id ? landmarks.get(p.landmark_id) : undefined;
       const localized = landmark
         ? Object.entries(landmark.name)
@@ -186,8 +199,8 @@ export function searchEntries(
         type: main.type,
         ...(p.subdivision && { subdivision: p.subdivision }),
         ...(p.subdivision_approx && { approximate: true }),
-        lat: round6(lat),
-        lng: round6(lng),
+        lat: point[1],
+        lng: point[0],
         zoomHint: main.type === 'street' ? zoomForSpan(span, 14, 17) : zoomHints[main.type],
         ...entryBbox(bbox),
         ...(group.length > 1 && { featureIds: group.map((c) => c.feature.properties.id) }),
@@ -212,6 +225,8 @@ export function searchEntries(
     ) as [number, number];
     if (territory?.territory && !inTerritory(lng, lat, territory))
       [lng, lat] = interiorPoint(area.geometry as Parameters<typeof interiorPoint>[0]);
+    const point = searchPoint(lng, lat, territory);
+    if (!point) continue;
     entries.set(id, {
       id,
       name: area.name,
@@ -219,8 +234,8 @@ export function searchEntries(
       type: 'subdivision',
       subdivision: area.name,
       ...(area.approximate && { approximate: true }),
-      lat: round6(lat),
-      lng: round6(lng),
+      lat: point[1],
+      lng: point[0],
       zoomHint: zoomHints.subdivision,
       ...entryBbox(turfBbox(feature) as BBox),
     });
@@ -251,10 +266,14 @@ export const step: Step = {
     // Overpass returns whole ways that cross the detail bbox; keep results the camera can reach.
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
-    const entries = inRegion(
-      searchEntries(displayFeatures(features, territory), areas, content, territory),
-      regionBounds,
-    ).filter((e) => inTerritory(e.lng, e.lat, territory));
+    const candidates = searchEntries(
+      displayFeatures(features, territory),
+      areas,
+      content,
+      territory,
+    );
+    // Opt-in anchors are admitted at full precision above; legacy packs keep round-then-bbox behavior.
+    const entries = territory.territory ? candidates : inRegion(candidates, regionBounds);
     const counts = new Map<string, number>();
     for (const e of entries) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     await writeJson(join(outDir, `${city.slug}.search-index.json`), buildSearchIndex(entries));

@@ -21,7 +21,11 @@ function anchor(g: Geometry): Position | undefined {
         coordinates: g.coordinates.reduce((a, b) => (a.length >= b.length ? a : b), []),
       });
     case 'GeometryCollection':
-      return g.geometries.flatMap((g) => (anchor(g) ? [anchor(g)!] : []))[0];
+      for (const child of g.geometries) {
+        const position = anchor(child);
+        if (position) return position;
+      }
+      return undefined;
   }
 }
 

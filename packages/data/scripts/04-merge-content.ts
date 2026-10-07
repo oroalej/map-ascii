@@ -17,8 +17,7 @@ import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 import { writeDetailLayouts } from './lib/detail-layout';
-import { Territory, inTerritory } from './lib/territory';
-import { displayFeatures } from './lib/display';
+import { Territory, inTerritory, removeVoid } from './lib/territory';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
@@ -75,29 +74,43 @@ export function addLabelAnchor(feature: AtlasFeature) {
   p.label_lat = Math.round(lat * 1e7) / 1e7;
 }
 
-/**
- * Problems with the city's tours against its data: steps that select or highlight a feature
- * that isn't there, or whose camera is outside the region (where the atlas can't go).
- */
-export function checkTours(
-  features: readonly AtlasFeature[],
+const asTerritory = (region: BBox | Territory): Territory =>
+  Array.isArray(region) ? { regionBounds: region, territory: null, void: null } : region;
+
+const cameraProblem = (where: string, lng: number, lat: number, territory: Territory) =>
+  inTerritory(lng, lat, territory)
+    ? []
+    : [
+        `${where}: camera ${lat}, ${lng} is outside the ${territory.territory ? 'territory' : 'region'}`,
+      ];
+
+/** Camera admission can fail before generating any curated display parts. */
+export function checkTourCameras(
   tours: ContentBundle['tours'],
   region: BBox | Territory,
 ): string[] {
+  const territory = asTerritory(region);
+  return tours.flatMap((tour) =>
+    tour.steps.flatMap((step, i) =>
+      cameraProblem(`${tour.id} step ${i + 1}`, step.camera.lng, step.camera.lat, territory),
+    ),
+  );
+}
+
+/** Check completed survivor identities, optionally also checking camera admission. */
+export function checkTours(
+  features: readonly AtlasFeature[],
+  tours: ContentBundle['tours'],
+  region?: BBox | Territory,
+): string[] {
   const ids = new Set(features.map((f) => f.properties.id));
   const problems: string[] = [];
+  const territory = region ? asTerritory(region) : undefined;
   for (const tour of tours) {
     tour.steps.forEach((step, i) => {
       const where = `${tour.id} step ${i + 1}`;
       const { lng, lat } = step.camera;
-      const territory: Territory = Array.isArray(region)
-        ? { regionBounds: region, territory: null, void: null }
-        : region;
-      if (!inTerritory(lng, lat, territory)) {
-        problems.push(
-          `${where}: camera ${lat}, ${lng} is outside the ${territory.territory ? 'territory' : 'region'}`,
-        );
-      }
+      if (territory) problems.push(...cameraProblem(where, lng, lat, territory));
       for (const id of [...(step.select ? [step.select] : []), ...(step.highlight ?? [])]) {
         if (!ids.has(id)) problems.push(`${where}: ${id} is not in the data`);
       }
@@ -118,6 +131,9 @@ export const step: Step = {
     features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const cameraProblems = checkTourCameras(content.tours, territory);
+    if (cameraProblems.length > 0)
+      throw new Error(`Tours don't match the data:\n  ${cameraProblems.join('\n  ')}`);
     for (const site of city.life?.sites ?? []) {
       if (site.position && !inTerritory(...site.position, territory))
         throw new Error(`Life site ${site.id}: position is outside the territory`);
@@ -150,11 +166,12 @@ export const step: Step = {
     }
     const roofs = enrichRoofs(cemeteries.features);
     finalizeDetailSelections(cemeteries.features);
-    const tourProblems = checkTours(
-      displayFeatures(cemeteries.features, territory),
-      content.tours,
-      territory,
-    );
+    const tourProblems = content.tours.length
+      ? checkTours(
+          cemeteries.features.filter((f) => removeVoid(f, territory) !== undefined),
+          content.tours,
+        )
+      : [];
     if (tourProblems.length > 0)
       throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);

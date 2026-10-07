@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
-import type { SeasonalRecord } from '@atlas/shared';
+import type { SeasonalRecord, SubdivisionArea } from '@atlas/shared';
 import { normalize, type AtlasFeature } from './03-normalize';
 import { tileRecords } from './05-tiles';
 import { buildSearchIndex, searchEntries } from './06-search-index';
@@ -29,6 +29,52 @@ const collection = (features: Feature[]): FeatureCollection => ({
   features,
 });
 const emptyRegion = { osm: collection([]), derived: [] };
+
+it('keeps boundary point and subdivision search anchors admitted after serialization', () => {
+  const boundary: Polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [0, 0],
+        [2, 0],
+        [0, 2.0000008],
+        [0, 0],
+      ],
+    ],
+  };
+  const t = createTerritory([0, 0, 2, 3], boundary, [0, 0, 0.1, 0.1]);
+  const point: [number, number] = [0.5, 1.5000006];
+  expect(inTerritory(...point, t)).toBe(true);
+  expect(inTerritory(0.5, 1.500001, t)).toBe(false);
+  const feature = (id: string, name: string, subdivision = false): AtlasFeature => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: point },
+    properties: {
+      id,
+      name,
+      class: 'place_label',
+      place: 'quarter',
+      ...(subdivision && { subdivision_label: true }),
+    },
+    tippecanoe: { layer: 'labels', minzoom: 10, maxzoom: 16 },
+  });
+  const features = [feature('boundary', 'Boundary'), feature('ward', 'Ward', true)];
+  const areas: SubdivisionArea[] = [
+    {
+      name: 'Ward',
+      approximate: false,
+      geometry: { type: 'Polygon', coordinates: bboxPolygon([0.4, 1.2, 0.6, 1.4]).coordinates },
+    },
+  ];
+  const content = { landmarks: [] } as unknown as ContentBundle;
+  const entries = searchEntries(features, areas, content, t);
+  expect(entries.map((e) => e.id)).toEqual(['boundary', 'ward']);
+  expect(entries.every((e) => inTerritory(e.lng, e.lat, t))).toBe(true);
+  expect(entries.map((e) => [e.lng, e.lat])).toEqual([point, point]);
+  expect(
+    searchEntries(features, areas, content, createTerritory(t.regionBounds, boundary)),
+  ).toEqual(searchEntries(features, areas, content));
+});
 
 it('preserves complete normalization inputs, cuts only tile records and repairs void anchors without mutation', () => {
   const source: Feature = {
@@ -131,6 +177,36 @@ it('uses original subdivision centroids for eligibility, clips HUD areas and kee
   });
   expect(result.features.some((f) => f.properties.id === 'osm:relation/outside')).toBe(false);
   expect(normalize(collection([inside, outside]), city, 10).areas).toHaveLength(2);
+});
+
+it('restricts same-named subdivision place labels to city membership only when opted in', () => {
+  const mapped: Feature = {
+    type: 'Feature',
+    id: 'relation/ward',
+    properties: { boundary: 'administrative', admin_level: '10', name: 'Ward' },
+    geometry: bboxPolygon([1, 1, 2, 2]),
+  };
+  const place = (id: string, coordinates: [number, number]): Feature => ({
+    type: 'Feature',
+    id,
+    properties: { place: 'quarter', name: 'Ward' },
+    geometry: { type: 'Point', coordinates },
+  });
+  // The outside-city node remains in the retained rectangle and cannot be hidden by void clipping.
+  const detail = collection([
+    mapped,
+    place('node/inside', [1.5, 1.5]),
+    place('node/outside', [0.5, 1.5]),
+  ]);
+  expect(inTerritory(0.5, 1.5, territory)).toBe(true);
+  for (const enabled of [false, true]) {
+    const result = normalize(detail, city, 10, emptyRegion, enabled);
+    const labels = ['osm:node/inside', 'osm:node/outside'].map(
+      (id) =>
+        result.features.find((f) => f.properties.id === id)!.properties.subdivision_label === true,
+    );
+    expect(labels).toEqual(enabled ? [true, false] : [true, true]);
+  }
 });
 
 it('drops whole seasonal records when embedded source segments cross the void', () => {

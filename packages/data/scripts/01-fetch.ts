@@ -7,7 +7,8 @@ import {
   fromOverpassBounds,
   intersectBbox,
   toOverpassBbox,
-  unionBbox,
+  configuredRegionBounds,
+  includesBoundary,
 } from './lib/geo';
 import { writeJson } from './lib/io';
 import {
@@ -191,8 +192,7 @@ export async function regionBounds(
   cache: FetchOptions,
   boundary: BBox,
 ): Promise<BBox> {
-  if ('bbox' in city.region)
-    return city.region.include_boundary ? unionBbox(city.region.bbox, boundary) : city.region.bbox;
+  if ('bbox' in city.region) return configuredRegionBounds(city.region, boundary);
   const { name, osm_relation } = city.region;
   const selector = osm_relation
     ? `rel(${osm_relation})`
@@ -227,10 +227,9 @@ export async function fetchDetail(
 ): Promise<OverpassResponse> {
   const aggregate = join(rawDir, files.rawDetail);
   const query = detailQuery(city, toOverpassBbox(bbox));
-  if (!('bbox' in city.region && city.region.include_boundary))
-    return overpass(query, aggregate, cache);
+  if (!includesBoundary(city)) return overpass(query, aggregate, cache);
   const strict = { ...cache, requireCoverage: true };
-  if (cache.offline) {
+  if (cache.offline || !cache.refresh) {
     const savedQuery = await readFile(`${aggregate}.query`, 'utf8').catch(() => undefined);
     if (cacheAnswers(savedQuery, query, { offline: false })) {
       const saved = await readFile(aggregate, 'utf8').catch((err: NodeJS.ErrnoException) => {
@@ -257,7 +256,7 @@ export const step: Step = {
     const cache: FetchOptions = {
       offline,
       refresh,
-      requireCoverage: 'bbox' in city.region && city.region.include_boundary === true,
+      requireCoverage: includesBoundary(city),
     };
     const boundaryData = await overpass(
       boundaryQuery(city),

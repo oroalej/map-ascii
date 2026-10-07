@@ -34,11 +34,11 @@ export const bboxPolygon = ([w, s, e, n]: BBox): Polygon => ({
 export function createTerritory(
   regionBounds: BBox,
   boundary: Polygon | MultiPolygon,
-  downtown?: BBox,
+  retainedBbox?: BBox,
 ): Territory {
-  if (!downtown) return { regionBounds, territory: null, void: null };
+  if (!retainedBbox) return { regionBounds, territory: null, void: null };
   const coordinates = union(
-    bboxPolygon(downtown).coordinates as Geom,
+    bboxPolygon(retainedBbox).coordinates as Geom,
     boundary.coordinates as Geom,
   );
   const empty = difference(bboxPolygon(regionBounds).coordinates as Geom, coordinates);
@@ -55,18 +55,16 @@ type Edge = { a: Position; b: Position; bbox: BBox };
 const edgeList = (geometry: MultiPolygon): Edge[] =>
   geometry.coordinates.flatMap((p) =>
     p.flatMap((r) =>
-      r
-        .slice(1)
-        .map((b, i) => ({
-          a: r[i]!,
-          b,
-          bbox: [
-            Math.min(r[i]![0]!, b[0]!),
-            Math.min(r[i]![1]!, b[1]!),
-            Math.max(r[i]![0]!, b[0]!),
-            Math.max(r[i]![1]!, b[1]!),
-          ] as BBox,
-        })),
+      r.slice(1).map((b, i) => ({
+        a: r[i]!,
+        b,
+        bbox: [
+          Math.min(r[i]![0]!, b[0]!),
+          Math.min(r[i]![1]!, b[1]!),
+          Math.max(r[i]![0]!, b[0]!),
+          Math.max(r[i]![1]!, b[1]!),
+        ] as BBox,
+      })),
     ),
   );
 const cache = new WeakMap<

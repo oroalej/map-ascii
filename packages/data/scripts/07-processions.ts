@@ -39,7 +39,6 @@ export function quantizeGroundRoutes(routes: readonly ProcessionRoute[]): Proces
   });
 }
 
-// Build <city>.processions.json: river and street routes, and outdoor Mass permissions.
 export function validateRouteTerritory(routes: readonly ProcessionRoute[], territory: Territory) {
   const point = (coordinates: number[]): Geometry => ({ type: 'Point', coordinates });
   const line = (coordinates: number[][]): Geometry => ({ type: 'LineString', coordinates });
@@ -71,6 +70,7 @@ export function validateRouteTerritory(routes: readonly ProcessionRoute[], terri
   }
 }
 
+// Build <city>.processions.json: river and street routes, and outdoor Mass permissions.
 export const step: Step = {
   name: '07-processions',
   async run({ city, content, buildDir, outDir }) {

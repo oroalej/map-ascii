@@ -1,5 +1,5 @@
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
-import { mkdtemp, rm, appendFile } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -12,8 +12,14 @@ import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, tileRecords, step as tileStep } from './05-tiles';
 import { step as searchStep } from './06-search-index';
-import { readFeatures, readJson, writeJson } from './lib/io';
-import { Territory, bboxPolygon, geometryOutsideVoid, inTerritory } from './lib/territory';
+import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
+import {
+  Territory,
+  bboxPolygon,
+  createTerritory,
+  geometryOutsideVoid,
+  inTerritory,
+} from './lib/territory';
 import { roofTileRecords } from './lib/roof-tiles';
 import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
@@ -113,6 +119,121 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('checks tour cameras before enrichment and selections after generated survivors', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-tour-territory-'));
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    const territory = createTerritory(
+      [-0.1, -0.1, 0.1, 0.1],
+      bboxPolygon([0, 0, 0.01, 0.01]),
+      [-0.005, -0.005, 0.005, 0.005],
+    );
+    const tour = (select: string, lng = 0.005): ContentBundle['tours'][number] => ({
+      id: 'tour/survivors',
+      title: { en: 'Survivors' },
+      status: 'draft',
+      steps: [
+        {
+          camera: { lng, lat: 0.005, zoom: 16 },
+          select,
+          duration_ms: 4000,
+          narration: { en: 'Fixture' },
+        },
+      ],
+    });
+    try {
+      await Promise.all(
+        [files.normalized, files.geography, files.subdivisions].map((file) =>
+          copyFile(join(ctx.buildDir, file), join(buildDir, file)),
+        ),
+      );
+      await writeJson(join(buildDir, files.territory), territory);
+      const normalized: AtlasFeature[] = [];
+      for await (const f of readFeatures(join(buildDir, files.normalized)))
+        normalized.push(f as AtlasFeature);
+      normalized.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-0.05, 0.005] },
+        properties: { id: 'removed', class: 'monument' },
+        tippecanoe: { layer: 'poi', minzoom: 17, maxzoom: 16 },
+      });
+      await writeFeatures(join(buildDir, files.normalized), normalized);
+      await expect(
+        mergeContent.run({
+          ...local,
+          content: {
+            ...content,
+            landmarks: [{ ...content.landmarks[0]!, osm_id: 'missing' }],
+            tours: [tour('missing', -0.05)],
+          },
+        }),
+      ).rejects.toThrow('outside the territory');
+      await mergeContent.run({
+        ...local,
+        content: { ...content, tours: [tour('plan:fixture-statue/1')] },
+      });
+      const ids: string[] = [];
+      for await (const f of readFeatures(join(buildDir, files.merged)))
+        ids.push((f as AtlasFeature).properties.id);
+      expect(ids).toContain('plan:fixture-statue/1');
+      await expect(
+        mergeContent.run({ ...local, content: { ...content, tours: [tour('removed')] } }),
+      ).rejects.toThrow('removed is not in the data');
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
+  it('keeps diagonal-cut streets searchable with and without repaired display labels', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-search-edge-'));
+    const boundary: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [0, 2.0000008],
+          [0, 0],
+        ],
+      ],
+    };
+    const territory = createTerritory([0, 0, 2, 3], boundary, [0, 0, 0.1, 0.1]);
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    try {
+      await writeJson(join(buildDir, files.geography), { regionBounds: territory.regionBounds });
+      await writeJson(join(buildDir, files.territory), territory);
+      await writeJson(join(buildDir, files.subdivisions), []);
+      for (const repaired of [false, true]) {
+        const road: AtlasFeature = {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0.5, 1],
+              [0.5, 2.5],
+            ],
+          },
+          properties: {
+            id: 'osm:way/edge',
+            class: 'road_minor',
+            name: 'Edge Street',
+            ...(repaired && { label_lng: 0.5, label_lat: 2.5 }),
+          },
+          tippecanoe: { layer: 'roads', minzoom: 13, maxzoom: 16 },
+        };
+        expect(tileRecords([road], territory)).not.toHaveLength(0);
+        await writeFeatures(join(buildDir, files.merged), [road]);
+        await searchStep.run(local);
+        const search = await readJson<{ entries: { lng: number; lat: number; name: string }[] }>(
+          join(local.outDir, 'fixture.search-index.json'),
+        );
+        expect(search.entries).toHaveLength(1);
+        expect(search.entries[0]!.name).toBe('Edge Street');
+        expect(inTerritory(search.entries[0]!.lng, search.entries[0]!.lat, territory)).toBe(true);
+        expect(inTerritory(0.5, 1.500001, territory)).toBe(false);
+      }
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
   it('publishes the opted-in territory only after full-source merging, with identical flagless behavior', async () => {
     for (const enabled of [false, true]) {
       const buildDir = await mkdtemp(join(tmpdir(), 'atlas-extent-'));
@@ -182,9 +303,9 @@ describe('pipeline (02–04) on the fixture extract', () => {
               ...local,
               city: {
                 ...local.city,
-              life: {
-                source: 'Fixture source',
-                sites: [
+                life: {
+                  source: 'Fixture source',
+                  sites: [
                     {
                       id: 'void',
                       kind: 'shelter',

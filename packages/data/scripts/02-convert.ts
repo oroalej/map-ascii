@@ -7,7 +7,7 @@ import type { Feature, FeatureCollection, Geometry, MultiPolygon, Polygon } from
 import osmtogeojson from 'osmtogeojson';
 import { seaPolygons, type Position } from './lib/coastline';
 import { DEM_ATTRIBUTION } from './lib/dem';
-import { fromOverpassBounds, unionBbox } from './lib/geo';
+import { fromOverpassBounds, configuredRegionBounds, includesBoundary } from './lib/geo';
 import { createTerritory } from './lib/territory';
 import { readJson, writeJson } from './lib/io';
 import { onlyRelation, type OverpassResponse } from './lib/overpass';
@@ -42,8 +42,7 @@ export type DerivedProperties = {
 const defaultZoom = 13;
 
 async function regionBounds(city: City, rawDir: string, boundary: BBox): Promise<BBox> {
-  if ('bbox' in city.region)
-    return city.region.include_boundary ? unionBbox(city.region.bbox, boundary) : city.region.bbox;
+  if ('bbox' in city.region) return configuredRegionBounds(city.region, boundary);
   const { name, osm_relation } = city.region;
   const region = await readJson<OverpassResponse>(join(rawDir, files.rawRegionRelation));
   const match = onlyRelation(region, 'Region', osm_relation ? {} : { name });
@@ -189,7 +188,7 @@ export const step: Step = {
       createTerritory(
         bounds,
         boundary.geometry,
-        'bbox' in city.region && city.region.include_boundary ? city.region.bbox : undefined,
+        includesBoundary(city) ? city.region.bbox : undefined,
       ),
     );
     const regionRaw = await readOptional<OverpassResponse>(join(rawDir, files.rawRegion));

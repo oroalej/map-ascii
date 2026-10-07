@@ -6,6 +6,12 @@ import { readFeatures, writeJson } from './io';
 import { generateSeasonalBunting } from './seasonal';
 import { generateSeasonalInstallations, seasonalRecordGeometry } from './seasonal-installations';
 import { geometryOutsideVoid, type Territory } from './territory';
+import {
+  openOverlayArchive as openUtilityArchive,
+  auditOverlayArchive,
+  assembleOverlayArchive,
+  type OverlayFormat,
+} from './overlay-tiles';
 
 /** Admit complete records, including geometry embedded in their serialized payload. */
 export function seasonalRecordsInTerritory(
@@ -20,13 +26,6 @@ export function seasonalRecordsInTerritory(
         geometryOutsideVoid({ type: 'LineString', coordinates: r.segment }, territory)),
   );
 }
-import {
-  openOverlayArchive as openUtilityArchive,
-  auditOverlayArchive,
-  assembleOverlayArchive,
-  type OverlayFormat,
-} from './overlay-tiles';
-
 const format: OverlayFormat<SeasonalRecord> = {
   layer: 'seasons',
   property: 'seasonal',

@@ -17,7 +17,7 @@ Ambient dialogue contains 100 illustrative scenes (40 independent utterances and
 | Country | Philippines (Geofabrik `philippines` extract) |
 | Boundary lookup | `relation["boundary"="administrative"]["name"="Naga City"]["admin_level"="6"]` within **Bicol Region** (OSM relation 3084673, verified 2026-09-29). Not within Camarines Sur: as an independent component city, Naga is cut out of the province polygon in OSM. |
 | Detail buffer | 2 km around the city boundary, intersected with the expanded camera rectangle |
-| Region | Below the viewport minimum at 1920×1080; generated territory-clipped terrain bands retain their Region-only zoom band |
+| Region | Retained downtown bbox `[123.1695, 13.602, 123.213, 13.64]` with `include_boundary: true`: keep this rectangle, including its neighboring-town slivers, plus the whole city boundary. Expected union camera bounds are approximately `[123.1695, 13.602, 123.3765, 13.6744]`; land outside both retained areas is empty. Expanded regeneration and publication remain gated. |
 | Subdivision | admin_level 10, local label **"barangay"** |
 | Content languages | `en` (required), `fil` (Filipino), `bcl` (Bikol) |
 | Smoke landmark | "Naga Metropolitan Cathedral" (e2e search target; OSM `alt_name` of way/23666715) |

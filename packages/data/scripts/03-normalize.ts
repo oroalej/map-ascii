@@ -26,6 +26,7 @@ import type {
   Position,
 } from 'geojson';
 import type { DerivedProperties, Geography } from './02-convert';
+import { includesBoundary } from './lib/geo';
 import {
   buildingHeight,
   classify,
@@ -469,7 +470,7 @@ export const step: Step = {
         osm: regionOsm,
         derived: derived.features as Feature<Geometry, DerivedProperties>[],
       },
-      !!(city.region && 'bbox' in city.region && city.region.include_boundary),
+      includesBoundary(city),
     );
 
     const byLayer = new Map<string, number>();
