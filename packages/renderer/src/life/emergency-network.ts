@@ -410,9 +410,9 @@ export class EmergencyRouter {
       legs: EmergencyLeg[] = [];
     let arcIndex = start.arc,
       fromT = start.position.t;
-    const visited = new Set<number>();
-    while (arcIndex >= 0 && !visited.has(arcIndex)) {
-      visited.add(arcIndex);
+    const visited = new Set<string>();
+    while (arcIndex >= 0 && !visited.has(`${arcIndex}/${fromT}`)) {
+      visited.add(`${arcIndex}/${fromT}`);
       const arc = this.arcs[arcIndex]!,
         route = this.route(arcIndex, fromT, start.target.id);
       if (!route) return [];

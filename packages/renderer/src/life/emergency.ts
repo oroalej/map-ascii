@@ -41,7 +41,7 @@ export const EMERGENCY = {
   stopBehindM: 12,
   arrivalM: 0.3,
   curbToleranceM: 0.2,
-  approachM: 30,
+  approachM: 60,
   ambulanceReleaseS: 20,
   policeReleaseS: 30,
 } as const;

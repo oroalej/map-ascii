@@ -359,6 +359,7 @@ export function completeScenarioState(world: LifeWorld) {
   };
   return structuredClone({
     clock: internal.clock,
+    ...(world.emergencyDispatch && { emergency: world.emergencyDispatch.snapshot() }),
     crossingReservations: world.crossingReservations?.snapshot(),
     junctions: internal.junctions?.snapshot(),
     arrivals: [...internal.arrivals].map(([id, { left, occupied }]) => ({ id, left, occupied })),

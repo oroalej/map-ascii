@@ -73,7 +73,7 @@ it.each([1, -1] as const)(
     };
     life.movers.splice(0, life.movers.length, m);
     const targetY = lngLatToTile(left, ...life.emergencyRouter.targets.get('hospital')!.at).y;
-    for (let i = 0; i < 400; i++) {
+    for (let i = 0; i < 1200; i++) {
       life.step(
         1 / 30,
         () => true,
