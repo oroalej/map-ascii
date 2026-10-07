@@ -94,6 +94,17 @@ export const FOLLOW = {
   /** Where a lane moves sideways, following compares lanes this far ahead too, m. */
   laneAheadM: 10,
 } as const;
+/** Road cruising factors; wet following targets leave the physical safety gap unchanged. */
+export const DRIVE = {
+  rain: { pace: [0.8, 0.85], headway: 1.8, gap: 2.5, lateral: 0.8 },
+  rush: {
+    chance: 0.001,
+    seconds: [5, 12],
+    pace: [1.25, 1.4],
+    maxPerTile: 1,
+    kinds: ['car', 'motorcycle', 'tricycle', 'jeepney'],
+  },
+} as const;
 /** Required distance from a vehicle centre to a stop edge, m. */
 export const frontClearance = (length: number): number => length / 2 + FOLLOW.minGap;
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */

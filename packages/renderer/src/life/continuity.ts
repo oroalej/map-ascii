@@ -226,6 +226,7 @@ export function projectMover(
     walked: m.walked,
     avoid: m.avoid,
     waiting: m.waiting,
+    rush: m.rush,
   };
   if (m.roadSteering !== undefined) preview.roadSteering = m.roadSteering;
   if (m.emergency) preview.emergency = m.emergency;
