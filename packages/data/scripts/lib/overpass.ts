@@ -64,6 +64,21 @@ export function cacheAnswers(
   return !!a && !!b && a.rest === b.rest && bboxContains(a.bbox, b.bbox);
 }
 
+/** Read an admitted saved response, preserving offline policy and cache-hit logging. */
+export async function readCached(
+  query: string,
+  cacheFile: string,
+  options: FetchOptions,
+): Promise<OverpassResponse | undefined> {
+  const saved = await stat(cacheFile).catch(() => undefined);
+  const savedQuery = await readFile(queryFile(cacheFile), 'utf8').catch(() => undefined);
+  if (saved && cacheAnswers(savedQuery, query, options)) {
+    console.log(`  cached ${cacheFile}`);
+    return JSON.parse(await readFile(cacheFile, 'utf8')) as OverpassResponse;
+  }
+  return undefined;
+}
+
 /** Run an Overpass query, saving the response at `cacheFile` (see `cacheAnswers`). */
 export async function overpass(
   query: string,
@@ -71,12 +86,8 @@ export async function overpass(
   options: FetchOptions,
 ): Promise<OverpassResponse> {
   const { offline } = options;
-  const saved = await stat(cacheFile).catch(() => undefined);
-  const savedQuery = await readFile(queryFile(cacheFile), 'utf8').catch(() => undefined);
-  if (saved && cacheAnswers(savedQuery, query, options)) {
-    console.log(`  cached ${cacheFile}`);
-    return JSON.parse(await readFile(cacheFile, 'utf8')) as OverpassResponse;
-  }
+  const saved = await readCached(query, cacheFile, options);
+  if (saved) return saved;
   if (offline)
     throw new Error(
       `--offline: no matching cached download at ${cacheFile}` +

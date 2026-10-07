@@ -6,15 +6,15 @@ import { difference, intersection, union, type Geom } from 'polyclip-ts';
 import { z } from 'zod';
 import { bboxesOverlap, inBbox } from './geo';
 
-const polygon = z.strictObject({
+const multiPolygon = z.strictObject({
   type: z.literal('MultiPolygon'),
   coordinates: z.array(z.array(z.array(z.array(z.number().finite()).min(2)).min(4)).min(1)),
 });
 /** Internal pipeline artifact; null geometries retain legacy rectangular behavior. */
 export const Territory = z.strictObject({
   regionBounds: BBoxSchema,
-  territory: polygon.nullable(),
-  void: polygon.nullable(),
+  territory: multiPolygon.nullable(),
+  void: multiPolygon.nullable(),
 });
 export type Territory = z.infer<typeof Territory>;
 
@@ -196,6 +196,14 @@ function clipLine(line: Position[], t: Territory): { lines: Position[][]; change
     }
   }
   flush();
+  if (lines.length > 1 && same(line[0]!, line[line.length - 1]!)) {
+    const first = lines[0]!,
+      last = lines[lines.length - 1]!;
+    if (same(first[0]!, line[0]!) && same(last[last.length - 1]!, line[0]!)) {
+      lines[0] = [...last, ...first.slice(1)];
+      lines.pop();
+    }
+  }
   return { lines, changed };
 }
 

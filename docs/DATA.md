@@ -30,7 +30,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
    - Transit stops, terminals, shelters, and covered entrances are fetched separately into `detail-life.osm.json`. Step 02 merges that optional download with the detail data; older cached downloads remain usable. Step 03 writes `life_site`, `life_modes` (bus 1, jeepney 2, tricycle 4), `life_covered`, and a stable `life_lng`/`life_lat` anchor. Rail and ferry platforms are excluded. Site metadata is retained from tile zoom 13 even while furniture glyphs stay hidden at smaller display zooms.
 2. **`02-convert`**
-   - Write `territory.geojson`: the camera rectangle, retained territory (configured bbox union city polygon), and void (rectangle minus territory). Without `include_boundary`, both geometries are null and existing rectangular behavior remains.
+   - Write `territory.geojson`: internal JSON metadata with the camera rectangle, retained territory (configured bbox union city polygon), and void (rectangle minus territory). Despite its prescribed filename, this is not a GeoJSON feature or collection. Without `include_boundary`, both geometries are null and existing rectangular behavior remains.
    - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF). The railway download is merged into the detail download first (if there is one).
    - DEM → hillshade/luminance raster (`gdaldem hillshade`) → grayscale PNG tiles.
 3. **`03-normalize`**

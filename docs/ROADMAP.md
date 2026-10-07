@@ -74,7 +74,7 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 - [x] ~~Orbit mode: pitch/bearing input, extruded building meshes, face shading → glyph ramp, compass reset. Tilted views thin out their labels so the skyline shows.~~ Removed 2026-09-30: the map is flat and north-up.
 - [x] Tour schema and player (caption card, controls, progress, pause on camera grab, "Resume tour" chip).
 - [x] Tours live in the city pack (`cities/<slug>/tours/`).
-- [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced). "From Isarog to the river" was removed when the map was limited to downtown; it comes back when the map extends past it.
+- [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced). "From Isarog to the river" was removed when the map was limited to downtown and remains historical. A replacement tour needs a separate task; the boundary-inclusive Naga extension does not restore it.
 - [x] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Checked tilted at z17.5–19: the parts sit and rise where their plans put them, so no numbers changed. Plans and art stay `draft` until someone who knows the places reviews them.
 
 **Accept when**

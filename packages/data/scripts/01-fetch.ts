@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { readFile, writeFile } from 'node:fs/promises';
+import { unlink, writeFile } from 'node:fs/promises';
 import type { BBox, City } from '@atlas/shared';
 import { downloadDem } from './lib/dem';
 import {
@@ -13,7 +13,7 @@ import {
 import { writeJson } from './lib/io';
 import {
   onlyRelation,
-  cacheAnswers,
+  readCached,
   overpass,
   quote,
   type FetchOptions,
@@ -229,18 +229,21 @@ export async function fetchDetail(
   const query = detailQuery(city, toOverpassBbox(bbox));
   if (!includesBoundary(city)) return overpass(query, aggregate, cache);
   const strict = { ...cache, requireCoverage: true };
-  if (cache.offline || !cache.refresh) {
-    const savedQuery = await readFile(`${aggregate}.query`, 'utf8').catch(() => undefined);
-    if (cacheAnswers(savedQuery, query, { offline: false })) {
-      const saved = await readFile(aggregate, 'utf8').catch((err: NodeJS.ErrnoException) => {
-        if (err.code === 'ENOENT') return undefined;
-        throw err;
+  const requests = detailParts(city, bbox);
+  if (cache.refresh && !cache.offline) {
+    // No old quarter may join the new generation after an interrupted refresh.
+    for (const file of [files.rawDetail, ...requests.map((part) => part.file)]) {
+      await unlink(join(rawDir, `${file}.query`)).catch((err: NodeJS.ErrnoException) => {
+        if (err.code !== 'ENOENT') throw err;
       });
-      if (saved !== undefined) return JSON.parse(saved) as OverpassResponse;
     }
   }
+  if (cache.offline || !cache.refresh) {
+    const saved = await readCached(query, aggregate, { ...strict, refresh: false });
+    if (saved) return saved;
+  }
   const parts: OverpassResponse[] = [];
-  for (const part of detailParts(city, bbox))
+  for (const part of requests)
     parts.push(await overpass(part.query, join(rawDir, part.file), strict));
   const detail = mergeResponses(parts);
   await writeJson(aggregate, detail);

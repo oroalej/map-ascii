@@ -189,6 +189,54 @@ describe('boundary-inclusive detail fetch', () => {
       }
     },
   );
+  it('retries an interrupted refresh without the old aggregate or unfinished quarters', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-refresh-'));
+    const response = (id: number) =>
+      new Response(JSON.stringify({ elements: [{ type: 'way', id }] }));
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(response(201))
+      .mockResolvedValueOnce(response(202))
+      .mockResolvedValueOnce(new Response('failed refresh', { status: 400 }))
+      .mockResolvedValueOnce(response(203))
+      .mockResolvedValueOnce(response(204));
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const parts = detailParts(expanded, [...bounds]);
+      for (const [i, part] of parts.entries()) {
+        await writeFile(
+          join(dir, part.file),
+          JSON.stringify({ elements: [{ type: 'way', id: 101 + i }] }),
+        );
+        await writeFile(join(dir, `${part.file}.query`), part.query);
+      }
+      await writeFile(
+        join(dir, 'detail.osm.json'),
+        JSON.stringify({ elements: [{ type: 'way', id: 901 }] }),
+      );
+      await writeFile(
+        join(dir, 'detail.osm.json.query'),
+        detailParts(expanded, [119, 9, 135, 25])[0]!.query,
+      );
+      await expect(
+        fetchDetail(expanded, [...bounds], dir, { offline: false, refresh: true }),
+      ).rejects.toThrow('HTTP 400');
+      expect(fetch).toHaveBeenCalledTimes(3);
+      await expect(fetchDetail(expanded, [...bounds], dir, { offline: true })).rejects.toThrow(
+        'detail-part-3',
+      );
+      expect(fetch).toHaveBeenCalledTimes(3);
+      const retry = await fetchDetail(expanded, [...bounds], dir, { offline: false });
+      expect(retry.elements.map((e) => e.id)).toEqual([201, 202, 203, 204]);
+      expect(fetch).toHaveBeenCalledTimes(5);
+      expect((await fetchDetail(expanded, [...bounds], dir, { offline: true })).elements).toEqual(
+        retry.elements,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('splitBbox', () => {

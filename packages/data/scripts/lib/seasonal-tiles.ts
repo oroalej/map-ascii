@@ -26,6 +26,7 @@ export function seasonalRecordsInTerritory(
         geometryOutsideVoid({ type: 'LineString', coordinates: r.segment }, territory)),
   );
 }
+
 const format: OverlayFormat<SeasonalRecord> = {
   layer: 'seasons',
   property: 'seasonal',

@@ -68,7 +68,7 @@ describe('territory subtraction', () => {
         coordinates: [
           [4.5, 4],
           [2, 4],
-          [4.5, 4],
+          [4.6, 4],
         ],
       }),
       tippecanoe: { layer: 'roads', minzoom: 6 },
@@ -88,7 +88,7 @@ describe('territory subtraction', () => {
         ],
         [
           [4, 4],
-          [4.5, 4],
+          [4.6, 4],
         ],
       ],
     });
@@ -96,6 +96,33 @@ describe('territory subtraction', () => {
     expect(clipped.properties).toBe(road.properties);
     expect(clipped.tippecanoe).toBe(road.tippecanoe);
     expect(road.geometry.type).toBe('LineString');
+  });
+  it('joins wraparound closed-line fragments without crossing the removed gap', () => {
+    const ring = feature({
+      type: 'LineString',
+      coordinates: [
+        [1.5, 1.5],
+        [1.5, 3],
+        [0.5, 3],
+        [0.5, 1.5],
+        [1.5, 1.5],
+      ],
+    });
+    const before = structuredClone(ring);
+    const clipped = removeVoid(ring, territory)!;
+    expect(clipped.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [0.5, 2],
+        [0.5, 1.5],
+        [1.5, 1.5],
+        [1.5, 3],
+        [1, 3],
+      ],
+    });
+    expect(clipped.id).toBe(ring.id);
+    expect(clipped.properties).toBe(ring.properties);
+    expect(ring).toEqual(before);
   });
   it('keeps collinear boundaries but discards a point-only tangency', () => {
     expect(

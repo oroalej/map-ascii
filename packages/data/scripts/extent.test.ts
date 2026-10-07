@@ -1,10 +1,16 @@
 import { expect, it } from 'vitest';
-import type { Feature, FeatureCollection, Polygon } from 'geojson';
-import type { SeasonalRecord, SubdivisionArea } from '@atlas/shared';
+import type { Feature, FeatureCollection, Geometry, Polygon } from 'geojson';
+import {
+  CityProcessions,
+  Procession,
+  type SeasonalRecord,
+  type SubdivisionArea,
+} from '@atlas/shared';
 import { normalize, type AtlasFeature } from './03-normalize';
-import { tileRecords } from './05-tiles';
+import { tileRecords, yearRange } from './05-tiles';
 import { buildSearchIndex, searchEntries } from './06-search-index';
-import { validateRouteTerritory } from './07-processions';
+import { quantizeGroundRoutes, validateRouteTerritory } from './07-processions';
+import { routeProcessions } from './lib/procession';
 import {
   bboxPolygon,
   createTerritory,
@@ -179,6 +185,140 @@ it('uses original subdivision centroids for eligibility, clips HUD areas and kee
   expect(normalize(collection([inside, outside]), city, 10).areas).toHaveLength(2);
 });
 
+it('keeps reachable anchors when retained components extend beyond the camera rectangle', () => {
+  const road = (id: string, coordinates: number[][]): AtlasFeature => ({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates },
+    properties: {
+      id,
+      class: 'road_minor',
+      name: id,
+      label_lng: 0.5,
+      label_lat: 3,
+      shop_lng: 0.5,
+      shop_lat: 3,
+      life_lng: 0.5,
+      life_lat: 3,
+    },
+    tippecanoe: { layer: 'roads', minzoom: 13, maxzoom: 16 },
+  });
+  const sources: AtlasFeature[] = [
+    road('split', [
+      [-3, 3],
+      [0.5, 3],
+      [1.5, 3],
+    ]),
+    road('single', [
+      [-4, 1],
+      [-3, 1],
+      [-2, 1],
+      [-1, 1],
+      [1, 1],
+      [1.5, 3],
+      [0.5, 3],
+    ]),
+    road('crossing', [
+      [-3, 1.5],
+      [6, 1.5],
+    ]),
+    {
+      ...road('school', []),
+      properties: {
+        id: 'school',
+        class: 'building_school',
+        name: 'School',
+        label_lng: 0.5,
+        label_lat: 3,
+      },
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: [
+          bboxPolygon([-4, 2.5, -1, 3.5]).coordinates,
+          bboxPolygon([1.2, 2.5, 1.4, 2.7]).coordinates,
+        ],
+      },
+    },
+  ];
+  const before = structuredClone(sources);
+  const displayed = displayFeatures(sources, territory);
+  expect(displayed).toHaveLength(sources.length);
+  for (const feature of displayed) {
+    for (const prefix of ['label', 'shop', 'life'] as const) {
+      const lng = feature.properties[`${prefix}_lng`],
+        lat = feature.properties[`${prefix}_lat`];
+      if (lng !== undefined && lat !== undefined)
+        expect(inTerritory(lng, lat, territory)).toBe(true);
+    }
+  }
+  expect(displayed[0]!.geometry).toEqual({
+    type: 'MultiLineString',
+    coordinates: [
+      [
+        [-3, 3],
+        [0, 3],
+      ],
+      [
+        [1, 3],
+        [1.5, 3],
+      ],
+    ],
+  });
+  const content = { landmarks: [] } as unknown as ContentBundle;
+  expect(searchEntries(displayed, [], content, territory).map((e) => e.id)).toEqual(
+    sources.map((f) => f.properties.id),
+  );
+  expect(sources).toEqual(before);
+  expect(displayFeatures(sources, createTerritory(territory.regionBounds, city.geometry))).toEqual(
+    sources,
+  );
+  const outside: AtlasFeature = {
+    ...road('outside', [
+      [4.0001, 3],
+      [4.002, 3],
+    ]),
+    properties: { id: 'outside', class: 'road_minor', name: 'Grouped' },
+  };
+  const inside: AtlasFeature = {
+    ...road('inside', [
+      [3.9999, 3],
+      [4, 3],
+    ]),
+    properties: { id: 'inside', class: 'road_minor', name: 'Grouped' },
+  };
+  const grouped = searchEntries(
+    displayFeatures([outside, inside], territory),
+    [],
+    content,
+    territory,
+  );
+  expect(grouped).toHaveLength(1);
+  expect(grouped[0]!.id).toBe('inside');
+  expect([...grouped[0]!.featureIds!].sort()).toEqual(['inside', 'outside']);
+});
+
+it('derives metadata years only from emitted display records', () => {
+  const building = (
+    id: string,
+    geometry: Polygon,
+    start_year?: number,
+    end_year?: number,
+  ): AtlasFeature => ({
+    type: 'Feature',
+    geometry,
+    properties: { id, class: 'building', start_year, end_year },
+    tippecanoe: { layer: 'buildings', minzoom: 13, maxzoom: 16 },
+  });
+  const sources = [
+    building('void', bboxPolygon([0.2, 2.5, 0.4, 3]), 1600),
+    building('retained', bboxPolygon([2, 2, 3, 3]), 1900, 1880),
+  ];
+  expect(yearRange(tileRecords(sources, territory), 2026)).toEqual([1880, 2026]);
+  expect(
+    yearRange(tileRecords(sources, createTerritory(territory.regionBounds, city.geometry)), 2026),
+  ).toEqual(yearRange(sources, 2026));
+  expect(yearRange([], 2026)).toEqual([2026, 2026]);
+});
+
 it('restricts same-named subdivision place labels to city membership only when opted in', () => {
   const mapped: Feature = {
     type: 'Feature',
@@ -343,4 +483,82 @@ it('rejects event geography crossing the void even with admitted endpoints', () 
       territory,
     ),
   ).toThrow('void');
+});
+
+it('validates Mass approaches as open paths through a concave site', () => {
+  const boundary: Polygon = {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [-0.0004, -0.0004],
+        [0.0004, -0.0004],
+        [0.0004, 0.0004],
+        [0.0001, 0.0004],
+        [0.0001, 0],
+        [-0.0001, 0],
+        [-0.0001, 0.0004],
+        [-0.0004, 0.0004],
+        [-0.0004, -0.0004],
+      ],
+    ],
+  };
+  const t = createTerritory(
+    [-0.0004, -0.0004, 0.0004, 0.0004],
+    boundary,
+    [-0.0004, -0.0004, 0.0004, -0.0003],
+  );
+  const church: Feature<Geometry, Record<string, unknown>> = {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [-0.0002, 0.0002] },
+    properties: { id: 'osm:node/1', class: 'building_religious' },
+  };
+  const grounds: Feature<Geometry, Record<string, unknown>> = {
+    type: 'Feature',
+    geometry: boundary,
+    properties: { id: 'osm:way/2', class: 'park' },
+  };
+  const event = Procession.parse({
+    id: 'procession/u-site',
+    title: { en: 'Test Mass' },
+    story: { en: 'Test' },
+    status: 'draft',
+    kind: 'mass',
+    site: 'osm:node/1',
+    grounds: ['osm:way/2'],
+    radius_m: 80,
+    gathering_anchor: [-0.0002, 0.0002],
+    schedule: {
+      month: 9,
+      weekday: 6,
+      nth: 3,
+      offset_days: 0,
+      start: '12:00',
+      duration_min: 60,
+      timezone: 'Etc/UTC',
+    },
+  });
+  const routes = quantizeGroundRoutes(routeProcessions([church, grounds], [event]).routes);
+  expect(CityProcessions.safeParse({ processions: routes }).success).toBe(true);
+  const mass = routes[0]!;
+  if (mass.kind !== 'mass') throw new Error('Expected Mass');
+  expect(mass.site.approaches.length).toBeGreaterThan(0);
+  expect(
+    mass.site.approaches.every((coordinates) =>
+      geometryOutsideVoid({ type: 'LineString', coordinates }, t),
+    ),
+  ).toBe(true);
+  expect(() => validateRouteTerritory(routes, t)).not.toThrow();
+  const crossing = {
+    ...mass,
+    site: {
+      ...mass.site,
+      approaches: [
+        [
+          [-0.0002, 0.0002],
+          [0.0002, 0.0002],
+        ] as [number, number][],
+      ],
+    },
+  };
+  expect(() => validateRouteTerritory([crossing], t)).toThrow('void');
 });

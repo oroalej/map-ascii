@@ -52,7 +52,7 @@ export function validateRouteTerritory(routes: readonly ProcessionRoute[], terri
             point(route.site.anchor),
             ...polygons(route.site.grounds),
             ...polygons(route.site.blocked),
-            ...polygons(route.site.approaches),
+            ...route.site.approaches.map(line),
             ...route.site.roads.map((r) => line(r.line)),
           ]
         : [

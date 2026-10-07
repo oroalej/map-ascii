@@ -17,9 +17,8 @@ import type { AtlasFeature, AtlasProperties } from './03-normalize';
 import { inBbox } from './lib/geo';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { files, type Step } from './step';
-import { Territory, inTerritory, inVoid } from './lib/territory';
-import { displayFeatures } from './lib/display';
-import { interiorPoint } from './lib/frontage';
+import { Territory, inTerritory } from './lib/territory';
+import { displayFeatures, territoryAnchor } from './lib/display';
 
 /** How far apart (degrees, ~220 m) two same-named ways can be and still be one street. */
 const STREET_GAP = 0.002;
@@ -85,10 +84,20 @@ const altNamesOf = (p: AtlasProperties): string[] =>
     .filter((v) => v && v !== p.name);
 
 /** Prefer the stable label anchor; otherwise use a point, line midpoint or area centroid. */
-function pointOn(geometry: Geometry, feature: Feature, territory?: Territory): Position {
+function pointOn(
+  geometry: Geometry,
+  feature: Feature,
+  territory?: Territory,
+): Position | undefined {
   const properties = feature.properties as AtlasProperties | null;
-  if (Number.isFinite(properties?.label_lng) && Number.isFinite(properties?.label_lat))
+  if (
+    Number.isFinite(properties?.label_lng) &&
+    Number.isFinite(properties?.label_lat) &&
+    (!territory?.territory ||
+      inTerritory(properties!.label_lng!, properties!.label_lat!, territory))
+  )
     return [properties!.label_lng!, properties!.label_lat!];
+  if (territory?.territory) return territoryAnchor(geometry, territory);
   if (geometry.type === 'Point') return geometry.coordinates;
   const line =
     geometry.type === 'LineString'
@@ -97,12 +106,7 @@ function pointOn(geometry: Geometry, feature: Feature, territory?: Territory): P
         ? geometry.coordinates.reduce((a, b) => (b.length > a.length ? b : a), [])
         : null;
   if (line && line.length > 0) return line[Math.floor(line.length / 2)]!;
-  const center = turfCentroid(feature).geometry.coordinates;
-  return territory &&
-    inVoid(center, territory) &&
-    (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')
-    ? interiorPoint(geometry)
-    : center;
+  return turfCentroid(feature).geometry.coordinates;
 }
 
 const overlaps = (a: BBox, b: BBox, gap: number) =>
@@ -175,14 +179,20 @@ export function searchEntries(
     for (const group of cluster(list, gap)) {
       // Represent the group by its largest member (the longest way, the grounds over a hall).
       const size = (c: Candidate) => (c.bbox[2] - c.bbox[0]) * 1e3 + (c.bbox[3] - c.bbox[1]);
-      const main = group.reduce((a, b) => (size(b) > size(a) ? b : a));
+      let main: Candidate | undefined;
+      let position: Position | undefined;
+      for (const candidate of [...group].sort((a, b) => size(b) - size(a))) {
+        position = pointOn(candidate.feature.geometry, candidate.feature, territory);
+        if (position) {
+          main = candidate;
+          break;
+        }
+      }
+      if (!main || !position) continue;
       const p = main.feature.properties;
       if (entries.has(p.id)) continue;
       const bbox = group.map((c) => c.bbox).reduce(join2);
-      const [lng, lat] = pointOn(main.feature.geometry, main.feature, territory) as [
-        number,
-        number,
-      ];
+      const [lng, lat] = position as [number, number];
       const point = searchPoint(lng, lat, territory);
       if (!point) continue;
       const landmark = p.landmark_id ? landmarks.get(p.landmark_id) : undefined;
@@ -223,8 +233,11 @@ export function searchEntries(
     let [lng, lat] = (
       node ? pointOn(node.geometry, node) : turfCentroid(feature).geometry.coordinates
     ) as [number, number];
-    if (territory?.territory && !inTerritory(lng, lat, territory))
-      [lng, lat] = interiorPoint(area.geometry as Parameters<typeof interiorPoint>[0]);
+    if (territory?.territory && !inTerritory(lng, lat, territory)) {
+      const position = territoryAnchor(feature.geometry, territory);
+      if (!position) continue;
+      [lng, lat] = position as [number, number];
+    }
     const point = searchPoint(lng, lat, territory);
     if (!point) continue;
     entries.set(id, {

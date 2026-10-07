@@ -9,7 +9,7 @@ import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
-import { checkTours, step as mergeContent } from './04-merge-content';
+import { checkTourCameras, checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, tileRecords, step as tileStep } from './05-tiles';
 import { step as searchStep } from './06-search-index';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
@@ -560,8 +560,10 @@ describe('pipeline (02–04) on the fixture extract', () => {
         step({ lat: 5, lng: 0.005 }, { highlight: ['osm:way/104', 'osm:way/999999'] }),
       ],
     };
-    expect(checkTours(features, [tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
+    expect(checkTourCameras([tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
       'tour/fixture step 2: camera 5, 0.005 is outside the region',
+    ]);
+    expect(checkTours(features, [tour])).toEqual([
       'tour/fixture step 2: osm:way/999999 is not in the data',
     ]);
   });

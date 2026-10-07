@@ -504,14 +504,14 @@ export function generateUtilities(
   ): boolean => {
     const d = distance(a.p, b.p);
     if (a.pole.id === b.pole.id || d < 0.01 || d > max) return false;
+    const [from, to] = [a.pole, b.pole].sort((p, q) => compare(p.id, q.id));
+    const id = utilitySpanId(from!.id, to!.id);
+    if (spans.has(id)) return false;
     if (
       territory &&
       !geometryOutsideVoid({ type: 'LineString', coordinates: [a.pole.at, b.pole.at] }, territory)
     )
       return false;
-    const [from, to] = [a.pole, b.pole].sort((p, q) => compare(p.id, q.id));
-    const id = utilitySpanId(from!.id, to!.id);
-    if (spans.has(id)) return false;
     spans.set(id, { id, kind, from: from!, to: to!, seed: utilitySeed(id) });
     return true;
   };

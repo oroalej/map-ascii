@@ -97,20 +97,16 @@ export function checkTourCameras(
   );
 }
 
-/** Check completed survivor identities, optionally also checking camera admission. */
+/** Check completed survivor identities; camera admission is checked before enrichment. */
 export function checkTours(
   features: readonly AtlasFeature[],
   tours: ContentBundle['tours'],
-  region?: BBox | Territory,
 ): string[] {
   const ids = new Set(features.map((f) => f.properties.id));
   const problems: string[] = [];
-  const territory = region ? asTerritory(region) : undefined;
   for (const tour of tours) {
     tour.steps.forEach((step, i) => {
       const where = `${tour.id} step ${i + 1}`;
-      const { lng, lat } = step.camera;
-      if (territory) problems.push(...cameraProblem(where, lng, lat, territory));
       for (const id of [...(step.select ? [step.select] : []), ...(step.highlight ?? [])]) {
         if (!ids.has(id)) problems.push(`${where}: ${id} is not in the data`);
       }
@@ -166,9 +162,19 @@ export const step: Step = {
     }
     const roofs = enrichRoofs(cemeteries.features);
     finalizeDetailSelections(cemeteries.features);
+    const tourIds = new Set(
+      content.tours.flatMap((tour) =>
+        tour.steps.flatMap((step) => [
+          ...(step.select ? [step.select] : []),
+          ...(step.highlight ?? []),
+        ]),
+      ),
+    );
     const tourProblems = content.tours.length
       ? checkTours(
-          cemeteries.features.filter((f) => removeVoid(f, territory) !== undefined),
+          cemeteries.features.filter(
+            (f) => tourIds.has(f.properties.id) && removeVoid(f, territory) !== undefined,
+          ),
           content.tours,
         )
       : [];
