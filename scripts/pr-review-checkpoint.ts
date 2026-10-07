@@ -283,12 +283,13 @@ export function parseReceipt(v: unknown): Receipt {
     !(
       v.reportSource === undefined ||
       v.reportSource === null ||
-      ['stdout', 'file', 'transcript'].includes(String(v.reportSource))
+      (typeof v.reportSource === 'string' &&
+        ['stdout', 'file', 'transcript'].includes(v.reportSource))
     ) ||
     !(
       v.terminatedBy === undefined ||
       v.terminatedBy === null ||
-      ['idle-watchdog', 'time-cap'].includes(String(v.terminatedBy))
+      (typeof v.terminatedBy === 'string' && ['idle-watchdog', 'time-cap'].includes(v.terminatedBy))
     ) ||
     typeof v.valid !== 'boolean' ||
     !nullableString(v.error) ||
