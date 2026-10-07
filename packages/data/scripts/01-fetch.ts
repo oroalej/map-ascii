@@ -183,16 +183,16 @@ async function regionBounds(city: City, rawDir: string, cache: FetchOptions): Pr
   const selector = osm_relation
     ? `rel(${osm_relation})`
     : `rel["boundary"="administrative"]["name"=${quote(name)}]`;
+  const tags: Record<string, string> = osm_relation ? {} : { name };
   const region = await overpass(
     `[out:json][timeout:120];
 ${selector};
 out tags bb;`,
     join(rawDir, files.rawRegionRelation),
     cache,
+    (data) => void onlyRelation(data, 'Region', tags),
   );
-  const match = osm_relation
-    ? onlyRelation(region, 'Region', {})
-    : onlyRelation(region, 'Region', { name });
+  const match = onlyRelation(region, 'Region', tags);
   if (!match.bounds) throw new Error('Region relation came back without bounds');
   console.log(`  region: relation/${match.id}`);
   return fromOverpassBounds(match.bounds);
@@ -204,16 +204,18 @@ export const step: Step = {
   name: '01-fetch',
   async run({ city, rawDir, offline, refresh }) {
     const cache: FetchOptions = { offline, refresh };
+    const boundaryTags = {
+      boundary: 'administrative',
+      name: city.boundary.name,
+      admin_level: String(city.boundary.admin_level),
+    };
     const boundaryData = await overpass(
       boundaryQuery(city),
       join(rawDir, files.rawBoundary),
       cache,
+      (data) => void onlyRelation(data, 'Boundary', boundaryTags),
     );
-    const boundary = onlyRelation(boundaryData, 'Boundary', {
-      boundary: 'administrative',
-      name: city.boundary.name,
-      admin_level: String(city.boundary.admin_level),
-    });
+    const boundary = onlyRelation(boundaryData, 'Boundary', boundaryTags);
     if (!boundary.bounds) throw new Error('Boundary relation came back without bounds');
     console.log(`  boundary: relation/${boundary.id}`);
 
