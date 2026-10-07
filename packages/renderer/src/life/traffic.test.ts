@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { metersPerUnit } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
 import { TileLife, LifeWorld, type Mover } from './simulate';
-import { compatible, type JunctionTable } from './junctions';
+import type { JunctionTable } from './junctions';
 import { FOLLOW, JUNCTION, kinematicsOf } from './config';
 import { worldTiles } from './testing/scenarios';
 import { VEHICLES } from './vehicles';

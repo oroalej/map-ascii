@@ -184,11 +184,18 @@ export function* crossroadsSteps(
     windows: [],
     errors: [],
   };
-  const guarded = world as unknown as { groundGuard(...args: unknown[]): WorldGroundGuard };
+  const guarded = world as unknown as {
+    groundGuard: (this: unknown, ...args: unknown[]) => WorldGroundGuard;
+  };
   const originalGuard = guarded.groundGuard;
   guarded.groundGuard = function (...args) {
     const guard = originalGuard.apply(this, args);
-    const wrapper: WorldGroundGuard = (tileLife, owner, before, ...rest) => {
+    const wrapper: (...args: Parameters<WorldGroundGuard>) => boolean = (
+      tileLife,
+      owner,
+      before,
+      ...rest
+    ) => {
       const movement = before && 'kind' in owner && owner.kind === 'vehicle';
       if (movement) result.guardAttempts++;
       const accepted = guard(tileLife, owner, before, ...rest);

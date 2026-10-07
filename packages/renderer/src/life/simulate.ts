@@ -4930,7 +4930,7 @@ export class TileLife {
     return Math.abs(change) * this.perMeter;
   }
 
-  private finishLateral(m: Mover, before: Mover) {
+  private finishLateral(m: Mover, _before: Mover) {
     const state = m.maneuver;
     if (!state) return;
     if (state.kind === 'filter') return;
@@ -5459,7 +5459,7 @@ export class TileLife {
           : Math.min(target, approach(room, lead, kinematicsOf(m.vehicle).brake * pm));
       caps[i] = Math.min(caps[i]!, room / dt);
       this.followLeaders[i] = j;
-      if (speeds[i]! + 1e-9 < previous) this.followTargets[i] = speeds[i]!;
+      if (speeds[i] + 1e-9 < previous) this.followTargets[i] = speeds[i]!;
     };
     const curbScenes =
       this.scenes.hasCurbScenes || movers.some((m) => this.offsetVaries(m, FOLLOW.laneAheadM));
@@ -6427,7 +6427,7 @@ export class TileLife {
               }
             }
             const retryLateral = before.maneuver
-              ? this.proposeLateral(m, before, lateralBudget * share!, dt, share!)
+              ? this.proposeLateral(m, before, lateralBudget * share!, dt, share)
               : 0;
             if (!walking && share! < 0) {
               const retreat = Math.min(m.d, dt * this.perMeter * steeringSpeed);

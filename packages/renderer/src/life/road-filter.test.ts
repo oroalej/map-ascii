@@ -28,7 +28,6 @@ function queue(vehicle: 'motorcycle' | 'bicycle' = 'motorcycle', width = 9.6) {
   b.signal({ x: 150 * pm, y: 2000 }, 6, -1, 90, true, undefined, { seed: 0 });
   const life = new TileLife(tile, b.finish(), 42);
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
-  life.parkingLines.clear();
   life.scenes.sites.length = 0;
   const stop = 150 - 6 - SIGNAL.gap;
   const make = (type: Mover['vehicle'], d: number): Mover => ({

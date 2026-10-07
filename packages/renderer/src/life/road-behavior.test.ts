@@ -25,7 +25,8 @@ function road(dir: 1 | -1 = 1, width = 9.6, oneway: 0 | 1 | -1 = dir) {
   );
   const life = new TileLife(tile, b.finish(), 42);
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
-  life.parkingLines.clear();
+  // These synthetic roads need their full width regardless of the parking draw.
+  (life as unknown as { parkingLines: Set<number> }).parkingLines.clear();
   life.scenes.sites.length = 0;
   const m: Mover = {
     kind: 'vehicle',
@@ -126,9 +127,9 @@ describe('accepted road lateral state', () => {
           undefined,
           hold === 'near' ? () => false : undefined,
           hold === 'inspection'
-            ? { inspecting: m }
+            ? { rain: 0, inspecting: m }
             : hold === 'activity'
-              ? { levels: { ...activityLevels(1), vehicle: 0 } }
+              ? { rain: 0, levels: { ...activityLevels(1), vehicle: 0 } }
               : undefined,
           () => true,
         );

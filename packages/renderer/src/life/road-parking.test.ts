@@ -22,7 +22,8 @@ it.each([
       seed,
     );
     const records = life.parked;
-    const strips = [...life.parkingLines];
+    // Audit internal strip decisions as well as public parked records against PRE.
+    const strips = [...(life as unknown as { parkingLines: ReadonlySet<number> }).parkingLines];
     const hash = createHash('sha256').update(JSON.stringify({ records, strips })).digest('hex');
     expect(hash).toBe(expected);
     expect(strips).not.toContain(0);
