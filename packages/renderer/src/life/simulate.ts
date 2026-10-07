@@ -8121,7 +8121,7 @@ export class TileLife {
           : flock.landing && count > 0
             ? { x: flock.lx, y: flock.ly }
             : undefined;
-      if (pointer && to && this.pointerNear(flock, pointer, to)) {
+      if (pointer && to && this.pointerNear(flock, pointer, to, true)) {
         this.recordStartle(flock, observing);
         pointer.radius = undefined;
         this.beginDeparture(flock);
@@ -8347,18 +8347,19 @@ export class TileLife {
     return bound;
   }
 
-  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point) {
+  private pointerRadius(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
     const spec = BIRD_SPECIES[flock.species];
     const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
     const margin =
-      flock.flightBounds && !target
+      flock.flightBounds && (!target || destination)
         ? birdFlightMargin(spec.speed * this.perMeter * 1.4, BIRD_FLIGHT)
         : 0;
     const bound = this.flockBound(flock);
     const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;
     if (
       distance2 > (reach + margin + bound) ** 2 &&
-      (!target || (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + bound) ** 2)
+      (!target ||
+        (target.x - pointer.x) ** 2 + (target.y - pointer.y) ** 2 > (reach + margin + bound) ** 2)
     )
       return 0;
     // The navigation anchor stays clear, while each independent bird steers around the mouse.
@@ -8368,8 +8369,8 @@ export class TileLife {
     );
   }
 
-  private pointerNear(flock: Flock, pointer: FlockPointer, target?: Point) {
-    const radius = this.pointerRadius(flock, pointer, target);
+  private pointerNear(flock: Flock, pointer: FlockPointer, target?: Point, destination = false) {
+    const radius = this.pointerRadius(flock, pointer, target, destination);
     const at = target ?? flock;
     return radius > 0 && (at.x - pointer.x) ** 2 + (at.y - pointer.y) ** 2 < radius ** 2;
   }

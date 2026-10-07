@@ -21,6 +21,7 @@ export function birdFixture(
     water?: boolean;
     observer?: boolean;
     inspection?: boolean;
+    fullFlock?: boolean;
   } = {},
 ) {
   const builder = new LifeBuilder();
@@ -54,7 +55,7 @@ export function birdFixture(
   const flock = life.flocks[0]!;
   life.flocks.splice(1);
   life.movers.length = life.gatherers.length = life.stalls.length = life.parked.length = 0;
-  flock.birds.splice(1);
+  if (!options.fullFlock) flock.birds.splice(1);
   Object.assign(flock, birdPoint(20, 0), {
     species,
     rank: 0,

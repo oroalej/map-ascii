@@ -42,6 +42,37 @@ describe('birds keep clear of the mouse', () => {
     expect(f.flock.perched).toBe(true);
   });
   it.each([false, true])(
+    'abandons a perch inside the active banking margin (full flock=%s)',
+    (fullFlock) => {
+      const f = birdFixture('pigeon', { fullFlock });
+      expect(f.flock.birds).toHaveLength(fullFlock ? 8 : 1);
+      Object.assign(f.flock, birdPoint(20, 0), { perch: 0 });
+      const pointer = birdLngLat(fullFlock ? 62 : 58, 0);
+      for (let i = 0; i < 200 && f.flock.perch === 0 && !f.flock.perched; i++)
+        f.step(pointer, 0.05);
+      expect(f.flock.perch === -1 || f.flock.perched).toBe(true);
+      if (f.flock.perched) {
+        expect(f.flock.flightBounds).toBeUndefined();
+        expect(f.flock.birds.every((bird) => !bird.flight)).toBe(true);
+      }
+      checkClear(f, pointer, 19);
+    },
+  );
+  it.each([false, true])(
+    'fully settles at a perch outside the banking margin (full flock=%s)',
+    (fullFlock) => {
+      const f = birdFixture('pigeon', { fullFlock });
+      Object.assign(f.flock, birdPoint(20, 0), { perch: 0 });
+      const pointer = birdLngLat(90, 0);
+      for (let i = 0; i < 200 && (!f.flock.perched || f.flock.flightBounds); i++)
+        f.step(pointer, 0.05);
+      expect(f.flock.perched).toBe(true);
+      expect(f.flock.perch).toBe(0);
+      expect(f.flock.flightBounds).toBeUndefined();
+      expect(f.flock.birds.every((bird) => !bird.flight)).toBe(true);
+    },
+  );
+  it.each([false, true])(
     'flushes a perched flock only inside its rendered clearance (inside=%s)',
     (inside) => {
       const f = birdFixture();
