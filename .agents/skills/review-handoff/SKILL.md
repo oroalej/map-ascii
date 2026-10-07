@@ -88,7 +88,7 @@ Write a prompt naming the shared `handoff-review-prompt.md`, round `2`, and the 
 Run from `<checkout>`:
 
 ```powershell
-& '<claude>' -p (Get-Content -Raw '<scratch>/round2/claude-prompt.txt') --model claude-opus-5-5 --effort high --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 '<scratch>/round2/claude-review.md'
+& '<claude>' -p (Get-Content -Raw '<scratch>/round2/claude-prompt.txt') --model claude-opus-5-5 --effort high --strict-mcp-config --dangerously-skip-permissions --output-format text | Out-File -Encoding utf8 '<scratch>/round2/claude-review.md'
 ```
 
 Capture Claude's native exit code immediately; validate fresh output and the same report sections as round 1. A failed or malformed report is retried before validation starts. Claude cannot amend the handoff or spawn additional reviewers.

@@ -22,10 +22,37 @@ import {
 let setup: ReturnType<typeof fixture>;
 beforeEach(() => {
   setup = fixture();
+  // Review slots are machine-wide; tests must not queue behind (or block) real reviews.
+  process.env.ATLAS_REVIEW_SLOTS_DIR = join(setup.directory, 'review-slots');
 });
 afterEach(() => {
+  delete process.env.ATLAS_REVIEW_SLOTS_DIR;
   rmSync(setup.directory, { recursive: true, force: true });
 });
+
+/** A stub Claude: writes a transcript whose final message is a complete review, then behaves as asked. */
+const transcriptStub = (then: string) =>
+  [
+    'const fs=require("node:fs"),p=require("node:path");',
+    'const dir=p.join(process.env.CLAUDE_CONFIG_DIR,"projects","repo");',
+    'fs.mkdirSync(dir,{recursive:true});',
+    'const e=(o)=>JSON.stringify(o)+"\\n";',
+    'fs.writeFileSync(p.join(dir,process.argv[2]+".jsonl"),',
+    ' e({type:"assistant",message:{id:"a",stop_reason:"tool_use",usage:{output_tokens:1},content:[{type:"tool_use",name:"Read"}]}})',
+    '+e({type:"user",message:{content:[{type:"tool_result",content:"x"}]}})',
+    '+e({type:"assistant",message:{id:"b",stop_reason:"end_turn",usage:{output_tokens:2},content:[{type:"text",text:process.argv[1]}]}})',
+    '+e({type:"attachment"}));',
+    then,
+  ].join('');
+
+function withClaudeConfig<T>(run: () => Promise<T>): Promise<T> {
+  const previous = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = join(setup.directory, 'claude-config');
+  return run().finally(() => {
+    if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previous;
+  });
+}
 
 describe('review process receipts', () => {
   it('pins a Claude session and records its token usage after exit', async () => {
@@ -79,6 +106,82 @@ describe('review process receipts', () => {
       if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
       else process.env.CLAUDE_CONFIG_DIR = previous;
     }
+  });
+
+  it('takes the report from the transcript when a finished session never prints or exits', async () => {
+    const { state } = await startReview(setup.options);
+    const result = await withClaudeConfig(() =>
+      runProcess({
+        run: state.run,
+        phase: 'review',
+        round: 1,
+        headSha: state.headSha,
+        executable: process.execPath,
+        // Finished (end_turn) but hung: exactly what headless Claude did on 2026-10-07.
+        args: ['-e', transcriptStub('setInterval(()=>{},1000);'), reviewText, '{sessionId}'],
+        output: 'stdout',
+        watchdog: { pollMs: 50, idleMs: 150 },
+      }),
+    );
+    expect(result.receipt).toMatchObject({
+      valid: true,
+      reportSource: 'transcript',
+      terminatedBy: 'idle-watchdog',
+      status: 'completed',
+    });
+    expect(result.receipt.exitCode).not.toBe(0);
+    expect(readFileSync(result.receipt.report, 'utf8')).toBe(reviewText);
+    expect(result.receipt.reportHash).toBe(parseReceipt(readJson(result.path)).reportHash);
+    expect(receiptValid(result.receipt, state, state.headSha)).toBe(true);
+  });
+
+  it('ends a child at the phase time cap and keeps an unfinished transcript invalid', async () => {
+    const { state } = await startReview(setup.options);
+    const result = await withClaudeConfig(() =>
+      runProcess({
+        run: state.run,
+        phase: 'review',
+        round: 1,
+        headSha: state.headSha,
+        executable: process.execPath,
+        // The last message is still a tool call: the session has not finished.
+        args: [
+          '-e',
+          [
+            'const fs=require("node:fs"),p=require("node:path");',
+            'const dir=p.join(process.env.CLAUDE_CONFIG_DIR,"projects","repo");fs.mkdirSync(dir,{recursive:true});',
+            'fs.writeFileSync(p.join(dir,process.argv[1]+".jsonl"),JSON.stringify({type:"assistant",message:{stop_reason:"tool_use",content:[{type:"tool_use"}]}})+"\\n");',
+            'setInterval(()=>{},1000);',
+          ].join(''),
+          '{sessionId}',
+        ],
+        output: 'stdout',
+        watchdog: { pollMs: 30, idleMs: 60, maxMs: 200 },
+      }),
+    );
+    expect(result.receipt).toMatchObject({ valid: false, terminatedBy: 'time-cap', quota: null });
+  });
+
+  it('accepts a complete review whose section headings vary', async () => {
+    const { state } = await startReview(setup.options);
+    const result = await runProcess({
+      run: state.run,
+      phase: 'review',
+      round: 1,
+      headSha: state.headSha,
+      executable: process.execPath,
+      args: [
+        '-e',
+        'process.stdout.write(process.argv[1])',
+        '**CI:** pending on the pinned head.\n\n**Verdict:** Approve. Nothing to fix.\n\n**Checked, no issues**\nA · B\n',
+      ],
+      output: 'stdout',
+    });
+    expect(result.receipt).toMatchObject({ valid: true, reportSource: 'stdout' });
+    expect(reportComplete('review', '### Verdict\n**Verdict:** Changes requested — one gap')).toBe(
+      true,
+    );
+    expect(reportComplete('review', 'Working on it: verdict pending')).toBe(false);
   });
 
   it('binds review and validation receipts to the round scope', async () => {
@@ -302,7 +405,8 @@ describe('review process receipts', () => {
     expect(quotaFailure('{"error":{"code":"usage_limit_reached"}}')).toMatchObject({ reset: null });
     expect(quotaFailure('{"error":{"code":"rate_limit_exceeded"}}')).toBeNull();
     expect(quotaFailure('HTTP 429: too many requests')).toBeNull();
-    expect(reportComplete('review', '**Verdict:** Approve')).toBe(false);
+    expect(reportComplete('review', '**Verdict:** Approve')).toBe(true);
+    expect(reportComplete('review', 'no verdict yet')).toBe(false);
     expect(reportComplete('validation', '### Validation\n| # | other |')).toBe(false);
   });
 

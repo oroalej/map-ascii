@@ -51,15 +51,84 @@ export function transcriptTotals(text: string): TokenTotals {
   return totals;
 }
 
+export const claudeConfigDir = (): string =>
+  process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude');
+
 /**
- * Reads a `claude -p --session-id` transcript after the process exits. Claude Code stores it
- * under `<config>/projects/<project>/<session>.jsonl`, with subagents in `<session>/subagents/`.
+ * Locates a `claude -p --session-id` transcript. Claude Code stores it under
+ * `<config>/projects/<project>/<session>.jsonl`, with subagents in `<session>/subagents/`.
+ */
+export function findTranscript(sessionId: string, configDir = claudeConfigDir()): string | null {
+  try {
+    const projects = join(configDir, 'projects');
+    if (!existsSync(projects)) return null;
+    for (const project of readdirSync(projects)) {
+      const transcript = join(projects, project, `${sessionId}.jsonl`);
+      if (existsSync(transcript)) return transcript;
+    }
+  } catch {
+    /* unreadable config directory */
+  }
+  return null;
+}
+
+export type TranscriptReport = {
+  /** Text blocks of the last assistant message, joined. */
+  text: string;
+  /** The transcript ends with an `end_turn` assistant message: the session finished its work. */
+  final: boolean;
+};
+
+/**
+ * The last assistant text in a transcript. Headless Claude sometimes finishes its turn but never
+ * prints it or exits (observed 2026-10-07 on 2.1.292 with subagents); the transcript still holds the
+ * complete report, so the wrapper can take it from here instead of discarding the run.
+ */
+export function transcriptReport(text: string): TranscriptReport | null {
+  let last: { text: string; final: boolean } | null = null;
+  let trailing = true;
+  for (const line of text.split(/\r?\n/).reverse()) {
+    if (!line.trim()) continue;
+    let entry: unknown;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { type, message } = entry as { type?: unknown; message?: unknown };
+    if (type !== 'assistant' || typeof message !== 'object' || message === null) {
+      // Attachments and queue records follow the final message; user/tool entries mean more work.
+      if (type === 'user' || type === 'tool_result') trailing = false;
+      continue;
+    }
+    const { content, stop_reason: stop } = message as { content?: unknown; stop_reason?: unknown };
+    if (!Array.isArray(content)) continue;
+    const blocks = content.filter(
+      (block): block is { type: 'text'; text: string } =>
+        typeof block === 'object' &&
+        block !== null &&
+        (block as { type?: unknown }).type === 'text' &&
+        typeof (block as { text?: unknown }).text === 'string',
+    );
+    if (!blocks.length) {
+      trailing = false;
+      continue;
+    }
+    last = {
+      text: blocks.map((block) => block.text).join('\n'),
+      final: trailing && stop === 'end_turn',
+    };
+    break;
+  }
+  return last;
+}
+
+/**
+ * Reads a `claude -p --session-id` transcript after the process exits.
  * Returns null when the transcript is missing or unreadable; usage is never estimated.
  */
-export function claudeUsage(
-  sessionId: string,
-  configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'),
-): ClaudeUsage | null {
+export function claudeUsage(sessionId: string, configDir = claudeConfigDir()): ClaudeUsage | null {
   try {
     const projects = join(configDir, 'projects');
     if (!existsSync(projects)) return null;

@@ -53,7 +53,7 @@ Everything else is solved with the patterns below. Never pause, ask the user, or
   - Single-quote prompts that contain `$`, or put the prompt in a file and pass `(Get-Content -Raw '<file>')`.
   - Capture stdout with `Out-File -Encoding utf8`, never a plain `>`, which writes UTF-16.
   - Capture native exit codes immediately.
-- **Long commands:** a `$review-pr` run can take hours and `gh pr checks --watch` 10+ minutes. If the shell tool can't hold a command, start it in the background with output to a log in scratch (`Start-Process -WindowStyle Hidden` for native processes), then poll until it exits.
+- **Long commands:** never give a reviewer, validator or coordinator process a shell timeout: on 2026-10-07 timeouts killed eleven finished Claude reviews. Start every `review:state run` in the background with its output to a log in scratch (`Start-Process -WindowStyle Hidden -FilePath pnpm.cmd -ArgumentList ...`), then poll its attempt's `receipt.json` every minute until `status` is `completed`; the wrapper owns the time caps (90 min review, 60 min validation) and ends a child that finished but never exited. The same background-and-poll applies to anything else over a few minutes (`gh pr checks --watch`, builds).
 - **Deleting:** delete only with `pnpm plans:clean`, `pnpm worktree:remove` or `git worktree remove`. Never delete with shell commands (`Remove-Item`, `rm`, `del`, `rmdir`): Codex rejects recursive deletes as "blocked by policy". Leave scratch for `$merge-pr` cleanup.
 
 ## Binaries

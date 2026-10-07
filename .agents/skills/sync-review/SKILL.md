@@ -91,7 +91,7 @@ If the result file is missing, use the canonical checkpoint result, or else the 
 ## 5. Confirm CI
 
 1. Confirm the result's `ci.status` is `green` or `fixed`.
-2. Confirm `gh pr checks <N>` passes on the PR's current head SHA (`gh pr view <N> --json headRefOid`). If checks are still running, wait with `gh pr checks <N> --watch`.
+2. Confirm `gh pr checks <N>` passes on the PR's current head SHA (`gh pr view <N> --json headRefOid`). If checks are still running, poll `gh pr checks <N>` every 2 minutes until none is pending.
 3. If either check fails, run `<review-pr-skill>` step 6 (the CI gate) yourself in the branch's worktree until CI is green, including its review round when a CI fix touched non-test source code. Use the new head from then on.
 
 ## 6. Merge into main

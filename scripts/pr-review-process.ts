@@ -1,7 +1,17 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { isAbsolute, join, parse } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import {
   atomicJson,
   contained,
@@ -16,7 +26,16 @@ import {
 import type { Json, Receipt } from './pr-review-checkpoint';
 import { acquire } from './file-lock';
 import { git, mainCheckout } from './git';
-import { claudeUsage } from './pr-review-usage';
+import { claudeUsage, findTranscript, transcriptReport } from './pr-review-usage';
+
+export type Watchdog = {
+  /** How often the wrapper looks at the child's transcript (default 30 s). */
+  pollMs?: number;
+  /** A finished transcript that stays unchanged this long means the child is hung on exit (default 2 min). */
+  idleMs?: number;
+  /** Hard cap on the child's run time; the phase default applies when omitted. */
+  maxMs?: number;
+};
 
 export type ProcessSpec = {
   run: string;
@@ -30,7 +49,24 @@ export type ProcessSpec = {
   reviewReceipt?: string;
   /** Absolute `round<k>/scope.json` written by `review:state scope`. */
   scope?: string;
+  watchdog?: Watchdog;
 };
+
+/**
+ * The wrapper owns every timeout, so callers never need a shell timeout that would kill a child
+ * mid-report. Reviews and validations that run longer than this are not producing anything useful.
+ */
+export const phaseTimeCapMs: Record<Receipt['phase'], number> = {
+  review: 90 * 60_000,
+  validation: 60 * 60_000,
+  coordinator: 6 * 60 * 60_000,
+  check: 2 * 60 * 60_000,
+};
+
+/** Claude reviews that may run at once on this machine; more than this exhausts the 5-hour window. */
+export const REVIEW_SLOTS = 2;
+export const reviewSlotsDir = (): string =>
+  process.env.ATLAS_REVIEW_SLOTS_DIR || join(tmpdir(), 'atlas-review-slots');
 
 /** Preserve literal reset text; a clock time without a date is not an ISO timestamp. */
 export function quotaFailure(text: string): Receipt['quota'] {
@@ -70,12 +106,10 @@ function readError(value: unknown): string | null {
 }
 
 export function reportComplete(kind: Receipt['phase'], text: string): boolean {
+  // A review is complete when it states its verdict; section wording varies between runs and a
+  // missing colon once cost a finished 35-minute review.
   if (kind === 'review')
-    return (
-      /^\*\*Verdict:\*\*\s*(?:Approve(?: with nits)?|Changes requested)\b/im.test(text) &&
-      /^\*\*Checked, no issues:\*\*/m.test(text) &&
-      /^\*\*Not checked:\*\*/m.test(text)
-    );
+    return /^\s*(?:#+\s*)?\*\*Verdict:?\*\*:?[^\n]*\b(?:approve|changes requested)\b/im.test(text);
   if (kind === 'validation')
     return (
       /^\*\*Claude's verdict:\*\*/m.test(text) &&
@@ -175,7 +209,31 @@ export function parseProcessSpec(value: unknown): ProcessSpec {
     throw new Error('Review receipt must be an absolute path');
   if (spec.scope !== undefined && (typeof spec.scope !== 'string' || !isAbsolute(spec.scope)))
     throw new Error('Scope must be an absolute scratch path');
+  if (spec.watchdog !== undefined) {
+    if (!record(spec.watchdog)) throw new Error('Invalid watchdog');
+    for (const key of ['pollMs', 'idleMs', 'maxMs'] as const) {
+      const v = spec.watchdog[key];
+      if (v !== undefined && !(typeof v === 'number' && Number.isFinite(v) && v > 0))
+        throw new Error(`Invalid watchdog ${key}`);
+    }
+  }
   return spec;
+}
+
+/** The transcript's final report, once the session has stopped working (`end_turn`, no later turn). */
+function finishedTranscript(
+  sessionId: string | null,
+  phase: Receipt['phase'],
+): { text: string; file: string } | null {
+  if (!sessionId || phase !== 'review') return null;
+  const file = findTranscript(sessionId);
+  if (!file) return null;
+  try {
+    const report = transcriptReport(readFileSync(file, 'utf8'));
+    return report?.final && reportComplete(phase, report.text) ? { text: report.text, file } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Report paths are substituted as individual arguments; no command string or shell is used. */
@@ -225,6 +283,21 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     timeoutMs: 100,
     timeoutMessage: 'A matching process is still active; observe its receipt',
   });
+  // Machine-wide: other worktrees' reviews queue here instead of all burning the Claude window at once.
+  const releaseSlot =
+    spec.phase === 'review' || spec.phase === 'validation'
+      ? await acquire(
+          Array.from({ length: REVIEW_SLOTS }, (_, i) => join(reviewSlotsDir(), `slot-${i}.lock`)),
+          {
+            timeoutMs: 3 * 60 * 60_000,
+            onWait: () => console.error('waiting for a review slot; other worktrees are reviewing'),
+            timeoutMessage: 'Timed out waiting for a review slot.',
+          },
+        ).catch(async (error: unknown) => {
+          await release();
+          throw error;
+        })
+      : null;
   try {
     // A restarted coordinator must inspect receipts first; this also rejects stale head input.
     if (
@@ -293,6 +366,10 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     });
     const stdout = openSync(spec.output === 'stdout' ? report : join(attempt, 'stdout.log'), 'wx');
     const stderr = openSync(join(attempt, 'stderr.log'), 'wx');
+    const pollMs = spec.watchdog?.pollMs ?? 30_000,
+      idleMs = spec.watchdog?.idleMs ?? 2 * 60_000,
+      maxMs = spec.watchdog?.maxMs ?? phaseTimeCapMs[spec.phase];
+    let terminatedBy: Receipt['terminatedBy'] = null;
     try {
       const child = spawn(spec.executable, args, {
         cwd: state.checkout,
@@ -305,30 +382,82 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
           receipt.childPid === null ? null : processIdentity(receipt.childPid);
         atomicJson(receiptPath, receipt);
       });
-      await new Promise<void>((done) => {
+      let closed = false;
+      const exited = new Promise<void>((done) => {
         child.once('error', (error) => {
           receipt.error = error.message;
         });
         child.once('close', (code, signal) => {
           receipt.exitCode = code;
           receipt.signal = signal;
+          closed = true;
           done();
         });
       });
+      // Headless Claude can finish its turn and then neither print nor exit. Watch its transcript:
+      // once the final report is there and the file stops changing, end the child and take the
+      // report from the transcript. The time cap replaces every caller-side shell timeout.
+      const started = Date.now();
+      let finishedSince: number | null = null;
+      let seenMtime = 0;
+      const controller = new AbortController();
+      void exited.then(() => controller.abort());
+      const watch = (async () => {
+        while (!closed) {
+          await delay(pollMs, undefined, { signal: controller.signal }).catch(() => undefined);
+          if (closed) return;
+          const now = Date.now();
+          const finished = finishedTranscript(sessionId, spec.phase);
+          if (finished) {
+            const mtime = statSync(finished.file).mtimeMs;
+            if (mtime !== seenMtime) {
+              seenMtime = mtime;
+              finishedSince = now;
+            }
+            if (finishedSince !== null && now - finishedSince >= idleMs) {
+              terminatedBy = 'idle-watchdog';
+              child.kill();
+              return;
+            }
+          } else finishedSince = null;
+          if (now - started >= maxMs) {
+            terminatedBy = 'time-cap';
+            child.kill();
+            return;
+          }
+        }
+      })();
+      await exited;
+      await watch;
     } finally {
       closeSync(stdout);
       closeSync(stderr);
     }
     receipt.finishedAt = new Date().toISOString();
     receipt.status = 'completed';
+    receipt.terminatedBy = terminatedBy;
     receipt.usage = sessionId ? claudeUsage(sessionId) : null;
-    const body = existsSync(report) ? readFileSync(report, 'utf8').replace(/^\uFEFF/, '') : '';
-    receipt.reportHash = existsSync(report) ? hash(readFileSync(report)) : null;
+    let body = existsSync(report) ? readFileSync(report, 'utf8').replace(/^\uFEFF/, '') : '';
+    receipt.reportSource = spec.output;
     receipt.valid =
       receipt.exitCode === 0 &&
       receipt.signal === null &&
       receipt.error === null &&
       reportComplete(spec.phase, body);
+    if (!receipt.valid && receipt.error === null) {
+      // The process never printed its report or never exited (the watchdog ended it), but its
+      // session finished the work: the transcript's final message is the report.
+      const finished = finishedTranscript(sessionId, spec.phase);
+      if (finished) {
+        if (!reportComplete(spec.phase, body)) {
+          writeFileSync(report, finished.text, 'utf8');
+          body = finished.text;
+          receipt.reportSource = 'transcript';
+        }
+        receipt.valid = true;
+      }
+    }
+    receipt.reportHash = existsSync(report) ? hash(readFileSync(report)) : null;
     if (receipt.valid && review) {
       try {
         const currentReview = readReview();
@@ -358,6 +487,7 @@ export async function runProcess(input: ProcessSpec): Promise<{ receipt: Receipt
     }
     return { receipt, path: receiptPath };
   } finally {
+    await releaseSlot?.();
     await release();
   }
 }

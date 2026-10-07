@@ -115,7 +115,7 @@ It returns `mode`, `since`, `reason`, `path` (the scope file), `ledger` and `del
 
 Pass the scope file as the process's `scope`, so its receipt is bound to it.
 
-**Launch** through the recovery reference's `run` wrapper from `<pr-checkout>`, with a shell timeout of at least 20 minutes. The wrapper creates a unique attempt folder, captures UTF-8 output and writes an independent receipt. The Claude prompt is `/review-pr <N> --report-only`. Add `--since <since>` in a delta round, and `--ledger <ledger>` whenever the scope returned one.
+**Launch** through the recovery reference's `run` wrapper from `<pr-checkout>`, in the background (shared.md, Long commands): never with a shell timeout, which would kill a finished review. The wrapper creates a unique attempt folder, captures UTF-8 output, watches the Claude transcript, ends a child that finished but never exited (or hits the 90-minute cap), and writes an independent receipt. The Claude prompt is `/review-pr <N> --report-only`. Add `--since <since>` in a delta round, and `--ledger <ledger>` whenever the scope returned one.
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-input.json
@@ -123,15 +123,15 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-i
 
 - **Arguments:** use the reference's exact Claude arguments; the wrapper substitutes the saved effort. Never change the model or effort, or drop a flag. Put the pinned-head instruction and the saved rejection text in one `--append-system-prompt` argument.
 - **Read-only check:** `--report-only` keeps Claude from editing. Afterwards, compare `git status --porcelain=v1 -z --untracked-files=all` with the baseline. Record any difference in the round's record. Never revert or stage it; protect unfamiliar changes with the reference's `protect`.
-- **Acceptance:** require a successful native exit and a complete report, with a verified receipt and an unchanged PR head. A recovered receipt must pass the reference's checks.
+- **Acceptance:** the receipt says `valid: true` with an unchanged PR head. A `reportSource: "transcript"` receipt is a normal success (the wrapper took the finished report from the session transcript); its exit code doesn't matter. A recovered receipt must pass the reference's checks.
   - A quota receipt or wrapper exit 75 means `interrupted`.
-  - Any other failed or incomplete attempt gets Retry.
+  - Any other `valid: false` attempt gets Retry.
 
   The receipt's report path is `<claude-report>`. Never review the PR yourself instead.
 
 ## 3. Round k: Codex validates Claude's review
 
-Launch through `run` as in the recovery reference, from `<pr-checkout>`, with a shell timeout of at least 30 minutes:
+Launch through `run` as in the recovery reference, from `<pr-checkout>`, in the background (the wrapper caps it at 60 minutes):
 - Use `{report}` as the `-o` output and `<claude-report>` as the input report.
 - Pass the round's scope file as `scope`. The wrapper rejects a scope that differs from the review's.
 - The prompt names the scope mode, `since` and the ledger path.
@@ -199,7 +199,7 @@ Checkpoint CI attempts, reruns and fixes:
 - Save completed local check commands with the working-tree hash, and reuse them only while that hash matches.
 - Recovery always rechecks GitHub CI against the current remote head.
 
-1. **Wait** until the PR has checks for its current head (`gh pr view <N> --json headRefOid,statusCheckRollup`), then run `gh pr checks <N> --watch` with a shell timeout of at least 30 minutes. If everything passes, go to 3 when a CI fix or leftovers commit in this run touched non-test source and no round has run since. Otherwise go to 4.
+1. **Wait** until the PR has checks for its current head (`gh pr view <N> --json headRefOid,statusCheckRollup`), then poll `gh pr checks <N>` every 2 minutes until no check is pending (CI jobs time out at 6 minutes each, so this takes 10–20 minutes; a `--watch` call needs a background launch, shared.md). If everything passes, go to 3 when a CI fix or leftovers commit in this run touched non-test source and no round has run since. Otherwise go to 4.
 2. **A check fails:** read `gh run view <run-id> --log-failed`. For e2e failures, also run `gh run download <run-id> -n playwright-results-<shard> -D <scratch>/ci`.
    - **Infrastructure flake** (runner, network or dependency-download error, or a timeout with no failing test): run `gh run rerun <run-id> --failed`, then back to 1. The same failure twice counts as real.
    - **Real failure:**

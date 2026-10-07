@@ -56,8 +56,8 @@ Work economically: every tool call re-reads the whole conversation so far. Batch
 
 **Full review:** this is the only pass over the whole PR. Later rounds review only the fixes, so a defect left out now ships or costs another round. Report every one you can prove. Count the changed lines and files (`git diff --shortstat`).
 
-- **Small diff** (under ~300 changed lines and at most 8 files): review it yourself, going through all four checklist areas.
-- **Larger diff:** split the review by files, not by area. Use `n = min(6, max(2, ceil(changed lines / 1000)))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
+- **Up to ~1500 changed lines:** review it yourself, going through all four checklist areas. Read hunks with context, not whole files; subagents cost 86 % of a round's tokens and are not needed at this size.
+- **Larger diff:** split the review by files, not by area. Use `n = min(3, ceil(changed lines / 1500))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
 
   Give each one:
   - its file list, and a diff of only those files saved to the scratchpad (`git diff <base>...<head> -- <files>`), plus the head ref (so it can `git show <ref>:<path>`)
