@@ -88,6 +88,25 @@ it('preserves complete normalization inputs, cuts only tile records and repairs 
   );
   expect(buildSearchIndex(entries).entries.some((e) => e.name === 'Street')).toBe(true);
   expect(entries.some((e) => e.id === 'osm:way/2')).toBe(false);
+  const splitSchool: AtlasFeature = {
+    ...building,
+    properties: { id: 'split-school', class: 'building_school', name: 'Split School' },
+    geometry: {
+      type: 'MultiPolygon',
+      coordinates: [
+        bboxPolygon([0.1, 1.5, 0.3, 1.8]).coordinates,
+        bboxPolygon([1.1, 3.5, 1.3, 3.8]).coordinates,
+      ],
+    },
+  };
+  const schoolEntry = searchEntries(
+    displayFeatures([splitSchool], territory),
+    [],
+    content,
+    territory,
+  )[0]!;
+  expect(inTerritory(schoolEntry.lng, schoolEntry.lat, territory)).toBe(true);
+  expect(searchEntries([splitSchool], [], content)[0]!.lng).toBe(0.7);
 });
 
 it('uses original subdivision centroids for eligibility, clips HUD areas and keeps source outlines', () => {

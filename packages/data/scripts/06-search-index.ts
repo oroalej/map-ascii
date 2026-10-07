@@ -17,7 +17,7 @@ import type { AtlasFeature, AtlasProperties } from './03-normalize';
 import { inBbox } from './lib/geo';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { files, type Step } from './step';
-import { Territory, inTerritory } from './lib/territory';
+import { Territory, inTerritory, inVoid } from './lib/territory';
 import { displayFeatures } from './lib/display';
 import { interiorPoint } from './lib/frontage';
 
@@ -74,7 +74,7 @@ const altNamesOf = (p: AtlasProperties): string[] =>
     .filter((v) => v && v !== p.name);
 
 /** Prefer the stable label anchor; otherwise use a point, line midpoint or area centroid. */
-function pointOn(geometry: Geometry, feature: Feature): Position {
+function pointOn(geometry: Geometry, feature: Feature, territory?: Territory): Position {
   const properties = feature.properties as AtlasProperties | null;
   if (Number.isFinite(properties?.label_lng) && Number.isFinite(properties?.label_lat))
     return [properties!.label_lng!, properties!.label_lat!];
@@ -86,7 +86,12 @@ function pointOn(geometry: Geometry, feature: Feature): Position {
         ? geometry.coordinates.reduce((a, b) => (b.length > a.length ? b : a), [])
         : null;
   if (line && line.length > 0) return line[Math.floor(line.length / 2)]!;
-  return turfCentroid(feature).geometry.coordinates;
+  const center = turfCentroid(feature).geometry.coordinates;
+  return territory &&
+    inVoid(center, territory) &&
+    (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')
+    ? interiorPoint(geometry)
+    : center;
 }
 
 const overlaps = (a: BBox, b: BBox, gap: number) =>
@@ -163,7 +168,10 @@ export function searchEntries(
       const p = main.feature.properties;
       if (entries.has(p.id)) continue;
       const bbox = group.map((c) => c.bbox).reduce(join2);
-      const [lng, lat] = pointOn(main.feature.geometry, main.feature) as [number, number];
+      const [lng, lat] = pointOn(main.feature.geometry, main.feature, territory) as [
+        number,
+        number,
+      ];
       const landmark = p.landmark_id ? landmarks.get(p.landmark_id) : undefined;
       const localized = landmark
         ? Object.entries(landmark.name)
