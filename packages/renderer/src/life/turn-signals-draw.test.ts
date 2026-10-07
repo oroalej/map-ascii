@@ -57,7 +57,7 @@ describe('emergency roof bars', () => {
         expect(out[at! + 3]! & ~3).toBe(normal.out[at! + 3]! & ~3);
         positions.push(at!);
         const restored = out.slice();
-        restored.set(normal.out.subarray(at!, at! + 4), at!);
+        restored.set(normal.out.subarray(at, at! + 4), at);
         expect(restored).toEqual(normal.out);
       });
       expect(positions[0]).not.toBe(positions[1]);

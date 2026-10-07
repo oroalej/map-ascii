@@ -1,11 +1,11 @@
 import { gzipSync } from 'node:zlib';
 import { expect, it } from 'vitest';
-import { CityEmergency, decodeEmergency, encodeEmergency, type EmergencyData } from '@atlas/shared';
+import { CityEmergency, decodeEmergency, encodeEmergency } from '@atlas/shared';
 
-const generated = import.meta.glob<EmergencyData>(
-  '../../../apps/web/public/tiles/naga.emergency.json',
-  { eager: true, import: 'default' },
-);
+const generated = import.meta.glob('../../../apps/web/public/tiles/naga.emergency.json', {
+  eager: true,
+  import: 'default',
+});
 
 it('ships a validated compact network with reachable destinations and excluded guard houses', () => {
   const data = Object.values(generated)[0];

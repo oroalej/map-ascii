@@ -179,20 +179,20 @@ it.each([false, true])('creeps through an earned red grant only with lights on (
   for (let i = 0; i < 600; i++) {
     life.step(
       1 / 30,
-      () => true,
+      () => 0,
       (kind) => kind === 'vehicle',
       undefined,
       { rain: 0, clock },
       ground,
     );
     if (m.x >= 2000 - 10 * life.perMeter && m.x <= 2000 + 10.7 * life.perMeter)
-      expect(m.v! / life.perMeter).toBeLessThanOrEqual(EMERGENCY.creepMps + 1e-6);
+      expect(m.v / life.perMeter).toBeLessThanOrEqual(EMERGENCY.creepMps + 1e-6);
   }
   expect(
     m.x > 2000,
     JSON.stringify({
       x: m.x,
-      speed: m.v! / life.perMeter,
+      speed: m.v / life.perMeter,
       signals: life.signals.signals,
       holds: (life as unknown as { localJunctions: JunctionTable }).localJunctions.snapshot(),
     }),

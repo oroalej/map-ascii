@@ -76,7 +76,7 @@ it.each([1, -1] as const)(
     for (let i = 0; i < 1200; i++) {
       life.step(
         1 / 30,
-        () => true,
+        () => 0,
         (kind) => kind === 'vehicle',
         undefined,
         { rain: 0 },

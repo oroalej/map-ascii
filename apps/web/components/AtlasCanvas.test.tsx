@@ -101,7 +101,11 @@ it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
         await Promise.resolve();
       });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
-      const requests = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+      const requests = vi
+        .mocked(fetch)
+        .mock.calls.map(([url]) =>
+          typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+        );
       expect(requests.some((url) => url.endsWith('.emergency.json'))).toBe(
         mode !== 'absent' && mode !== 'zero',
       );

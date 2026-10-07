@@ -95,7 +95,7 @@ it('rolls back a rejected pull-aside trial from an absent roadShift', () => {
   life.movers.splice(0, life.movers.length, a, bMover);
   life.step(
     1 / 30,
-    () => true,
+    () => 0,
     () => true,
     undefined,
     { rain: 0 },

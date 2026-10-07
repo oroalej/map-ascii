@@ -33,7 +33,7 @@ export class EmergencyDispatch {
       if (!config[kind]?.max) continue;
       const seed = hashString(`emergency/${kind}`) ^ salt;
       this.clocks.set(kind, { seed, draws: 0, left: 0, run: 0, attempt: 0, rng: random(seed) });
-      this.clocks.get(kind)!.left = this.draw(kind, config[kind]!.interval_s);
+      this.clocks.get(kind)!.left = this.draw(kind, config[kind].interval_s);
     }
   }
   private draw(kind: EmergencyKind, range: readonly [number, number]) {

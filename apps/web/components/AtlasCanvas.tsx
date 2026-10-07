@@ -71,11 +71,8 @@ const EMPTY_PROCESSIONS: readonly ProcessionRoute[] = [];
 function useCityEmergency(slug: string, configured: boolean): EmergencyData | undefined {
   const [state, setState] = useState<{ slug: string; data?: EmergencyData }>({ slug });
   useEffect(() => {
+    if (!configured) return;
     const abort = new AbortController();
-    if (!configured) {
-      setState({ slug });
-      return;
-    }
     void fetch(`/tiles/${slug}.emergency.json`, { signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) return undefined;

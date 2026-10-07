@@ -10307,8 +10307,10 @@ export class LifeWorld {
             (m.guardWait ?? 0) >= STALL.anySeconds) &&
           this.owns(life, m) &&
           outsideView(life, life.groundBodies(m), view, 0)
-        )
-          m.emergency ? this.releaseEmergency({ life, mover: m }) : life.release(m);
+        ) {
+          if (m.emergency) this.releaseEmergency({ life, mover: m });
+          else life.release(m);
+        }
       }
   }
 
