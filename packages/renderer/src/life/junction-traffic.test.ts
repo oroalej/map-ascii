@@ -5,6 +5,7 @@ import { JunctionTraffic } from './junction-traffic';
 import { TileLife, type Mover } from './simulate';
 import { VEHICLES } from './vehicles';
 import { JUNCTION } from './config';
+import { RUSH_PACE_SALT } from './driving';
 
 function fixture() {
   const tile = { z: 16, x: 55192, y: 30266 },
@@ -99,7 +100,7 @@ it('denies a rushing approach whose earlier box clearance leaves insufficient ex
   expect(f.refresh(1)).toBeCloseTo(6.1, 2);
   expect(f.table.canEnter(f.m, f.p.key)).toBe(true);
   // Choose a stable driver share giving exactly 1.3x normal cruise.
-  f.m.rank = 1 / 3 / 3571.719;
+  f.m.rank = 1 / 3 / RUSH_PACE_SALT;
   f.m.rush = 5;
   const rushed = f.refresh(2);
   expect(rushed).toBeCloseTo(4.69, 2);

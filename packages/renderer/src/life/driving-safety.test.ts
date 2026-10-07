@@ -21,6 +21,9 @@ import { continuityMover, continuityTile, left } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import type { JunctionTable } from './junctions';
 
+type ExistingRandomStreams = Record<'rng' | 'routeRng' | 'walkerRng' | 'runRng', () => number>;
+const existingRandomStreams = (life: TileLife) => life as unknown as ExistingRandomStreams;
+
 it('still follows a slower leader during a forced burst', () => {
   const life = driveRoad(),
     follower = driveMover(life, 500),
@@ -34,6 +37,76 @@ it('still follows a slower leader during a forced burst', () => {
     );
   }
   expect(follower.v).toBeLessThan(follower.speed);
+});
+
+it.each([0, 1])('clears a tight junction exit and releases cross traffic with rain %s', (rain) => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 0, y: 2000 },
+      { x: 2000, y: 2000 },
+      { x: 4000, y: 2000 },
+    ],
+    LifeLine.roadMajor,
+    14,
+  );
+  b.line(
+    [
+      { x: 2000, y: 0 },
+      { x: 2000, y: 2000 },
+      { x: 2000, y: 4000 },
+    ],
+    LifeLine.roadMinor,
+    6,
+  );
+  const life = new TileLife(driveTile, b.finish(), 1);
+  life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+  life.scenes.sites.length = 0;
+  driveStreams(life).rushRng = () => 1;
+  const pm = life.perMeter,
+    junction = life.junctionIndex.junctions[0]!,
+    length = VEHICLES.car.length,
+    follower = driveMover(life, 2000 - 30 * pm),
+    leader = driveMover(life, 2000 + junction.radius + (length + 1.6 + length / 2) * pm);
+  follower.v = 2 * pm;
+  leader.from = 1;
+  leader.d = leader.x - 2000;
+  leader.v = 0;
+  const table = (life as unknown as { localJunctions: JunctionTable }).localJunctions;
+  let granted = false;
+  for (let frame = 0; frame < 400; frame++) {
+    life.step(0.1, undefined, undefined, undefined, {
+      rain,
+      inspecting: leader,
+      clock: frame / 10,
+    });
+    granted ||= table.granted(follower);
+  }
+  expect(granted).toBe(true);
+  expect((follower.x - 2000 - junction.radius) / pm - length / 2).toBeGreaterThan(0);
+  expect([...table.holds(follower)].some((hold) => hold.inside)).toBe(false);
+
+  const cross = driveMover(life, 2000);
+  Object.assign(cross, {
+    line: 1,
+    from: life.geo.starts[1],
+    d: 2000 - 30 * pm,
+    y: 2000 - 30 * pm,
+    hx: 0,
+    hy: 1,
+    v: 2 * pm,
+  });
+  let crossGrant = false;
+  for (let frame = 400; frame < 600; frame++) {
+    life.step(0.1, undefined, undefined, undefined, {
+      rain,
+      inspecting: leader,
+      clock: frame / 10,
+    });
+    crossGrant ||= table.granted(cross);
+  }
+  expect(crossGrant).toBe(true);
+  expect(cross.y).toBeGreaterThan(2000 + junction.radius);
 });
 
 it('cancels a burst on a service approach and does not admit one during dwell', () => {
@@ -66,7 +139,7 @@ it('cancels a burst on a service approach and does not admit one during dwell', 
   expect(m.v).toBe(0);
 });
 
-it('stops a forced speeder at a red signal', () => {
+it('stops a forced speeder at a red signal without admitting another burst', () => {
   const b = new LifeBuilder();
   b.line(
     [
@@ -99,6 +172,13 @@ it('stops a forced speeder at a red signal', () => {
   for (let frame = 0; frame < 100; frame++) driveStep(life, 0, { clock: red });
   expect(m.x).toBeLessThan(2048);
   expect(m.v).toBe(0);
+  expect(m.waiting ?? 0).toBe(0);
+  m.rush = 0;
+  const rng = vi.fn(() => 0);
+  driveStreams(life).rushRng = rng;
+  driveStep(life, 0, { clock: red });
+  expect(m.rush).toBe(0);
+  expect(rng).not.toHaveBeenCalled();
 });
 
 it('a forced speeder still brakes for a complete pedestrian footprint', () => {
@@ -160,20 +240,21 @@ it('does not perturb the existing route and population random streams', () => {
     b = driveRoad();
   driveMover(a);
   driveMover(b);
-  const states = [a, b].map(
-    (life) =>
-      life as unknown as {
-        rng: () => number;
-        routeRng: () => number;
-        walkerRng: () => number;
-        runRng: () => number;
-      },
-  );
+  const states = [a, b].map(existingRandomStreams);
   const tick = a as unknown as {
     rushTick(m: (typeof a.movers)[number], dt: number, room: boolean): void;
   };
   driveStreams(a).rushRng = vi.fn(() => 0);
   tick.rushTick(a.movers[0]!, 0.1, true);
+  for (const key of ['rng', 'routeRng', 'walkerRng', 'runRng'] as const)
+    expect(states[0]![key]()).toBe(states[1]![key]());
+});
+
+it('keeps the production burst stream independent of every existing random stream', () => {
+  const a = driveRoad(),
+    b = driveRoad(),
+    states = [a, b].map(existingRandomStreams);
+  for (let draw = 0; draw < 8; draw++) driveStreams(a).rushRng();
   for (const key of ['rng', 'routeRng', 'walkerRng', 'runRng'] as const)
     expect(states[0]![key]()).toBe(states[1]![key]());
 });

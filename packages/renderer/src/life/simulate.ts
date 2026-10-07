@@ -377,6 +377,7 @@ function viewIn(tile: TileId, bounds: LngLatBounds | undefined, margin: number) 
 }
 
 const between = (rng: () => number, [lo, hi]: readonly [number, number]) => lo + (hi - lo) * rng();
+const RUSH_KINDS: ReadonlySet<string> = new Set(DRIVE.rush.kinds);
 
 /** Craft kinds in a stable order, for lane bend keys. */
 const VEHICLE_KINDS = Object.keys(VEHICLES) as CraftType[];
@@ -1086,11 +1087,12 @@ export class TileLife {
     m.junctionRoute = preview.junctionRoute;
     m.waiting = preview.waiting;
     m.rush = preview.rush;
-    if (
-      (m.rush ?? 0) > 0 &&
-      [...this.residentMovers()].some((resident) => (resident.rush ?? 0) > 0)
-    )
-      m.rush = 0;
+    if ((m.rush ?? 0) > 0)
+      for (const resident of this.residentMovers())
+        if ((resident.rush ?? 0) > 0) {
+          m.rush = 0;
+          break;
+        }
     m.crossingWait = preview.crossingWait;
     m.routing = preview.routing;
     m.train = preview.train;
@@ -4886,7 +4888,15 @@ export class TileLife {
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
       if (room < 0.5 * pm) diagnostics?.following(m, leader);
       const wetRoad = this.scenes.raining && m.kind === 'vehicle' && !!m.vehicle;
-      const targetRoom = Math.max(0, gap - (wetRoad ? DRIVE.rain.gap : FOLLOW.minGap)) * pm;
+      let targetGap = wetRoad ? DRIVE.rain.gap : FOLLOW.minGap;
+      // Admission reserves the physical gap; clear that box before seeking extra wet room.
+      if (wetRoad)
+        for (const r of table.holds(m))
+          if (r.inside && r.since !== undefined) {
+            targetGap = FOLLOW.minGap;
+            break;
+          }
+      const targetRoom = Math.max(0, gap - targetGap) * pm;
       const target = Math.min(
         speeds[i]!,
         targetRoom / (wetRoad ? DRIVE.rain.headway : FOLLOW.headway),
@@ -5507,7 +5517,11 @@ export class TileLife {
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
         if (m.kind === 'vehicle') {
           const was = (m.rush ?? 0) > 0;
-          this.rushTick(m, dt, rushing < DRIVE.rush.maxPerTile);
+          const openRoad =
+            !was &&
+            rushing < DRIVE.rush.maxPerTile &&
+            Math.min(speeds[i]!, this.caps[i]!) + 1e-8 * this.perMeter >= this.cruise(m);
+          this.rushTick(m, dt, openRoad);
           rushing += Number((m.rush ?? 0) > 0) - Number(was);
           // New starts keep this step's traffic limits; expiry eases back immediately.
           if (was && (m.rush ?? 0) <= 0) speeds[i] = Math.min(speeds[i]!, this.cruise(m));
@@ -6447,18 +6461,23 @@ export class TileLife {
   /** Frozen and seasonally hidden residents retain a burst slot until it ends. */
   private reconcileRush(): number {
     let count = 0;
-    for (const m of this.residentMovers()) {
-      if ((m.rush ?? 0) <= 0) continue;
-      if (
-        this.scenes.raining ||
-        m.kind !== 'vehicle' ||
-        !DRIVE.rush.kinds.some((kind) => kind === m.vehicle) ||
-        this.scenes.visits.has(m) ||
-        this.scenes.services.has(m) ||
-        count >= DRIVE.rush.maxPerTile
-      )
-        m.rush = 0;
-      else count++;
+    for (let pool = 0; pool < 2; pool++) {
+      const movers = pool === 0 ? this.movers : this.suppressedGround?.movers.hidden;
+      if (!movers) continue;
+      for (let i = 0; i < movers.length; i++) {
+        const m = movers[i]!;
+        if ((m.rush ?? 0) <= 0) continue;
+        if (
+          this.scenes.raining ||
+          m.kind !== 'vehicle' ||
+          !RUSH_KINDS.has(m.vehicle!) ||
+          this.scenes.visits.has(m) ||
+          this.scenes.services.has(m) ||
+          count >= DRIVE.rush.maxPerTile
+        )
+          m.rush = 0;
+        else count++;
+      }
     }
     return count;
   }
@@ -6472,7 +6491,7 @@ export class TileLife {
     } else if (
       room &&
       (m.waiting ?? 0) <= 0 &&
-      DRIVE.rush.kinds.some((kind) => kind === m.vehicle) &&
+      RUSH_KINDS.has(m.vehicle!) &&
       this.rushRng() < DRIVE.rush.chance * dt
     )
       m.rush = between(this.rushRng, DRIVE.rush.seconds);

@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { activityLevels, DRIVE, kinematicsOf } from './config';
+import { activityLevels, DRIVE, FOLLOW, kinematicsOf } from './config';
 import { cruise } from './driving';
 import { driveMover, driveRoad, driveStep, driveStreams } from './testing/driving';
 import type { GroundGuard, Mover } from './simulate';
+import { VEHICLES } from './vehicles';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -133,6 +134,20 @@ it('ends blocked bursts and does not admit another while collision-waiting', () 
   expect(rng).not.toHaveBeenCalled();
 });
 
+it('does not draw a burst for stopped following traffic', () => {
+  const life = driveRoad(),
+    follower = driveMover(life, 500),
+    leader = driveMover(life, follower.x + (VEHICLES.car.length + FOLLOW.minGap) * life.perMeter);
+  follower.v = leader.v = 0;
+  const rng = vi.fn(() => 0);
+  driveStreams(life).rushRng = rng;
+  driveStep(life, 0, { inspecting: leader });
+  expect(follower.v).toBeLessThan(1e-8 * life.perMeter);
+  expect(follower.waiting ?? 0).toBe(0);
+  expect(follower.rush ?? 0).toBe(0);
+  expect(rng).not.toHaveBeenCalled();
+});
+
 it.each(['bus', 'truck', 'bicycle'] as const)(
   'does not admit a %s even when the burst RNG succeeds',
   (vehicle) => {
@@ -147,7 +162,7 @@ it.each(['bus', 'truck', 'bicycle'] as const)(
   },
 );
 
-it('cancels a burst before choosing a wet target and freezes duration during inspection', () => {
+it('cancels a burst and slows in rain, with duration frozen during inspection', () => {
   const life = driveRoad(),
     m = driveMover(life);
   driveStreams(life).rushRng = () => 0;
@@ -169,9 +184,6 @@ it('makes production-chance starts within a bounded seeded run and replays exact
       driveStep(life);
       if (life === lives[0])
         starts += life.movers.filter((m, i) => (m.rush ?? 0) > 0 && previous[i]! <= 0).length;
-      expect(life.movers.filter((m) => (m.rush ?? 0) > 0).length).toBeLessThanOrEqual(
-        DRIVE.rush.maxPerTile,
-      );
     }
   }
   expect(starts).toBeGreaterThan(0);

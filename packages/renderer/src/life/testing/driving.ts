@@ -1,12 +1,18 @@
 import { metersPerUnit } from '../../raster/geometry';
 import { LifeBuilder, LifeLine } from '../geometry';
 import { TileLife, type LifeEnv, type Mover } from '../simulate';
+import { left } from './continuity';
 
-export const driveTile = { z: 16, x: 55192, y: 30266 };
+export const driveTile = left;
 export const drivePm = 1 / metersPerUnit(driveTile);
 
 /** Clear road with controlled traffic and no incidental local scenes. */
-export function driveRoad(seed = 1, bend = 0, kind: LifeLine = LifeLine.roadMajor, oneway: 0 | 1 = 0) {
+export function driveRoad(
+  seed = 1,
+  bend = 0,
+  kind: LifeLine = LifeLine.roadMajor,
+  oneway: 0 | 1 = 0,
+) {
   const b = new LifeBuilder();
   const points = [
     { x: 0, y: 2000 },

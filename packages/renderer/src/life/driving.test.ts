@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DRIVE } from './config';
-import { cruise, share } from './driving';
+import { cruise, RAIN_PACE_SALT, share } from './driving';
 import type { Mover } from './simulate';
 
 const mover = (rank = 0.3): Mover =>
@@ -10,8 +10,8 @@ describe('driving pace', () => {
   it('gives each driver a stable share in the configured range', () => {
     const values = [0, 0.1, 0.3, 0.7, 0.999].map((rank) => {
       const m = mover(rank);
-      const pace = share(m, DRIVE.rain.pace, 7919.123);
-      expect(share(m, DRIVE.rain.pace, 7919.123)).toBe(pace);
+      const pace = share(m, DRIVE.rain.pace, RAIN_PACE_SALT);
+      expect(share(m, DRIVE.rain.pace, RAIN_PACE_SALT)).toBe(pace);
       expect(pace).toBeGreaterThanOrEqual(0.8);
       expect(pace).toBeLessThan(0.85);
       return pace;
