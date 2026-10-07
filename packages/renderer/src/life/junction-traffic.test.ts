@@ -5,6 +5,7 @@ import { JunctionTraffic } from './junction-traffic';
 import { TileLife, type Mover } from './simulate';
 import { VEHICLES } from './vehicles';
 import { JUNCTION } from './config';
+import { RUSH_PACE_SALT } from './driving';
 
 function fixture() {
   const tile = { z: 16, x: 55192, y: 30266 },
@@ -89,6 +90,25 @@ it('still charges a stationary downstream queue behind a moving leader', () => {
     queue = f.vehicle(14, 0);
   expect(f.refresh(1, [f.leader, queue])).toBeCloseTo(4.8);
   expect(f.table.granted(f.m, f.p.key)).toBe(false);
+});
+
+it('denies a rushing approach whose earlier box clearance leaves insufficient exit room', () => {
+  const f = fixture();
+  f.m.x = -20 * f.pm;
+  f.leader.x = 8 * f.pm;
+  f.leader.v = 2 * f.pm;
+  expect(f.refresh(1)).toBeCloseTo(6.1, 2);
+  expect(f.table.canEnter(f.m, f.p.key)).toBe(true);
+  // Choose a stable driver share giving exactly 1.3x normal cruise.
+  f.m.rank = 1 / 3 / RUSH_PACE_SALT;
+  f.m.rush = 5;
+  const rushed = f.refresh(2);
+  expect(rushed).toBeCloseTo(4.69, 2);
+  expect(rushed).toBeLessThan(VEHICLES.car.length + JUNCTION.gap);
+  expect(f.table.canEnter(f.m, f.p.key)).toBe(false);
+  f.m.rush = 0;
+  f.m.v = 10.4 * f.pm;
+  expect(f.refresh(3)).toBeLessThan(VEHICLES.car.length + JUNCTION.gap);
 });
 
 it('uses observed velocity from the traffic frame and treats unknown velocity as stationary', () => {
