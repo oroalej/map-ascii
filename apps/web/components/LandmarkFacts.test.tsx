@@ -355,13 +355,23 @@ it('does not show unlisted selections and cancels stale search responses', async
   expect(project).toHaveBeenLastCalledWith([20, 2]);
   expect(dialog()!.textContent).toContain('B place');
 });
-it('scrolls URL-less citations without adding history or changing the selection operation', () => {
-  testLandmarks[0] = { ...landmark, sources: [{ title: 'Printed history' }] };
+it('keeps citation targets when displaying OSM last without adding history or changing the selection operation', () => {
+  testLandmarks[0] = {
+    ...landmark,
+    sources: [
+      { title: 'OpenStreetMap', note: 'Location and name only.' },
+      { title: 'Printed history' },
+    ],
+    facts: landmark.facts!.map((fact) => ({ ...fact, source: 1 })),
+  };
   clickSelection();
   render();
   flush();
   const citation = dialog()!.querySelector<HTMLAnchorElement>('sup a')!;
   const source = document.getElementById(citation.hash.slice(1))!;
+  expect(citation.textContent).toBe('[2]');
+  expect(source.textContent).toBe('Printed history');
+  expect(dialog()!.querySelector('section li:last-child')?.textContent).toContain('OpenStreetMap');
   const scroll = vi.fn();
   Object.defineProperty(source, 'scrollIntoView', { value: scroll });
   const href = location.href,

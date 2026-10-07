@@ -20,6 +20,14 @@ export function LandmarkDetails({
   subdivisionLabel,
   headingId,
 }: LandmarkDetailsProps) {
+  // Keep original source indices for citations while displaying OSM attribution last.
+  const sources = landmark.sources
+    .map((source, index) => ({ source, index }))
+    .sort(
+      (a, b) =>
+        Number(a.source.title.startsWith('OpenStreetMap')) -
+        Number(b.source.title.startsWith('OpenStreetMap')),
+    );
   const subdivision = feature?.subdivision ?? entry?.subdivision;
   const approximate = feature ? feature.subdivisionApprox : entry?.approximate;
   const { start_year: start, end_year: end } = landmark;
@@ -115,7 +123,7 @@ export function LandmarkDetails({
       <section className={styles.sources}>
         <h3>Sources</h3>
         <ul>
-          {landmark.sources.map((source, i) => (
+          {sources.map(({ source, index: i }) => (
             <li id={`${headingId}-source-${i}`} key={i}>
               {source.url ? (
                 <a href={source.url} target="_blank" rel="noreferrer">
