@@ -254,6 +254,10 @@ it('excludes pipeline-only highway from base tiling while retaining it for utili
     outDir: join(dir, 'public'),
   } as unknown as StepContext;
   await writeDetailLayouts(context);
+  await writeFile(
+    join(dir, 'territory.geojson'),
+    JSON.stringify({ regionBounds: [0, -0.005, 0.01, 0], territory: null, void: null }),
+  );
   await step.run(context);
   expect(vi.mocked(tippecanoe).mock.calls[0]![2]).toContain('--exclude=highway');
 });

@@ -60,8 +60,13 @@ export function subdivisionAreas(
   city: Feature<Polygon | MultiPolygon>,
   mapped: readonly { name: string; feature: Feature<Polygon | MultiPolygon> }[],
   places: readonly PlaceNode[],
+  restrictToCity = false,
 ): Area[] {
-  const out: Area[] = mapped.map((m) => area(m.name, false, m.feature));
+  const out: Area[] = mapped.flatMap((m) => {
+    if (!restrictToCity) return [area(m.name, false, m.feature)];
+    const clipped = intersection(asGeom(city.geometry), asGeom(m.feature.geometry));
+    return clipped.length ? [area(m.name, false, toFeature(clipped))] : [];
+  });
   const mappedNames = new Set(mapped.map((m) => m.name));
   const seen = new Set<string>();
   const nodes = places.filter((p) => {

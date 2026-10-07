@@ -14,6 +14,7 @@ import {
 } from '@atlas/shared';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
+import { geometryOutsideVoid, inVoid, type Territory } from './territory';
 
 export type UtilityLamp = { key: string; road: string; at: UtilityPoint };
 type XY = UtilityPoint;
@@ -155,6 +156,7 @@ export function generateUtilities(
   features: readonly AtlasFeature[],
   bounds: BBox,
   lamps: readonly UtilityLamp[] = [],
+  territory?: Territory,
 ) {
   const projection = utilityProjection(bounds);
   const stats = {
@@ -254,6 +256,7 @@ export function generateUtilities(
     normal: XY,
   ): keyof typeof stats.rejected | undefined => {
     const geographic = projection.unproject(p);
+    if (territory && inVoid(geographic, territory)) return 'bounds';
     if (
       geographic[0] < bounds[0] ||
       geographic[0] > bounds[2] ||
@@ -501,6 +504,11 @@ export function generateUtilities(
   ): boolean => {
     const d = distance(a.p, b.p);
     if (a.pole.id === b.pole.id || d < 0.01 || d > max) return false;
+    if (
+      territory &&
+      !geometryOutsideVoid({ type: 'LineString', coordinates: [a.pole.at, b.pole.at] }, territory)
+    )
+      return false;
     const [from, to] = [a.pole, b.pole].sort((p, q) => compare(p.id, q.id));
     const id = utilitySpanId(from!.id, to!.id);
     if (spans.has(id)) return false;

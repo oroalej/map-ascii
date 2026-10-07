@@ -17,6 +17,8 @@ import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 import { writeDetailLayouts } from './lib/detail-layout';
+import { Territory, inTerritory } from './lib/territory';
+import { displayFeatures } from './lib/display';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
@@ -80,7 +82,7 @@ export function addLabelAnchor(feature: AtlasFeature) {
 export function checkTours(
   features: readonly AtlasFeature[],
   tours: ContentBundle['tours'],
-  [west, south, east, north]: BBox,
+  region: BBox | Territory,
 ): string[] {
   const ids = new Set(features.map((f) => f.properties.id));
   const problems: string[] = [];
@@ -88,8 +90,13 @@ export function checkTours(
     tour.steps.forEach((step, i) => {
       const where = `${tour.id} step ${i + 1}`;
       const { lng, lat } = step.camera;
-      if (lng < west || lng > east || lat < south || lat > north) {
-        problems.push(`${where}: camera ${lat}, ${lng} is outside the region`);
+      const territory: Territory = Array.isArray(region)
+        ? { regionBounds: region, territory: null, void: null }
+        : region;
+      if (!inTerritory(lng, lat, territory)) {
+        problems.push(
+          `${where}: camera ${lat}, ${lng} is outside the ${territory.territory ? 'territory' : 'region'}`,
+        );
       }
       for (const id of [...(step.select ? [step.select] : []), ...(step.highlight ?? [])]) {
         if (!ids.has(id)) problems.push(`${where}: ${id} is not in the data`);
@@ -110,6 +117,11 @@ export const step: Step = {
     }
     features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    for (const site of city.life?.sites ?? []) {
+      if (site.position && !inTerritory(...site.position, territory))
+        throw new Error(`Life site ${site.id}: position is outside the territory`);
+    }
     const merged = applyLandcoverTreeOverrides(
       mergeTraffic(
         mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
@@ -119,10 +131,6 @@ export const step: Step = {
       ),
       content.landcover,
     );
-    const tourProblems = checkTours(merged, content.tours, regionBounds);
-    if (tourProblems.length > 0) {
-      throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
-    }
     // Plan-view landmark parts (belfries, domes, tiered bases) as their own small footprints.
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
@@ -142,6 +150,13 @@ export const step: Step = {
     }
     const roofs = enrichRoofs(cemeteries.features);
     finalizeDetailSelections(cemeteries.features);
+    const tourProblems = checkTours(
+      displayFeatures(cemeteries.features, territory),
+      content.tours,
+      territory,
+    );
+    if (tourProblems.length > 0)
+      throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
     await writeFeatures(join(buildDir, files.merged), cemeteries.features);
     console.log(

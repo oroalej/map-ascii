@@ -14,6 +14,7 @@ import {
 } from '@atlas/shared';
 import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import type {
   Feature,
   FeatureCollection,
@@ -261,8 +262,15 @@ export function normalize(
     osm: { type: 'FeatureCollection', features: [] },
     derived: [],
   },
+  restrictSubdivisions = false,
 ): { features: AtlasFeature[]; areas: Area[] } {
-  const detail = classifyAll(assignFrontages(osm), subdivisionLevel);
+  // Eligibility uses the original relation centroid, before any display subtraction.
+  const detail = classifyAll(assignFrontages(osm), subdivisionLevel).filter(
+    ({ cls, feature }) =>
+      !restrictSubdivisions ||
+      cls !== 'admin_subdivision' ||
+      booleanPointInPolygon(centerOf(feature), boundary),
+  );
   const detailIds = new Set(detail.map((c) => String(c.feature.id)));
   const regional = classifyAll(region.osm, subdivisionLevel).filter(
     (c) => !detailIds.has(String(c.feature.id)) && c.cls !== 'admin_subdivision',
@@ -277,7 +285,7 @@ export function normalize(
   const places = detail
     .filter(({ cls, tags }) => cls === 'place_label' && isSubdivisionPlace(tags, subdivisionLevel))
     .map(({ feature, tags }) => ({ name: tags.name!, position: centerOf(feature) }));
-  const areas = subdivisionAreas(boundary, mapped, places);
+  const areas = subdivisionAreas(boundary, mapped, places, restrictSubdivisions);
   const areaNames = new Set(areas.map((a) => a.name));
 
   const cityName = tagsOf(boundary).name;
@@ -348,7 +356,11 @@ export function normalize(
     if (variant !== undefined) properties.variant = variant;
     if (cls === 'place_label') {
       properties.place = tags.place!;
-      if (areaNames.has(tags.name!) && isSubdivisionPlace(tags, subdivisionLevel)) {
+      if (
+        areaNames.has(tags.name!) &&
+        isSubdivisionPlace(tags, subdivisionLevel) &&
+        (!restrictSubdivisions || booleanPointInPolygon(centerOf(feature), boundary))
+      ) {
         properties.subdivision_label = true;
       }
     }
@@ -449,10 +461,16 @@ export const step: Step = {
       regionBounds,
     );
     const derived = await readOptional(join(buildDir, files.derived), empty);
-    const { features, areas } = normalize(osm, boundary, city.subdivision.admin_level, {
-      osm: regionOsm,
-      derived: derived.features as Feature<Geometry, DerivedProperties>[],
-    });
+    const { features, areas } = normalize(
+      osm,
+      boundary,
+      city.subdivision.admin_level,
+      {
+        osm: regionOsm,
+        derived: derived.features as Feature<Geometry, DerivedProperties>[],
+      },
+      !!(city.region && 'bbox' in city.region && city.region.include_boundary),
+    );
 
     const byLayer = new Map<string, number>();
     let withSubdivision = 0;

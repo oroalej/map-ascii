@@ -19,6 +19,7 @@ import {
 import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeJson } from './io';
 import { generateUtilities, type UtilityLamp } from './utilities';
+import type { Territory } from './territory';
 
 import {
   openOverlayArchive as openUtilityArchive,
@@ -106,13 +107,14 @@ export async function buildUtilityTiles(
   mergedPath: string,
   bounds: BBox,
   buildDir: string,
+  territory?: Territory,
 ) {
   const base = await openUtilityArchive(basePath);
   try {
     const features: AtlasFeature[] = [];
     for await (const f of readFeatures(mergedPath)) features.push(f as AtlasFeature);
     const catalog = await utilityLampCatalog(base.archive);
-    const generated = generateUtilities(features, bounds, catalog);
+    const generated = generateUtilities(features, bounds, catalog, territory);
     const header = await base.archive.getHeader();
     const worstLatitude = Math.max(Math.abs(bounds[1]), Math.abs(bounds[3]));
     const tileMeters =

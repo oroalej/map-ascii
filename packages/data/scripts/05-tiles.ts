@@ -20,6 +20,12 @@ import { detailCredits } from './lib/site-detail';
 import { publishDetailLayouts, readDetailLayouts } from './lib/detail-layout';
 import { tippecanoe } from './lib/tippecanoe';
 import { files, type Step } from './step';
+import { Territory, type Territory as TerritoryType } from './lib/territory';
+import { displayFeatures } from './lib/display';
+
+/** Pure production tile-input path, before the external tile compiler. */
+export const tileRecords = (features: readonly AtlasFeature[], territory: TerritoryType) =>
+  displayFeatures(features, territory).flatMap(roofTileRecords);
 
 /** Earliest dated year in the data (or `now` if nothing is dated) through `now`. */
 async function yearRange(mergedPath: string, now: number): Promise<[number, number]> {
@@ -63,6 +69,7 @@ export const step: Step = {
     const { city, content, buildDir, outDir } = ctx;
     const layouts = await readDetailLayouts(ctx);
     const merged = join(buildDir, files.merged);
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
     const geography = await readJson<Geography>(join(buildDir, files.geography));
     const years = await yearRange(merged, new Date().getFullYear());
     const meta = buildMeta(city, geography, years, [
@@ -82,10 +89,9 @@ export const step: Step = {
         : pmtiles;
     const utilityOutput = seasonal ? join(buildDir, `${city.slug}.utility-base.pmtiles`) : pmtiles;
     const tileInput = join(buildDir, 'tile-input.geojsonseq');
-    const records: AtlasFeature[] = [];
-    for await (const feature of readFeatures(merged))
-      records.push(...roofTileRecords(feature as AtlasFeature));
-    await writeFeatures(tileInput, records);
+    const features: AtlasFeature[] = [];
+    for await (const feature of readFeatures(merged)) features.push(feature as AtlasFeature);
+    await writeFeatures(tileInput, tileRecords(features, territory));
     tippecanoe(tileInput, base, [
       '-o',
       '{out}',
@@ -108,6 +114,7 @@ export const step: Step = {
         merged,
         utilityCoverageBounds(geography.bounds, geography.regionBounds),
         buildDir,
+        territory,
       );
 
     if (seasonal)
@@ -117,6 +124,7 @@ export const step: Step = {
         merged,
         city.life?.seasons,
         buildDir,
+        territory,
       );
 
     await mkdir(outDir, { recursive: true });

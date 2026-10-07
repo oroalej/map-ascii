@@ -17,6 +17,9 @@ import type { AtlasFeature, AtlasProperties } from './03-normalize';
 import { inBbox } from './lib/geo';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { files, type Step } from './step';
+import { Territory, inTerritory } from './lib/territory';
+import { displayFeatures } from './lib/display';
+import { interiorPoint } from './lib/frontage';
 
 /** How far apart (degrees, ~220 m) two same-named ways can be and still be one street. */
 const STREET_GAP = 0.002;
@@ -132,6 +135,7 @@ export function searchEntries(
   features: readonly AtlasFeature[],
   areas: readonly SubdivisionArea[],
   content: ContentBundle,
+  territory?: Territory,
 ): SearchEntry[] {
   const entries = new Map<string, SearchEntry>();
   const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
@@ -195,9 +199,11 @@ export function searchEntries(
     );
     const id = node?.properties.id ?? outline?.properties.id ?? `subdivision/${area.name}`;
     if (entries.has(id)) continue;
-    const [lng, lat] = (
+    let [lng, lat] = (
       node ? pointOn(node.geometry, node) : turfCentroid(feature).geometry.coordinates
     ) as [number, number];
+    if (territory?.territory && !inTerritory(lng, lat, territory))
+      [lng, lat] = interiorPoint(area.geometry as Parameters<typeof interiorPoint>[0]);
     entries.set(id, {
       id,
       name: area.name,
@@ -236,7 +242,11 @@ export const step: Step = {
     const areas = await readJson<SubdivisionArea[]>(join(buildDir, files.subdivisions));
     // Overpass returns whole ways that cross the detail bbox; keep results the camera can reach.
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
-    const entries = inRegion(searchEntries(features, areas, content), regionBounds);
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const entries = inRegion(
+      searchEntries(displayFeatures(features, territory), areas, content, territory),
+      regionBounds,
+    ).filter((e) => inTerritory(e.lng, e.lat, territory));
     const counts = new Map<string, number>();
     for (const e of entries) counts.set(e.type, (counts.get(e.type) ?? 0) + 1);
     await writeJson(join(outDir, `${city.slug}.search-index.json`), buildSearchIndex(entries));
