@@ -24,7 +24,7 @@ Before altering a worktree, run `inspect` with:
 
 It returns the latest matching checkpoint or a legacy source. Add `claudeEffort: "<level>"` only when `--claude-effort` was explicitly supplied; omit it to inherit an explicitly chosen saved effort on resume. Accept only `low`, `medium`, `high`, `xhigh` or `max`. Reject missing/invalid option values before initialization or process launches. Add `fresh: true` or `resume: "<absolute-run-path>"` for the corresponding flags. Reject both together. A `--resume` target without a PR argument gets its PR and branch from the saved checkpoint, or verified `invocation.json`/`pr-round1.json` legacy metadata; then query that PR. Never use the main checkout's fallback PR selection for an explicit resume.
 
-Inspect the original checkout, baseline, owned bytes and pending operations. Keep owned WIP only when the saved bytes and index/working-tree hashes still match. Preserve unknown changes; if a detached worktree is needed, replay only recorded owned bytes with `restore` below. Legacy dirty files have no ownership proof and remain baseline edits.
+Inspect the original checkout, baseline, owned bytes and pending operations. Keep owned WIP only when the saved bytes and index/working-tree hashes still match. In the PR's own task worktree, every other dirty file (unknown changes, legacy dirty files, owned files whose bytes no longer match) is the task's work: adopt it with "Commit task leftovers" (shared.md) before `init`, so the new review covers it. In other checkouts (the main checkout, a folder of unknown origin), preserve unknown changes; if a detached worktree is needed, replay only recorded owned bytes with `restore` below.
 
 Fetch the branch and main, reconcile local and remote commits under the skill's Git rules, then refresh the PR head. Run `init` with the same input using the chosen PR checkout and refreshed remote SHA. It creates a new invocation and returns `state`, verified `reusable` receipts, and recovery diagnostics. No files in the source invocation are changed. An active recorded child prevents initialization: observe its process and receipt rather than launching another.
 
@@ -34,7 +34,7 @@ Use `state.claudeEffort` for every new Claude PR-review attempt. Initialization 
 
 For `Worker checkpoint`, verify its identity with `show` and attach directly to that initialized invocation. Its saved effort is authoritative; reject a conflicting explicit worker option. The caller's coordinator receipt supervises this worker. Do not run `init` again. The worker checkpoints its own operations and launches reviewer/validator wrappers normally.
 
-After main synchronization, dispatch to the recovered phase only when the reviewed head is unchanged. A new merge or external commit requires a new review round, retaining old rounds as history. Before consuming a saved clean result, verify local HEAD equals current PR head, current main is an ancestor, the worktree has no uncommitted review fixes, and GitHub CI passes for that exact head.
+After main synchronization, dispatch to the recovered phase only when the reviewed head is unchanged. A new merge or external commit requires a new review round, retaining old rounds as history. Before consuming a saved clean result, verify local HEAD equals current PR head, current main is an ancestor, the task worktree has nothing uncommitted apart from held-back files, and GitHub CI passes for that exact head.
 
 ## Record operations
 
@@ -52,6 +52,8 @@ Example reporting metadata:
       "mainMerge": "current",
       "cli": { "codex": "<resolved-version>", "claude": "<resolved-version>" },
       "workTree": null,
+      "leftovers": [],
+      "heldBack": [],
       "noticed": [],
       "localChecks": []
     }
@@ -95,7 +97,7 @@ Reconcile a pending operation before repeating it:
 - A pending push's commit is already an ancestor of refreshed PR head: acknowledge the push; review any subsequent/new commits. Never duplicate a commit or force-push.
 - A pending main merge is owned only when its saved pre-merge head and intended main SHA match Git's merge state. Continue its resolution; otherwise preserve that checkout and use a detached one.
 - A running child is identified by PID and OS start identity. Read its existing logs and await completion. Missing output from a live child is not a retry condition.
-- Uncheckpointed changes are preserved as unknown edits. Recreate the unfinished step in an isolated checkout if ownership cannot be established.
+- Uncheckpointed changes in the PR's task worktree are adopted with "Commit task leftovers" (shared.md), never stranded. In other checkouts they are preserved as unknown edits; recreate the unfinished step in an isolated checkout if ownership cannot be established.
 
 `restore` takes `{ "run": "<scratch>", "checkout": "<isolated-checkout>" }`. It verifies repository identity and every destination's saved base bytes before writing any owned changes. A mismatch requires manual reconciliation of the saved patch intent; never overwrite unrelated bytes. Then initialize a new continuation using that checkout. Saved deletions are applied only to matching base files.
 

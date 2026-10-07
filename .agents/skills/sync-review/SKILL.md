@@ -60,12 +60,8 @@ For a branch whose existing PR has a saved incomplete review, inspect it with th
 
 ## 1. Commit and push
 
-1. If `git -C <wt> status --porcelain` isn't empty, review `git diff`, `git diff --cached` and the untracked files.
-2. Hold back any file that looks like a secret (`.env*`, keys, tokens, credentials) and any file over 10 MB. Leave held-back files uncommitted and untouched, report them, and continue.
-3. Stage the rest by explicit path.
-4. Commit with one gitmoji + conventional message written from the diff, matching `git log` (e.g. `✨ feat(life): …`): lowercase, imperative, header at most 72 characters. Hooks run. If a hook rejects the commit, fix what it reports (formatting, lint, a wrong branch for the main checkout: use the detached work tree) and commit again.
-5. If `origin/<branch>` has commits the local branch lacks, run `git merge origin/<branch>`. Resolve any conflicts with the rules in [merge-main.md](../review-pr/references/merge-main.md) item 4.
-6. `git push -u origin <branch>` (in a detached work tree, `git push origin HEAD:<branch>`). If it is rejected because the remote moved, repeat step 5 and push again; Retry a network failure.
+1. In the branch's worktree, follow "Commit task leftovers" (shared.md, Shared patterns) with `<run>` as `<scratch>`. It commits everything uncommitted except held-back files, merges `origin/<branch>` when the remote moved, and pushes. `$review-pr` (step 4) reviews those commits.
+2. In a detached work tree (the branch is checked out in the main checkout), nothing uncommitted is adopted. Merge `origin/<branch>` if needed (merge-main.md item 4 for conflicts) and push unpushed commits with `git push origin HEAD:<branch>` (Retry; if rejected because the remote moved, merge and push again).
 
 ## 2. Delegate main synchronization to review-pr
 
