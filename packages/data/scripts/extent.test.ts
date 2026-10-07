@@ -141,6 +141,56 @@ it('drops whole seasonal records when embedded source segments cross the void', 
   expect(seasonalRecordsInTerritory([safe, bad], territory)).toEqual([safe]);
   expect(seasonalRecordsInTerritory([safe, bad], territory)[0]).toBe(safe);
   expect(seasonalRecordsInTerritory([safe, bad])).toEqual([safe, bad]);
+  const common = {
+    version: 1 as const,
+    id: 'edge',
+    season: 'test',
+    installation: 'test',
+    anchor: 'osm:way/1',
+    seed: 1,
+  };
+  const edgeRecords: SeasonalRecord[] = [
+    { ...common, kind: 'light-string', from: [0.5, 1.5], to: [1.5, 3] },
+    {
+      ...common,
+      kind: 'carnival',
+      style: 'midway',
+      at: [1.000001, 3],
+      size_m: [30, 30],
+      angle_deg: 0,
+    },
+    { ...common, kind: 'decorated-canopy', at: [1.000001, 3], radius_m: 10 },
+  ];
+  expect(seasonalRecordsInTerritory(edgeRecords, territory)).toEqual([]);
+});
+
+it('rejects straight utility spans across a concave gap with otherwise admissible endpoints', () => {
+  const bounds: [number, number, number, number] = [123.18, 13.62, 123.184, 13.624];
+  const boundary = {
+    type: 'MultiPolygon' as const,
+    coordinates: [
+      bboxPolygon([123.18, 13.62, 123.1819, 13.624]).coordinates,
+      bboxPolygon([123.1821, 13.62, 123.184, 13.624]).coordinates,
+    ],
+  };
+  const t = createTerritory(bounds, boundary, [123.18, 13.62, 123.184, 13.621]);
+  const road: AtlasFeature = {
+    type: 'Feature',
+    properties: { id: 'gap', class: 'road_major', highway: 'primary', width: 8 },
+    tippecanoe: { layer: 'roads', minzoom: 6, maxzoom: 16 },
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [123.1802, 13.622],
+        [123.1838, 13.622],
+      ],
+    },
+  };
+  const crosses = (r: ReturnType<typeof generateUtilities>['records'][number]) =>
+    r.kind === 'span' &&
+    !geometryOutsideVoid({ type: 'LineString', coordinates: [r.span.from.at, r.span.to.at] }, t);
+  expect(generateUtilities([road], bounds).records.some(crosses)).toBe(true);
+  expect(generateUtilities([road], bounds, [], t).records.some(crosses)).toBe(false);
 });
 
 it('admits utility supports after offsets and retains only spans wholly outside the void', () => {
