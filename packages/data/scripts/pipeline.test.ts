@@ -182,8 +182,9 @@ describe('pipeline (02–04) on the fixture extract', () => {
               ...local,
               city: {
                 ...local.city,
-                life: {
-                  sites: [
+              life: {
+                source: 'Fixture source',
+                sites: [
                     {
                       id: 'void',
                       kind: 'shelter',
