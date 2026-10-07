@@ -41,6 +41,8 @@ export type FetchOptions = {
   offline: boolean;
   /** Download again, replacing saved copies. */
   refresh?: boolean;
+  /** Require matching query filters and bbox coverage even when offline. */
+  requireCoverage?: boolean;
 };
 
 /**
@@ -51,9 +53,10 @@ export type FetchOptions = {
 export function cacheAnswers(
   saved: string | undefined,
   query: string,
-  { offline, refresh = false }: FetchOptions,
+  { offline, refresh = false, requireCoverage = false }: FetchOptions,
 ): boolean {
-  if (offline) return true;
+  if (offline)
+    return requireCoverage ? cacheAnswers(saved, query, { offline: false, refresh: false }) : true;
   if (refresh || saved === undefined) return false;
   if (saved === query) return true;
   const [a, b] = [splitOverpassBbox(saved), splitOverpassBbox(query)];
@@ -73,7 +76,13 @@ export async function overpass(
     console.log(`  cached ${cacheFile}`);
     return JSON.parse(await readFile(cacheFile, 'utf8')) as OverpassResponse;
   }
-  if (offline) throw new Error(`--offline: no cached download at ${cacheFile}`);
+  if (offline)
+    throw new Error(
+      `--offline: no matching cached download at ${cacheFile}` +
+        (options.requireCoverage
+          ? ` covering ${JSON.stringify(splitOverpassBbox(query)?.bbox ?? 'the query')}`
+          : ''),
+    );
 
   for (let attempt = 1; ; attempt++) {
     const endpoint = endpoints[(attempt - 1) % endpoints.length]!;

@@ -54,6 +54,14 @@ export const bboxesOverlap = (a: BBox, b: BBox) =>
 export const toOverpassBbox = ([west, south, east, north]: BBox) =>
   [south, west, north, east].map((n) => n.toFixed(6)).join(',');
 
+/** The smallest rectangle containing both bboxes. */
+export const unionBbox = (a: BBox, b: BBox): BBox => [
+  Math.min(a[0], b[0]),
+  Math.min(a[1], b[1]),
+  Math.max(a[2], b[2]),
+  Math.max(a[3], b[3]),
+];
+
 /** The overlap of two bboxes. Throws when they don't overlap. */
 export function intersectBbox(a: BBox, b: BBox): BBox {
   const out: BBox = [

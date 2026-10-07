@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -36,12 +36,48 @@ describe('cacheAnswers', () => {
   it('always uses the saved download offline', () => {
     expect(cacheAnswers('old', city, { offline: true })).toBe(true);
   });
+
+  it('requires metadata, matching filters and coverage in strict offline mode', () => {
+    const strict = { offline: true, requireCoverage: true };
+    expect(cacheAnswers(undefined, city, strict)).toBe(false);
+    expect(cacheAnswers(downtown, city, strict)).toBe(false);
+    expect(cacheAnswers(city, downtown, strict)).toBe(true);
+    expect(cacheAnswers(city, q('13.602,123.17,13.64,123.213', 'node["place"];'), strict)).toBe(
+      false,
+    );
+  });
 });
 
 describe('overpass', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+  });
+
+  it('rejects smaller lighter/region caches and missing metadata without an offline network fallback', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-coverage-'));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    try {
+      for (const name of ['detail-traffic.osm.json', 'region-part-1.osm.json']) {
+        const path = join(dir, name);
+        await writeFile(path, JSON.stringify({ elements: [] }));
+        await expect(
+          overpass(city, path, { offline: true, requireCoverage: true }),
+        ).rejects.toThrow('covering');
+        await writeFile(`${path}.query`, downtown);
+        await expect(
+          overpass(city, path, { offline: true, requireCoverage: true }),
+        ).rejects.toThrow(path);
+        await writeFile(`${path}.query`, city);
+        expect(await overpass(downtown, path, { offline: true, requireCoverage: true })).toEqual({
+          elements: [],
+        });
+      }
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('retries a dropped connection, on the next server, and saves the answer', async () => {

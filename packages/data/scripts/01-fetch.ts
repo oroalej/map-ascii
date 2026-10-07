@@ -1,10 +1,18 @@
 import { join } from 'node:path';
+import { readFile, writeFile } from 'node:fs/promises';
 import type { BBox, City } from '@atlas/shared';
 import { downloadDem } from './lib/dem';
-import { bufferBbox, fromOverpassBounds, intersectBbox, toOverpassBbox } from './lib/geo';
+import {
+  bufferBbox,
+  fromOverpassBounds,
+  intersectBbox,
+  toOverpassBbox,
+  unionBbox,
+} from './lib/geo';
 import { writeJson } from './lib/io';
 import {
   onlyRelation,
+  cacheAnswers,
   overpass,
   quote,
   type FetchOptions,
@@ -177,8 +185,14 @@ export function mergeResponses(responses: readonly OverpassResponse[]): Overpass
 }
 
 /** The region's bounds: its relation's bbox, or the configured bbox. */
-async function regionBounds(city: City, rawDir: string, cache: FetchOptions): Promise<BBox> {
-  if ('bbox' in city.region) return city.region.bbox;
+export async function regionBounds(
+  city: City,
+  rawDir: string,
+  cache: FetchOptions,
+  boundary: BBox,
+): Promise<BBox> {
+  if ('bbox' in city.region)
+    return city.region.include_boundary ? unionBbox(city.region.bbox, boundary) : city.region.bbox;
   const { name, osm_relation } = city.region;
   const selector = osm_relation
     ? `rel(${osm_relation})`
@@ -198,12 +212,53 @@ out tags bb;`,
   return fromOverpassBounds(match.bounds);
 }
 
+/** Stable part identities allow an ordinary retry to retain completed downloads. */
+export const detailParts = (city: City, bbox: BBox) =>
+  splitBbox(bbox, 2).map((part, i) => ({
+    query: detailQuery(city, toOverpassBbox(part)),
+    file: files.rawDetail.replace('.osm.json', `-part-${i + 1}.osm.json`),
+  }));
+
+export async function fetchDetail(
+  city: City,
+  bbox: BBox,
+  rawDir: string,
+  cache: FetchOptions,
+): Promise<OverpassResponse> {
+  const aggregate = join(rawDir, files.rawDetail);
+  const query = detailQuery(city, toOverpassBbox(bbox));
+  if (!('bbox' in city.region && city.region.include_boundary))
+    return overpass(query, aggregate, cache);
+  const strict = { ...cache, requireCoverage: true };
+  if (cache.offline) {
+    const savedQuery = await readFile(`${aggregate}.query`, 'utf8').catch(() => undefined);
+    if (cacheAnswers(savedQuery, query, { offline: false })) {
+      const saved = await readFile(aggregate, 'utf8').catch((err: NodeJS.ErrnoException) => {
+        if (err.code === 'ENOENT') return undefined;
+        throw err;
+      });
+      if (saved !== undefined) return JSON.parse(saved) as OverpassResponse;
+    }
+  }
+  const parts: OverpassResponse[] = [];
+  for (const part of detailParts(city, bbox))
+    parts.push(await overpass(part.query, join(rawDir, part.file), strict));
+  const detail = mergeResponses(parts);
+  await writeJson(aggregate, detail);
+  await writeFile(`${aggregate}.query`, query);
+  return detail;
+}
+
 // Download OSM for the city boundary, the detail bbox, and the region, plus the region's DEM,
 // into raw/<city>/
 export const step: Step = {
   name: '01-fetch',
   async run({ city, rawDir, offline, refresh }) {
-    const cache: FetchOptions = { offline, refresh };
+    const cache: FetchOptions = {
+      offline,
+      refresh,
+      requireCoverage: 'bbox' in city.region && city.region.include_boundary === true,
+    };
     const boundaryData = await overpass(
       boundaryQuery(city),
       join(rawDir, files.rawBoundary),
@@ -218,16 +273,12 @@ export const step: Step = {
     console.log(`  boundary: relation/${boundary.id}`);
 
     // Detail outside the region can't be seen (the camera is clamped to it), so don't fetch it.
-    const regionBbox = await regionBounds(city, rawDir, cache);
+    const regionBbox = await regionBounds(city, rawDir, cache, fromOverpassBounds(boundary.bounds));
     const detailBbox = intersectBbox(
       bufferBbox(fromOverpassBounds(boundary.bounds), city.detail_buffer_km),
       regionBbox,
     );
-    const detail = await overpass(
-      detailQuery(city, toOverpassBbox(detailBbox)),
-      join(rawDir, files.rawDetail),
-      cache,
-    );
+    const detail = await fetchDetail(city, detailBbox, rawDir, cache);
     console.log(`  detail: ${detail.elements.length} elements`);
     const rail = await overpass(
       railQuery(toOverpassBbox(detailBbox)),
