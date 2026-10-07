@@ -33,6 +33,69 @@ vi.mock('./moments', async (load) => {
 });
 
 describe('life worker protocol', () => {
+  it.each(['lane', 'filter'] as const)(
+    'matches complete accepted %s state and indicators through worker frames',
+    (kind) => {
+      const entry = continuityTile(left, undefined, 77, 0, 1);
+      entry.life.widths[0] = 9.6;
+      const direct = new LifeWorld();
+      direct.sync([entry]);
+      const worlds: LifeWorld[] = [];
+      const api = createLifeWorkerApi(undefined, () => {
+        const world = new LifeWorld();
+        worlds.push(world);
+        return world;
+      });
+      api.init({ processions: [] });
+      api.sync([structuredClone(entry)]);
+      for (const world of [direct, worlds[0]!]) {
+        const life = worldTiles(world).get(entry.key)!;
+        life.movers.length = life.parked.length = life.gatherers.length = life.stalls.length = 0;
+        life.scenes.sites.length = 0;
+        const m = continuityMover(life, 2000);
+        Object.assign(m, {
+          lane: 0.9,
+          lat: -0.1,
+          vehicle: kind === 'filter' ? 'motorcycle' : 'car',
+          maneuver:
+            kind === 'filter'
+              ? { kind, target: 0.9, corridor: 1 / 3, queueSpeed: 0 }
+              : { kind, target: 0.5 },
+          laneSignal: 'left',
+        });
+        life.movers.push(m);
+      }
+      const center = tileToLngLat(left, { x: 2000, y: 2000 });
+      let indicating = false;
+      for (let frame = 0; frame < 40; frame++) {
+        const input: FrameInput = {
+          gust: {
+            camera: { lng: center[0], lat: center[1], zoom: 21 },
+            size: { width: 800, height: 600 },
+            cssCell: { w: 5, h: 7.5 },
+            time: frame / 10,
+            wind: { dir: [1, 0], strength: 0 },
+          },
+          step: {
+            dt: 0.1,
+            zoom: 21,
+            bounds: undefined,
+            wind: undefined,
+            weather: { rain: 0, minutes: 720 },
+            cellMeters: 0.2,
+          },
+          visible: [21, activityLevels(1), center],
+        };
+        const inline = runLifeFrame(direct, input),
+          remote = api.frame(input);
+        expect(remote.agents).toEqual(inline.agents);
+        expect(completeScenarioState(worlds[0]!)).toEqual(completeScenarioState(direct));
+        indicating ||= remote.agents.some((agent) => agent.turnSignal?.side === 'left');
+      }
+      expect(indicating).toBe(true);
+    },
+  );
+
   it('installs initial and late emergency geography without replacing ordinary owners', () => {
     const world = new LifeWorld(),
       api = createLifeWorkerApi(undefined, () => world),

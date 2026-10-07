@@ -125,6 +125,10 @@ export type Receipt = Identity & {
   /** Claude session pinned with `--session-id`, and its token totals read after exit. */
   sessionId?: string | null;
   usage?: ClaudeUsage | null;
+  /** Where the report came from: the process output, or its Claude transcript when the process never printed. */
+  reportSource?: 'stdout' | 'file' | 'transcript' | null;
+  /** Set when the wrapper ended the child: it had finished but never exited, or it hit the time cap. */
+  terminatedBy?: 'idle-watchdog' | 'time-cap' | null;
   valid: boolean;
   quota: { reason: string; reset: string | null } | null;
   error: string | null;
@@ -276,6 +280,17 @@ export function parseReceipt(v: unknown): Receipt {
     ) ||
     !(v.sessionId === undefined || nullableString(v.sessionId)) ||
     !(v.usage === undefined || v.usage === null || record(v.usage)) ||
+    !(
+      v.reportSource === undefined ||
+      v.reportSource === null ||
+      (typeof v.reportSource === 'string' &&
+        ['stdout', 'file', 'transcript'].includes(v.reportSource))
+    ) ||
+    !(
+      v.terminatedBy === undefined ||
+      v.terminatedBy === null ||
+      (typeof v.terminatedBy === 'string' && ['idle-watchdog', 'time-cap'].includes(v.terminatedBy))
+    ) ||
     typeof v.valid !== 'boolean' ||
     !nullableString(v.error) ||
     !(
@@ -463,8 +478,10 @@ export function receiptValid(receipt: Receipt, state: Identity, headSha: string)
     receipt.branch !== state.branch ||
     receipt.headSha !== headSha ||
     receipt.status !== 'completed' ||
-    receipt.exitCode !== 0 ||
-    receipt.signal !== null ||
+    // A report recovered from the session transcript is complete even though the hung process
+    // had to be ended by the wrapper; the wrapper only marks it valid for a finished session.
+    (receipt.reportSource !== 'transcript' &&
+      (receipt.exitCode !== 0 || receipt.signal !== null)) ||
     !receipt.valid ||
     receipt.quota !== null ||
     !receipt.reportHash

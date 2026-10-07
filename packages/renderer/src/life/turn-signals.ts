@@ -79,8 +79,10 @@ export function turnSide(
 export function visibleTurnSignal(
   routing: VehicleRouting | undefined,
   clock: number,
+  laneSide?: TurnSide,
 ): TurnSignal | undefined {
-  const side = routing?.signal?.side ?? (routing?.indicating ? routing.plan?.side : undefined);
-  if (!side || !routing) return;
-  return { side, on: blinkOn(routing.seed, clock) };
+  const side =
+    laneSide ?? routing?.signal?.side ?? (routing?.indicating ? routing.plan?.side : undefined);
+  if (!side) return;
+  return { side, on: blinkOn(routing?.seed ?? 0, clock) };
 }

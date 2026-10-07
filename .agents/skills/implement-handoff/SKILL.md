@@ -1,16 +1,16 @@
 ---
 name: implement-handoff
-description: Take an ASCII Atlas handoff from two-round review to PR, implementation, synchronization, resumable PR review and CI. Retains progress when delegated PR review exhausts usage; never merges. Use for $implement-handoff with optional --fast, --claude-effort and a task name or handoff path.
+description: Take an ASCII Atlas handoff from its review to PR, implementation, synchronization, resumable PR review and CI. Reuses a review that already covers the handoff; retains progress when the PR review exhausts usage; never merges. Use for $implement-handoff with optional --fast, --claude-effort, --two-round and a task name or handoff path.
 ---
 
 # Review a handoff → implement → land as a PR → $review-pr
 
-Usage: `$implement-handoff [--fast] [--claude-effort <level>] [--candidate <prior candidate path>] <task | path to handoff.md>`
+Usage: `$implement-handoff [--fast] [--claude-effort <level>] [--two-round] [--candidate <prior candidate path>] <task | path to handoff.md>`
 
 Invoking `$implement-handoff` authorizes these actions for this one task:
 
 - editing its `handoff.md` with review amendments
-- running `$review-handoff --apply` with its two-round limit
+- running `$review-handoff --apply` (one round; `--two-round` is forwarded when given)
 - creating its worktree if the handoff says it's a new task (or a detached work tree when it can't be used)
 - implementing it, committing and pushing
 - merging `origin/main` into its branch, resolving every conflict (including regenerating and publishing tiles with `pnpm data:build` / `pnpm data:publish`)
@@ -19,7 +19,7 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 
 Don't ask for confirmation between steps, and never merge the PR. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns, Rules, Binaries (`codex` only), Speed and Claude effort.
 
-- **Interrupted review:** an interrupted delegated PR review ends this invocation with saved progress.
+- **Interrupted review:** an interrupted PR review (a reviewer or validator hit the usage limit) ends this invocation with saved progress.
 - **Other ends:** nothing to do (no such handoff, or the work already landed on `main`) and a missing tool.
 - **Stop conditions:** the handoff's "Stop and report if" conditions are problems to solve, not stops.
 
@@ -28,12 +28,12 @@ Don't ask for confirmation between steps, and never merge the PR. Follow [shared
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
 | This session: amends the handoff, implements, commits, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
-| Inside `$review-handoff`: round 1 review / round 2 validation | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
-| Inside `$review-handoff`: round 2 review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
-| PR review coordinator: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
-| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, max | | normal / `<speed>` |
+| Inside `$review-handoff`: the round 1 review (and round 2's validation with `--two-round`) | Sol 6.1 (`gpt-6.1-sol`) | high | `<speed>` |
+| Inside `$review-handoff`: round 2 review (`--two-round` only) | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
+| This session again: runs `$review-pr`'s loop inline, including main synchronization, fixes and CI | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+| Inside `$review-pr`: the review / round 1's validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, high | | normal / `<speed>` |
 
-`$review-handoff` and `$review-pr` resolve their own binaries. `--fast` is forwarded to both; `--claude-effort` goes only to `$review-pr`.
+`$review-handoff` and `$review-pr` resolve their own binaries. `--fast` is forwarded to both; `--claude-effort` goes only to `$review-pr`, `--two-round` only to `$review-handoff`.
 
 ## Rules
 
@@ -49,6 +49,7 @@ shared.md's Rules apply, plus:
 1. **Parse options and resolve Codex.**
    - Take out `--fast` and set `<speed>`.
    - Take out and validate `--claude-effort`, remembering whether it was explicit.
+   - Take out `--two-round`, to forward to `$review-handoff`.
    - Resolve an explicit `--candidate` path against the invocation directory and keep its absolute path for the handoff review. It is not the original handoff path.
    - Resolve `<codex>` (shared.md, Binaries).
 2. Find the handoff:
@@ -68,7 +69,12 @@ shared.md's Rules apply, plus:
 5. Move `<task-dir>` to `<main-checkout>/.plans/active/` if it is not already there. Before moving, verify resolved old/new paths stay within this task's main-checkout `.plans/` locations and that the destination is unoccupied. Retain each task-local path's suffix relative to the old task directory. After moving, rebase `<task-dir>`, `<scratch>`, a supplied task-local `--candidate`, and any result/artifact variables onto the new directory. Preserve historical JSON records unchanged. Add or update its `.plans/README.md` row: status `Implementing (implement-handoff)`, Evidence `<branch> / <wt>`. Leave its Handoff review and PR review cells as they are (`not run` in a new row); the review skills write them. Completed tasks belong under `.plans/done/<group>/<task>/`; use the topic group of related completed work when moving a task there.
 6. **Resume where the task left off.** Decide from the result files, not from the README cells (those are for people):
    - **An open, non-draft PR exists for the branch** (`gh pr list --head <branch> --state open --json number,isDraft,headRefOid`): the implementation already landed. First run "Commit task leftovers" (shared.md) in `<wt>`; owned WIP of a saved incomplete review stays for its coordinator. A leftovers commit changes the PR head, so the review below covers it. Read its body with `gh pr view <N> --json body` and restore the "Unmet gates" section's gates, targets, latest measurements and approaches tried for steps 5–6. Skip steps 1–4. Search only `<task-dir>/review.json` and invocation-root `.plans/*/pr<N>-review-fixes/run-*/result.json` files for final `review-pr` results; never consume `round<k>/result.json` records. Require `pr: <N>` and `headSha` equal to the PR's current `headRefOid`, then select the newest matching final result by modification time. If it is `clean` with `ci.status` equal to `green` or `fixed`, report "PR review: already clean at <sha>" and go to step 6 as `clean`, retaining the restored unmet gates. Otherwise go to step 5 with those gates retained.
-   - **Otherwise, a ready handoff review may be reused.** Take the newest `<task-dir>/handoff-review/run-*/result.json` with `status: ready`, `applied: true`, this task, and a `candidateHash` equal to the SHA-256 of the current `handoff.md`. If one exists, skip step 1, set `<handoff-result>` to it and go to step 2. `main` having moved since doesn't matter (Rules).
+   - **Otherwise, a ready handoff review is reused.** Take the newest `<task-dir>/handoff-review/run-*/result.json` with `status: ready` and this task, and hash the current `handoff.md` (SHA-256):
+     - its `candidateHash` equals that hash: the review was applied. Skip step 1, set `<handoff-result>` to it and go to step 2.
+     - its `originalHash` equals that hash: a standalone `$review-handoff` without `--apply` reviewed exactly this text. Copy its `candidate` file over `handoff.md`, verify the saved bytes hash to its `candidateHash`, note "applied the earlier review <run folder>" for the report, set `<handoff-result>` to it and go to step 2. Never review the same text twice: that cost 1.5–2 hours per task on 2026-10-07.
+     - neither matches (the handoff was edited after the review): continue normally.
+
+     `main` having moved since doesn't matter (Rules).
    - **A resumed implementation:** if the branch already has this task's commits after the reused result's `branchSha` (`git merge-base --is-ancestor <branchSha> HEAD` succeeds and HEAD differs), those commits are the implementation in progress. Step 3.1 continues from the first step that `<scratch>/progress.md` and `git log` don't show as done.
    - **Nothing to reuse:** continue normally.
 
@@ -85,9 +91,9 @@ Follow [merge-main.md](../review-pr/references/merge-main.md) in `<wt>` with an 
 
 Skip this step when step 0.6 reused a ready review or resumed at step 5.
 
-Load [the sibling review-handoff skill](../review-handoff/SKILL.md) from this skill's checkout and follow it exactly. Missing skill or reference files are a missing tool. Use this session as its coordinator. Always pass `--apply` and the absolute `<task-dir>/handoff.md` path; forward `--fast` and `--candidate` only when explicitly supplied. Do not start another coordinator CLI session.
+Load [the sibling review-handoff skill](../review-handoff/SKILL.md) from this skill's checkout and follow it exactly. Missing skill or reference files are a missing tool. Use this session as its coordinator. Always pass `--apply` and the absolute `<task-dir>/handoff.md` path; forward `--fast`, `--two-round` and `--candidate` only when explicitly supplied. Do not start another coordinator CLI session.
 
-The standalone skill owns the reviewer prompts, models, evidence checks, candidate, ledger and unique invocation scratch. Its sequence is Codex round 1, then Claude review and Codex validation in round 2. It retries failed processes, fixes nonmatching amendments, decides conflicts and applies the validated amendments itself. The handoff budget is two rounds, independent of `$review-pr`'s rounds later.
+The standalone skill owns the reviewer prompts, models, evidence checks, candidate, ledger and unique invocation scratch. Its sequence is one Codex round (plus Claude review and Codex validation with `--two-round`). It retries failed processes, applies amendments with `pnpm handoff:apply`, fixes unplaced ones, and decides conflicts itself. Its rounds are independent of `$review-pr`'s rounds later.
 
 Retain its fresh JSON result path as `<handoff-result>` and read it.
 
@@ -119,22 +125,16 @@ Work in `<wt>`, following the amended handoff:
 
 Follow steps 1 and 3 of `<skill-dir>/../sync-review/SKILL.md` for this one branch and worktree, with these adjustments. Don't merge `origin/main` here: `$review-pr` does it first, in step 5.
 
-For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
+Set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
 
 - **Step 1 (commit and push):** usually only pushes, since step 3 already committed. Anything uncommitted at this point is work the handoff missed (commit it) or a held-back secret or large file (leave it uncommitted and report it), as "Commit task leftovers" says. A rejected push is fetched, merged and pushed again.
 - **Step 3 (PR):** if there's no PR, create one. Take the body from the handoff's Goal & context, its steps, and its Verification results (what actually ran). Add a "Handoff review amendments" section listing the design and post-review amendments. If a gate is still unmet (step 3.2), add an "Unmet gates" section: the gate, its target, the latest measurement, and the approaches tried.
 
 ## 5. Run $review-pr
 
-Make the delegated review call (shared.md) with `resultFile: "<scratch>/review.json"`:
+Run the review loop in this session (shared.md, "Running $review-pr from another skill"), writing its result copy to `<scratch>/review.json`. The review skill writes the task's PR review cell when it can report. Then:
 
-```
-pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input.json
-```
-
-`$review-pr` writes the task's PR review cell when it can report. Then:
-
-- `clean` (review clean and CI green): first confirm nothing is left behind. `git -C <wt> fetch origin <branch>`, then `git -C <wt> status --porcelain=v1 --untracked-files=all` must list only the result's `heldBack` files, and `<wt>`'s `HEAD`, `origin/<branch>` and the result's `headSha` must be the same commit. If `$review-pr` worked in a detached work tree and `<wt>` is clean and merely behind, fast-forward it (`merge --ff-only`). Anything else uncommitted or unpushed: run "Commit task leftovers" (shared.md) with `<scratch>`, then make the delegated review call again, which reviews the new commits; repeat until this check passes. Then go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
+- `clean` (review clean and CI green): first confirm nothing is left behind. `git -C <wt> fetch origin <branch>`, then `git -C <wt> status --porcelain=v1 --untracked-files=all` must list only the result's `heldBack` files, and `<wt>`'s `HEAD`, `origin/<branch>` and the result's `headSha` must be the same commit. If the review worked in a detached work tree and `<wt>` is clean and merely behind, fast-forward it (`merge --ff-only`). Anything else uncommitted or unpushed: run "Commit task leftovers" (shared.md) with `<scratch>`, then run the review loop again, which reviews the new commits; repeat until this check passes. Then go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
 - `error` (a missing tool): the PR stays open. Set the row's Next step to its `stopReason`. The folder stays in `active/`.
 - `interrupted`: report the checkpoint, reset information and resume command; set the row's Next step accordingly. Leave the task active, preserve WIP and scratch, and end without marking implementation complete or retrying the exhausted process.
 
@@ -142,7 +142,7 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input
 
 Report, following the handoff's "Report back" section, and add:
 
-- **Handoff review:** the status, round count (of 2), Codex then Claude → Codex sequence, result path, whether applied, retries and restarts, and every amendment (design first, then post-review). If step 0.6 reused an earlier review, say "reused <run folder>"; if it skipped to `$review-pr` because the PR already existed, say so.
+- **Handoff review:** the status, round count, reviewer sequence, result path, whether applied, retries and restarts, and every amendment (design first, then post-review). If step 0.6 reused an earlier review, say "reused <run folder>" (or "applied the earlier review <run folder>"); if it skipped to `$review-pr` because the PR already existed, say so.
 - **Blockers solved and gates unmet:** each outcome or premise condition hit in step 3.2, what was changed to solve it, and any gate still unmet with its latest numbers.
 - **The PR URL**, and the `$review-pr` result: the main merge (`mainMerge`), review rounds (`roundCount`), final status, the CI status, open entries it carried, and anything it noticed. If the review was already clean at the PR's head, say "PR review: already clean at <sha>".
 - Leftovers commits, held-back files (the only files left uncommitted), detached work trees, and conflict decisions.

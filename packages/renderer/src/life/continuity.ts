@@ -219,7 +219,17 @@ export function projectMover(
     vehicle: m.vehicle,
     paint: m.paint,
     lane: m.lane,
+    chosenLane: m.chosenLane,
+    lat: m.lat,
+    latYaw: m.latYaw,
+    maneuver: m.maneuver,
+    laneSignal: m.laneSignal,
+    lanePatience: m.lanePatience,
+    laneCooldown: m.laneCooldown,
+    filterRetry: m.filterRetry,
+    roadScan: m.roadScan,
     roadShift: m.roadShift,
+    roadYaw: m.roadYaw,
     pause: m.pause,
     rank: m.rank,
     group: m.group,
@@ -375,6 +385,61 @@ export function projectMover(
       stopY: frame.y + m.train.stopY * frame.scale,
       edge: false,
     };
+  if (m.chosenLane !== undefined || m.lat !== undefined || m.latYaw !== undefined || m.maneuver) {
+    // Lane intent remaps by fraction; metre-valued displacement never scales with tile units.
+    // Rebase against the destination's routed lane to retain the accepted physical pose.
+    preview.lat = undefined;
+    const offset =
+      ((oldX - preview.x) * -preview.hy + (oldY - preview.y) * preview.hx) / target.perMeter;
+    preview.lat = offset - target.offsetOf(preview);
+    const layout = target.directionalLanes(preview.line);
+    const chosen = Math.min(
+      layout.count - 1,
+      Math.floor((preview.chosenLane ?? preview.lane) * layout.count),
+    );
+    const state = preview.maneuver;
+    if (!state) {
+      if (Math.abs(preview.lat) <= 1e-8) preview.lat = undefined;
+      if (preview.lat !== undefined || preview.latYaw !== undefined) {
+        preview.maneuver = {
+          kind: 'return',
+          target: preview.chosenLane ?? preview.lane,
+          returning: true,
+        };
+        if (preview.lat !== undefined) preview.laneSignal = preview.lat > 0 ? 'left' : 'right';
+      }
+    } else if (state.corridor !== undefined) {
+      const boundary =
+        layout.count === 1
+          ? 1
+          : Math.max(1, Math.min(layout.count - 1, Math.round(state.corridor * layout.count)));
+      const fit = target.filterCorridor(preview, {
+        ...state,
+        kind: 'filter',
+        corridor: boundary / layout.count,
+      });
+      preview.maneuver = fit
+        ? { ...fit.maneuver, kind: state.kind }
+        : {
+            ...state,
+            kind: 'return',
+            target: preview.chosenLane ?? preview.lane,
+            corridor: undefined,
+            returning: true,
+          };
+    } else if (
+      state.kind === 'lane' &&
+      (layout.count === 1 ||
+        Math.min(layout.count - 1, Math.floor(state.target * layout.count)) === chosen)
+    ) {
+      preview.maneuver = {
+        ...state,
+        kind: 'return',
+        target: preview.chosenLane ?? preview.lane,
+        returning: true,
+      };
+    }
+  }
   const pose = target.pose(preview);
   if (
     !m.train &&
