@@ -27,9 +27,9 @@ When the prompt says `Scope: delta since <sha>`, Claude reviewed only the fix co
 - For each ledger entry these commits claim to fix, check that the fix really resolves it. An entry that still holds goes under "Noticed" with its ledger ID, unless the ledger marks it `open`: it's already carried in the PR body.
 - For "Noticed", inspect the delta, the callers and tests of changed code, and the ledger's open entries. Don't re-audit untouched files, but read anything outside the delta that the evidence needs.
 
-## Validate every entry
+## Validate every blocker and should-fix entry
 
-Go through every Blocker, Should-fix, and Nit in Claude's review. For each one:
+Go through every Blocker and Should-fix in Claude's review. **Skip the nits:** the fixer never fixes them (they go into the PR body for the owner), so validating them is wasted work; write their count in one line under the table. For each blocker or should-fix entry:
 
 1. Read the cited `path:line` on the head commit, plus enough of the surrounding code and callers to judge it.
 2. Check the claim:
@@ -72,6 +72,6 @@ Your final message is saved as `validation.md` and drives the fixes. Use exactly
 - **N<n> <blocker | should-fix | nit>** <path:line — one line> — <evidence> (or "None")
 ```
 
-- Include every entry in the Validation table, invalid ones too.
-- Fix steps cover the valid and partly valid entries plus noticed blockers and should-fix items, ordered blockers, then should-fix, then nits. Merge entries that change the same code into one step.
+- Include every blocker and should-fix entry in the Validation table, invalid ones too; nits only as a count line below it.
+- Fix steps cover the valid and partly valid entries plus noticed blockers and should-fix items, ordered blockers, then should-fix. Merge entries that change the same code into one step.
 - If no entry is valid and nothing serious was noticed, write "No valid entries" under Fix steps.

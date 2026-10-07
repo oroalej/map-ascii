@@ -24,10 +24,9 @@ Don't ask for confirmation between steps or branches. Follow [shared.md](../revi
 
 | Role | Model | Effort | Speed | How |
 | --- | --- | --- | --- | --- |
-| Loop session (this session): commits, conflicts, PRs, CI fixes, merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
-| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by `$review-pr` |
-| Codex #1: validates Claude's review (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` | started by `$review-pr` |
-| Codex #2: runs `$review-pr` (review rounds, fixes, CI gate) | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` | started by this skill (step 4) |
+| Loop session (this session): commits, conflicts, PRs, the `$review-pr` loop (rounds, fixes, CI gate), merges | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting | the user's session |
+| PR review | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal | started by the `$review-pr` steps |
+| Codex #1: validates Claude's round-1 blockers and should-fix items (analysis only) | Sol 6.1 (`gpt-6.1-sol`) | high | `<speed>` | started by the `$review-pr` steps |
 
 `$review-pr` resolves its own `codex` and `claude`. `--fast` and `--claude-effort` apply to every listed branch's review.
 
@@ -74,15 +73,9 @@ No action: `$review-pr` merges `origin/main` first (its step 1.7), and `$merge-p
    - Title: a gitmoji + conventional header summarizing the branch's commits since `main`.
    - Body: what the branch does, taken from its commits and its handoff, plus a test plan listing the checks the handoff names. Don't invent claims about tests that weren't run.
 
-## 4. Review (up to 3 rounds), with the CI gate ($review-pr)
+## 4. Review (up to 2 rounds), with the CI gate ($review-pr)
 
-`$review-pr` runs the review loop and CI gate itself. Start Codex #2 with the delegated review call (shared.md), using `resultFile: "<run>/<slug>-review.json"`:
-
-```
-pnpm.cmd -C <repo> --silent review:state run --input <run>/<slug>-coordinator-input.json
-```
-
-If the result file is missing, use the canonical checkpoint result, or else the `review-pr-result` block at the end of the `-o` file.
+Run the review loop and CI gate in this session (shared.md, "Running $review-pr from another skill"), writing the result copy to `<run>/<slug>-review.json`.
 
 - `clean` → step 5.
 - `error` → the branch ends with its `stopReason`; apply "Keep going".

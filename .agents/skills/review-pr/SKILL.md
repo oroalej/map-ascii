@@ -1,16 +1,16 @@
 ---
 name: review-pr
-description: Review a pull request until clean (at most 3 rounds) and CI is green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (later rounds review only the fixes), Sol 6.1 validates, and the coordinator fixes and pushes. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
+description: Review a pull request in at most 2 rounds and get CI green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (round 2 reviews only the fixes), Sol 6.1 validates round 1's blockers and should-fix items, and this session fixes and pushes. Nits are reported, not fixed. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
-# Claude review → Codex validation → fixes, up to 3 rounds, then CI
+# Claude review → (round 1) Codex validation → fixes, at most 2 rounds, then CI
 
 Invoking `$review-pr` authorizes the whole flow, without confirmation between steps:
 
 - opening the branch's PR if it has none
 - creating the PR branch's worktree, or a detached work tree
 - merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles) and pushing
-- review rounds until one is clean, at most 3: Claude's review, the validation run, then fixes committed and pushed to the PR's branch
+- at most 2 review rounds: round 1 is Claude's full review, the validation run, then fixes for the blockers and should-fix items; round 2 is Claude's review of those fixes and the fixes for what it still finds
 - the CI gate until CI is green, with CI fixes committed and pushed
 
 Never merge the PR.
@@ -22,8 +22,10 @@ Read [shared.md](references/shared.md) (Ends, Shared patterns, Rules, Binaries, 
 | Role | Model | Effort | Speed |
 | --- | --- | --- | --- |
 | Review (every round) | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal |
-| Codex #1: validates Claude's review (analysis only, every round) | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
+| Codex #1: validates Claude's blockers and should-fix items (analysis only, round 1 only) | Sol 6.1 (`gpt-6.1-sol`) | high | `<speed>` |
 | This session: fixes, commits, pushes, CI fixes | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+
+Round 2 has no validator: Claude's delta review judges the fixes against the ledger, and this session fixes what it reports.
 
 ## Inputs (all optional)
 
@@ -36,7 +38,7 @@ Read [shared.md](references/shared.md) (Ends, Shared patterns, Rules, Binaries, 
   - With no PR argument, take the PR from its saved identity.
   - Reject a mismatched explicit target.
   - Reject combining `--fresh` and `--resume`.
-- `Worker checkpoint: <run-path>` (delegated invocations only): attach to the caller's initialized checkpoint after verifying its repository, PR and branch.
+- `Worker checkpoint: <run-path>` (wrong-model relaunches only): attach to the caller's initialized checkpoint after verifying its repository, PR and branch.
   - Its `claudeEffort` is authoritative; an explicit effort argument must match it.
   - Never initialize a second invocation, or mistake the supervising coordinator receipt for a reviewer.
 
@@ -104,18 +106,18 @@ Rounds start at 1; recovery keeps the saved k. Each round uses `<scratch>/round<
 pnpm.cmd -C <repo> --silent review:state scope --input <scratch>/round<k>/scope-input.json
 ```
 
-It returns `mode`, `since`, `reason`, `path` (the scope file), `ledger` and `delta`.
+It returns `mode`, `since`, `reason`, `path` (the scope file), `ledger` and `delta` (the patch of the branch's own commits since `since`).
 
-- **delta:** review only the commits since the last reviewed commit (`since`), plus their callers and tests, guided by the ledger of earlier findings. Chosen only when:
+- **delta:** review only the branch's commits since the last reviewed commit (`since`), plus their callers and tests, guided by the ledger of earlier findings. Chosen when:
   - that commit is an ancestor of HEAD
-  - no merge happened since
-  - at most 400 lines changed
+  - no main synchronization since then combined both sides' changes to the same file (a clean merge is left out of the patch and does not force a full round)
+  - at most 800 lines changed in those commits
   - no dependency, build, CI or agent-instruction file changed
 - **full:** everything else; review the whole PR.
 
 Pass the scope file as the process's `scope`, so its receipt is bound to it.
 
-**Launch** through the recovery reference's `run` wrapper from `<pr-checkout>`, in the background (shared.md, Long commands): never with a shell timeout, which would kill a finished review. The wrapper creates a unique attempt folder, captures UTF-8 output, watches the Claude transcript, ends a child that finished but never exited (or hits the 90-minute cap), and writes an independent receipt. The Claude prompt is `/review-pr <N> --report-only`. Add `--since <since>` in a delta round, and `--ledger <ledger>` whenever the scope returned one.
+**Launch** through the recovery reference's `run` wrapper from `<pr-checkout>`, in the background (shared.md, Long commands): never with a shell timeout, which would kill a finished review. The wrapper creates a unique attempt folder, captures UTF-8 output, watches the Claude transcript, ends a child that finished but never exited (or hits the 90-minute cap), and writes an independent receipt. The Claude prompt is `/review-pr <N> --report-only`. Add `--since <since> --delta <delta>` in a delta round, and `--ledger <ledger>` whenever the scope returned one.
 
 ```
 pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-input.json
@@ -129,7 +131,9 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/claude-i
 
   The receipt's report path is `<claude-report>`. Never review the PR yourself instead.
 
-## 3. Round k: Codex validates Claude's review
+## 3. Round 1 only: Codex validates Claude's blockers and should-fix items
+
+**Round 2 skips this step.** Its Claude review is a delta check of round 1's fixes; take its blockers and should-fix items as valid entries (`verdict: "valid"`, `finalSeverity` as Claude set it) and go to step 4. In round 1, if Claude reported no blocker and no should-fix item, skip validation too: the round is clean (step 4).
 
 Launch through `run` as in the recovery reference, from `<pr-checkout>`, in the background (the wrapper caps it at 60 minutes):
 - Use `{report}` as the `-o` output and `<claude-report>` as the input report.
@@ -153,18 +157,20 @@ pnpm.cmd -C <repo> --silent review:state run --input <scratch>/round<k>/validati
 
 ## 4. Round k: implement the valid entries
 
-Read `<validation-report>`. A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round: add it with `claudeSeverity: null`, `verdict: "valid"` and the validator's severity as `finalSeverity`, and fix it with the others. Save `begin` / `finish` checkpoints for each fix, check, commit and push (recovery reference). Continue verified completed steps; leave unfamiliar or uncheckpointed edits untouched.
+Read `<validation-report>` (round 1) or Claude's report (round 2). A blocker or should-fix under "Noticed, not in Claude's review" is a valid entry of this round: add it with `claudeSeverity: null`, `verdict: "valid"` and the validator's severity as `finalSeverity`, and fix it with the others. Save `begin` / `finish` checkpoints for each fix, check, commit and push (recovery reference). Continue verified completed steps; leave unfamiliar or uncheckpointed edits untouched.
+
+**Nits are never fixed in this loop.** Record them in the round's record with `outcome: "none"` and list them in the PR body under "Nits (not fixed)" (`gh pr edit <N> --body-file`), so the owner can pick them up. Fixing nits took two hours per round and started new rounds that found more nits.
 
 Classify before editing:
 
-- **Clean:** no valid blocker or should-fix, noticed ones included. Fix any valid nits as below, then go to step 6.
+- **Clean:** no valid blocker or should-fix, noticed ones included. Go to step 6.
 - **Outside the PR's diff:** allowed. Find why the fix reaches those files (a caller, a shared helper, a fixture), keep the change scoped, and record why in the commit message and the entry's `outOfDiff`.
 - **Repeat** (round 2+): a valid blocker or should-fix with the same `path` and claim as an entry an earlier round marked `fixed`. That fix didn't work: learn why from its commit, fix it differently, and set `repeat` to that round. An entry that has already repeated once isn't fixed a third time: mark it `open` with both attempts and carry it into the PR body (step 4.2).
 - **Oscillation:** a fix that would revert all or part of an earlier round's commit (`git show <commit>`). Decide, don't stall: record the decision in the commit body and the entry's `decision`, and add the losing claim to `rejected.md`.
 
 Then, in `<pr-checkout>` on the PR's head branch:
 
-1. **Order:** fix blockers, then should-fix, then nits, each scoped to its entry, following `AGENTS.md`.
+1. **Order:** fix blockers, then should-fix items, each scoped to its entry, following `AGENTS.md`.
 2. **Targeted test:** after each step, run that step's test (the named Vitest file, or `pnpm run test --changed`) and fix failures before moving on.
    - If no approach passes, keep the part that passes, or revert only your own edit for that entry.
    - Mark the entry `open` with what was tried, and add it to the PR body's "Open review entries" (`gh pr edit <N> --body-file`). The round goes on.
@@ -181,16 +187,16 @@ Write the round's record to `<scratch>/round<k>/result.json` with `{round, revie
 
 Record the same fields in checkpoint `history` before another round starts, plus findings, noticed items, rejected decisions, commits and the next phase. The next scope and ledger are built from them.
 
-## 5. Review loop (until clean, at most 3 rounds)
+## 5. Review loop (at most 2 rounds)
 
 - **Clean** (no valid blocker or should-fix, apart from entries already carried as `open`) → step 6.
 - **Fixed** (valid blockers or should-fix items were fixed and pushed):
-  - k < 3 → round k+1 at step 2.
-  - k = 3 → no round 4. Round 3's fixes stay pushed without another review, and any entry left unfixed is carried as `open` in the PR body. Go to step 6. Record `roundCap: true` in the report.
+  - k = 1 → round 2 at step 2.
+  - k = 2 → no round 3. Round 2's fixes stay pushed without another review (the targeted tests and CI cover them), and any entry left unfixed is carried as `open` in the PR body. Go to step 6. Record `roundCap: true` in the report.
 
-Round 1 is the full review that should find everything; rounds 2 and 3 check the fixes. Repeat, Oscillation and `rejected.md` keep them converging.
+Round 1 is the full review that should find everything; round 2 checks the fixes. Repeat, Oscillation and `rejected.md` keep them converging.
 
-Nits are fixed as they come up. A round whose only valid entries are nits is clean, so nits never start another round.
+A round whose only entries are nits is clean; nits never start a round and are never fixed here (step 4).
 
 ## 6. CI gate (until green)
 
@@ -207,7 +213,7 @@ Checkpoint CI attempts, reruns and fixes:
      - Fix the cause. Change the test only if the test is wrong. A failure that also happens on plain `origin/main` gets fixed too; record why the fix is outside the diff.
      - Commit (`🐛 fix(<scope>): …` or `💚 ci(<scope>): …`) with step 4's staging rules, push, and go back to 1.
      - Count each attempt in `ci.attempts`. There's no attempt cap; change the approach when one keeps failing.
-3. **Review CI fixes:** after a CI fix or leftovers commit to non-test source, run one more round (steps 2–4) once CI is green, if fewer than 3 rounds have run. It counts toward the 3. Not clean → step 5. Clean → repeat this step from 1 for its pushes. With 3 rounds already run, skip the review, list those commits as unreviewed in the report, and go to 4.
+3. **Review CI fixes:** after a CI fix or leftovers commit to non-test source, run one more round (steps 2–4) once CI is green, if fewer than 2 rounds have run. It counts toward the 2. Not clean → step 5. Clean → repeat this step from 1 for its pushes. With 2 rounds already run, skip the review, list those commits as unreviewed in the report, and go to 4.
 4. **Nothing left uncommitted.** Before reporting `clean`, in the PR's task worktree (`<pr-checkout>`, or the untouched original worktree when a detached tree was used for another reason), `git status --porcelain=v1 --untracked-files=all` lists only held-back files, and `HEAD` equals the PR head (fast-forward an untouched worktree that is merely behind). Otherwise follow "Commit task leftovers" (shared.md) with `<scratch>` there, including bytes recorded with `protect` and fix WIP this run left behind, and go back to 1. Skip the main checkout. Then go to step 7 with `clean`.
 
 ## 7. Report and clean up
@@ -215,9 +221,9 @@ Checkpoint CI attempts, reruns and fixes:
 The report covers:
 
 - **Main merge:** `mainMerge` with its `Conflict decisions:`, and failures that also happen on `main`.
-- **Rounds:** the round count (every round, including one after a CI fix), and `round cap reached; round 3 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
+- **Rounds:** the round count (every round, including one after a CI fix), and `round cap reached; round 2 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
 - **Per round:** Claude's verdict and the validation table (# / Claude's severity / verdict / evidence / final severity).
-- **Entries:** fixed entries with commit hashes; open entries carried into the PR body, with what was tried; noticed items with severity (noticed nits are listed for the user).
+- **Entries:** fixed entries with commit hashes; open entries carried into the PR body, with what was tried; nits (not fixed, listed in the PR body); noticed items with severity.
 - **Checkout:** the detached work tree used, if any, and the untouched worktree's state. Every leftovers commit (step 1.3 or 6.4) and every held-back file.
 - **CI:** the gate's reruns, fix attempts, fix commits and final state, plus which checks ran locally and which were left to CI.
 - **Settings and status:** the PR URL, Codex #1's speed, the selected Claude effort, the `codex` and `claude` versions, and the final status.
@@ -275,17 +281,17 @@ End with a fenced `review-pr-result` block holding one JSON object:
 ```
 
 - **`status`:**
-  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 3 ended with its fixes pushed (`roundCap: true`), and `ci.status` is `green` or `fixed`.
+  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 2 ended with its fixes pushed (`roundCap: true`), and `ci.status` is `green` or `fixed`.
   - `error`: an Ends case; `stopReason` names it.
   - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes live in checkpoint operations, and no clean result is implied for WIP. `resume` is null otherwise.
 - **`headSha`:** the PR head when the run ends (`gh pr view <N> --json headRefOid`). The results apply to this commit only.
 - **`claudeEffort`:** the resolved selection for unfinished and future reviews. Each round keeps its actual effort.
-- **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`leftovers`:** the SHAs of leftovers commits (shared.md, Commit task leftovers). **`heldBack`:** paths left uncommitted as secrets or files over 10 MB; a `clean` result has nothing else uncommitted. **`roundCount`:** the report's round count. **`roundCap`:** true when round 3 had fixes and no round 4 ran.
+- **`cli`:** the resolved versions (`null` when unresolved). **`workTree`:** `null`, or the detached tree's path and why. **`leftovers`:** the SHAs of leftovers commits (shared.md, Commit task leftovers). **`heldBack`:** paths left uncommitted as secrets or files over 10 MB; a `clean` result has nothing else uncommitted. **`roundCount`:** the report's round count. **`roundCap`:** true when round 2 had fixes and no round 3 ran.
 - **`mainMerge`:** `current`, `merged`, `resolved <n> files`, `aborted` (only for `merge tool unavailable`), or `not-run` (ended before step 1.7).
 - **Per round:**
   - `scope` and `usage` come from the review receipt; `usage` is null when unavailable, never estimated.
   - Entry `verdict` is `valid`, `partly` or `invalid`.
-  - Entry `outcome` is `fixed`, `open` (with `openReason`) or `none`.
+  - Entry `outcome` is `fixed`, `open` (with `openReason`) or `none` (invalid entries and nits).
   - `repeat` names the repeated round, and `decision` records an oscillation decision.
   - `claudeSeverity` is `null` for a promoted noticed item.
   - `outOfDiff` is `null`, or the files outside the diff and why.

@@ -41,7 +41,7 @@ Everything else is solved with the patterns below. Never pause, ask the user, or
   A commit made here is unreviewed: the caller's review must cover it. Report each leftovers commit and every held-back file.
 - **Decide, don't stall.** Some cases need a decision rather than a pause: two claims or fixes that contradict each other, a finding that recurs after its fix, or a fix that would revert an earlier one. Read the evidence on both sides, then choose or combine. Record the decision and its reason in the commit body and the round's record. Add the losing claim to `rejected.md` (or the ledger) so it doesn't come back.
 - **Carry, don't stop.** What still can't be made to work after real attempts (a fix whose test won't pass, a gate that misses its target) is committed as far as it works. List it in the PR body under "Open review entries" (or "Unmet gates"), with what was tried, and continue.
-- **Relaunch on the wrong model.** A skill that requires a Sol 6.1 (`gpt-6.1-sol`) xhigh session may start under another model or effort. It then resolves `<codex>` (Binaries) and starts itself with `& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C '<same directory>' '<the same invocation and arguments>'`, relaying that run's report and result. It never asks the user to restart. A PR review relaunch instead uses the delegated review call below, with the same public arguments, so usage exhaustion is recorded even without a final model report.
+- **Relaunch on the wrong model.** A skill that requires a Sol 6.1 (`gpt-6.1-sol`) xhigh session may start under another model or effort. It then resolves `<codex>` (Binaries) and starts itself with `& '<codex>' exec -m gpt-6.1-sol -c 'model_reasoning_effort="xhigh"' <speed> -C '<same directory>' '<the same invocation and arguments>'`, relaying that run's report and result. It never asks the user to restart. A PR review relaunch instead goes through the wrapper's `coordinator` phase (recovery.md, "Run native processes"), with the same public arguments, so usage exhaustion is recorded even without a final model report.
 
 ## Rules
 
@@ -89,19 +89,15 @@ It never changes Claude, which runs at normal speed, or the coordinating session
 - Codex settings never change.
 - `$review-handoff`'s Claude review is fixed at `high` and never takes this option.
 
-## Delegated review call
+## Running $review-pr from another skill
 
-A caller that runs `$review-pr` (`$implement-handoff`, `$sync-review`, `$merge-pr`, or a wrong-model relaunch) follows [recovery.md](recovery.md)'s delegated coordinator protocol:
+`$implement-handoff`, `$sync-review` and `$merge-pr` run the review loop **in their own session**: load `<repo>/.agents/skills/review-pr/SKILL.md` and follow its steps for the PR, forwarding the caller's `--claude-effort` and `--fast`. There is no second coordinator process: it loaded every skill again, re-discovered the PR, and spent hours on bookkeeping. The reviewer and validator still run as native processes through `review:state run` (receipts, watchdog, review slots and quota detection are theirs).
 
-1. Initialize the PR identity and current head with `review:state init`, passing `claudeEffort` only when explicitly supplied. Initialization continues earlier verified work automatically.
-2. Run the coordinator through `review:state run` with:
-   - `phase: "coordinator"`, `output: "file"` and the caller's `resultFile`
-   - the reference's exact Codex model, effort and speed arguments, with `{report}` as the `-o` output
-   - a prompt that adds `--claude-effort <state.claudeEffort>` and `Worker checkpoint: <review-scratch>`
-
-   Allow at least 4 hours (Long commands). Retain the resolved effort for any inline CI review.
-3. Read the result file, or else the canonical `<review-scratch>/result.json`.
-   - `clean`: the review is clean and CI is green. Entries carried as `open` are in the PR body and don't block.
+1. Initialize the PR identity and current head with `review:state init` ([recovery.md](recovery.md)), passing `claudeEffort` only when explicitly supplied. Initialization continues earlier verified work automatically. `<review-scratch>` is the returned invocation path.
+2. Follow the review skill from its step 1.5 (baseline) to step 7 in this session, then write its result object to `<review-scratch>/result.json` and to the caller's result path.
+3. Act on the result:
+   - `clean`: the review is clean and CI is green. Entries carried as `open` and the listed nits are in the PR body and don't block.
    - `error`: an Ends case; use its `stopReason`.
-   - `interrupted`, a quota receipt or wrapper exit 75: end the caller with saved progress. Report the checkpoint, reset text and resume command, and preserve all scratch, WIP and worktrees. Never relaunch the exhausted process. This applies even when no final model report exists.
-   - No result: inspect the checkpoint and receipts before Retry. Await a live child. Retry a dead coordinator as a continuation, which never repeats verified review or validation work.
+   - `interrupted` (a quota receipt or wrapper exit 75 from a reviewer or validator): end the caller with saved progress. Report the checkpoint, reset text and resume command, and preserve all scratch, WIP and worktrees. Never relaunch the exhausted process.
+
+A session on the wrong model relaunches itself (Shared patterns, "Relaunch on the wrong model"); only that relaunch uses the wrapper's `coordinator` phase and `Worker checkpoint`.

@@ -19,7 +19,7 @@ Invoking `$implement-handoff` authorizes these actions for this one task:
 
 Don't ask for confirmation between steps, and never merge the PR. Follow [shared.md](../review-pr/references/shared.md): Ends, Shared patterns, Rules, Binaries (`codex` only), Speed and Claude effort.
 
-- **Interrupted review:** an interrupted delegated PR review ends this invocation with saved progress.
+- **Interrupted review:** an interrupted PR review (a reviewer or validator hit the usage limit) ends this invocation with saved progress.
 - **Other ends:** nothing to do (no such handoff, or the work already landed on `main`) and a missing tool.
 - **Stop conditions:** the handoff's "Stop and report if" conditions are problems to solve, not stops.
 
@@ -30,8 +30,8 @@ Don't ask for confirmation between steps, and never merge the PR. Follow [shared
 | This session: amends the handoff, implements, commits, opens the PR | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 | Inside `$review-handoff`: round 1 review / round 2 validation | Sol 6.1 (`gpt-6.1-sol`) | max | `<speed>` |
 | Inside `$review-handoff`: round 2 review | Claude Opus 5.5 (`claude-opus-5-5`) | high | normal |
-| PR review coordinator: runs `$review-pr`, including main synchronization | Sol 6.1 (`gpt-6.1-sol`) | xhigh | `<speed>` |
-| Inside `$review-pr`: the review / its validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, max | | normal / `<speed>` |
+| This session again: runs `$review-pr`'s loop inline, including main synchronization, fixes and CI | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+| Inside `$review-pr`: the review / round 1's validation | Claude Opus 5.5 (`claude-opus-5-5`), `<claude-effort>` / Sol 6.1, high | | normal / `<speed>` |
 
 `$review-handoff` and `$review-pr` resolve their own binaries. `--fast` is forwarded to both; `--claude-effort` goes only to `$review-pr`.
 
@@ -119,22 +119,16 @@ Work in `<wt>`, following the amended handoff:
 
 Follow steps 1 and 3 of `<skill-dir>/../sync-review/SKILL.md` for this one branch and worktree, with these adjustments. Don't merge `origin/main` here: `$review-pr` does it first, in step 5.
 
-For the delegated steps, set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
+Set `<review-pr-skill>` to `<skill-dir>/../review-pr/SKILL.md`, `<run>` to this invocation's `<scratch>`, and `<slug>` to the branch name with `/` replaced by `-`. Confirm the sibling review skill exists before following step 1.
 
 - **Step 1 (commit and push):** usually only pushes, since step 3 already committed. Anything uncommitted at this point is work the handoff missed (commit it) or a held-back secret or large file (leave it uncommitted and report it), as "Commit task leftovers" says. A rejected push is fetched, merged and pushed again.
 - **Step 3 (PR):** if there's no PR, create one. Take the body from the handoff's Goal & context, its steps, and its Verification results (what actually ran). Add a "Handoff review amendments" section listing the design and post-review amendments. If a gate is still unmet (step 3.2), add an "Unmet gates" section: the gate, its target, the latest measurement, and the approaches tried.
 
 ## 5. Run $review-pr
 
-Make the delegated review call (shared.md) with `resultFile: "<scratch>/review.json"`:
+Run the review loop in this session (shared.md, "Running $review-pr from another skill"), writing its result copy to `<scratch>/review.json`. The review skill writes the task's PR review cell when it can report. Then:
 
-```
-pnpm.cmd -C <repo> --silent review:state run --input <scratch>/coordinator-input.json
-```
-
-`$review-pr` writes the task's PR review cell when it can report. Then:
-
-- `clean` (review clean and CI green): first confirm nothing is left behind. `git -C <wt> fetch origin <branch>`, then `git -C <wt> status --porcelain=v1 --untracked-files=all` must list only the result's `heldBack` files, and `<wt>`'s `HEAD`, `origin/<branch>` and the result's `headSha` must be the same commit. If `$review-pr` worked in a detached work tree and `<wt>` is clean and merely behind, fast-forward it (`merge --ff-only`). Anything else uncommitted or unpushed: run "Commit task leftovers" (shared.md) with `<scratch>`, then make the delegated review call again, which reviews the new commits; repeat until this check passes. Then go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
+- `clean` (review clean and CI green): first confirm nothing is left behind. `git -C <wt> fetch origin <branch>`, then `git -C <wt> status --porcelain=v1 --untracked-files=all` must list only the result's `heldBack` files, and `<wt>`'s `HEAD`, `origin/<branch>` and the result's `headSha` must be the same commit. If the review worked in a detached work tree and `<wt>` is clean and merely behind, fast-forward it (`merge --ff-only`). Anything else uncommitted or unpushed: run "Commit task leftovers" (shared.md) with `<scratch>`, then run the review loop again, which reviews the new commits; repeat until this check passes. Then go to step 6, which decides completion from the retained unmet-gate state and any entries `$review-pr` carried as `open`.
 - `error` (a missing tool): the PR stays open. Set the row's Next step to its `stopReason`. The folder stays in `active/`.
 - `interrupted`: report the checkpoint, reset information and resume command; set the row's Next step accordingly. Leave the task active, preserve WIP and scratch, and end without marking implementation complete or retrying the exhausted process.
 
