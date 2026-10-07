@@ -79,6 +79,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  FILTER,
   frontClearance,
   laneLayout,
   LANE_WIDTH_M,
@@ -4910,13 +4911,7 @@ export class TileLife {
   private finishLateral(m: Mover, before: Mover) {
     const state = m.maneuver;
     if (!state) return;
-    if (state.kind === 'filter') {
-      const pending = Math.abs(this.maneuverOffset(before) - this.offsetOf(before, m)) > 1e-6;
-      const blocked =
-        pending && Math.abs((m.lat ?? 0) - (before.lat ?? 0)) < 1e-8 ? (state.blocked ?? 0) + 1 : 0;
-      m.maneuver = { ...state, blocked, returning: state.returning || blocked >= 2 };
-      return;
-    }
+    if (state.kind === 'filter') return;
     if (
       Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) > 1e-6 ||
       Math.abs(m.latYaw ?? 0) > 1e-3
@@ -4949,12 +4944,12 @@ export class TileLife {
     return room;
   }
 
-  /** Project the accepted body onto its current travel axes, including stamp-size clearance. */
+  /** Project the accepted physical body onto its current travel axes. */
   private roadEnvelope(m: Mover) {
     const spec = VEHICLES[m.vehicle!],
       pose = this.pose(m);
-    const length = Math.max(spec.length, this.crossingMinimum);
-    const width = Math.max(spec.width, this.crossingMinimum);
+    const length = spec.length;
+    const width = spec.width;
     const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
     const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
     return {
@@ -5009,12 +5004,168 @@ export class TileLife {
     return this.offsetOf({ ...m, chosenLane: preference, lat: undefined, maneuver: undefined }, m);
   }
 
+  private filterCap(m: Mover): number {
+    return (
+      Math.min(m.speed / this.perMeter, (m.maneuver?.queueSpeed ?? 0) + FILTER.gain, FILTER.max) *
+      this.perMeter
+    );
+  }
+
+  /** Queue identity can change as the rider passes; its velocity remains meaningful meanwhile. */
+  private updateFilter(index: number, table: JunctionTable) {
+    const m = this.movers[index]!;
+    if (m.kind !== 'vehicle' || (m.vehicle !== 'motorcycle' && m.vehicle !== 'bicycle')) return;
+    let state = m.maneuver;
+    if (state && state.corridor === undefined && state.kind !== 'filter') return;
+    if (
+      !state &&
+      (this.followLeaders[index]! < 0 || (m.filterRetry ?? 0) > 0 || (m.roadScan ?? 0) > 0)
+    )
+      return;
+    const group = this.trafficGroups.get(m.line * 2 + (m.dir === 1 ? 1 : 0)) ?? [];
+    const at = this.offsetOf(m),
+      layout = this.directionalLanes(m.line);
+    const original = this.laneTargetOffset(m, m.chosenLane ?? m.lane);
+    const progress = (m.dir * this.along[m.from]! + m.d) / this.perMeter;
+    let queue: Mover | undefined,
+      nearest = Infinity;
+    const reference = state ? original : at;
+    for (const j of group) {
+      const peer = this.movers[j]!;
+      if (peer === m || peer.vehicle === 'bicycle' || peer.vehicle === 'motorcycle') continue;
+      const separation = Math.abs(
+        (peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress,
+      );
+      if (
+        separation > 60 ||
+        separation >= nearest ||
+        Math.abs(reference - this.offsetOf(peer)) >=
+          (VEHICLES[m.vehicle].width + VEHICLES[peer.vehicle!].width) / 2 + FOLLOW.roadGap
+      )
+        continue;
+      nearest = separation;
+      queue = peer;
+    }
+    const velocity = queue
+      ? this.inspected === queue
+        ? 0
+        : Math.max(0, (queue.v ?? queue.speed) / this.perMeter)
+      : state?.queueSpeed;
+    if (state) {
+      if (velocity !== undefined && velocity !== state.queueSpeed) {
+        state = { ...state, queueSpeed: velocity };
+        m.maneuver = state;
+      }
+      const transit = this.scenes.services.get(m)?.site;
+      const request =
+        state.returning ||
+        (velocity ?? 0) > FILTER.leave ||
+        (transit?.road === m.line && this.roadProtectedRoom(m, table) < FILTER.clear);
+      if (request && state.kind === 'filter') {
+        if (this.roadGapSafe(m, original)) {
+          m.maneuver = {
+            ...state,
+            kind: 'return',
+            target: m.chosenLane ?? m.lane,
+            returning: true,
+          };
+          m.laneSignal = original < at ? 'left' : 'right';
+        } else if (!state.returning) m.maneuver = { ...state, returning: true };
+      } else if (state.kind === 'return' && !this.roadGapSafe(m, original, true)) {
+        m.maneuver = { ...state, kind: 'filter', returning: true };
+      }
+      return;
+    }
+    const leaderIndex = this.followLeaders[index]!;
+    if (
+      leaderIndex < 0 ||
+      !queue ||
+      velocity === undefined ||
+      velocity >= FILTER.enter ||
+      (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+      (m.filterRetry ?? 0) > 0 ||
+      (m.roadScan ?? 0) > 0 ||
+      m.roadShift !== undefined ||
+      m.curveLengthM !== undefined ||
+      this.scenes.merging(m) ||
+      this.roadProtectedRoom(m, table) <= FILTER.clear
+    )
+      return;
+    m.roadScan = 0.5;
+    const actual = Math.max(
+      0,
+      Math.min(layout.count - 1, Math.floor((at - layout.start) / layout.width)),
+    );
+    const boundaries =
+      layout.count > 1
+        ? Array.from({ length: layout.count - 1 }, (_, n) => n + 1)
+            .sort((a, b) => Math.abs(a - actual) - Math.abs(b - actual) || a - b)
+            .map((n) => n / layout.count)
+        : [1];
+    for (const corridor of boundaries) {
+      const candidate: RoadManeuver = {
+        kind: 'filter',
+        target: m.chosenLane ?? m.lane,
+        corridor,
+        queueSpeed: velocity,
+      };
+      const target = this.maneuverOffset({ ...m, maneuver: candidate });
+      const half = VEHICLES[m.vehicle].width / 2;
+      // A single-lane edge needs enough road around the complete rider, not just its centre.
+      const offset =
+        layout.count === 1 ? layout.start + layout.span - half - ROAD_MARGIN_M : target;
+      const chosen =
+        layout.count === 1
+          ? { ...candidate, corridor: (offset - layout.start) / layout.span }
+          : candidate;
+      if (
+        offset - half < layout.start + ROAD_MARGIN_M ||
+        offset + half > layout.start + layout.span - ROAD_MARGIN_M
+      )
+        continue;
+      let clear = true;
+      for (const j of group) {
+        const peer = this.movers[j]!;
+        if (
+          peer === m ||
+          Math.abs((peer.dir * this.along[peer.from]! + peer.d) / this.perMeter - progress) > 60
+        )
+          continue;
+        if (
+          Math.abs(offset - this.offsetOf(peer)) <
+          half + this.roadEnvelope(peer).width + FOLLOW.roadGap
+        ) {
+          clear = false;
+          break;
+        }
+      }
+      if (!clear || !this.roadGapSafe(m, offset)) continue;
+      m.maneuver = chosen;
+      m.laneSignal = offset < at ? 'left' : 'right';
+      m.lanePatience = undefined;
+      return;
+    }
+  }
+
+  /** Count final simulation outcomes once, including a step whose every guard trial failed. */
+  private recordFilterStep(m: Mover, before: Mover) {
+    const state = m.maneuver;
+    if (state?.kind !== 'filter') return;
+    const displaced =
+      Math.abs((m.lat ?? 0) - (before.lat ?? 0)) > 1e-8 ||
+      Math.hypot(m.x - before.x, m.y - before.y) > 1e-8 * this.perMeter;
+    const blocked = displaced ? 0 : (state.blocked ?? 0) + 1;
+    if (blocked !== (state.blocked ?? 0) || (blocked >= 2 && !state.returning))
+      m.maneuver = { ...state, blocked, returning: state.returning || blocked >= 2 };
+    if (blocked >= 2) m.filterRetry = FILTER.retry;
+  }
+
   private updateLane(index: number, dt: number, table: JunctionTable, otherLimited: boolean) {
     const m = this.movers[index]!;
     if (!m.vehicle || m.kind !== 'vehicle') return;
     const state = m.maneuver;
     if (state) {
-      if (state.kind === 'filter') return;
+      if (state.kind === 'filter' || state.corridor !== undefined) return;
       const target = this.maneuverOffset(m),
         delta = Math.abs(target - this.offsetOf(m));
       const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
@@ -5648,8 +5799,12 @@ export class TileLife {
       let intentionalHold = false;
       let otherRoadLimit = false;
       if (m.kind === 'vehicle') {
+        if (!this.scenes.held(m)) this.updateFilter(i, table);
         if (m.vehicle) {
-          limit.target = speeds[i]!;
+          limit.target =
+            m.maneuver?.corridor !== undefined
+              ? Math.min(speeds[i]!, this.filterCap(m))
+              : speeds[i]!;
           limit.cap = this.caps[i]!;
           this.scenes.limit(m, dt, kinematicsOf(m.vehicle).brake * this.perMeter, limit);
           const clearing = this.clearingJunctions;
@@ -5866,7 +6021,7 @@ export class TileLife {
       if (m.kind === 'vehicle') {
         this.tickRoadTimers(m, dt);
         this.updateLane(i, dt, table, otherRoadLimit);
-        if (m.maneuver && m.maneuver.kind !== 'filter')
+        if (m.maneuver && m.maneuver.kind !== 'filter' && m.maneuver.corridor === undefined)
           distance = Math.min(
             distance,
             Math.max(0, this.roadProtectedRoom(m, table) - LANE.clear) * this.perMeter,
@@ -5910,7 +6065,13 @@ export class TileLife {
         m.roadShift -= Math.sign(m.roadShift) * change;
         if (Math.abs(m.roadShift) < 1e-8) m.roadShift = undefined;
       }
-      const lateral = this.proposeLateral(m, before, distance, dt);
+      // A stopped queue permits a guarded sideways step within the rider's speed budget.
+      // Its longitudinal following/signal cap still determines forwardDistance below.
+      const lateralBudget =
+        before.maneuver?.corridor !== undefined
+          ? Math.max(distance, this.filterCap(before) * dt)
+          : distance;
+      const lateral = this.proposeLateral(m, before, lateralBudget, dt);
       if (walking) {
         if (m.momentFacing) faceGroup(m, m.hx, m.hy);
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
@@ -5940,8 +6101,8 @@ export class TileLife {
         for (let retry = 0; retry < 3; retry++) {
           const pose = this.pose(m);
           const travel = Math.hypot(pose.x - origin.x, pose.y - origin.y);
-          if (travel <= distance + 1e-8 * this.perMeter || travel === 0) break;
-          m.d = before.d + ((m.d - before.d) * distance) / travel;
+          if (travel <= lateralBudget + 1e-8 * this.perMeter || travel === 0) break;
+          m.d = before.d + ((m.d - before.d) * lateralBudget) / travel;
           this.advance(m, 0, false);
           moved = Math.max(0, m.d - before.d);
         }
@@ -6169,7 +6330,7 @@ export class TileLife {
               }
             }
             const retryLateral = before.maneuver
-              ? this.proposeLateral(m, before, distance * share!, dt, share!)
+              ? this.proposeLateral(m, before, lateralBudget * share!, dt, share!)
               : 0;
             if (!walking && share! < 0) {
               const retreat = Math.min(m.d, dt * this.perMeter * steeringSpeed);
@@ -6412,6 +6573,7 @@ export class TileLife {
         }
         if (
           m.kind === 'vehicle' &&
+          !m.maneuver &&
           m.waiting >= JUNCTION.giveUp &&
           !intentionalHold &&
           !pass?.recoveryAttempts?.has(m) &&
@@ -6441,6 +6603,7 @@ export class TileLife {
         m.v = travelled / dt;
       }
       const walkingRecovery = isWalker(m.kind) ? this.walkerRecoveryProgress.get(m) : undefined;
+      this.recordFilterStep(m, before);
       if (walkingRecovery !== undefined) {
         if (moved > 0) {
           walkingRecovery.travelled += moved / this.perMeter;

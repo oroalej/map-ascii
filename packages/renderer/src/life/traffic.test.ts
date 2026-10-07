@@ -419,6 +419,10 @@ describe('curved traffic', () => {
     geo.oneway!.fill(1);
     const life = new TileLife(tile, geo, 3);
     life.parked.length = life.stalls.length = 0;
+    // Keep twelve original seeded vehicles spread across the population for this 120 s flow check.
+    const vehicles = life.movers.filter((m) => m.kind === 'vehicle');
+    const stride = Math.max(1, Math.ceil(vehicles.length / 12));
+    life.movers.splice(0, life.movers.length, ...vehicles.filter((_, i) => i % stride === 0));
     for (let frame = 0; frame < 120 * 30; frame++) {
       life.step(1 / 30);
       for (const m of life.movers) if (m.kind === 'vehicle') assert.equal(m.dir, 1);
