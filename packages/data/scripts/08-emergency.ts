@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { CityEmergency, type EmergencyConfig } from '@atlas/shared';
+import { CityEmergency, decodeEmergency, type EmergencyConfig } from '@atlas/shared';
 import type { Geom } from 'polyclip-ts';
 import { intersection } from 'polyclip-ts';
 import turfBbox from '@turf/bbox';
@@ -8,6 +8,7 @@ import type { AtlasFeature } from './03-normalize';
 import { clipLine } from './lib/coastline';
 import { displayFeatures } from './lib/display';
 import { buildEmergencyGraph } from './lib/emergency-graph';
+import { dispatchNetwork } from './lib/emergency-dispatch-network';
 import { encodeEmergencyInTerritory } from './lib/emergency-territory';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import {
@@ -95,25 +96,29 @@ export const step: Step = {
     for await (const feature of readFeatures(join(buildDir, files.merged)))
       features.push(feature as AtlasFeature);
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
-    const network = emergencyNetwork(features, config, territory),
-      mandatory = network.targets.filter((t) => t.kind !== 'building');
-    const buildings = network.targets
-      .filter((t) => t.kind === 'building')
-      .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
+    let network = emergencyNetwork(features, config, territory);
     let data = encodeEmergencyInTerritory(network, territory),
       bytes = gzipSync(JSON.stringify(data) + '\n').length;
+    // Routing uses the decoded, rounded edge costs. Retain these exact shortest
+    // paths when an opted-in city's expanded network needs budget reduction.
+    const full = territory.territory ? decodeEmergency(data) : network;
+    const mandatory = full.targets.filter((t) => t.kind !== 'building');
+    const buildings = full.targets
+      .filter((t) => t.kind === 'building')
+      .sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1]);
     for (
       let cap = Math.min(512, buildings.length);
       bytes > 32 * 1024 && cap >= 1;
       cap = Math.floor(cap * 0.8)
     ) {
-      network.targets = [
+      const targets = [
         ...mandatory,
         ...Array.from(
           { length: cap },
           (_, i) => buildings[Math.floor((i * buildings.length) / cap)]!,
         ),
       ];
+      network = territory.territory ? dispatchNetwork(full, targets) : { ...full, targets };
       data = encodeEmergencyInTerritory(network, territory);
       bytes = gzipSync(JSON.stringify(data) + '\n').length;
     }

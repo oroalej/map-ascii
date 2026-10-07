@@ -5,6 +5,7 @@ import {
   createTerritory,
   geometryOutsideVoid,
   inTerritory,
+  inVoid,
   removeVoid,
 } from './territory';
 
@@ -33,6 +34,41 @@ const feature = (geometry: Geometry): Feature => ({
 });
 
 describe('territory subtraction', () => {
+  it('keeps exterior open segments when midpoint rounding lands back on a void-only edge', () => {
+    const t = createTerritory(
+      [123, 13, 124, 14],
+      bboxPolygon([123.2, 13.8, 124, 14]),
+      [123, 13, 123.1, 13.1],
+    );
+    const line: Geometry = {
+      type: 'LineString',
+      coordinates: [
+        [124, 13.9],
+        [124.00000000000001, 12.999999999999998],
+      ],
+    };
+    expect(geometryOutsideVoid(line, t)).toBe(true);
+    const polygon: Geometry = {
+      type: 'Polygon',
+      coordinates: [[...line.coordinates, [124.001, 13.9], line.coordinates[0]!]],
+    };
+    expect(geometryOutsideVoid(polygon, t)).toBe(true);
+    const source = feature(polygon);
+    expect(removeVoid(source, t)).toBe(source);
+  });
+  it('rejects a tiny enclosed void hole without an area allowance', () => {
+    const city = bboxPolygon([1, 1, 5, 5]);
+    city.coordinates.push(
+      bboxPolygon([3 - 1.5e-10, 3 - 1.5e-10, 3 + 1.5e-10, 3 + 1.5e-10]).coordinates[0]!,
+    );
+    const t = createTerritory([0, 0, 5, 5], city, [0, 0, 2, 2]);
+    const enclosing = feature(bboxPolygon([2.5, 2.5, 3.5, 3.5]));
+    expect(inVoid([3, 3], t)).toBe(true);
+    expect(geometryOutsideVoid(enclosing.geometry, t)).toBe(false);
+    const clipped = removeVoid(enclosing, t)!;
+    expect(clipped.geometry.type === 'Polygon' && clipped.geometry.coordinates.length).toBe(2);
+    expect(geometryOutsideVoid(clipped.geometry, t)).toBe(true);
+  });
   it('admits a retained boundary triangle without using subtraction object identity', () => {
     const boundary: Polygon = {
       type: 'Polygon',
@@ -251,9 +287,48 @@ describe('territory subtraction', () => {
       type: 'LineString',
       coordinates: [
         [6, 0.5],
-        [5, 0.5],
+        [5.000000000000001, 0.5],
       ],
     });
+  });
+  it('excludes closed void-only rectangle edges from lines and polygon rings', () => {
+    for (const coordinates of [
+      [
+        [6, 0.5],
+        [4, 0.5],
+      ],
+      [
+        [-1, 3],
+        [0.5, 3],
+      ],
+      [
+        [3, -1],
+        [3, 0.5],
+      ],
+      [
+        [0.5, 6],
+        [0.5, 4],
+      ],
+    ]) {
+      const source = feature({ type: 'LineString', coordinates });
+      const result = removeVoid(source, territory)!;
+      expect(result.geometry.type).toBe('LineString');
+      expect(geometryOutsideVoid(result.geometry, territory)).toBe(true);
+      if (result.geometry.type === 'LineString') {
+        expect(result.geometry.coordinates[0]).toEqual(coordinates[0]);
+        expect(result.geometry.coordinates.every((p) => !inVoid(p, territory))).toBe(true);
+      }
+    }
+    const source = feature(bboxPolygon([-1, 2.5, 0.5, 3.5]));
+    const result = removeVoid(source, territory)!;
+    expect(geometryOutsideVoid(result.geometry, territory)).toBe(true);
+    expect(result.geometry.type).toBe('Polygon');
+    if (result.geometry.type === 'Polygon') {
+      expect(result.geometry.coordinates.flat().every((p) => !inVoid(p, territory))).toBe(true);
+      expect(result.geometry.coordinates[0]).toContainEqual([-1, 2.5]);
+      expect(result.geometry.coordinates[0]).toContainEqual([-1, 3.5]);
+    }
+    expect(removeVoid(feature(bboxPolygon([2.5, 1e-11, 2.6, 2e-11])), territory)).toBeUndefined();
   });
   it('retains all geometry and legacy membership with a null void', () => {
     const t = createTerritory([0, 0, 5, 5], city);

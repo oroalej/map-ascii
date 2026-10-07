@@ -74,6 +74,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - For packs opting into the whole boundary, subtract the territory's void before selecting the road component and station targets, using the same late display geometry as tiles. Full source geography remains available to earlier derivation steps; flagless packs keep their existing network.
    - Snap hospital and station centroids within 120 m against complete source polylines. Keep source road identity, cumulative interior progress, canonical tangent and signed side; thin building targets to one per 100 m cell within 30 m of a road.
    - Fail for missing configured targets. Write validated `<city>.emergency.json` with delta/varint geometry and a 32 KiB gzip cap. Re-running `--from 08` uses current merged intermediates and changes only this file.
+   - When an opted-in expanded territory exceeds that cap, keep every service target and select building destinations across the city. Retain shortest directed paths in both directions between those destinations and each service location, plus shortest hospital routes from retained road endpoints. Use the decoded codec's rounded costs, preserve one-way permissions and complete admitted edge shapes, and omit roads that none of these routes use. Packs without the boundary flag retain their existing graph policy.
 
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
 

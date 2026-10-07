@@ -157,6 +157,21 @@ const interpolate = (a: Position, b: Position, u: number): Position =>
 const same = (a: Position, b: Position) =>
   Math.abs(a[0]! - b[0]!) <= EPS && Math.abs(a[1]! - b[1]!) <= EPS;
 
+/** A strict exterior endpoint keeps the open segment outside a closed rectangle.
+ * Avoid interpolating a one-ULP gap back onto its excluded edge. */
+function beyondRectangle(
+  a: Position,
+  b: Position,
+  { regionBounds: [w, s, e, n] }: Territory,
+): boolean {
+  return (
+    (a[0]! <= w && b[0]! <= w && (a[0]! < w || b[0]! < w)) ||
+    (a[0]! >= e && b[0]! >= e && (a[0]! > e || b[0]! > e)) ||
+    (a[1]! <= s && b[1]! <= s && (a[1]! < s || b[1]! < s)) ||
+    (a[1]! >= n && b[1]! >= n && (a[1]! > n || b[1]! > n))
+  );
+}
+
 function segmentCuts(a: Position, b: Position, t: Territory): number[] {
   const bounds: BBox = [
     Math.min(a[0]!, b[0]!),
@@ -188,10 +203,14 @@ function polygonRelation(
       const a = ring[i - 1]!,
         b = ring[i]!;
       if (same(a, b)) continue;
+      if (beyondRectangle(a, b, t)) {
+        retainedBoundary = true;
+        continue;
+      }
       const cuts = segmentCuts(a, b, t);
       for (let j = 1; j < cuts.length; j++) {
         const p = interpolate(a, b, (cuts[j - 1]! + cuts[j]!) / 2);
-        const inside = inVoid(p, t) && !data.edges.some((e) => onEdge(p, e));
+        const inside = inVoid(p, t);
         voidBoundary ||= inside;
         retainedBoundary ||= !inside;
       }
@@ -227,13 +246,13 @@ function clipLine(line: Position[], t: Territory): { lines: Position[][]; change
     for (let j = 1; j < cuts.length; j++) {
       const start = cuts[j - 1]!,
         end = cuts[j]!;
-      if (inVoid(interpolate(a, b, (start + end) / 2), t)) {
+      const from = interpolate(a, b, start),
+        to = interpolate(a, b, end);
+      if (!beyondRectangle(from, to, t) && inVoid(interpolate(a, b, (start + end) / 2), t)) {
         changed = true;
         flush();
         continue;
       }
-      const from = interpolate(a, b, start),
-        to = interpolate(a, b, end);
       if (current.length && !same(current[current.length - 1]!, from)) flush();
       if (!current.length) current.push(from);
       current.push(to);
@@ -306,11 +325,54 @@ function clipGeometry(geometry: Geometry, t: Territory): Geometry | undefined {
   }
 }
 
+const floatBits = new DataView(new ArrayBuffer(8));
+/** One representable step excludes a closed void edge without a geographic buffer. */
+function adjacentFloat(value: number, direction: -1 | 1): number {
+  if (value === 0) return direction * Number.MIN_VALUE;
+  floatBits.setFloat64(0, value);
+  const bits = floatBits.getBigUint64(0);
+  floatBits.setBigUint64(0, bits + (value > 0 === direction > 0 ? 1n : -1n));
+  return floatBits.getFloat64(0);
+}
+
+type CoordinateTree = Position | CoordinateTree[];
+/** Polygon/line subtraction produces closed rings; void-only rectangle edges are open. */
+function excludeRectangleEdges(geometry: Geometry, t: Territory): Geometry {
+  if (geometry.type === 'GeometryCollection') {
+    const geometries = geometry.geometries.map((g) => excludeRectangleEdges(g, t));
+    return geometries.every((g, i) => g === geometry.geometries[i])
+      ? geometry
+      : { ...geometry, geometries };
+  }
+  const [w, s, e, n] = t.regionBounds;
+  const position = (p: Position): Position => {
+    if (!inVoid(p, t)) return p;
+    const q = [...p];
+    if (p[0] === w) q[0] = adjacentFloat(w, -1);
+    if (p[0] === e) q[0] = adjacentFloat(e, 1);
+    if (p[1] === s) q[1] = adjacentFloat(s, -1);
+    if (p[1] === n) q[1] = adjacentFloat(n, 1);
+    return q[0] === p[0] && q[1] === p[1] ? p : q;
+  };
+  const coordinates = <C extends CoordinateTree>(c: C): C => {
+    // Mapping positions preserves the geometry's coordinate nesting and dimensions.
+    if (typeof c[0] === 'number') return position(c as Position) as C;
+    const children = c as CoordinateTree[];
+    const mapped = children.map(coordinates);
+    return mapped.every((child, i) => child === children[i]) ? c : (mapped as C);
+  };
+  const mapped = coordinates(geometry.coordinates);
+  return mapped === geometry.coordinates
+    ? geometry
+    : ({ ...geometry, coordinates: mapped } as Geometry);
+}
+
 /** Remove only the void, keeping a single identity and all original derivation metadata. */
 export function removeVoid<F extends Feature>(feature: F, t: Territory): F | undefined {
   if (!t.void || !mayMeetVoid(turfBbox(feature) as BBox, t)) return feature;
-  const geometry = clipGeometry(feature.geometry, t);
-  if (!geometry) return undefined;
+  const clipped = clipGeometry(feature.geometry, t);
+  if (!clipped) return undefined;
+  const geometry = excludeRectangleEdges(clipped, t);
   if (geometry === feature.geometry) return feature;
   const result = { ...feature, geometry };
   if (feature.bbox) result.bbox = turfBbox(result);
@@ -336,9 +398,14 @@ export const geometryOutsideVoid = (geometry: Geometry, t: Territory): boolean =
         geometryOutsideVoid({ type: 'LineString', coordinates }, t),
       );
     case 'Polygon':
-      return polygonRelation(geometry.coordinates, t) === 'outside';
+      return (
+        geometry.coordinates.every((ring) => ring.every((p) => !inVoid(p, t))) &&
+        polygonRelation(geometry.coordinates, t) === 'outside'
+      );
     case 'MultiPolygon':
-      return geometry.coordinates.every((p) => polygonRelation(p, t) === 'outside');
+      return geometry.coordinates.every((p) =>
+        geometryOutsideVoid({ type: 'Polygon', coordinates: p }, t),
+      );
     case 'GeometryCollection':
       return geometry.geometries.every((g) => geometryOutsideVoid(g, t));
   }

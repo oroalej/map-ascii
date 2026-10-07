@@ -255,7 +255,7 @@ it('keeps reachable anchors when retained components extend beyond the camera re
     coordinates: [
       [
         [-3, 3],
-        [0, 3],
+        [-Number.MIN_VALUE, 3],
       ],
       [
         [1, 3],
