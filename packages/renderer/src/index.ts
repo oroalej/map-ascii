@@ -1,3 +1,4 @@
+import { THRONG_MASK_SIDE } from './life/throng';
 import { MOMENTS } from './life/moments';
 export type { EmojiCue } from './life/emoji';
 import { spawnMargin } from './life/births';
@@ -1045,7 +1046,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
     // Nothing out, and the texture already empty: nothing to upload.
-    if (agents.length === 0 && !lifeShown) {
+    const acceptedCrowd = lifeActive() ? drawnLife?.throngRun : undefined;
+    const crowdEvent = acceptedCrowd && processions.find((p) => p.id === acceptedCrowd.id);
+    if (agents.length === 0 && !crowdEvent && !lifeShown) {
       agentsDrawn = 0;
       lifeAgents = agents;
       return;
@@ -1067,11 +1070,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
-      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
+      drawnLife,
       trackSpeech ? speechSpeakers : undefined,
       drawnLife?.puffs,
+      crowdEvent && acceptedCrowd
+        ? {
+            event: crowdEvent,
+            progress: acceptedCrowd.progress,
+            quality: knobs.throng,
+            clock: drawnLife?.signalClock,
+            subGuard: drawnLife?.cellGuard((lng, lat) => {
+              const [c, r] = placement!.toCell(lng, lat);
+              return [c * THRONG_MASK_SIDE, r * THRONG_MASK_SIDE];
+            }),
+          }
+        : undefined,
     );
-    lifeShown = agents.length > 0;
+    lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;
   };
   const reportCues = (kind: 'speech' | 'emoji', now: number) => {

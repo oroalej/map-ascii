@@ -12,6 +12,10 @@ import lock from '../../../content/cities/naga/tiles.lock.json';
 import { GroundProcessionScene } from './procession-street';
 import { bodyHitsPolygon, segmentBody } from './occupancy';
 import { eventBodySize } from './event-actors';
+import { packLife } from './draw';
+import { groundForRoute, eventGroundAllows } from './ground-events';
+import { themes, mapGlyphs } from '../theme';
+import { ProcessionGlyph } from './procession-glyphs';
 
 // Select this integration test when generated geography or authored exterior anchors change.
 import.meta.glob('../../../../apps/web/public/tiles/*.processions.json');
@@ -41,6 +45,58 @@ describe('shipped exterior Mass gatherings', () => {
   );
   for (const route of routes) {
     if (route.kind !== 'mass') continue;
+    if (route.site.altar)
+      it(`keeps the celebrants and both images packed throughout ${route.id}`, () => {
+        const frame = localMetricProjection(route.site.altar!.at),
+          ground = groundForRoute(route),
+          glyphs = mapGlyphs(themes.dark);
+        const toCell = (lng: number, lat: number): [number, number] => {
+          const [x, y] = frame.to([lng, lat]);
+          return [x / 0.25 + 60, -y / 0.25 + 60];
+        };
+        const fromCell = (c: number, r: number) => frame.from([(c - 60) * 0.25, -(r - 60) * 0.25]);
+        for (const progress of [0.05, 0.5, 0.95]) {
+          const actors = new GroundProcessionScene(route)
+            .agents(progress, 0)
+            .filter((a) => a.eventRole === 'altar');
+          expect(actors).toHaveLength(15);
+          const out = new Uint8Array(120 * 120 * 4),
+            owners = new Uint32Array(120 * 120);
+          packLife(
+            out,
+            {
+              cols: 120,
+              rows: 120,
+              cellWidth: 10,
+              cellHeight: 18,
+              toCell,
+              allowsGroundCell: (a, c, r) =>
+                eventGroundAllows(a.eventRole === 'altar' ? ground.altar! : ground, [
+                  fromCell(c + 0.5, r + 0.5),
+                  fromCell(c, r),
+                  fromCell(c + 1, r),
+                  fromCell(c + 1, r + 1),
+                  fromCell(c, r + 1),
+                ]),
+            },
+            actors,
+            themes.dark,
+            (g) => Math.max(0, glyphs.indexOf(g)),
+            undefined,
+            undefined,
+            { owners },
+          );
+          const people = actors
+            .map((a, i) => ({ a, owner: i + 1 }))
+            .filter(({ a }) => !a.glyph || a.glyph === ProcessionGlyph.andas);
+          expect(people).toHaveLength(10);
+          for (const { owner } of people)
+            expect(owners.some((value) => value === owner)).toBe(true);
+          expect(new Set(actors.filter((a) => !a.glyph).map((a) => a.paint))).toEqual(
+            new Set([0, 7]),
+          );
+        }
+      });
     it(`keeps all ${route.id} approaches, exits and complete crowd footprints outside the church`, () => {
       const frame = localMetricProjection(route.site.location, {
         east: LEGACY_LOCAL_METERS_PER_DEGREE,

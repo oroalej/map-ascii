@@ -106,7 +106,7 @@
   "rows": [],
   "areas": [],
   "status": "draft",
-  "credit": "Owner-supplied church, Science High School and Balatas Road references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied church, Science High School and Balatas Road references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: Balatas-Cararayan Road",
@@ -115,7 +115,7 @@
     },
     {
       "title": "Owner-supplied Balatas Road canopy reference",
-      "note": "Inspected 2026-10-02. The initial dense road-covering draft is superseded by the owner request to reduce it. Retain spaced trees on both verges at roughly 40 m or greater along each side, with smaller estimated 11–14 m crowns and unchanged 8 m height. Chosen trunk positions and source routes remain; constrained gaps and clear road views are intentional. This is a schematic corridor, not a species or tree inventory."
+      "note": "Inspected 2026-10-02. The initial dense road-covering is superseded by the owner request to reduce it. Retain spaced trees on both verges at roughly 40 m or greater along each side, with smaller estimated 11–14 m crowns and unchanged 8 m height. Chosen trunk positions and source routes remain; constrained gaps and clear road views are intentional. This is a schematic corridor, not a species or tree inventory."
     }
   ]
 }

@@ -1052,7 +1052,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Owner-supplied landscaped grounds references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied landscaped grounds references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -1061,11 +1061,11 @@
     },
     {
       "title": "Owner-supplied five landscaped grounds references",
-      "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative draft landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
+      "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
     },
     {
       "title": "Owner-supplied school grounds references",
-      "note": "Inspected 2026-10-03. Restrained planting, paths and small schematic parking areas fit the saved OSM campus and complete source obstacles. Draft, undated estimates; no species, construction date, roof reconstruction, surveyed parcel or exact vehicle inventory inferred. Reference bitmaps remain in ignored evidence."
+      "note": "Inspected 2026-10-03. Restrained planting, paths and small schematic parking areas fit the saved OSM campus and complete source obstacles. schematic, undated estimates; no species, construction date, roof reconstruction, surveyed parcel or exact vehicle inventory inferred. Reference bitmaps remain in ignored evidence."
     }
   ]
 }

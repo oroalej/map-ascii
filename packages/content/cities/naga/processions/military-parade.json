@@ -4,9 +4,9 @@
     "en": "Bicol Regional Military Parade Exhibition"
   },
   "story": {
-    "en": "TODO(verify): The original schedule names Panganiban Drive to Plaza Quezon at 07:00. The rotonda landmark is an illustrative start, snapped to the street; Plaza Quezon is also snapped to the named corridor. Marching contingents, color guard, band, vehicles, two-hour duration and route arrangement are illustrative."
+    "en": "The parade starts at 07:00 on Panganiban Drive and continues through Elias Angeles, Caceres and General Luna to the Plaza Quezon stage. The 72 contingents recall the documented 2023 gathering. Uniform colors, six bands, block sizes and the three-hour replay are illustrative; the latter follows the dated 2023 event window."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "parade",
   "season": "penafrancia-fiesta",
   "label": {
@@ -26,7 +26,18 @@
       "osm:way/721779874",
       "osm:way/836685800",
       "osm:way/836685805",
-      "osm:way/1553212752"
+      "osm:way/1553212752",
+      "osm:way/1553218896",
+      "osm:way/596568239",
+      "osm:way/1553218895",
+      "osm:way/23520783",
+      "osm:way/755073153",
+      "osm:way/1053485826",
+      "osm:way/1373537377",
+      "osm:way/596568240",
+      "osm:way/1553212757",
+      "osm:way/596568242",
+      "osm:way/1553212756"
     ]
   },
   "schedule": {
@@ -35,26 +46,39 @@
     "nth": 3,
     "offset_days": -1,
     "start": "07:00",
-    "duration_min": 120,
+    "duration_min": 180,
     "timezone": "Asia/Manila"
   },
   "formation": {
-    "contingents": 3,
-    "ranks": 4,
-    "band": 12,
-    "color_guard": 4,
-    "vehicles": ["truck", "car"]
+    "contingents": 72,
+    "ranks": 8,
+    "columns": 6,
+    "bands": 6,
+    "band": 24,
+    "color_guard": 8,
+    "vehicles": []
   },
   "sources": [
     {
-      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "title": "Naga Tourism: 2026 festival calendar",
       "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
-      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+      "note": "Dated event dates and starts. Annual recurrence and depicted formations are illustrative; future arrangements may vary."
     },
     {
-      "title": "OpenStreetMap: event anchors and grounds",
-      "url": "https://www.openstreetmap.org/way/252223489",
-      "note": "Mapped anchors: osm:way/252223489, osm:way/201276958. Street endpoints are snapped within 200 m; a roof-safe endpoint may move up to 50 m beyond its nearest safe road position. Mapped bridge decks and directly connected approaches inform bounded water permissions. Paths, formation, sidewalks and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "title": "Naga Tourism: parade traffic advisory and official map",
+      "url": "https://tourism.naga.gov.ph/traffic-advisory-penafrancia-festival-parade-routes/",
+      "note": "Official 2026 map inspected: Panganiban Drive, south on Elias Angeles, west on Caceres, north on General Luna to the Plaza stage. Blue judging area faces the plaza."
+    },
+    {
+      "title": "Philippine Information Agency: 72 contingents in 2023",
+      "url": "https://mirror.pia.gov.ph/news/2023/09/20/13th-military-regional-military-parade-competition-marks-gathering-of-72-contingents",
+      "note": "Reports 72 contingents in the September 15, 2023 competition; this does not assert the same count in every year."
+    },
+    {
+      "title": "City of Naga: 2023 parade event window",
+      "url": "https://www2.naga.gov.ph/event/13th-bicol-regional-military-parade/",
+      "note": "The September 15, 2023 event lists 07:00–10:00. The 2026 start remains 07:00; the replay length is illustrative."
     }
-  ]
+  ],
+  "crowd_areas": ["osm:way/201276958", "osm:way/252223489"]
 }

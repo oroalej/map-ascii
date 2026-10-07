@@ -375,7 +375,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Universidad de Santa Isabel — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Universidad de Santa Isabel — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -388,7 +388,7 @@
       "note": "Official independent illustrated campus map identifies the chapel and courtyard facilities. The earlier schematic chapel approach and seats are superseded by the supplied overhead courtyard and pavilion layout. OSM boundary includes Naga Central School I: no detail is added to that northern section. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
     },
     {
-      "title": "Draft surface placement audit",
+      "title": "surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {

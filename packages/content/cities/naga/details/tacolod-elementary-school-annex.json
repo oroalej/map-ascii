@@ -222,7 +222,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied Google Maps school references; © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: mapped school grounds",
@@ -234,7 +234,7 @@
       "note": "Image #1: owner-supplied Google Maps overhead of the Annex on Fourth Street, inspected 2026-10-04. The owner explicitly instructed proceeding with this reference. The central lawn, eastern foliage and edge approaches guide a restrained fit to the complete mapped grounds and five standing classroom roofs. The imagery is rotated relative to north-up OSM; alignment and dimensions remain approximate. No Google reuse rights are asserted; the reference raster is not distributed."
     },
     {
-      "title": "Draft layout limits",
+      "title": "layout limits",
       "note": "Added positions, crown sizes, height estimates, path widths and low planting are undated drafts. No surveyed boundary, species, construction history, vehicle inventory or verified accessibility claim is inferred."
     }
   ]

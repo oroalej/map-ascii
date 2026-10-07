@@ -1,3 +1,4 @@
+import type { ThrongPayload } from './throng';
 /**
  * Agents → the life layer's texels (RGBA8 per cell: low glyph byte, packed glyph/class byte, agent kind bits,
  * and for vehicles their paint and part, for people their paint, part, and candle), which the
@@ -200,6 +201,9 @@ export type LifePackMetadata = {
   focus?: ReadonlySet<LifeFocus>;
   /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
   clockCells?: number[];
+  throng?: ThrongPayload;
+  throngMask?: Uint32Array;
+  throngCells?: number[];
 };
 
 /** Every complete texel write also replaces its frame-local owner. */
@@ -314,6 +318,8 @@ export function packLife(
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
+  metadata.throngMask?.fill(0);
+  if (metadata.throngCells) metadata.throngCells.length = 0;
   if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
     throw new RangeError('Wrong stamped vehicle mask size');
   if (!grid.stampedVehicles && fallbackStampedVehicles.length < agents.length)
@@ -339,10 +345,21 @@ export function packLife(
     let drawn = 0;
     // Fixed obstacles keep their cells as movers pass: parked cars, then vendors.
     // Owner indices still refer to the caller's original array.
-    for (const priority of [0, 1, 2])
+    for (const priority of [-2, -1, 0, 1, 2, 3]) {
+      if (priority === 0 && metadata.throng)
+        drawn += packThrong(out, grid, metadata.throng, theme, glyphIndex, glyphs, metadata);
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
-        if ((agent.parked ? 0 : agent.vehicle === 'cart' ? 1 : 2) !== priority) continue;
+        const stage = agent.eventScenery
+          ? -2
+          : agent.event || agent.eventGround
+            ? -1
+            : agent.parked
+              ? 1
+              : agent.vehicle === 'cart'
+                ? 2
+                : 3;
+        if (stage !== priority) continue;
         drawingOwner = index + 1;
         drawingClockCells =
           agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
@@ -533,10 +550,11 @@ export function packLife(
           }
         } else {
           drawn += n;
-          for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+          if (!agent.eventScenery) for (const at of journal.before.keys()) groundCells[at / 4] = 1;
           if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
         }
       }
+    }
     journal = undefined;
     drawingOwner = 0;
     drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
@@ -552,6 +570,57 @@ export function packLife(
     drawingMini = false;
   }
 }
+
+/** Whole-footprint admission and final texel budget, with no simulated owner. */
+function packThrong(
+  out: Uint8Array,
+  grid: LifeGrid,
+  payload: ThrongPayload,
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+  glyphs: LifeGlyphs,
+  metadata: LifePackMetadata,
+) {
+  let used = 0,
+    drawn = 0;
+  const speakers = drawingSpeakers;
+  drawingSpeakers = undefined;
+  drawingOwner = 0;
+  drawingFocus = 0;
+  drawingClockCells = undefined;
+  for (const cell of payload.cells) {
+    journal = { before: new Map(), denied: false };
+    const n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
+    const attempt = journal;
+    if (!cell.mask && grid.allowsGroundCell)
+      for (const at of attempt.before.keys())
+        if (
+          !grid.allowsGroundCell(cell.agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
+        ) {
+          attempt.denied = true;
+          break;
+        }
+    if (!n || attempt.denied || attempt.incomplete || used + attempt.before.size > payload.cap) {
+      for (const [at, previous] of attempt.before) {
+        for (let b = 0; b < 4; b++) out[at + b] = previous[b]!;
+        if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
+      }
+      continue;
+    }
+    used += attempt.before.size;
+    drawn++;
+    for (const at of attempt.before.keys()) {
+      const i = at / 4;
+      groundCells[i] = 1;
+      if (metadata.throngMask) metadata.throngMask.set(cell.mask ?? FULL_CROWD_MASK, i * 8);
+      metadata.throngCells?.push(i);
+    }
+  }
+  journal = undefined;
+  drawingSpeakers = speakers;
+  return drawn;
+}
+const FULL_CROWD_MASK = new Uint32Array(8).fill(0xffffffff);
 
 /** Decorative ink fills empty cells only after its detailed source was successfully admitted. */
 function drawPuffs(
@@ -599,6 +668,50 @@ function drawAgent(
       r = Math.floor(row),
       index = glyphIndex(agent.prop === 'event' ? agent.glyph! : '•');
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
+    if (agent.eventFootprint && agent.prop === 'event' && agent.ahead && agent.side) {
+      const [ax, ay] = toCell(...agent.ahead),
+        [sx, sy] = toCell(...agent.side);
+      const length = agent.eventFootprint.length,
+        width = agent.eventFootprint.width;
+      const offsets = [
+        [-0.5, -0.5],
+        [0.5, -0.5],
+        [0.5, 0.5],
+        [-0.5, 0.5],
+      ];
+      const corners = offsets.map(([x, y]) => [
+        col + (ax - col) * length * x! + (sx - col) * width * y!,
+        row + (ay - row) * length * x! + (sy - row) * width * y!,
+      ]);
+      let n = 0;
+      for (
+        let y = Math.floor(Math.min(...corners.map((p) => p[1]!)));
+        y <= Math.floor(Math.max(...corners.map((p) => p[1]!)));
+        y++
+      )
+        for (
+          let x = Math.floor(Math.min(...corners.map((p) => p[0]!)));
+          x <= Math.floor(Math.max(...corners.map((p) => p[0]!)));
+          x++
+        ) {
+          if (x < 0 || y < 0 || x >= cols || y >= rows) {
+            if (journal) journal.incomplete = true;
+            continue;
+          }
+          const at = (y * cols + x) * 4;
+          rememberGroundCell(out, at);
+          writeCell(
+            out,
+            at,
+            index,
+            classId(lifeClassFor.person),
+            EVENT_PERSON_BITS,
+            personByte(agent.paint ?? PAINT_NONE, PersonPart.figure, agent.candle),
+          );
+          n++;
+        }
+      return n ? 1 : 0;
+    }
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
     writeCell(
@@ -607,7 +720,7 @@ function drawAgent(
       index,
       classId(lifeClassFor.person),
       agent.eventGround ? EVENT_PERSON_BITS : CellBit.person,
-      personByte(agent.paint ?? PAINT_NONE, PersonPart.figure),
+      personByte(agent.paint ?? PAINT_NONE, PersonPart.figure, agent.candle),
     );
     return 1;
   }

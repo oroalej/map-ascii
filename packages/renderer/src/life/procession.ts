@@ -32,6 +32,14 @@ export const PROCESSION = {
   playSpeed: 10,
   eventActors: 300,
   eventSpectators: 90,
+  throng: {
+    stream: 0.9,
+    tail: 0.6,
+    verge: 0.7,
+    mass: 0.95,
+    bank: 0.7,
+    uniforms: [3, 4, 5, 6, 7, 8, 9, 10] as const,
+  },
   mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },
   street: {
     bearerStart: 1,
@@ -220,6 +228,7 @@ export function routePolyline(points: readonly Point[]) {
         Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]),
     );
   return {
+    points,
     along,
     at(distance: number) {
       const s = Math.max(0, Math.min(along.at(-1)!, distance));
@@ -347,7 +356,7 @@ export class ProcessionScene {
     }
     // A flotilla of small boats follows the pagoda, three abreast.
     const small: CraftType[] = ['baroto', 'rowboat', 'motorboat', 'sailboat'];
-    const followers = PROCESSION.followers;
+    const followers = this.route.formation?.followers ?? PROCESSION_DEFAULTS.fluvial.followers;
     for (let i = 0; i < followers; i++) {
       const row = Math.floor(i / 3);
       const vehicle =

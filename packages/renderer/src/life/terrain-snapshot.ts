@@ -6,6 +6,7 @@ type CellTerrain = NonNullable<ReturnType<LifeWorld['cellTerrain']>>;
 export type TerrainSnapshot = {
   ref: CellTerrain['ref'];
   blocked: FlatPolygonIndex;
+  hardBlocked?: FlatPolygonIndex;
   forbidden: FlatPolygonIndex;
   roads: FlatPolygonIndex;
   trees: FlatPolygonIndex;
@@ -14,6 +15,7 @@ export function snapshotOf(terrain: CellTerrain) {
   const snapshot: TerrainSnapshot = {
     ref: terrain.ref,
     blocked: terrain.blocked.toFlat(),
+    hardBlocked: terrain.hardBlocked.toFlat(),
     forbidden: terrain.forbidden.toFlat(),
     roads: terrain.roads.toFlat(),
     trees: terrain.trees.toFlat(),
@@ -21,6 +23,7 @@ export function snapshotOf(terrain: CellTerrain) {
   // Only these newly allocated buffers are transferred; the world's polygons stay intact.
   const transferables = [
     snapshot.blocked,
+    snapshot.hardBlocked!,
     snapshot.forbidden,
     snapshot.roads,
     snapshot.trees,
@@ -43,6 +46,7 @@ export function cellTerrainFrom(snapshot: TerrainSnapshot) {
   return {
     ref: snapshot.ref,
     blocked: new FrozenPolygonIndex(snapshot.blocked),
+    hardBlocked: new FrozenPolygonIndex(snapshot.hardBlocked ?? snapshot.blocked),
     access: {
       roads: new FrozenPolygonIndex(snapshot.roads),
       forbidden: new FrozenPolygonIndex(snapshot.forbidden),

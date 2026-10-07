@@ -1,3 +1,5 @@
+import { throng } from './life/throng';
+import type { ProcessionRoute } from '@atlas/shared';
 import { project } from './camera';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
@@ -28,6 +30,7 @@ import {
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadCrowdMask,
   uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
@@ -58,7 +61,7 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
-import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
+import { EffectClocks, ORDINARY_CLOCK, heldClock } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
   packBeams,
@@ -547,6 +550,8 @@ type Texels = {
   candles?: boolean;
   held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
+  crowdMask?: Uint32Array;
+  crowdCells?: number[];
   owners: Uint32Array;
   revision: number;
   light: Uint8Array;
@@ -624,6 +629,13 @@ export function lifePass(
   heldFrame?: object,
   speakers?: LifeGrid['speakers'],
   puffs?: Float64Array,
+  crowd?: {
+    event: ProcessionRoute;
+    progress: number;
+    quality: number;
+    clock?: number;
+    subGuard?: LifeGrid['allowsGroundCell'];
+  },
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -642,6 +654,9 @@ export function lifePass(
         sun,
         focus,
         speakers,
+        crowd?.event,
+        crowd?.progress,
+        crowd?.quality,
       ]
     : undefined;
   if (
@@ -652,10 +667,27 @@ export function lifePass(
     return buffers.held.drawn;
   buffers.held = undefined;
   const lifeTexels = buffers.life;
+  const crowdPayload = crowd
+    ? throng(
+        crowd.event,
+        crowd.progress,
+        placement,
+        cols,
+        rows,
+        view.camera.zoom,
+        crowd.quality,
+        crowd.subGuard,
+      )
+    : undefined;
+  if (crowdPayload?.cells.length) {
+    buffers.crowdMask ??= new Uint32Array(cols * rows * 8);
+    buffers.crowdCells ??= [];
+  }
+
   if (buffers.stampedVehicles.length < agents.length)
     buffers.stampedVehicles = new Uint8Array(agents.length);
   const packStart = profiler?.time();
-  buffers.candles = buffers.clockCandidates = false;
+  buffers.candles = buffers.clockCandidates = !!crowdPayload?.cells.some((c) => c.agent.candle);
   for (const agent of agents) {
     if (!agent.candle) continue;
     buffers.candles = true;
@@ -686,9 +718,21 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
-    { owners: buffers.owners, focus, clockCells: buffers.clockCells },
+    {
+      owners: buffers.owners,
+      focus,
+      clockCells: buffers.clockCells,
+      throng: crowdPayload,
+      throngMask: buffers.crowdMask,
+      throngCells: buffers.crowdCells,
+    },
     puffs,
   );
+  // Birds may overwrite crowd texels; their real owner clears the crowd permission mask.
+  if (buffers.crowdMask)
+    for (let i = 0; i < buffers.owners.length; i++)
+      if (buffers.owners[i]) buffers.crowdMask.fill(0, i * 8, i * 8 + 8);
+  uploadCrowdMask(gl, targets, buffers.crowdCells?.length ? buffers.crowdMask : undefined);
   buffers.stampedAgents = agents;
   buffers.revision++;
   if (buffers.clocks) {
@@ -697,6 +741,9 @@ export function lifePass(
       const agent = agents[buffers.owners[cell]! - 1];
       if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? ORDINARY_CLOCK);
     }
+    for (const cell of buffers.crowdCells ?? [])
+      if (!buffers.owners[cell] && lifeTexels[cell * 4 + 3]! & 128)
+        buffers.clocks.set(0, cell, heldClock(crowd?.clock ?? 0));
     buffers.clocks.finish(0);
   }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
@@ -995,6 +1042,8 @@ export function glyphPass(
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_crowdMask: targets.crowdMaskTex ?? targets.idTex,
+    u_hasCrowdMask: !!targets.crowdMaskActive,
     u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
     u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,

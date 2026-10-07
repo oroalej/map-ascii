@@ -80,6 +80,34 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('publishes zero-agent accepted crowds and discards late crowds after Stop', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, [route]);
+    host.sync(s.tiles);
+    await flush();
+    host.setLive(route.id, 0.4, '2026');
+    const run = { id: route.id, progress: 0.4, live: true };
+    mock.frame.mockResolvedValueOnce({ ...result(1), procession: run });
+    host.request(s.input);
+    await flush();
+    expect(host.latest()?.agents).toHaveLength(0);
+    expect(host.latest()?.throngRun).toEqual(run);
+    let finish!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    host.request(s.input);
+    host.setLive(undefined);
+    host.stop();
+    expect(host.latest()?.throngRun).toBeUndefined();
+    finish({ ...result(2), procession: run });
+    await flush();
+    expect(host.latest()?.throngRun).toBeUndefined();
+    host.dispose();
+  });
   it('keeps provenance on an accepted frame and drops marked stale replies', async () => {
     const s = fixture(),
       host = createWorkerHost({}, []);

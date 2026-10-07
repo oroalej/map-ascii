@@ -4,9 +4,9 @@
     "en": "Peñafrancia Traslación"
   },
   "story": {
-    "en": "TODO(verify): The image is carried from the Old Peñafrancia Shrine to the Metropolitan Cathedral at the published noon start. The carried image, voyadores, candles and marshals illustrate the event; the routed street path, four-hour duration and formation are schematic."
+    "en": "The Divino Rostro leads Our Lady from the Old Shrine along Peñafrancia Avenue, P. Burgos, Elias Angeles and Iglesia Road to Porta Mariae and the Cathedral. The noon-to-18:30 replay follows the 2026 report. About 820,000 devotees attended that year; the two andas, bearers, marshals and dense crowd are illustrative representations."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "procession",
   "season": "penafrancia-fiesta",
   "label": {
@@ -14,7 +14,20 @@
   },
   "route": {
     "from": "osm:way/606888524",
-    "to": "osm:way/23666715"
+    "to": "osm:way/358807129",
+    "via": [
+      "osm:way/23519386",
+      "osm:way/23521401",
+      "osm:way/23521917",
+      "osm:way/1529540511",
+      "osm:way/1529540512",
+      "osm:way/596568237",
+      "osm:way/596568243",
+      "osm:way/1529540510",
+      "osm:way/936923544",
+      "osm:way/1560123986",
+      "osm:way/23519131"
+    ]
   },
   "schedule": {
     "month": 9,
@@ -22,29 +35,32 @@
     "nth": 3,
     "offset_days": -8,
     "start": "12:00",
-    "duration_min": 240,
+    "duration_min": 390,
     "timezone": "Asia/Manila"
   },
   "formation": {
-    "bearers": 8,
-    "ranks": 12,
-    "marshals": 4
+    "images": 2,
+    "bearers": 40,
+    "marshals": 16,
+    "ranks": 20,
+    "columns": 6
   },
   "sources": [
     {
-      "title": "Naga City Tourism: 2026 civic and religious events schedule",
+      "title": "Naga Tourism: 2026 festival calendar",
       "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
-      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+      "note": "Dated event dates and starts. Annual recurrence and depicted formations are illustrative; future arrangements may vary."
     },
     {
-      "title": "GMA Regional TV: Traslación 2024",
-      "url": "https://www.gmanetwork.com/regionaltv/features/103997/over-900t-devotees-gather-for-traslacion-in-peafrancia-2024/story",
-      "note": "Confirms Old Shrine to Metropolitan Cathedral endpoints; does not establish this schematic street route or formation."
+      "title": "Daily Tribune: 2026 Traslación",
+      "url": "https://tribune.net.ph/2026/09/11/traslacion-procession-draws-over-800000-devotees-to-naga-city-as-opinions-clash-over-no-liquor-ban-decision",
+      "note": "Reports both images reaching Porta Mariae around 18:30, followed by Holy Mass, with about 820,000 devotees. The number drawn is illustrative."
     },
     {
-      "title": "OpenStreetMap: event anchors and grounds",
-      "url": "https://www.openstreetmap.org/way/606888524",
-      "note": "Mapped anchors: osm:way/606888524, osm:way/23666715. Street endpoints are snapped within 200 m; a roof-safe endpoint may move up to 50 m beyond its nearest safe road position. Mapped bridge decks and directly connected approaches inform bounded water permissions. Paths, formation, sidewalks and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "title": "Bicol Mail: 2026 Traslación streets",
+      "url": "https://www.bicolmail.net/single-post/bicol-devotees-flock-to-naga-for-pe%C3%B1afrancia-traslacion",
+      "note": "Reports a noon Shrine departure and the named street sequence. Iglesia Road is represented by the mapped Paz/Callejon segment adjacent to Porta Mariae; this mapping uses OSM geography."
     }
-  ]
+  ],
+  "crowd_areas": ["osm:way/724187419", "osm:way/1203045057"]
 }

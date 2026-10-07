@@ -5,6 +5,7 @@ import {
   seasonalAccessRing,
   type StreetRoute,
   type MassRoute,
+  type FluvialRoute,
 } from '@atlas/shared';
 import type { LngLatBounds } from './procession';
 type Point = [number, number];
@@ -13,6 +14,8 @@ export type EventGround = {
   blocked: Point[][];
   water?: Point[][];
   bridges?: Point[][];
+  seated?: EventGround;
+  altar?: EventGround;
 };
 type RingBounds = { ring: Point[]; w: number; s: number; e: number; n: number };
 type RingIndex = { bins: Map<number, RingBounds[]>; large: RingBounds[]; scratch: Set<RingBounds> };
@@ -31,17 +34,27 @@ const indexes = new WeakMap<
   }
 >();
 const EMPTY: Point[][] = [];
-const routeGrounds = new WeakMap<StreetRoute | MassRoute, EventGround>();
+const routeGrounds = new WeakMap<StreetRoute | MassRoute | FluvialRoute, EventGround>();
 const groundBounds = new WeakMap<EventGround, LngLatBounds>();
 export function streetSidewalks(segment: StreetRoute['segments'][number]) {
   return segment.sidewalks_m ?? { left: segment.sidewalk_m, right: segment.sidewalk_m };
 }
 /** Shared carriageway/access traversal; asymmetric sidewalks shift the envelope. */
-export function routeRings(route: StreetRoute, options: { sidewalks?: boolean } = {}): Point[][] {
+export function routeRings(
+  route: StreetRoute,
+  options: { sidewalks?: boolean; verges?: boolean } = {},
+): Point[][] {
   const rings: Point[][] = [];
   for (let i = 1; i < route.route.length; i++) {
     const segment = route.segments[i - 1]!;
-    const sides = options.sidewalks ? streetSidewalks(segment) : { left: 0, right: 0 };
+    const tags = options.sidewalks ? streetSidewalks(segment) : { left: 0, right: 0 };
+    const sides =
+      options.verges && segment.verge_m
+        ? {
+            left: Math.max(tags.left, segment.verge_m.left),
+            right: Math.max(tags.right, segment.verge_m.right),
+          }
+        : tags;
     const offset = (sides.left - sides.right) / 2;
     const frame = localMetricProjection(route.route[i - 1]!);
     const end = frame.to(route.route[i]!);
@@ -74,24 +87,43 @@ export function eventGroundBounds(ground: EventGround): LngLatBounds {
   return bounds;
 }
 /** Initialized once on either side of the worker; frame replies carry only route IDs. */
-export function groundForRoute(route: StreetRoute | MassRoute): EventGround {
+export function groundForRoute(route: StreetRoute | MassRoute | FluvialRoute): EventGround {
   const saved = routeGrounds.get(route);
   if (saved) return saved;
   const ground: EventGround =
     route.kind === 'mass'
       ? { regions: route.site.grounds, blocked: route.site.blocked }
-      : { regions: [], blocked: route.blocked, water: route.water, bridges: route.bridges };
-  if (route.kind !== 'mass') ground.regions = routeRings(route, { sidewalks: true });
+      : route.kind === 'fluvial'
+        ? {
+            regions: route.crowd_ground?.grounds ?? [],
+            blocked: route.crowd_ground?.blocked ?? [],
+            water: route.crowd_ground?.water,
+            bridges: route.crowd_ground?.bridges,
+          }
+        : {
+            regions: [
+              ...routeRings(route, { sidewalks: true, verges: true }),
+              ...(route.crowd_grounds ?? []),
+            ],
+            blocked: route.blocked,
+            water: route.water,
+            bridges: route.bridges,
+          };
+  if (route.kind === 'mass') {
+    ground.seated = { regions: route.site.seated_grounds ?? [], blocked: route.site.blocked };
+    ground.altar = { regions: route.site.altar_ground ?? [], blocked: route.site.blocked };
+  }
   routeGrounds.set(route, ground);
   return ground;
 }
-export function groundsForRoutes(
-  routes: readonly (StreetRoute | MassRoute | { kind: 'fluvial' })[],
-) {
+export function groundsForRoutes(routes: readonly (StreetRoute | MassRoute | FluvialRoute)[]) {
   const grounds = new Map<string, EventGround>();
-  for (const route of routes)
-    if (route.kind !== 'fluvial') grounds.set(route.id, groundForRoute(route));
+  for (const route of routes) grounds.set(route.id, groundForRoute(route));
   return grounds;
+}
+/** Traffic always closes the mapped carriageway or complete authored precinct. */
+export function trafficRings(route: StreetRoute | MassRoute): Point[][] {
+  return route.kind === 'mass' ? (route.site.closure_zone ?? []) : routeRings(route);
 }
 function index(rings: Point[][]): RingIndex {
   const saved = ringIndexes.get(rings);
@@ -203,6 +235,9 @@ export function eventGroundAllows(
     );
   return (
     (!outline || !outlineHits(cached.blocked, outline)) &&
+    (!outline ||
+      !outlineHits(cached.water, outline) ||
+      points.every((q) => inside(cached.bridges, q))) &&
     points.every(
       (q) =>
         inside(cached.regions, q) &&
@@ -215,4 +250,9 @@ export function eventGroundAllows(
 export function eventBridgeAllows(ground: EventGround, points: readonly Point[]) {
   const bridges = index(ground.bridges ?? EMPTY);
   return points.every((q) => inside(bridges, q));
+}
+/** Candidate pruning for partial coarse cells; admission still checks every subcell. */
+export function eventGroundTouches(ground: EventGround, outline: readonly Point[]) {
+  const regions = index(ground.regions);
+  return outline.some((q) => inside(regions, q)) || outlineHits(regions, outline);
 }

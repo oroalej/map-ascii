@@ -755,7 +755,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Bicol State College of Applied Sciences and Technology — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Bicol State College of Applied Sciences and Technology — Owner-supplied overhead reference (Google Maps), date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: original site and surrounding features",
@@ -764,7 +764,7 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. Draft visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. The adjoining Naga Grandstand field is outside part of the mapped BISCAST boundary; the visual envelope includes it without asserting campus ownership. Source building footprints in the older extract differ substantially from the photograph, so courts and approaches are limited to clear ground. campus-basketball is fitted 21 m from the registered estimate to preserve its complete water/court footprint while clearing displaced mapped roofs and access; this is an explicitly draft placement."
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. The adjoining Naga Grandstand field is outside part of the mapped BISCAST boundary; the visual envelope includes it without asserting campus ownership. Source building footprints in the older extract differ substantially from the photograph, so courts and approaches are limited to clear ground. campus-basketball is fitted 21 m from the registered estimate to preserve its complete water/court footprint while clearing displaced mapped roofs and access; this is an explicitly placement."
     }
   ]
 }

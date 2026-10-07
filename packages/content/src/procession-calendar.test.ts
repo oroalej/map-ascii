@@ -33,8 +33,19 @@ it('keeps all five fiesta events in actual calendar order across early and late 
         (day) => `${year}-09-${String(day).padStart(2, '0')}`,
       ),
     );
-    expect(times.map((x) => x.time.time)).toEqual(['12:00', '16:00', '07:00', '15:00', '18:30']);
+    expect(times.map((x) => x.time.time)).toEqual(['12:00', '18:30', '07:00', '16:00', '18:00']);
     for (const { p, time } of times)
       expect(activeSeason(pack.city.life?.seasons, year, time.day)?.id).toBe(p.season);
+  }
+});
+
+it('verifies every fiesta event without unresolved wording', async () => {
+  const pack = (await loadCityPacks(contentRoot, { only: 'naga' })).packs[0]!;
+  const events = pack.content.processions.filter((p) => p.season === 'penafrancia-fiesta');
+  expect(events).toHaveLength(5);
+  for (const event of events) {
+    expect(event.status).toBe('verified');
+    expect(event.sources?.length).toBeGreaterThan(0);
+    expect(JSON.stringify(event)).not.toMatch(/TODO\(verify\)/);
   }
 });

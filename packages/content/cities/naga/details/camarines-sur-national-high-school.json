@@ -254,7 +254,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Camarines Sur National High School — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Camarines Sur National High School — Owner-supplied overhead reference (Google Maps), date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: original site and surrounding features",
@@ -263,7 +263,7 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. Draft visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. The visual envelope excludes the existing Santa Isabel detail grounds, preserving both sites and their separate selection."
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. visual envelope preserves original parent; traced geometry is clipped to standing roofs and full-width mapped roads. Visible reference and older mapped footprints differ; tree shifts are capped at eight metres. The visual envelope excludes the existing Santa Isabel detail grounds, preserving both sites and their separate selection."
     }
   ],
   "roof_overrides": [

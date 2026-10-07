@@ -111,17 +111,30 @@ export type TrafficMix = Partial<
 export const YEAR_RANGE = [1000, 3000] as const;
 /** Zod-free event validation and formation defaults, shared by authoring and runtime. */
 export const PROCESSION_LIMITS = {
-  fluvial: { columns: [1, 6], ranks: [1, 20], escorts: [0, 40] },
-  procession: { bearers: [4, 24], ranks: [1, 20], marshals: [0, 12] },
-  parade: { contingents: [1, 6], ranks: [1, 10], band: [0, 24], color_guard: [0, 8] },
+  fluvial: { columns: [1, 6], ranks: [1, 20], escorts: [0, 40], followers: [0, 200] },
+  procession: {
+    bearers: [4, 64],
+    ranks: [1, 20],
+    marshals: [0, 32],
+    columns: [2, 10],
+    images: [1, 3],
+  },
+  parade: {
+    contingents: [1, 100],
+    ranks: [1, 10],
+    band: [0, 48],
+    color_guard: [0, 8],
+    bands: [0, 6],
+    columns: [2, 10],
+  },
   radius: 500,
   vehicles: 4,
   schedule: { offset_days: [-31, 31], duration_min: [1, 1440] },
 } as const;
 export const PROCESSION_DEFAULTS = {
-  fluvial: { columns: 3, ranks: 8, escorts: 6 },
-  procession: { bearers: 8, ranks: 12, marshals: 4 },
-  parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4 },
+  fluvial: { columns: 3, ranks: 8, escorts: 6, followers: 14 },
+  procession: { bearers: 8, ranks: 12, marshals: 4, columns: 6, images: 1 },
+  parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4, bands: 1, columns: 4 },
 } as const;
 export const PROCESSION_VEHICLES = ['car', 'truck', 'motorcycle'] as const;
 /** Physical geometry used by event routing, probes and collision reservations, in metres. */
@@ -146,12 +159,13 @@ export function processionFormationWidth(
   vehicles: readonly (typeof PROCESSION_VEHICLES)[number][] = [],
 ): number {
   const g = PROCESSION_GEOMETRY;
-  const people = (g.columns - 1) * g.columnPitch + g.person.width;
+  // A narrow road may require single file; larger rosters add rows, never drop members.
+  const people = g.person.width;
   return (
     Math.max(
       people,
       ...(kind === 'procession'
-        ? [2 * g.bearerOffset + g.person.width, 2 * g.marshalOffset + g.person.width, g.andas.width]
+        ? [g.andas.width]
         : vehicles.map((vehicle) => g.vehicles[vehicle].width)),
     ) +
     2 * (g.probePadding + g.clearanceMargin)

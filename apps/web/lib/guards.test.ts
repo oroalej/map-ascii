@@ -1,4 +1,10 @@
-import { CityMeta, CityProcessions, SearchIndexFile, SubdivisionAreas } from '@atlas/shared';
+import {
+  CityMeta,
+  CityProcessions,
+  SearchIndexFile,
+  SubdivisionAreas,
+  PROCESSION_DEFAULTS,
+} from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { isCityMeta, isCityProcessions, isSearchIndexFile, isSubdivisionAreas } from './guards';
 
@@ -102,6 +108,62 @@ describe('browser shape guards agree with the schemas', () => {
       expect(CityProcessions.safeParse({ processions: [p] }).success).toBe(true);
       expect(isCityProcessions({ processions: [p] })).toBe(true);
     }
+    const agrees = (event: unknown, accepted: boolean) => {
+      const bundle = { processions: [event] };
+      expect(CityProcessions.safeParse(bundle).success).toBe(accepted);
+      expect(isCityProcessions(bundle)).toBe(accepted);
+    };
+    for (const [event, defaults, key, min, max] of [
+      [fluvial, PROCESSION_DEFAULTS.fluvial, 'followers', 0, 200],
+      [street, PROCESSION_DEFAULTS.procession, 'columns', 2, 10],
+      [street, PROCESSION_DEFAULTS.procession, 'images', 1, 3],
+      [{ ...street, kind: 'parade' }, PROCESSION_DEFAULTS.parade, 'bands', 0, 6],
+      [{ ...street, kind: 'parade' }, PROCESSION_DEFAULTS.parade, 'columns', 2, 10],
+    ] as const)
+      for (const value of [min, max, min - 1, max + 1])
+        agrees(
+          { ...event, formation: { ...defaults, [key]: value } },
+          value >= min && value <= max,
+        );
+    agrees({ ...street, formation: { ...PROCESSION_DEFAULTS.procession, followers: 2 } }, false);
+    agrees({ ...fluvial, formation: { ...PROCESSION_DEFAULTS.fluvial, images: 2 } }, false);
+    for (const clear_m of [undefined, 5, 8, 0, 8.1, Infinity])
+      agrees(
+        { ...street, segments: [{ ...street.segments[0], clear_m }] },
+        clear_m === undefined || (clear_m > 0 && clear_m <= 8),
+      );
+    for (const verge_m of [
+      { left: 6, right: 0 },
+      { left: 6.1, right: 0 },
+      { left: 2, right: 2, other: 1 },
+    ])
+      agrees(
+        { ...street, segments: [{ ...street.segments[0], verge_m }] },
+        !('other' in verge_m) && verge_m.left <= 6,
+      );
+    const rings = mass.site.grounds;
+    agrees({ ...street, crowd_grounds: rings }, true);
+    agrees(
+      { ...fluvial, crowd_ground: { grounds: rings, blocked: [], water: [], bridges: [] } },
+      true,
+    );
+    agrees(
+      {
+        ...mass,
+        site: {
+          ...mass.site,
+          closure_zone: rings,
+          seated_grounds: rings,
+          altar_ground: rings,
+          altar: { at: route[0], radius_m: 5, images: 2 },
+        },
+      },
+      true,
+    );
+    agrees(
+      { ...mass, site: { ...mass.site, altar: { at: route[0], radius_m: 5, images: 4 } } },
+      false,
+    );
     for (const [status, label, accepted] of [
       ['draft', { en: '   ' }, false],
       ['draft', { en: 'TODO(verify)' }, true],
@@ -133,7 +195,7 @@ describe('browser shape guards agree with the schemas', () => {
     }
     for (const p of [
       { ...street, segments: [] },
-      { ...street, formation: { columns: 2 } },
+      { ...street, formation: { columns: 11 } },
       { ...mass, route },
       { ...fluvial, banks: [[1, 2]] },
       { ...street, season: 'fiesta' },

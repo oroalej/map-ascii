@@ -640,6 +640,7 @@ export const ProcessionFormation = z.strictObject({
   columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
   ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
   escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
+  followers: formationCount(PROCESSION_LIMITS.fluvial.followers).optional(),
 });
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
 const ProcessionId = z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>');
@@ -651,6 +652,8 @@ export const FollowingSchedule = z.strictObject({
     .max(PROCESSION_LIMITS.schedule.duration_min[1]),
 });
 export const StreetFormation = z.strictObject({
+  columns: formationCount(PROCESSION_LIMITS.procession.columns).optional(),
+  images: formationCount(PROCESSION_LIMITS.procession.images).optional(),
   bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
     PROCESSION_DEFAULTS.procession.bearers,
   ),
@@ -662,6 +665,8 @@ export const StreetFormation = z.strictObject({
   ),
 });
 export const ParadeFormation = z.strictObject({
+  columns: formationCount(PROCESSION_LIMITS.parade.columns).optional(),
+  bands: formationCount(PROCESSION_LIMITS.parade.bands).optional(),
   contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
     PROCESSION_DEFAULTS.parade.contingents,
   ),
@@ -680,7 +685,18 @@ const EventRing = z
     (r) => !!r[0] && r[0][0] === r.at(-1)![0] && r[0][1] === r.at(-1)![1],
     'expected closed ring',
   );
+const EventAltar = z.strictObject({ at: EventPoint, radius_m: z.number().positive().max(20) });
+const CrowdGround = z.strictObject({
+  grounds: z.array(EventRing),
+  blocked: z.array(EventRing),
+  water: z.array(EventRing),
+  bridges: z.array(EventRing),
+});
 export const ProcessionSite = z.strictObject({
+  closure_zone: z.array(EventRing).optional(),
+  seated_grounds: z.array(EventRing).optional(),
+  altar_ground: z.array(EventRing).optional(),
+  altar: EventAltar.extend({ images: z.int().min(0).max(3) }).optional(),
   id: OsmId,
   location: EventPoint,
   anchor: EventPoint,
@@ -959,17 +975,21 @@ export function contentSchemas(languages?: readonly string[]) {
         kind: z.literal('procession'),
         route: streetRoute,
         formation: StreetFormation.optional(),
+        crowd_areas: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,
         kind: z.literal('parade'),
         route: streetRoute,
         formation: ParadeFormation.optional(),
+        crowd_areas: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,
         kind: z.literal('mass'),
         site: OsmId,
+        crowd_boundary: EventRing.optional(),
+        altar: EventAltar.optional(),
         grounds: z.array(OsmAreaId).min(1),
         /** Authored exterior forecourt; the pipeline snaps only to safe connected cells. */
         gathering_anchor: LngLat.optional(),
@@ -1062,17 +1082,27 @@ const streetEventBase = {
   ...movingEventBase,
   segments: z
     .array(
-      z.strictObject({
-        id: OsmId,
-        width_m: z.number().positive(),
-        // Legacy symmetric allowance; new archives carry route-relative sides.
-        sidewalk_m: z.number().min(0),
-        sidewalks_m: z
-          .strictObject({ left: z.number().min(0), right: z.number().min(0) })
-          .optional(),
-      }),
+      z
+        .strictObject({
+          id: OsmId,
+          width_m: z.number().positive(),
+          clear_m: z.number().positive().optional(),
+          verge_m: z
+            .strictObject({ left: z.number().min(0).max(6), right: z.number().min(0).max(6) })
+            .optional(),
+          // Legacy symmetric allowance; new archives carry route-relative sides.
+          sidewalk_m: z.number().min(0),
+          sidewalks_m: z
+            .strictObject({ left: z.number().min(0), right: z.number().min(0) })
+            .optional(),
+        })
+        .refine(
+          (s) => s.clear_m === undefined || s.clear_m <= s.width_m,
+          'clear_m exceeds width_m',
+        ),
     )
     .min(1),
+  crowd_grounds: z.array(EventRing).optional(),
   blocked: z.array(EventRing),
   water: z.array(EventRing).optional(),
   bridges: z.array(EventRing).optional(),
@@ -1085,6 +1115,7 @@ export const CityProcessions = z.object({
           ...generatedEventBase,
           ...movingEventBase,
           kind: z.literal('fluvial'),
+          crowd_ground: CrowdGround.optional(),
           banks: z.array(z.tuple([z.number().min(0), z.number().min(0)])).optional(),
           formation: ProcessionFormation.optional(),
         }),

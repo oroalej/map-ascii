@@ -274,6 +274,7 @@ export type LifeArea = {
     'parking' | 'blocked' | 'vehicle-blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
   rings: TilePoint[][];
   water?: boolean;
+  seating?: boolean;
 };
 
 export const PLACE_STRIDE = 5;
@@ -731,10 +732,12 @@ export class LifeBuilder {
     rings: readonly (readonly TilePoint[])[],
     water = false,
     crossingStripes?: readonly (readonly TilePoint[])[],
+    seating = false,
   ) {
     this.areas.push({
       kind,
       water,
+      ...(seating && { seating }),
       rings: rings.map((r) => r.map((p) => ({ ...p }))),
       ...(crossingStripes && {
         crossingStripes: crossingStripes.map((r) => r.map((p) => ({ ...p }))),

@@ -4,9 +4,9 @@
     "en": "Mass after the Traslación"
   },
   "story": {
-    "en": "TODO(verify): A Mass follows the image’s arrival at the Cathedral. The 16:00 start inherits the illustrative four-hour Traslación; the ninety-minute gathering, outdoor grounds and overflow are schematic. Attendees converge, face the church and disperse."
+    "en": "Holy Mass follows the images arriving at Porta Mariae around 18:30 in the 2026 report. The ninety-minute replay, outdoor altar and car-free precinct are illustrative. The project owner marked the altar and crowd boundary on 2026-10-07; people face the altar, leaving its platform and clear apron for celebrants and the images."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "mass",
   "season": "penafrancia-fiesta",
   "label": {
@@ -22,19 +22,30 @@
   },
   "sources": [
     {
-      "title": "Archdiocese of Caceres: Peñafrancia calendar",
-      "url": "https://www.archdioceseofcaceres.org/caceresevents",
-      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+      "title": "Daily Tribune: 2026 Traslación",
+      "url": "https://tribune.net.ph/2026/09/11/traslacion-procession-draws-over-800000-devotees-to-naga-city-as-opinions-clash-over-no-liquor-ban-decision",
+      "note": "Reports both images reaching Porta Mariae around 18:30, followed by Holy Mass, with about 820,000 devotees. The number drawn is illustrative."
     },
     {
-      "title": "Naga City Tourism: 2026 civic and religious events schedule",
-      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
-      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
-    },
-    {
-      "title": "OpenStreetMap: event anchors and grounds",
+      "title": "Project owner: Cathedral precinct annotation",
       "url": "https://www.openstreetmap.org/way/23666715",
-      "note": "Mapped anchors: osm:way/23666715, osm:way/1203045057. The authored illustrative forecourt anchor and mapped grounds seed a connected exterior gathering within the radius, with approaches and exits excluding the standing church footprint; this event has no snapped route endpoints. Grounds, road overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "note": "Project owner annotated atlas image, 2026-10-07. Boundary fitted around the annotated forecourt and mapped east garden with a four-metre curb margin. Altar shifted four metres north within the annotation tolerance to clear the mapped overhead arch; placement is approximate, not a surveyed festival arrangement."
     }
-  ]
+  ],
+  "crowd_boundary": [
+    [123.186198, 13.6275521],
+    [123.1864897, 13.6273466],
+    [123.1870525, 13.626974],
+    [123.1877989, 13.6265453],
+    [123.1884405, 13.6275053],
+    [123.1876324, 13.6280193],
+    [123.1867987, 13.6284196],
+    [123.1866297, 13.6282563],
+    [123.1864502, 13.6279664],
+    [123.186198, 13.6275521]
+  ],
+  "altar": {
+    "at": [123.18688, 13.627796],
+    "radius_m": 5
+  }
 }

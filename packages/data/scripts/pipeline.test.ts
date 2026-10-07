@@ -1,5 +1,5 @@
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
-import { mkdtemp, rm, appendFile } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTours, step as mergeContent } from './04-merge-content';
-import { buildMeta, step as tileStep } from './05-tiles';
+import { buildMeta, writeMetadata, step as tileStep } from './05-tiles';
+import { landcoverCredits } from './lib/landcover';
+import { cemeteryCredits } from './lib/cemeteries';
+import { detailCredits } from './lib/site-detail';
+import { planCredits } from './lib/plan';
 import { readFeatures, readJson } from './lib/io';
 import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
@@ -110,6 +114,32 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('writes normal-step metadata without touching an existing archive', async () => {
+    await mkdir(ctx.outDir, { recursive: true });
+    const archive = join(ctx.outDir, `${city.slug}.pmtiles`);
+    await writeFile(archive, 'archive sentinel');
+    const geography = await readJson<Geography>(join(ctx.buildDir, files.geography));
+    const years = [
+      ...features
+        .flatMap((f) => [f.properties.start_year, f.properties.end_year])
+        .filter((y): y is number => y !== undefined),
+      2026,
+    ];
+    const expected = buildMeta(
+      city,
+      geography,
+      [Math.min(...years), 2026],
+      [
+        ...landcoverCredits(content.landcover),
+        ...cemeteryCredits(content.cemeteries),
+        ...detailCredits(content.details),
+        ...planCredits(content.plans),
+      ],
+    );
+    expect(await writeMetadata(ctx, 2026)).toEqual(expected);
+    expect(await readJson(join(ctx.outDir, `${city.slug}.meta.json`))).toEqual(expected);
+    expect(await readFile(archive, 'utf8')).toBe('archive sentinel');
+  });
   it('writes aliases using the canonical parent final surface class', async () => {
     const parent = features.find((f) => f.properties.id === 'osm:way/105')!;
     const detail = SiteDetail.parse({

@@ -892,7 +892,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga City People's Mall — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga City People's Mall — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -905,8 +905,8 @@
       "note": "Independent south riverfront photograph shows roofed frontage, broad access stairs and a lamp. The OSM market footprint spans Zamora Street; keep that existing road overlay. Do not claim a surveyed roof-deck parking layout. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
     },
     {
-      "title": "Draft surface placement audit",
-      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a draft estimate."
+      "title": "surface placement audit",
+      "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout. The entry tread is repositioned outside the nearest mapped facade edge; its size and architectural location remain a estimate."
     },
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",

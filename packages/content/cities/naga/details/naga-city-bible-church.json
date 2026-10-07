@@ -41,7 +41,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied LCC, Queborac Terminal and Bible Church references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: Naga City Bible Church",
@@ -50,7 +50,7 @@
     },
     {
       "title": "Owner-supplied LCC, Queborac Terminal and Bible Church references",
-      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated draft estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
+      "note": "Inspected 2026-10-02. Owner references guide restrained edge planting, lawns, pedestrian approaches and schematic parking. Complete mapped standing roofs, full road/path widths and existing parking polygons govern fit. Grounds are visual coverage estimates, not surveyed ownership boundaries. Positions, widths and heights are undated estimates; no species, construction history or exact parking inventory is inferred. Reference bitmaps remain ignored evidence."
     },
     {
       "title": "Tightly cropped church reference",

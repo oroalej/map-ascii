@@ -4,9 +4,9 @@
     "en": "Peñafrancia fluvial procession"
   },
   "story": {
-    "en": "TODO(verify): The image leaves Danlugan ni Ina on a pagoda barge and follows the Naga River toward the Peñafrancia Basilica. Danlugan departure and the concluding Mass are sourced; the river path, formation and 210-minute duration are illustrative. The simulation retains the original usual-afternoon window 15:00–18:30 and following 18:30 Mass by owner choice. The updated 2026 advisory instead moved boarding/start to 21:00 and estimated Mass at 23:00; this is not the final actual 2026 schedule."
+    "en": "The pagoda leaves Danlugan ni Ina, passes the Panganiban, Colgante and Magsaysay bridges and approaches Dagsaan, the landing near the Basilica. Both banks and decks are crowded. The annual 16:00–18:00 replay, 120 follower boats and 16 escorts are illustrative. The 2024 gathering drew about 1.5 million devotees; the documented 2026 adjustment instead departed at 21:00 because of river conditions."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "fluvial",
   "route": {
     "from": "osm:node/6791580317",
@@ -17,8 +17,8 @@
     "weekday": 6,
     "nth": 3,
     "offset_days": 0,
-    "start": "15:00",
-    "duration_min": 210,
+    "start": "16:00",
+    "duration_min": 120,
     "timezone": "Asia/Manila"
   },
   "season": "penafrancia-fiesta",
@@ -27,29 +27,38 @@
   },
   "sources": [
     {
-      "title": "Naga City Tourism: 2026 civic and religious events schedule",
-      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
-      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+      "title": "Naga Tourism: fluvial route advisory",
+      "url": "https://tourism.naga.gov.ph/traffic-advisory-2026-penafrancia-festival-fluvial-procession/",
+      "note": "Cathedral to Danlugan ni Ina, the river and the Basilica. River geometry comes from OSM; the rendered flotilla and spectators are illustrative."
     },
     {
       "title": "Naga Tourism: updated 2026 fluvial schedule",
       "url": "https://tourism.naga.gov.ph/public-advisory-updated-schedule-for-the-fluvial-procession/",
-      "note": "The later 2026 advisory moved boarding/start to 21:00 and estimated concluding Mass at 23:00. This simulation retains the owner-selected usual afternoon window 15:00–18:30 and inherited 18:30 Basilica Mass from the original listings; it does not depict the final actual 2026 schedule. TODO(verify)."
+      "note": "River conditions moved the 2026 departure to 21:00 with an estimated ninety minutes on the water. This annual replay instead uses an illustrative 16:00–18:00 window."
     },
     {
-      "title": "City of Naga: 2022 fluvial procession",
-      "url": "https://www2.naga.gov.ph/fluvial-procession-highlights-festival/",
-      "note": "Cathedral-to-Danlugan foot procession after afternoon Mass, then fluvial procession and a concluding Mass. Supports Danlugan departure; river path, 210-minute window and formation are illustrative TODO(verify)."
+      "title": "Naga Tourism: 2024 fluvial gathering",
+      "url": "https://tourism.naga.gov.ph/fluvial-procession-draws-1-5-million-devotees/",
+      "note": "Reports 1.5 million devotees and the concluding Pontifical Mass at the Basilica. The crowd layout and ninety-minute Mass duration are illustrative."
     },
     {
-      "title": "Archdiocese of Caceres: Peñafrancia calendar",
-      "url": "https://www.archdioceseofcaceres.org/caceresevents",
-      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+      "title": "Naga Ordinance 582, section 2(23)",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord1977-582.pdf",
+      "note": "Connects Santonja Street to Colgante Bridge. Matching this location to OSM way 23540251 is a geographic inference."
     },
     {
-      "title": "OpenStreetMap: event anchors and grounds",
-      "url": "https://www.openstreetmap.org/node/6791580317",
-      "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. River endpoints are snapped within 300 m to mapped waterways. The river route, bank crowds, formation and density are illustrative TODO(verify), not surveyed festival arrangements."
+      "title": "Dennis T. Marpuri: Colgante eyewitness account",
+      "url": "https://dateline-ibalon.com/2026/01/padamlagan-an-eyewitness-account-of-the-colgante-bridge-tragedy-dennis-t-marpuri-with-movie-review/",
+      "note": "January 2026 account associates former Colgante Street with present Santoja Street; corroborates the mapped bridge alias."
+    },
+    {
+      "title": "Naga Tourism: 2026 Dagsaan landing",
+      "url": "https://tourism.naga.gov.ph/1-2-million-strong-historic-nighttime-fluvial-procession-illuminates-naga-river/",
+      "note": "September 20, 2026 account places the landing at Dagsaan near the Basilica, with about 1.2 million spectators. Dated night schedule is separate from this illustrative afternoon replay."
     }
-  ]
+  ],
+  "formation": {
+    "escorts": 16,
+    "followers": 120
+  }
 }

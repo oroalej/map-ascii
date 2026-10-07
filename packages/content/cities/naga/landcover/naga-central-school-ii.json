@@ -202,7 +202,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga Central School II - Geometry: © OpenStreetMap contributors (ODbL). Draft owner-reference details; survey needed.",
+  "credit": "Naga Central School II - Geometry: © OpenStreetMap contributors (ODbL). owner-reference details; survey needed.",
   "sources": [
     {
       "title": "OpenStreetMap: original site and surrounding features",
@@ -211,11 +211,11 @@
     },
     {
       "title": "Owner-supplied additional landmark overhead reference",
-      "note": "Inspected 2026-10-02. Image/capture dates unknown. Draft manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
+      "note": "Inspected 2026-10-02. Image/capture dates unknown. manual registration, representative planting, paving and parking inventory; dimensions/heights are estimates. Existing mapped roofs retained. No dates or surveyed ownership inferred. Reference bitmap remains ignored evidence, not shipped."
     },
     {
       "title": "Owner-supplied Central II red-perimeter/yellow-grass annotation",
-      "note": "Inspected 2026-10-02. Open Grandstand field grass and edge crowns are split at the existing Central II/Bicol visual-envelope seam. The adjoining field remains ownership-unspecified. Standing source roofs, drives and both earlier basketball surfaces remain clear. Mature edge planting, without trees in the yellow field interior; exact source/image alignment and dimensions are draft."
+      "note": "Inspected 2026-10-02. Open Grandstand field grass and edge crowns are split at the existing Central II/Bicol visual-envelope seam. The adjoining field remains ownership-unspecified. Standing source roofs, drives and both earlier basketball surfaces remain clear. Mature edge planting, without trees in the yellow field interior; exact source/image alignment and dimensions are schematic."
     }
   ]
 }

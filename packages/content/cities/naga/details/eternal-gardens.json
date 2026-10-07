@@ -219,7 +219,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -228,7 +228,7 @@
     },
     {
       "title": "Owner-supplied memorial and school enhancement references",
-      "note": "Inspected 2026-10-02. Ground photo supports a Marian statue and halo above a wide stepped stone pedestal, shown here strictly from above. The circled cemetery-interior position is independent of the separate mapped Transfiguration monument. Estimated 9×8 m base and 8–9 m statue/halo heights; placement fitted about 5 m west of the central footway to preserve its full width. New standing parts reserve their footprint from representative burial markers; no mapped burial is deleted. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+      "note": "Inspected 2026-10-02. Ground photo supports a Marian statue and halo above a wide stepped stone pedestal, shown here strictly from above. The circled cemetery-interior position is independent of the separate mapped Transfiguration monument. Estimated 9×8 m base and 8–9 m statue/halo heights; placement fitted about 5 m west of the central footway to preserve its full width. New standing parts reserve their footprint from representative burial markers; no mapped burial is deleted. Positions, dimensions and heights are estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
     }
   ]
 }

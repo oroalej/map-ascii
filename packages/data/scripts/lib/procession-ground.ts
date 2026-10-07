@@ -15,6 +15,8 @@ import { featurePoint, ROUTE_STEP_M } from './procession';
 import { isStandingBuilding } from './obstacles';
 import { intersection, union } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
+import { safeLattice, compactLattice, bakeCrowdAreas } from './crowd-ground';
+export const VERGE_MAX_M = 6;
 
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
@@ -30,7 +32,8 @@ const isExclusion = (f: F) =>
   isStandingBuilding(f as AtlasFeature) ||
   String(f.properties.class).startsWith('water') ||
   f.properties.class === 'barrier' ||
-  !!f.properties.detail_blocked;
+  !!f.properties.detail_blocked ||
+  (f.properties.class === 'building_part' && f.properties.variant === 'pedestal');
 const blockedAccess = (v: unknown) => v === 'no' || v === 'private';
 const walkable = (tags: Record<string, unknown>) => !blockedAccess(tags.foot ?? tags.access);
 const vehicleAllowed = (tags: Record<string, unknown>, vehicle: 'truck' | 'car' | 'motorcycle') =>
@@ -61,7 +64,10 @@ function featureBox(f: F) {
   if (saved) return saved;
   const positions = polygons(f.geometry)
     .flat(2)
-    .concat(lines(f as AtlasFeature).flat());
+    .concat(
+      lines(f as AtlasFeature).flat(),
+      f.geometry.type === 'Point' ? [f.geometry.coordinates] : [],
+    );
   const box: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
   for (const q of positions) {
     box[0] = Math.min(box[0], q[0]!);
@@ -131,6 +137,20 @@ function obstacles(
         else target.push(poly[0]!);
       };
       for (const poly of polygons(f.geometry)) save(poly.map(asPoints));
+      if (
+        f.geometry.type === 'Point' &&
+        (cls === 'barrier' || f.properties.detail_blocked || f.properties.variant === 'pedestal')
+      ) {
+        const at = frame.toMeters(f.geometry.coordinates);
+        save([
+          Array.from({ length: 17 }, (_, i) =>
+            frame.toLngLat([
+              at[0] + Math.cos(((i % 16) * Math.PI) / 8) * BARRIER_HALF_WIDTH_M,
+              at[1] + Math.sin(((i % 16) * Math.PI) / 8) * BARRIER_HALF_WIDTH_M,
+            ]),
+          ),
+        ]);
+      }
       if (cls === 'barrier' || f.properties.detail_blocked)
         for (const line of lines(f as AtlasFeature))
           for (let i = 1; i < line.length; i++) {
@@ -197,8 +217,8 @@ export function routeStreet(features: readonly F[], p: Street) {
         ),
     );
   };
-  const allows = (road: AtlasFeature, a: Point, b: Point) => {
-    const footprint = seatingFootprint([a, b], needed).coordinates as Point[][][];
+  const allows = (road: AtlasFeature, a: Point, b: Point, clearance = needed) => {
+    const footprint = seatingFootprint([a, b], clearance).coordinates as Point[][][];
     const points = footprint.flat(2);
     const bounds: [number, number, number, number] = [
       Math.min(...points.map((q) => q[0])),
@@ -225,6 +245,8 @@ export function routeStreet(features: readonly F[], p: Street) {
     width_m: number;
     sidewalk_m: number;
     sidewalks_m: { left: number; right: number };
+    verge_m: { left: number; right: number };
+    clear_m: number;
   }[] = [];
   let length_m = 0;
   for (const e of ordered) {
@@ -233,10 +255,51 @@ export function routeStreet(features: readonly F[], p: Street) {
     const count = Math.ceil(e.length / ROUTE_STEP_M);
     const road = byId.get(e.road)!;
     const sidewalks_m = sidewalks(road, a !== e.a);
+    const qa = a.at,
+      qb = b.at;
+    let clear_m = needed;
+    for (let candidate = needed + 0.5; candidate < e.width; candidate += 0.5) {
+      if (!allows(road, qa, qb, candidate)) break;
+      clear_m = candidate;
+    }
+    if (allows(road, qa, qb, e.width)) clear_m = e.width;
+    const local = localFrame(qa),
+      end = local.toMeters(qb),
+      d = Math.hypot(...end);
+    const verge = (side: number) => {
+      let clear = 0;
+      for (let depth = 0.5; depth <= VERGE_MAX_M; depth += 0.5) {
+        const offset = side * (e.width / 2 + depth / 2);
+        const shifted = [qa, qb].map((q) => {
+          const m = local.toMeters(q);
+          return local.toLngLat([m[0] - (end[1] / d) * offset, m[1] + (end[0] / d) * offset]);
+        });
+        const strip = seatingFootprint(shifted, depth).coordinates as Point[][][];
+        if (
+          obstacles(
+            features,
+            local,
+            [
+              Math.min(qa[0], qb[0]) - 0.001,
+              Math.min(qa[1], qb[1]) - 0.001,
+              Math.max(qa[0], qb[0]) + 0.001,
+              Math.max(qa[1], qb[1]) + 0.001,
+            ],
+            strip,
+          ).length
+        )
+          break;
+        clear = depth;
+      }
+      return clear;
+    };
+    const verge_m = { left: verge(1), right: verge(-1) };
     for (let k = 1; k <= count; k++) {
       const t = k / count;
       route.push(unproject([a.xy[0] + (b.xy[0] - a.xy[0]) * t, a.xy[1] + (b.xy[1] - a.xy[1]) * t]));
       segments.push({
+        clear_m,
+        verge_m,
         id: e.road,
         width_m: e.width,
         sidewalk_m: Math.min(sidewalks_m.left, sidewalks_m.right),
@@ -254,7 +317,11 @@ export function routeStreet(features: readonly F[], p: Street) {
     Math.max(...route.map((q) => q[1])) + ROUTE_BOUNDS_MARGIN_DEG,
   ];
   const corridors = ordered.map((e) => {
-    const sides = sidewalks(byId.get(e.road)!);
+    const tagged = sidewalks(byId.get(e.road)!);
+    const sides = {
+      left: Math.max(tagged.left, VERGE_MAX_M),
+      right: Math.max(tagged.right, VERGE_MAX_M),
+    };
     const dx = e.b.xy[0] - e.a.xy[0],
       dy = e.b.xy[1] - e.a.xy[1];
     const d = Math.hypot(dx, dy),
@@ -264,23 +331,67 @@ export function routeStreet(features: readonly F[], p: Street) {
     return seatingFootprint([shift(e.a.xy), shift(e.b.xy)], e.width + sides.left + sides.right)
       .coordinates as Point[][][];
   });
-  // Balance clipping, rounding far below source precision, as seatingFootprint does.
-  let merged = corridors.map((poly) =>
-    poly.map((p) =>
-      p.map((r) =>
-        r.map(([x, y]) => [Math.round(x * 1e9) / 1e9, Math.round(y * 1e9) / 1e9] as Point),
-      ),
+  const crowdPolys = (p.crowd_areas ?? []).flatMap((id) => {
+    const f = byId.get(id);
+    if (!f || !polygons(f.geometry).length) throw new Error(`${p.id}: missing crowd area ${id}`);
+    return polygons(f.geometry).map((poly) => poly.map(asPoints));
+  });
+  for (const q of crowdPolys.flat(2)) {
+    bounds[0] = Math.min(bounds[0], q[0]);
+    bounds[1] = Math.min(bounds[1], q[1]);
+    bounds[2] = Math.max(bounds[2], q[0]);
+    bounds[3] = Math.max(bounds[3], q[1]);
+  }
+  const water: Point[][] = [];
+  const square: Point[][][] = [
+    [
+      [
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[1]],
+        [bounds[2], bounds[3]],
+        [bounds[0], bounds[3]],
+        [bounds[0], bounds[1]],
+      ],
+    ],
+  ];
+  const pieces = [...corridors.flat(), ...crowdPolys];
+  const boxes = pieces.map((poly) => {
+    const q = poly.flat();
+    return [
+      Math.min(...q.map((p) => p[0])),
+      Math.min(...q.map((p) => p[1])),
+      Math.max(...q.map((p) => p[0])),
+      Math.max(...q.map((p) => p[1])),
+    ];
+  });
+  const nearby = [...nearbyFeatures(features, bounds)].filter((f) => {
+    const [w, s, e, n] = featureBox(f);
+    return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
+  });
+  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
+    const w = Math.min(...ring.map((p) => p[0])),
+      s = Math.min(...ring.map((p) => p[1])),
+      e = Math.max(...ring.map((p) => p[0])),
+      n = Math.max(...ring.map((p) => p[1]));
+    return pieces.some((poly, i) => {
+      const b = boxes[i]!;
+      return (
+        w <= b[2]! &&
+        e >= b[0]! &&
+        s <= b[3]! &&
+        n >= b[1]! &&
+        intersection([ring], poly).length > 0
+      );
+    });
+  });
+  water.push(
+    ...obstacles(
+      nearby.filter((f) => String(f.properties.class).startsWith('water')),
+      frame,
+      bounds,
+      square,
     ),
   );
-  while (merged.length > 1) {
-    const next: ReturnType<typeof union>[] = [];
-    for (let i = 0; i < merged.length; i += 2)
-      next.push(i + 1 < merged.length ? union(merged[i]!, merged[i + 1]!) : merged[i]!);
-    merged = next;
-  }
-  const corridor = merged[0]!;
-  const water: Point[][] = [];
-  const blocked = obstacles(features, frame, bounds, corridor, water);
   const bridges = ordered
     .filter((e) => {
       return bridgeAllowed(byId.get(e.road)!, e.a.at, e.b.at);
@@ -288,33 +399,53 @@ export function routeStreet(features: readonly F[], p: Street) {
     .flatMap((e) =>
       seatingFootprint([e.a.at, e.b.at], e.width).coordinates.map((poly) => asPoints(poly[0]!)),
     );
-  return { route, length_m, segments, blocked, water, bridges };
+  const crowd_grounds = bakeCrowdAreas(localFrame(route[0]!), crowdPolys, [...blocked, ...water]);
+  return { route, length_m, segments, blocked, water, bridges, crowd_grounds };
 }
 
 /** Connected 2 m outdoor cells; row compaction gives small geographic permission polygons. */
 export function bakeMassSite(
   features: readonly F[],
   p: Mass,
+  images = 0,
 ): Extract<ProcessionRoute, { kind: 'mass' }>['site'] {
   const byId = new Map(features.map((f) => [String(f.properties.id), f]));
   const church = byId.get(p.site);
   if (!church) throw new Error(`${p.id}: missing church ${p.site}`);
   const location = featurePoint(church);
   const frame = localFrame(location);
-  const groundPolys = p.grounds.flatMap((id) => {
+  const authoredPolys = p.grounds.flatMap((id) => {
     const f = byId.get(id);
     if (!f || !polygons(f.geometry).length) throw new Error(`${p.id}: missing grounds ${id}`);
     return polygons(f.geometry).map((poly) => poly.map(asPoints));
   });
-  const a = frame.toLngLat([-p.radius_m, -p.radius_m]),
-    b = frame.toLngLat([p.radius_m, p.radius_m]);
+  const groundPolys = p.crowd_boundary ? [[p.crowd_boundary]] : authoredPolys;
+  const boundaryXY = p.crowd_boundary?.map(frame.toMeters);
+  const radius_m = boundaryXY
+    ? Math.ceil(Math.max(...boundaryXY.map((q) => Math.hypot(...q)))) + 2
+    : p.radius_m;
+  const a = frame.toLngLat([-radius_m, -radius_m]),
+    b = frame.toLngLat([radius_m, radius_m]);
   const square: Point[][][] = [[[a, [b[0], a[1]], b, [a[0], b[1]], a]]];
-  const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]], square);
+  const hardSource = features.filter((f) => f.properties.class !== 'seating');
+  const domain = p.crowd_boundary ? [[p.crowd_boundary]] : square;
+  const hardBlocked = obstacles(hardSource, frame, [a[0], a[1], b[0], b[1]], domain);
+  const blocked = obstacles(features, frame, [a[0], a[1], b[0], b[1]], domain);
+  const circle = (at: Point, radius: number) => {
+    const c = frame.toMeters(at);
+    return Array.from({ length: 33 }, (_, i) =>
+      frame.toLngLat([
+        c[0] + Math.cos(((i % 32) * Math.PI) / 16) * radius,
+        c[1] + Math.sin(((i % 32) * Math.PI) / 16) * radius,
+      ]),
+    );
+  };
+  if (p.altar) blocked.push(circle(p.altar.at, p.altar.radius_m + 3));
   for (const poly of groundPolys)
     for (const hole of poly.slice(1))
       for (const part of intersection([hole], square)) blocked.push(asPoints(part[0]!));
   const nearby = (line: Position[]) =>
-    line.some((q) => Math.hypot(...frame.toMeters(q)) <= p.radius_m + MASS_PROXIMITY_MARGIN_M);
+    line.some((q) => Math.hypot(...frame.toMeters(q)) <= radius_m + MASS_PROXIMITY_MARGIN_M);
   const roads = features
     .filter(
       (f) =>
@@ -354,60 +485,16 @@ export function bakeMassSite(
       }),
     );
   const safe = (xy: Point) => {
-    if (Math.hypot(...xy) > p.radius_m) return false;
+    if (!p.crowd_boundary && Math.hypot(...xy) > p.radius_m) return false;
     const q = frame.toLngLat(xy);
     return (
       !blocked.some((ring) => pointInPolygon(q, [ring])) &&
-      (groundPolys.some((poly) => pointInPolygon(q, poly)) || nearLine(xy))
+      (groundPolys.some((poly) => pointInPolygon(q, poly)) || (!p.crowd_boundary && nearLine(xy)))
     );
   };
   const step = PROCESSION_GEOMETRY.massCell,
-    radius = Math.ceil(p.radius_m / step),
-    cells = new Map<string, Point>();
-  const exclusions = blocked.map((ring) => {
-    const xy = ring.map(frame.toMeters);
-    return {
-      xy,
-      w: Math.min(...xy.map((q) => q[0])),
-      e: Math.max(...xy.map((q) => q[0])),
-      s: Math.min(...xy.map((q) => q[1])),
-      n: Math.max(...xy.map((q) => q[1])),
-    };
-  });
-  const clearCell = ([x, y]: Point) => {
-    const h = step / 2;
-    const ring: Point[] = [
-      [x - h, y - h],
-      [x + h, y - h],
-      [x + h, y + h],
-      [x - h, y + h],
-      [x - h, y - h],
-    ];
-    return !exclusions.some(
-      (r) =>
-        r.w <= x + h &&
-        r.e >= x - h &&
-        r.s <= y + h &&
-        r.n >= y - h &&
-        intersection([ring], [r.xy]).length > 0,
-    );
-  };
+    cells = safeLattice(frame, [-radius_m, -radius_m, radius_m, radius_m], safe, blocked, step);
   const key = (x: number, y: number) => `${x}/${y}`;
-  for (let y = -radius; y <= radius; y++)
-    for (let x = -radius; x <= radius; x++) {
-      const xy: Point = [x * step, y * step];
-      if (
-        [
-          [0, 0],
-          [-step / 2, -step / 2],
-          [-step / 2, step / 2],
-          [step / 2, -step / 2],
-          [step / 2, step / 2],
-        ].every(([dx, dy]) => safe([xy[0] + dx!, xy[1] + dy!])) &&
-        clearCell(xy)
-      )
-        cells.set(key(x, y), xy);
-    }
   // The closest safe cell can be an isolated sliver beside a facade. Choose a usable
   // connected gathering region first, then its nearest outdoor church-facing anchor.
   const visited = new Set<string>();
@@ -470,27 +557,11 @@ export function bakeMassSite(
       }
     }
   }
-  const grounds: Point[][] = [];
-  for (let y = -radius; y <= radius; y++) {
-    for (let x = -radius; x <= radius; x++)
-      if (connected.has(key(x, y))) {
-        const start = x;
-        while (x + 1 <= radius && connected.has(key(x + 1, y))) x++;
-        const a = (start - 0.5) * step,
-          b = (x + 0.5) * step,
-          c = (y - 0.5) * step,
-          d = (y + 0.5) * step;
-        grounds.push(
-          [
-            [a, c],
-            [b, c],
-            [b, d],
-            [a, d],
-            [a, c],
-          ].map((q) => frame.toLngLat(q as Point)),
-        );
-      }
-  }
+  const grounds = compactLattice(
+    frame,
+    p.crowd_boundary ? cells : new Map([...cells].filter(([id]) => connected.has(id))),
+    step,
+  );
   const approaches: Point[][] = [];
   for (let sector = 0; sector < 8; sector++) {
     const theta = (sector * Math.PI) / 4;
@@ -512,9 +583,158 @@ export function bakeMassSite(
     location,
     anchor: frame.toLngLat(seed[1]),
     radius_m: p.radius_m,
+    ...(p.crowd_boundary && { closure_zone: [p.crowd_boundary] }),
+    seated_grounds: bakeCrowdAreas(
+      frame,
+      features
+        .filter((f) => f.properties.class === 'seating')
+        .flatMap((f) => polygons(f.geometry).map((poly) => poly.map(asPoints)))
+        .map((poly) =>
+          p.crowd_boundary
+            ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
+            : [poly],
+        )
+        .flat()
+        .flatMap((poly) => seatingFootprint(poly[0]!, 3).coordinates.map((p) => p.map(asPoints)))
+        .flatMap((poly) =>
+          p.crowd_boundary
+            ? intersection(poly, [p.crowd_boundary]).map((p) => p.map(asPoints))
+            : [poly],
+        ),
+      hardBlocked,
+      0.5,
+    ),
+    ...(p.altar && {
+      altar: { ...p.altar, images },
+      altar_ground: bakeCrowdAreas(
+        frame,
+        [[circle(p.altar.at, p.altar.radius_m + 3)]],
+        hardBlocked,
+        0.5,
+      ),
+    }),
     grounds,
-    blocked,
+    blocked: p.crowd_boundary ? hardBlocked : blocked,
     approaches,
-    roads,
+    roads: p.crowd_boundary ? [] : roads,
   };
+}
+
+/** Bank bands and mapped decks are explicit permissions; water never grants a bank. */
+export function bakeFluvialCrowd(
+  features: readonly F[],
+  route: Point[],
+  banks: [number, number][],
+) {
+  const frame = localFrame(route[0]!);
+  const strips: Point[][][] = [];
+  // Crowd permissions need fewer bank joins than the unchanged 10 m boat route.
+  for (let start = 0; start < route.length - 1; start += 3) {
+    const i = Math.min(start + 3, route.length - 1);
+    const a = frame.toMeters(route[start]!),
+      b = frame.toMeters(route[i]!);
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (!d) continue;
+    for (const side of [-1, 1]) {
+      const index = side > 0 ? 0 : 1;
+      const offset = side * (Math.max(...banks.slice(start, i + 1).map((p) => p[index])) + 15.5);
+      const line = [a, b].map((q) =>
+        frame.toLngLat([q[0] - ((b[1] - a[1]) / d) * offset, q[1] + ((b[0] - a[0]) / d) * offset]),
+      );
+      strips.push(...seatingFootprint(line, 29).coordinates.map((poly) => poly.map(asPoints)));
+    }
+  }
+  const points = route;
+  const bounds: [number, number, number, number] = [
+    Math.min(...points.map((q) => q[0])) - 0.001,
+    Math.min(...points.map((q) => q[1])) - 0.001,
+    Math.max(...points.map((q) => q[0])) + 0.001,
+    Math.max(...points.map((q) => q[1])) + 0.001,
+  ];
+  const bridges = features
+    .filter((f) => f.properties.bridge && f.properties.bridge !== 'no')
+    .flatMap((f) =>
+      lines(f as AtlasFeature).flatMap((line) =>
+        seatingFootprint(asPoints(line), width(f as AtlasFeature)).coordinates.map((poly) =>
+          asPoints(poly[0]!),
+        ),
+      ),
+    )
+    .filter((r) =>
+      r.some(
+        (q) => q[0] >= bounds[0] && q[0] <= bounds[2] && q[1] >= bounds[1] && q[1] <= bounds[3],
+      ),
+    );
+  let envelope: ReturnType<typeof union> = [];
+  const pieces = [...strips, ...bridges.map((r) => [r])];
+  // Balanced union keeps source precision and avoids a sequential growing sweep.
+  let groups = pieces.map(
+    (p) =>
+      [
+        p.map((r) =>
+          r.map(([x, y]) => [Math.round(x * 1e9) / 1e9, Math.round(y * 1e9) / 1e9] as Point),
+        ),
+      ] as ReturnType<typeof union>,
+  );
+  while (groups.length > 1) {
+    const next: typeof groups = [];
+    for (let i = 0; i < groups.length; i += 2)
+      next.push(i + 1 < groups.length ? union(groups[i]!, groups[i + 1]!) : groups[i]!);
+    groups = next;
+  }
+  envelope = groups[0] ?? [];
+  const water: Point[][] = [];
+  // Keep water's full outline within the local bbox. Intersecting a long river with
+  // hundreds of jagged bank/deck edges adds no permission and creates costly slivers.
+  const square: Point[][][] = [
+    [
+      [
+        [bounds[0], bounds[1]],
+        [bounds[2], bounds[1]],
+        [bounds[2], bounds[3]],
+        [bounds[0], bounds[3]],
+        [bounds[0], bounds[1]],
+      ],
+    ],
+  ];
+  const boxes = pieces.map((p) => {
+    const q = p.flat();
+    return [
+      Math.min(...q.map((p) => p[0])),
+      Math.min(...q.map((p) => p[1])),
+      Math.max(...q.map((p) => p[0])),
+      Math.max(...q.map((p) => p[1])),
+    ];
+  });
+  const nearby = [...nearbyFeatures(features, bounds)].filter((f) => {
+    const [w, s, e, n] = featureBox(f);
+    return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
+  });
+  // Full nearby hard outlines are safer and cheaper than carving each roof against
+  // the jagged crowd union. The permission polygons already bound the visible ink.
+  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
+    const w = Math.min(...ring.map((p) => p[0])),
+      s = Math.min(...ring.map((p) => p[1])),
+      e = Math.max(...ring.map((p) => p[0])),
+      n = Math.max(...ring.map((p) => p[1]));
+    return pieces.some((poly, i) => {
+      const b = boxes[i]!;
+      return (
+        w <= b[2]! &&
+        e >= b[0]! &&
+        s <= b[3]! &&
+        n >= b[1]! &&
+        intersection([ring], poly).length > 0
+      );
+    });
+  });
+  water.push(
+    ...obstacles(
+      features.filter((f) => String(f.properties.class).startsWith('water')),
+      frame,
+      bounds,
+      square,
+    ),
+  );
+  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges };
 }

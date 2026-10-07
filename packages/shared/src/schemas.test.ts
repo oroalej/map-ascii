@@ -309,7 +309,8 @@ describe('Procession', () => {
       label: { en: 'Procession' },
     };
     expect(ok(street)).toBe(true);
-    expect(ok({ ...street, formation: { columns: 3 } })).toBe(false);
+    expect(ok({ ...street, formation: { columns: 3 } })).toBe(true);
+    expect(ok({ ...street, formation: { columns: 11 } })).toBe(false);
     expect(ok({ ...street, label: undefined })).toBe(false);
     expect(ok({ ...street, label: { en: '   ' } })).toBe(false);
     const { route: _route, ...base } = street;

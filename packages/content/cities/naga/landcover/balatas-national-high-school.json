@@ -1873,7 +1873,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Owner-requested school enhancement; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-requested school enhancement; © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: mapped school grounds",
@@ -1882,7 +1882,7 @@
     },
     {
       "title": "Owner-requested school enhancement",
-      "note": "No separate high-school image was supplied. Conservative edge planting, open lawns, paths and schematic parking fit the complete saved OSM grounds, two standing classroom roofs and full adjacent road/path widths; placement is estimated from mapped geometry and the owner request. Undated draft estimates; no surveyed boundary, species, court markings, construction date, roof reconstruction or vehicle inventory inferred. Reference bitmap remains ignored evidence."
+      "note": "No separate high-school image was supplied. Conservative edge planting, open lawns, paths and schematic parking fit the complete saved OSM grounds, two standing classroom roofs and full adjacent road/path widths; placement is estimated from mapped geometry and the owner request. Undated estimates; no surveyed boundary, species, court markings, construction date, roof reconstruction or vehicle inventory inferred. Reference bitmap remains ignored evidence."
     }
   ]
 }

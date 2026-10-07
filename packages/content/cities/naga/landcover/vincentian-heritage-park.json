@@ -1424,7 +1424,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Vincentian Heritage Park — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft undated estimates.",
+  "credit": "Vincentian Heritage Park — owner-supplied reference; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -1433,7 +1433,7 @@
     },
     {
       "title": "Owner-supplied civic and seminary reference",
-      "note": "Undated owner reference, inspected 2026-10-02. Draft plan-view translation; positions, sizes and heights are estimates. Preserve mapped identities and standing footprints. Temporary vehicles, wires, signage and other background clutter omitted; no species or historical dates inferred."
+      "note": "Undated owner reference, inspected 2026-10-02. plan-view translation; positions, sizes and heights are estimates. Preserve mapped identities and standing footprints. Temporary vehicles, wires, signage and other background clutter omitted; no species or historical dates inferred."
     }
   ]
 }

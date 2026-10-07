@@ -28,6 +28,7 @@ export function makeCellGuard(
   toCell: (lng: number, lat: number) => [number, number],
   grounds?: ReadonlyMap<string, EventGround>,
   blocked?: Hits,
+  hardBlocked?: Hits,
 ) {
   const [c0, r0] = toCell(...tileToLngLat(ref.tile, { x: 0, y: 0 }));
   const [c1, r1] = toCell(...tileToLngLat(ref.tile, { x: ref.perMeter, y: ref.perMeter }));
@@ -36,11 +37,18 @@ export function makeCellGuard(
   const body: Body = { x: 0, y: 0, hx: 1, hy: 0, length: width, width: height };
   const sample = [body];
   const points: [number, number][] = Array.from({ length: 9 }, () => [0, 0]);
-  const terrain = blocked ?? NO_BLOCKED;
+  const ordinaryTerrain = blocked ?? NO_BLOCKED;
   return (agent: VisibleAgent, col: number, row: number) => {
     if (agent.aboard) return true;
     if (agent.eventGround) {
-      const ground = grounds?.get(agent.eventGround);
+      const base = grounds?.get(agent.eventGround);
+      const ground =
+        agent.eventRole === 'seated'
+          ? base?.seated
+          : agent.eventRole === 'altar'
+            ? base?.altar
+            : base;
+      const terrain = agent.eventRole ? (hardBlocked ?? ordinaryTerrain) : ordinaryTerrain;
       if (!ground) return false;
       let frames = permissions.get(ground);
       if (!frames) permissions.set(ground, (frames = new WeakMap<Hits, PermissionCache>()));
@@ -87,7 +95,7 @@ export function makeCellGuard(
       body.x = (col + 0.5 - c0) * width;
       body.y = (row + 0.5 - r0) * height;
       const allowed =
-        !blocked?.hits(sample) &&
+        !terrain.hits(sample) &&
         eventGroundAllows(ground, points, [points[0]!, points[6]!, points[8]!, points[2]!]);
       let rows = cache.columns.get(x);
       if (!rows) cache.columns.set(x, (rows = new Map<number, boolean>()));

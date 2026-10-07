@@ -785,7 +785,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Owner-supplied school and hospital references; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied school and hospital references; © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: standing site footprint",
@@ -794,7 +794,7 @@
     },
     {
       "title": "Owner-supplied school and hospital references",
-      "note": "Inspected 2026-10-03. Source-relative draft planting, lawns, paved approaches and schematic parking fit complete mapped roofs and full road/path widths. The outline is an estimated visual envelope, not a surveyed property boundary. No species, dates, roof reconstruction or exact parking/vehicle inventory inferred. Reference bitmaps stay in ignored evidence."
+      "note": "Inspected 2026-10-03. Source-relative planting, lawns, paved approaches and schematic parking fit complete mapped roofs and full road/path widths. The outline is an estimated visual envelope, not a surveyed property boundary. No species, dates, roof reconstruction or exact parking/vehicle inventory inferred. Reference bitmaps stay in ignored evidence."
     }
   ]
 }

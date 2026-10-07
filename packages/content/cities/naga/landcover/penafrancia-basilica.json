@@ -972,7 +972,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Peñafrancia Basilica vegetation: owner-supplied Google Maps overhead / Street View references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Draft estimates; imagery dates unknown.",
+  "credit": "Peñafrancia Basilica vegetation: owner-supplied Google Maps overhead / Street View references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). estimates; imagery dates unknown.",
   "sources": [
     {
       "title": "OpenStreetMap: grounds, buildings and roads",
@@ -981,7 +981,7 @@
     },
     {
       "title": "Owner-supplied annotated Google Maps overhead reference",
-      "note": "Inspected 2026-10-02. All circled vegetation groups traced and registered to pavilion centre and opposite church transept corners; roads and roofs checked. Positions, counts and crown diameters are draft estimates, with estimated trunks kept clear of mapped carriageways/buildings despite registration/OSM uncertainty. Shadows excluded. Replaces the unsupported single-tree/planting placeholders. Imagery/capture date unknown; no timeline dates inferred; reference bitmap is not shipped."
+      "note": "Inspected 2026-10-02. All circled vegetation groups traced and registered to pavilion centre and opposite church transept corners; roads and roofs checked. Positions, counts and crown diameters are estimates, with estimated trunks kept clear of mapped carriageways/buildings despite registration/OSM uncertainty. Shadows excluded. Replaces the unsupported single-tree/planting placeholders. Imagery/capture date unknown; no timeline dates inferred; reference bitmap is not shipped."
     },
     {
       "title": "Owner-supplied Google Street View: palm-lined Basilica Road",
@@ -989,7 +989,7 @@
     },
     {
       "title": "Owner correction: opposite roadside tree columns",
-      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Final red/yellow annotation identifies the retained red road and yellow tree columns on both sides. Inner palms follow the inside curb strip and outer palms the opposite curb strip; western outer broadleaf crowns sit behind that outer column. Estimated offsets are 4.1–12 m from the road centreline, adjusted locally to clear mapped standing footprints/crossings. North row follows its mapped footway. Source roads, pavilion and isolated courtyard trees are retained. Earlier displaced aerial-row masks are superseded; no new parallel roadway or plaza-edge path is introduced."
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Final red/yellow annotation identifies the retained red road and yellow tree columns on both sides. Inner palms follow the inside curb strip and outer palms the opposite curb strip; western outer broadleaf crowns sit behind that outer column. Estimated offsets are 4.1–12 m from the road centreline, adjusted locally to clear mapped standing footprints/crossings. North row follows its mapped footway. Source roads, pavilion and isolated courtyard trees are retained. Earlier displaced aerial-row masks are superseded; no new parallel roadway or plaza-edge path is introduced."
     }
   ]
 }

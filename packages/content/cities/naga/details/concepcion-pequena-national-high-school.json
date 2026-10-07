@@ -142,7 +142,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied Shrine, Concepcion and Sabang references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap school/plaza grounds",
@@ -151,7 +151,7 @@
     },
     {
       "title": "Owner-supplied Shrine, Concepcion and Sabang references",
-      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated draft estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
+      "note": "Inspected 2026-10-02. Owner references guide relative planting, open lawns, pedestrian approaches and reserved parking surfaces. Complete mapped standing buildings and full road/path widths govern fit where reference orientation or roof layout differs. Positions, dimensions and heights are undated estimates; parking is schematic space, not a measured bay or vehicle inventory. No species, construction history or ownership boundary inferred. Reference bitmaps remain ignored evidence."
     },
     {
       "title": "Mapped school identity versus reference layout",

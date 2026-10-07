@@ -1,3 +1,4 @@
+import { formationLayout } from './formation-layout';
 import { eventActor, identifyEventActor } from './event-actors';
 import { describe, expect, it, vi } from 'vitest';
 import { FrameProfiler } from '../profile';
@@ -243,26 +244,15 @@ describe('street event simulation', () => {
     { left: 0, right: 1 },
     { left: 1, right: 2 },
     { left: 0, right: 0 },
-  ])('places spectators only on available sides: %j', (sides) => {
+  ])('keeps spectator permission without simulated stations: %j', (sides) => {
     const scene = new GroundProcessionScene({
       ...street,
       segments: street.segments.map((s) => ({ ...s, sidewalks_m: sides })),
     });
-    const spectators = scene.actors.filter((a) => a.destination);
-    const expected = sides.left && sides.right ? 2 : sides.left || sides.right ? 1 : 0;
-    expect(new Set(spectators.map((a) => Math.sign(a.off))).size).toBe(expected);
-    if (!sides.left) expect(spectators.every((a) => a.off < 0)).toBe(true);
-    if (!sides.right) expect(spectators.every((a) => a.off > 0)).toBe(true);
+    expect(scene.actors.filter((a) => a.destination)).toHaveLength(0);
     const at = (side: number) => scene.frame.from([100, side * 4.7]);
     expect(eventGroundAllows(scene.ground, [at(1)])).toBe(sides.left > 0);
     expect(eventGroundAllows(scene.ground, [at(-1)])).toBe(sides.right > 0);
-    const admitted = new Set(scene.agents(0.5, 0).map(eventActor));
-    // Rounded end caps may omit a whole footprint at an endpoint; interior sides fit.
-    expect(
-      spectators
-        .filter((a) => -a.back > 0 && -a.back < street.length_m)
-        .every((a) => admitted.has('live/default/' + a.id)),
-    ).toBe(true);
   });
   it('reconciles once per terrain, closure or resident activation and restores traffic immediately', () => {
     const { w, life } = world();
@@ -609,7 +599,7 @@ describe('street event simulation', () => {
     expect(life.eventPopulation).toBe(0);
   });
   it.each(['procession', 'parade'] as const)(
-    'admits both sidewalk crowds on one-metre %s sidewalks',
+    'keeps both one-metre %s sidewalks for the static crowd',
     (kind) => {
       const scene = new GroundProcessionScene({
         ...street,
@@ -617,19 +607,10 @@ describe('street event simulation', () => {
         formation: undefined,
         segments: street.segments.map((segment) => ({ ...segment, sidewalk_m: 1 })),
       });
-      const spectators = new Set(
-        scene.actors.filter((actor) => actor.destination).map((actor) => `test/${actor.id}`),
-      );
-      const admitted = scene
-        .agents(0.6, 0, { scope: 'test' })
-        .filter((actor) => spectators.has(eventActor(actor)!));
-      expect(admitted.length).toBeGreaterThan(spectators.size * 0.9);
-      expect(admitted.filter((actor) => actor.lat > street.route[0]![1]).length).toBeGreaterThan(
-        20,
-      );
-      expect(admitted.filter((actor) => actor.lat < street.route[0]![1]).length).toBeGreaterThan(
-        20,
-      );
+      expect(scene.actors.filter((actor) => actor.destination)).toHaveLength(0);
+      const at = (side: number) => scene.frame.from([100, side * 4.7]);
+      expect(eventGroundAllows(scene.ground, [at(1)])).toBe(true);
+      expect(eventGroundAllows(scene.ground, [at(-1)])).toBe(true);
     },
   );
   it('keeps a parade actor visible through a rounded bend and rejects ground beyond it', () => {
@@ -647,11 +628,11 @@ describe('street event simulation', () => {
       segments: Array.from({ length: 2 }, () => ({ id: 'osm:way/1', width_m: 8, sidewalk_m: 0 })),
     };
     const scene = new GroundProcessionScene(route),
-      tail = Math.max(10, ...scene.actors.map((actor) => actor.back)) + 10;
+      layout = formationLayout(route);
     for (const head of [95, 99.75, 100, 101, 105])
       expect(
         scene
-          .agents((head + tail) / (200 + tail), 0)
+          .agents((head + layout.leading) / (200 + layout.tail + layout.leading), 0)
           .some((actor) => eventActor(actor)?.endsWith('/0')),
       ).toBe(true);
     expect(eventGroundAllows(scene.ground, [frame.from([102.5, -2.5])])).toBe(true);
@@ -1215,25 +1196,27 @@ describe('street event simulation', () => {
       ).toBe(true);
     },
   );
-  it.each(['procession', 'parade'] as const)(
+  it.each(['procession', 'parade', 'mass'] as const)(
     'clears moving and parked traffic across the full %s route for live and played events, then restores identities',
     (kind) => {
       for (const live of [true, false]) {
         const { w, life } = world();
-        const route: StreetRoute =
-          kind === 'parade'
-            ? {
-                ...street,
-                kind: 'parade',
-                formation: {
-                  contingents: 2,
-                  ranks: 3,
-                  band: 8,
-                  color_guard: 4,
-                  vehicles: ['car'],
-                },
-              }
-            : street;
+        const route: StreetRoute | MassRoute =
+          kind === 'mass'
+            ? { ...mass, site: { ...mass.site, closure_zone: groundForRoute(street).regions } }
+            : kind === 'parade'
+              ? {
+                  ...street,
+                  kind: 'parade',
+                  formation: {
+                    contingents: 2,
+                    ranks: 3,
+                    band: 8,
+                    color_guard: 4,
+                    vehicles: ['car'],
+                  },
+                }
+              : street;
         w.setProcessions([route]);
         const car = (x: number, y = 2000): Mover => ({
           ...ordinaryPerson(x, y),

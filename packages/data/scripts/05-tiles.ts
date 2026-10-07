@@ -56,21 +56,35 @@ export function buildMeta(
   });
 }
 
+/** Metadata-only generation shares exactly the normal tile step's inputs and credits. */
+export async function writeMetadata(
+  ctx: Parameters<Step['run']>[0],
+  now = new Date().getFullYear(),
+) {
+  const { city, content, buildDir, outDir } = ctx;
+  const merged = join(buildDir, files.merged);
+  const geography = await readJson<Geography>(join(buildDir, files.geography));
+  const years = await yearRange(merged, now);
+  const meta = buildMeta(city, geography, years, [
+    ...landcoverCredits(content.landcover),
+    ...cemeteryCredits(content.cemeteries),
+    ...detailCredits(content.details),
+    ...planCredits(content.plans),
+  ]);
+
+  await mkdir(outDir, { recursive: true });
+  await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+  return meta;
+}
+
 // Build <city>.pmtiles with tippecanoe and write the city's metadata and detail fingerprints.
 export const step: Step = {
   name: '05-tiles',
   async run(ctx) {
-    const { city, content, buildDir, outDir } = ctx;
+    const { city, buildDir, outDir } = ctx;
     const layouts = await readDetailLayouts(ctx);
     const merged = join(buildDir, files.merged);
     const geography = await readJson<Geography>(join(buildDir, files.geography));
-    const years = await yearRange(merged, new Date().getFullYear());
-    const meta = buildMeta(city, geography, years, [
-      ...landcoverCredits(content.landcover),
-      ...cemeteryCredits(content.cemeteries),
-      ...detailCredits(content.details),
-      ...planCredits(content.plans),
-    ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     const seasonal = city.life?.seasons?.some(
@@ -121,7 +135,7 @@ export const step: Step = {
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
-    await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+    await writeMetadata(ctx);
     await publishDetailLayouts(ctx, layouts);
     // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
     const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));

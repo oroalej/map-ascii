@@ -1,24 +1,18 @@
+import { formationLayout } from './formation-layout';
 /** Deterministic street formations and connected arrival gatherings, independent of the camera. */
 import {
   localMetricProjection,
-  PROCESSION_DEFAULTS,
   PROCESSION_GEOMETRY,
   LEGACY_LOCAL_METERS_PER_DEGREE,
   type StreetRoute,
   type MassRoute,
 } from '@atlas/shared';
-import { PROCESSION, motionProfile, profileAt, routePolyline } from './procession';
+import { PROCESSION, motionProfile, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
-import {
-  eventGroundAllows,
-  groundForRoute,
-  streetSidewalks,
-  type EventGround,
-} from './ground-events';
+import { eventGroundAllows, groundForRoute, type EventGround } from './ground-events';
 import { hashString, random } from './random';
 import type { VisibleAgent } from './simulate';
 import type { LifeInspection } from './inspection';
-import { VEHICLES } from './vehicles';
 import { eventActor, identifyEventActor, eventBodySize } from './event-actors';
 import { bodyCorners, segmentBody } from './occupancy';
 
@@ -46,6 +40,9 @@ type Actor = {
   approach?: Point[];
   adopted?: VisibleAgent;
   groundAllowed?: boolean;
+  eventRole?: 'altar';
+  eventFootprint?: { length: number; width: number };
+  eventScenery?: boolean;
 };
 export type EventSpan = { a: Point; b: Point; width: number };
 export class GroundProcessionScene {
@@ -87,21 +84,9 @@ export class GroundProcessionScene {
     this.profile = motionProfile(hashString(route.id), this.along.at(-1)!);
     this.ground = groundForRoute(route);
     this.build();
-    this.tail =
-      this.actors.reduce<number>(
-        (tail, actor) => (actor.destination ? tail : Math.max(tail, actor.back)),
-        PROCESSION.street.tailPadding,
-      ) + PROCESSION.street.tailPadding;
-    this.leadingExtent = this.actors.reduce<number>(
-      (extent, actor) =>
-        actor.destination
-          ? extent
-          : Math.max(
-              extent,
-              -actor.back + eventBodySize(actor).length / 2 + PROCESSION_GEOMETRY.probePadding,
-            ),
-      PROCESSION.street.headMargin,
-    );
+    const layout = route.kind === 'mass' ? undefined : formationLayout(route);
+    this.tail = layout?.tail ?? 0;
+    this.leadingExtent = layout?.leading ?? 0;
   }
   get playDuration() {
     return Math.max(
@@ -209,7 +194,8 @@ export class GroundProcessionScene {
       this.massParents = parents;
       this.massOrder = new Map(queue.map((id, i) => [id, i]));
       // Closest church-facing destinations fill first; paths follow the connected outdoor grid.
-      for (const id of queue.slice(0, PROCESSION.eventActors)) {
+      const reserved = r.site.altar ? 8 + r.site.altar.images + 5 : 0;
+      for (const id of queue.slice(0, PROCESSION.eventActors - reserved)) {
         add(0, 0, 3 + Math.floor(rng() * 5));
         const a = this.actors.at(-1)!,
           tail: Point[] = [];
@@ -222,107 +208,51 @@ export class GroundProcessionScene {
         ];
         this.massPaths.push(a.approach);
       }
+      if (r.site.altar) {
+        const centre = this.frame.to(r.site.altar.at);
+        const fixed = (
+          dx: number,
+          dy: number,
+          paint: number,
+          glyph?: string,
+          size?: { length: number; width: number },
+          scenery = false,
+        ) => {
+          add(0, 0, paint, glyph);
+          const a = this.actors.at(-1)!;
+          a.destination = this.frame.from([centre[0] + dx, centre[1] + dy]);
+          a.eventRole = 'altar';
+          a.eventFootprint = size;
+          a.eventScenery = scenery;
+        };
+        for (let i = 0; i < 8; i++)
+          fixed(((i % 4) - 1.5) * 1.2, -2 + Math.floor(i / 4) * 1.5, i < 5 ? 0 : 7);
+        fixed(0, 0, 6, ProcessionGlyph.platform, { length: 5, width: 5 }, true);
+        fixed(0, 2, 3, ProcessionGlyph.table, { length: 1.2, width: 2.4 });
+        fixed(0, 0, 3, ProcessionGlyph.canopy, { length: 5, width: 6 }, true);
+        fixed(-3, 2, 6, ProcessionGlyph.support, { length: 0.4, width: 0.4 });
+        fixed(3, 2, 6, ProcessionGlyph.support, { length: 0.4, width: 0.4 });
+        for (let i = 0; i < r.site.altar.images; i++)
+          fixed(
+            (i - (r.site.altar.images - 1) / 2) * 10,
+            -0.5,
+            4,
+            ProcessionGlyph.andas,
+            PROCESSION_GEOMETRY.andas,
+          );
+      }
       return;
     }
-    if (this.route.kind === 'procession') {
-      const f = this.route.formation;
-      add(0, 0, 4, ProcessionGlyph.andas);
-      for (let i = 0; i < (f?.bearers ?? PROCESSION_DEFAULTS.procession.bearers); i++)
-        add(
-          PROCESSION.street.bearerStart + Math.floor(i / 2) * PROCESSION.street.bearerGap,
-          (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.bearerOffset,
-          3,
-        );
-      for (let i = 0; i < (f?.marshals ?? PROCESSION_DEFAULTS.procession.marshals); i++)
-        add(
-          -PROCESSION.street.marshalLead - Math.floor(i / 2) * PROCESSION.street.marshalGap,
-          (i % 2 ? 1 : -1) * PROCESSION_GEOMETRY.marshalOffset,
-          6,
-          ProcessionGlyph.flag,
-        );
-      for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.procession.ranks); r++)
-        for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
-          add(
-            PROCESSION.street.devoteeStart + r * PROCESSION.street.rankGap,
-            (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
-            3 + Math.floor(rng() * 5),
-          );
-    } else {
-      const f = this.route.formation;
-      let back = 0;
-      for (let i = 0; i < (f?.color_guard ?? PROCESSION_DEFAULTS.parade.color_guard); i++)
-        add(
-          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * PROCESSION.street.rankGap,
-          ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
-            PROCESSION_GEOMETRY.columnPitch,
-          5,
-          ProcessionGlyph.flag,
-        );
-      back += PROCESSION.street.guardGap;
-      for (let i = 0; i < (f?.band ?? PROCESSION_DEFAULTS.parade.band); i++)
-        add(
-          back + Math.floor(i / PROCESSION_GEOMETRY.columns) * PROCESSION.street.rankGap,
-          ((i % PROCESSION_GEOMETRY.columns) - (PROCESSION_GEOMETRY.columns - 1) / 2) *
-            PROCESSION_GEOMETRY.columnPitch,
-          4,
-          i % 2 ? ProcessionGlyph.bugle : ProcessionGlyph.drum,
-        );
-      back +=
-        Math.ceil((f?.band ?? PROCESSION_DEFAULTS.parade.band) / PROCESSION_GEOMETRY.columns) *
-          PROCESSION.street.rankGap +
-        PROCESSION.street.bandGap;
-      for (let k = 0; k < (f?.contingents ?? PROCESSION_DEFAULTS.parade.contingents); k++) {
-        for (let r = 0; r < (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks); r++)
-          for (let c = 0; c < PROCESSION_GEOMETRY.columns; c++)
-            add(
-              back + r * PROCESSION.street.rankGap,
-              (c - (PROCESSION_GEOMETRY.columns - 1) / 2) * PROCESSION_GEOMETRY.columnPitch,
-              3 + k,
-            );
-        back +=
-          (f?.ranks ?? PROCESSION_DEFAULTS.parade.ranks) * PROCESSION.street.rankGap +
-          PROCESSION.street.contingentGap;
-      }
-      for (const vehicle of f?.vehicles ?? []) {
-        add(back, 0, 5, undefined, vehicle);
-        back += VEHICLES[vehicle].length + PROCESSION.street.vehicleGap;
-      }
-    }
-    // Both sidewalks; weight the start and arrival without independent random reseeding.
-    const spacing = Math.max(
-      PROCESSION.street.spectatorSpacing,
-      this.route.length_m / PROCESSION.eventSpectators,
-    );
-    for (
-      let s = 0;
-      s <= this.route.length_m && this.actors.length < PROCESSION.eventActors;
-      s += spacing
-    )
-      for (const side of [-1, 1]) {
-        const at = this.at(s),
-          segment = this.route.segments[at.index]!;
-        const inset = Math.min(
-          PROCESSION.street.spectatorInset,
-          streetSidewalks(segment)[side > 0 ? 'left' : 'right'] -
-            PERSON_REACH -
-            PROCESSION.street.spectatorMargin,
-        );
-        // On a 1 m sidewalk the accepted 0.44 m inset leaves 0.11 m of padded
-        // reach on the closed carriageway. Retain those spectators within the
-        // shared event envelope; ordinary vehicle traffic is excluded there.
-        if (inset < 0) continue;
-        add(-s, side * (segment.width_m / 2 + inset), 3 + Math.floor(rng() * 5));
-        this.actors.at(-1)!.destination = this.frame.from([
-          at.x - at.hy * this.actors.at(-1)!.off,
-          at.y + at.hx * this.actors.at(-1)!.off,
-        ]);
-      }
+    for (const member of formationLayout(this.route).actors)
+      add(member.back, member.off, member.paint, member.glyph, member.vehicle);
   }
+
   adopt(actors: readonly VisibleAgent[]) {
     this.reset();
     if (this.route.kind !== 'mass') return;
     for (const actor of actors) {
-      if (this.adopted.length >= this.actors.length) break;
+      if (this.adopted.length >= this.actors.length || this.actors[this.adopted.length]?.eventRole)
+        break;
       if (actor.kind !== 'person' || actor.prop || actor.vehicle || actor.aboard) continue;
       const q = this.frame.to([actor.lng, actor.lat]);
       const footprint = [
@@ -398,12 +328,9 @@ export class GroundProcessionScene {
     return this.polyline.at(s);
   }
   private head(progress: number) {
-    return (
-      (this.route.kind === 'parade' ? progress : profileAt(this.profile, progress)) *
-        (this.along.at(-1)! + this.tail) -
-      this.tail
-    );
+    return this.route.kind === 'mass' ? 0 : formationLayout(this.route).head(progress);
   }
+
   spans(progress: number): EventSpan[] {
     // Mass road overflow is reserved by its actual admitted bodies, not every nearby road.
     const route = this.route;
@@ -442,10 +369,15 @@ export class GroundProcessionScene {
         owner && options.inspection ? options.inspection.progress(owner, progress) : progress;
       const actorTime = owner && options.inspection ? options.inspection.clock(owner, time) : time;
       const head = this.route.kind === 'mass' ? 0 : this.head(actorProgress);
-      if (a.destination && options.crowds === false) continue;
+      if (a.destination && !a.eventRole && options.crowds === false) continue;
       let x: number, y: number, hx: number, hy: number;
       let holding = false;
-      if (this.route.kind === 'mass') {
+      if (a.eventRole) {
+        [x, y] = this.frame.to(a.destination!);
+        hx = 0;
+        hy = -1;
+        holding = true;
+      } else if (this.route.kind === 'mass') {
         const path = a.approach!;
         // Queue new walkers over the arrival window instead of placing hundreds at the
         // same approach point. Adopted walkers keep their existing position immediately.
@@ -467,7 +399,7 @@ export class GroundProcessionScene {
           c = path[k]!;
         x = c[0] + (b[0] - c[0]) * u;
         y = c[1] + (b[1] - c[1]) * u;
-        const church = this.frame.to(this.route.site.location),
+        const church = this.frame.to(this.route.site.altar?.at ?? this.route.site.location),
           d = Math.hypot(church[0] - x, church[1] - y) || 1;
         hx = (church[0] - x) / d;
         hy = (church[1] - y) / d;
@@ -482,7 +414,7 @@ export class GroundProcessionScene {
       }
       const q = this.frame.from([x, y]);
       const fixed = this.route.kind !== 'mass' && !!a.destination;
-      if (!holding && (!fixed || a.groundAllowed === undefined)) {
+      if ((a.eventRole || !holding) && (!fixed || a.groundAllowed === undefined)) {
         const dimensions = eventBodySize(a);
         const corners = bodyCorners({
           x,
@@ -492,7 +424,11 @@ export class GroundProcessionScene {
           length: dimensions.length + 2 * PROCESSION_GEOMETRY.probePadding,
           width: dimensions.width + 2 * PROCESSION_GEOMETRY.probePadding,
         }).map((point) => this.frame.from([point.x, point.y]));
-        const allowed = eventGroundAllows(this.ground, [q, ...corners], corners);
+        const allowed = eventGroundAllows(
+          a.eventRole ? this.ground.altar! : this.ground,
+          [q, ...corners],
+          corners,
+        );
         if (fixed) a.groundAllowed = allowed;
         if (!allowed) continue;
       } else if (fixed && !a.groundAllowed) continue;
@@ -516,6 +452,11 @@ export class GroundProcessionScene {
             candleSeed: adopted?.candleSeed ?? a.seed,
             paint: adopted?.paint ?? a.paint,
             eventGround: this.route.id,
+            ...(a.eventRole && {
+              eventRole: a.eventRole,
+              eventFootprint: a.eventFootprint,
+              eventScenery: a.eventScenery,
+            }),
           },
           id,
         ),

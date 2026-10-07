@@ -22,7 +22,7 @@ import { makeCellGuard } from './cell-guard';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import { EMPTY_PUFFS } from './exhaust';
-import { groundsForRoutes, routeRings } from './ground-events';
+import { groundsForRoutes, trafficRings } from './ground-events';
 import { PolygonIndex } from './occupancy';
 import { eventBodySize } from './event-actors';
 let nextGeneration = 0;
@@ -33,11 +33,13 @@ function retainOrdinary(
   route?: ProcessionRoute,
 ): FrameView | undefined {
   if (!view) return;
-  const street = route?.kind === 'procession' || route?.kind === 'parade' ? route : undefined;
-  const projection = street && localMetricProjection(street.route[0]!);
+  const street = route && route.kind !== 'fluvial' ? route : undefined;
+  const projection =
+    street &&
+    localMetricProjection(street.kind === 'mass' ? street.site.location : street.route[0]!);
   const closure = projection && new PolygonIndex();
   if (closure && street && projection)
-    for (const ring of routeRings(street))
+    for (const ring of trafficRings(street))
       closure.add([
         ring.map((point) => {
           const [x, y] = projection.to(point);
@@ -48,6 +50,7 @@ function retainOrdinary(
     ...view,
     puffs: EMPTY_PUFFS,
     procession: undefined,
+    throngRun: undefined,
     agents: view.agents.filter((agent) => {
       if (agent.event || agent.eventGround || agent.prop === 'event') return false;
       if (route?.kind === 'fluvial' && (agent.kind === 'boat' || agent.aboard)) return false;
@@ -77,6 +80,8 @@ export type FrameView = {
   agents: VisibleAgent[];
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
+  /** Run and terrain accepted together; HUD may display a newer optimistic command. */
+  throngRun?: ProcessionRun;
   signalClock: number;
   cellGuard: LifeWorld['groundCellGuard'];
 };
@@ -108,7 +113,7 @@ export function createInlineHost(
   let generation = ++nextGeneration;
   return {
     invalidateFrame() {
-      if (view) view = { ...view, agents: [] };
+      if (view) view = { ...view, agents: [], throngRun: undefined };
       acceptedPost = undefined;
     },
     sync: (tiles, focus, context) => {
@@ -136,6 +141,7 @@ export function createInlineHost(
       view = {
         ...result,
         generation,
+        throngRun: result.procession,
         cellGuard: (toCell) =>
           terrain &&
           makeCellGuard(
@@ -145,6 +151,7 @@ export function createInlineHost(
             toCell,
             terrain.events,
             terrain.blocked,
+            terrain.hardBlocked,
           ),
       };
       preparation.schedule();
@@ -168,7 +175,13 @@ export function createInlineHost(
       view = retainOrdinary(view);
       acceptedPost = undefined;
     },
-    setLive: (id, progress, occurrence) => world.setLive(id, progress, occurrence),
+    setLive: (id, progress, occurrence) => {
+      const previous = world.procession();
+      world.setLive(id, progress, occurrence);
+      const next = world.procession();
+      if (previous?.id !== next?.id || previous?.live !== next?.live)
+        view = retainOrdinary(view, world.processionRoute(next?.id));
+    },
     play: (id, timing) => {
       if (!world.play(id, timing)) return false;
       view = retainOrdinary(view, world.processionRoute(id));
@@ -277,7 +290,7 @@ export function createWorkerHost(
       agentEpoch++;
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
-      if (view) view = { ...view, agents: [] };
+      if (view) view = { ...view, agents: [], throngRun: undefined };
     },
     sync(next, nextFocus, nextView) {
       if (disposed) return;
@@ -320,7 +333,14 @@ export function createWorkerHost(
       profiler?.clearContinuity();
       terrain = undefined;
       sent.clear();
-      if (view) view = { ...view, agents: [], puffs: EMPTY_PUFFS, cellGuard: () => undefined };
+      if (view)
+        view = {
+          ...view,
+          agents: [],
+          throngRun: undefined,
+          puffs: EMPTY_PUFFS,
+          cellGuard: () => undefined,
+        };
       if (fallback) fallback.clearTiles();
       else void remote.clearTiles().catch(fail);
     },
@@ -360,6 +380,7 @@ export function createWorkerHost(
                     toCell,
                     eventGrounds,
                     cellTerrain.blocked,
+                    cellTerrain.hardBlocked,
                   ),
               };
             return;
@@ -376,6 +397,7 @@ export function createWorkerHost(
             puffs: result.puffs,
             generation,
             procession: result.procession,
+            throngRun: result.procession,
             signalClock: result.signalClock,
             cellGuard: (toCell) =>
               cellTerrain &&
@@ -386,6 +408,7 @@ export function createWorkerHost(
                 toCell,
                 eventGrounds,
                 cellTerrain.blocked,
+                cellTerrain.hardBlocked,
               ),
           };
           if (result.profile) profiler?.merge(result.profile);
@@ -417,6 +440,13 @@ export function createWorkerHost(
     },
     setLive(id, progress, occurrence) {
       if (disposed) return;
+      if (live.id !== id || live.occurrence !== occurrence) {
+        agentEpoch++;
+        view = retainOrdinary(
+          view,
+          processions.find((route) => route.id === id),
+        );
+      }
       live = { id, progress, occurrence };
       if (fallback) fallback.setLive(id, progress, occurrence);
       else void remote.setLive(id, progress, occurrence).catch(fail);

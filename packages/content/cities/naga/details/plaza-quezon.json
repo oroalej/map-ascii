@@ -182,7 +182,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Plaza Quezon — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed. Owner-supplied overhead supports undated edge planting and side approaches.",
+  "credit": "Plaza Quezon — Geometry: © OpenStreetMap contributors (ODbL). Schematic detail estimated from imagery; ground survey pending. Owner-supplied overhead supports undated edge planting and side approaches.",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -192,7 +192,7 @@
     {
       "title": "Independent facility reference",
       "url": "https://www2.naga.gov.ph/proposed-ordinance/nb1_2025-0845-renaming-plaza-quezon/",
-      "note": "Post-2024 redevelopment completion and proposed renaming remain unverified. Existing mapped stage roof, stage-front terrace, crossing and schematic lighting are retained. The separately sourced owner overhead supports bounded edge landscaping and access; it does not date or verify the proposed redevelopment. Positions, counts, dimensions and heights remain draft estimates fitted to standing source geometry."
+      "note": "Post-2024 redevelopment completion and proposed renaming remain unverified. Existing mapped stage roof, stage-front terrace, crossing and schematic lighting are retained. The separately sourced owner overhead supports bounded edge landscaping and access; it does not date or verify the proposed redevelopment. Positions, counts, dimensions and heights remain estimates fitted to standing source geometry."
     },
     {
       "title": "City ordinance: public plaza lighting facilities",
@@ -200,7 +200,7 @@
       "note": "Supports existing plaza lighting; schematic fixtures do not claim the layout of the unverified redevelopment."
     },
     {
-      "title": "Draft surface placement audit",
+      "title": "surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {

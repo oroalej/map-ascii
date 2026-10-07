@@ -30,7 +30,7 @@ import {
   eventBridgeAllows,
   eventGroundBounds,
   groundsForRoutes,
-  routeRings,
+  trafficRings,
 } from './ground-events';
 import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
@@ -6892,6 +6892,9 @@ export type VisibleAgent = {
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
   prop?: 'ball' | 'event';
   eventGround?: string;
+  eventRole?: 'altar' | 'seated';
+  eventFootprint?: { length: number; width: number };
+  eventScenery?: boolean;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -6961,6 +6964,7 @@ type GroundTerrain = {
   key: string;
   seasonalKey: string;
   blocked: PolygonIndex;
+  hardBlocked: PolygonIndex;
   vehicleBlocked: PolygonIndex;
   seasonal: PolygonIndex;
   water: PolygonIndex;
@@ -7343,6 +7347,7 @@ export class LifeWorld {
       origin: string;
       laneBounds: readonly [number, number, number, number];
       blocked: Polygon[];
+      hardBlocked: Polygon[];
       vehicleBlocked: Polygon[];
       water: Polygon[];
       trees: Polygon[];
@@ -7934,6 +7939,7 @@ export class LifeWorld {
       seasonalKey,
       ref,
       blocked: new PolygonIndex(),
+      hardBlocked: new PolygonIndex(),
       vehicleBlocked: new PolygonIndex(),
       seasonal: new PolygonIndex(),
       water: new PolygonIndex(),
@@ -7959,6 +7965,7 @@ export class LifeWorld {
           origin: key,
           laneBounds: [Infinity, Infinity, -Infinity, -Infinity],
           blocked: [],
+          hardBlocked: [],
           vehicleBlocked: [],
           water: [],
           trees: [],
@@ -7972,7 +7979,10 @@ export class LifeWorld {
           );
         for (const a of life.geo.areas ?? []) {
           if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
-          if (a.kind === 'blocked') (a.water ? cached.water : cached.blocked).push(metric(a.rings));
+          if (a.kind === 'blocked') {
+            (a.water ? cached.water : cached.blocked).push(metric(a.rings));
+            if (!a.water && !a.seating) cached.hardBlocked.push(metric(a.rings));
+          }
           if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(metric(a.rings));
         }
         const bounds = [Infinity, Infinity, -Infinity, -Infinity];
@@ -8017,6 +8027,7 @@ export class LifeWorld {
                   y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
                 }));
           yield* terrain.blocked.addSteps([ring]);
+          yield* terrain.hardBlocked.addSteps([ring]);
           yield* terrain.seasonal.addSteps([ring]);
           yield* terrain.trees.addSteps([ring]);
         }
@@ -8028,6 +8039,7 @@ export class LifeWorld {
     for (const life of lives) {
       const cached = this.metricTerrain.get(life)!;
       for (const polygon of cached.blocked) yield* terrain.blocked.addSteps(polygon);
+      for (const polygon of cached.hardBlocked) yield* terrain.hardBlocked.addSteps(polygon);
       for (const polygon of cached.vehicleBlocked) yield* terrain.vehicleBlocked.addSteps(polygon);
       for (const polygon of cached.water) yield* terrain.water.addSteps(polygon);
     }
@@ -8100,6 +8112,7 @@ export class LifeWorld {
     }
     // Serialization buffers are prepared privately too; the worker transfers them once.
     yield* terrain.blocked.toFlatSteps();
+    yield* terrain.hardBlocked.toFlatSteps();
     yield* terrain.roadAccess.roads.toFlatSteps();
     yield* terrain.roadAccess.forbidden.toFlatSteps();
     yield* terrain.trees.toFlatSteps();
@@ -8234,7 +8247,11 @@ export class LifeWorld {
       (this.live && this.live.progress >= 0 && this.live.progress < 1 ? this.live.id : undefined);
     const scene = id && this.scenes.get(id);
     const terrain = this.groundTerrain;
-    if (!(scene instanceof GroundProcessionScene) || scene.route.kind === 'mass' || !terrain?.ref) {
+    if (
+      !(scene instanceof GroundProcessionScene) ||
+      (scene.route.kind === 'mass' && !scene.route.site.closure_zone?.length) ||
+      !terrain?.ref
+    ) {
       this.trafficClosureCache = undefined;
       return undefined;
     }
@@ -8246,7 +8263,7 @@ export class LifeWorld {
       const q = lngLatToTile(ref.tile, lng, lat);
       return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
     };
-    for (const ring of routeRings(scene.route)) index.add([ring.map(metric)]);
+    for (const ring of trafficRings(scene.route)) index.add([ring.map(metric)]);
     this.trafficClosureCache = { scene, terrain, index };
     return index;
   }
@@ -8722,14 +8739,14 @@ export class LifeWorld {
           body.kind = agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human;
           out.length = 1;
           if (
-            admission.conflicts(token, out) > 0 ||
-            arrivals?.conflicts(token, out) ||
-            blocked.hits(out) ||
+            (!agent.eventScenery &&
+              (admission.conflicts(token, out) > 0 || arrivals?.conflicts(token, out))) ||
+            (agent.eventRole ? this.groundTerrain!.hardBlocked : blocked).hits(out) ||
             (water.hits(out) && !bridgeAllows(body))
           )
             continue;
-          cached.actors.push({ token, body, owner });
-          arrivals?.set(token, out);
+          if (!agent.eventScenery) cached.actors.push({ token, body, owner });
+          if (!agent.eventScenery) arrivals?.set(token, out);
           owner.eventPopulation++;
           this.eventAgents.push(agent);
         }
@@ -9371,6 +9388,7 @@ export class LifeWorld {
       version: terrain,
       events: this.eventGrounds,
       blocked: terrain.blocked,
+      hardBlocked: terrain.hardBlocked,
       ref: { tile: ref.tile, perMeter: ref.perMeter },
       forbidden: terrain.roadAccess.forbidden,
       roads: terrain.roadAccess.roads,
@@ -9390,6 +9408,7 @@ export class LifeWorld {
       toCell,
       this.eventGrounds,
       terrain.blocked,
+      terrain.hardBlocked,
     );
   }
 

@@ -12,7 +12,7 @@ import {
   type ProcessionRoute,
 } from '@atlas/shared';
 import type { Feature, Geometry, Position } from 'geojson';
-import { routeStreet, bakeMassSite } from './procession-ground';
+import { routeStreet, bakeMassSite, bakeFluvialCrowd } from './procession-ground';
 
 type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: string }>;
 
@@ -346,7 +346,10 @@ export function routeProcessions(
       ...('follows' in p.schedule && { follows: p.schedule.follows }),
     };
     if (p.kind === 'mass') {
-      routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p) });
+      const follows = 'follows' in p.schedule ? p.schedule.follows : undefined;
+      const preceding = follows ? processions.find((event) => event.id === follows) : undefined;
+      const images = preceding?.kind === 'procession' ? (preceding.formation?.images ?? 1) : 0;
+      routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p, images) });
       continue;
     }
     if (p.kind !== 'fluvial') {
@@ -403,6 +406,13 @@ export function routeProcessions(
       kind: p.kind,
       route: path.map((m) => graph.project.from(m).map((v) => Math.round(v * 1e7) / 1e7) as Point),
       length_m: Math.round(length),
+      ...(banks && {
+        crowd_ground: bakeFluvialCrowd(
+          features,
+          path.map((m) => graph.project.from(m)),
+          banks,
+        ),
+      }),
       ...(banks
         ? { banks: banks.map(([l, r]) => [Math.round(l * 2) / 2, Math.round(r * 2) / 2]) }
         : {}),
