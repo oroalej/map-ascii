@@ -61,10 +61,13 @@ export type LifeSchedules = {
 };
 
 /** Illustrative night folklore; schedules describe the simulation, not reported hauntings. */
+export const FOLKLORE_SITE_KINDS = ['cemetery', 'worship', 'hospital'] as const;
+export type FolkloreSiteKind = (typeof FOLKLORE_SITE_KINDS)[number];
+
 export type FolkloreConfig = {
   hours: { from: number; to: number };
   ghosts: {
-    sites: ('cemetery' | 'worship' | 'hospital')[];
+    sites: FolkloreSiteKind[];
     per_cemetery: [number, number];
     undas_per_cemetery: [number, number];
     undas_season: string;

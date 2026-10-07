@@ -50,6 +50,7 @@ import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
 import { festivePulseGlsl } from '../life/seasonal-installations';
 import { carnivalMotionGlsl } from '../life/carnival-motion';
+import { hauntLampGlsl } from '../life/folklore-lighting';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -180,6 +181,7 @@ float effectTime(ivec2 cell, int channel) {
   return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
 }
 
+${hauntLampGlsl}
 float lampOn(int g, float time, vec2 sampleCell) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
@@ -188,8 +190,7 @@ float lampOn(int g, float time, vec2 sampleCell) {
     for(int i=0;i<8;i++) {
       if(i>=u_hauntCount)break;
       if(distance(world,u_haunts[i].xy)<u_haunts[i].z) {
-        uint tick=cellHash(ivec2(int(floor(time*17.0)),g+407));
-        return (tick&255u)<100u?0.08:0.9+0.1*sin(time*29.0+float(g));
+        return hauntLamp(time, g);
       }
     }
   }

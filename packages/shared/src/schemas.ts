@@ -10,6 +10,7 @@ import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
 import { WIND_STRENGTHS, type ClimateConfig } from './climate';
 import {
+  FOLKLORE_SITE_KINDS,
   RHYTHM_KINDS,
   SEASON_ANCHOR_KINDS,
   runtimeCityLife,
@@ -1567,7 +1568,7 @@ export const Folklore = z.strictObject({
     .refine((hours) => hours.from !== hours.to, 'hours must describe a nonempty window'),
   ghosts: z.strictObject({
     sites: z
-      .array(z.enum(['cemetery', 'worship', 'hospital']))
+      .array(z.enum(FOLKLORE_SITE_KINDS))
       .min(1)
       .refine((sites) => new Set(sites).size === sites.length, 'duplicate folklore site'),
     per_cemetery: FolkloreCounts,

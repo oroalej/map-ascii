@@ -161,6 +161,9 @@ import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { tileKey, type TileId } from './tiles';
 
+const EMPTY_OWNERS = new Uint32Array(0);
+const EMPTY_LIFE_CELLS = new Uint8Array(0);
+
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
 export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
@@ -748,6 +751,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
     !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
     options.cityLife?.seasons?.some((season) => !!(season.candles || season.visitors)) === true,
+    !!options.cityLife?.folklore,
   );
   const { source } = tileCache;
 
@@ -1648,6 +1652,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       clocks,
       seasonal,
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
+      !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
     );
   };
   const frame = (now: number) => {
@@ -1858,8 +1863,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             dpr,
             geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
             revision: raster?.revision ?? 0,
-            owners: raster?.owners ?? new Uint32Array(0),
-            life: raster?.life ?? new Uint8Array(0),
+            owners: raster?.owners ?? EMPTY_OWNERS,
+            life: raster?.life ?? EMPTY_LIFE_CELLS,
             agents: lifeAgents,
             folklore: folkloreQuads,
             labelsCover: (point) =>
@@ -2086,7 +2091,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
       clearFolklore();
-      host.invalidateFrame();
+      host.invalidateFolklore();
       lifeHover.pointer(null);
       if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       life = { ...life, ...settings };

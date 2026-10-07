@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CityLife, RuntimeCityLifeSchema } from './schemas';
+import { FOLKLORE_SITE_KINDS } from './rhythm';
 
 const source = { title: 'Folklore reference', url: 'https://example.org/' };
 const season = {
@@ -48,5 +49,16 @@ describe('city folklore configuration', () => {
       expect(CityLife.safeParse({ ...life, folklore: { ...folklore, ...change } }).success).toBe(
         false,
       );
+  });
+  it('accepts every configured site kind and rejects unknown or repeated kinds', () => {
+    const parseSites = (sites: string[]) =>
+      CityLife.safeParse({
+        source: 'example',
+        seasons: [season],
+        folklore: { ...folklore, ghosts: { ...folklore.ghosts, sites } },
+      });
+    for (const kind of FOLKLORE_SITE_KINDS) expect(parseSites([kind]).success).toBe(true);
+    expect(parseSites(['school']).success).toBe(false);
+    expect(parseSites(['hospital', 'hospital']).success).toBe(false);
   });
 });

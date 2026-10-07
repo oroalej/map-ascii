@@ -55,7 +55,7 @@ export const cities = readdirSync(citiesDir)
     const cemeteryAnchor = cemeteryIds.flatMap(
       (id) => search?.entries.filter((e) => e.id === id) ?? [],
     )[0];
-    if (runtimeLife?.folklore && hasMeta && !cemeteryAnchor)
+    if (runtimeLife?.folklore?.ghosts.sites.includes('cemetery') && hasMeta && !cemeteryAnchor)
       throw new Error(`${slug}: folklore needs a mapped cemetery smoke anchor`);
     const eventDir = new URL(`${slug}/processions/`, citiesDir);
     const processions = existsSync(eventDir)
@@ -90,7 +90,7 @@ export const cities = readdirSync(citiesDir)
       tours,
       processions,
       generatedProcessions,
-      seasons: city.life ? (RuntimeCityLifeSchema.parse(city.life).seasons ?? []) : [],
+      seasons: runtimeLife?.seasons ?? [],
     };
   });
 

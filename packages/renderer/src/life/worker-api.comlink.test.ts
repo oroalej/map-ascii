@@ -5,6 +5,12 @@ import { expect, it } from 'vitest';
 import { LifeWorld } from './simulate';
 import { makeScenario } from './testing/scenarios';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+import {
+  createLifeWorkerApi,
+  runLifeFrame,
+  type FrameInput,
+  type LifeWorkerApi,
+} from './worker-api';
 it('clones active folklore through real Comlink messages and retains subsequent frames', async () => {
   const { port1, port2 } = new MessageChannel(),
     remote = wrap<LifeWorkerApi>(nodeEndpoint(port2)),
@@ -46,13 +52,6 @@ it('clones active folklore through real Comlink messages and retains subsequent 
     port2.close();
   }
 });
-import {
-  createLifeWorkerApi,
-  runLifeFrame,
-  type FrameInput,
-  type LifeWorkerApi,
-} from './worker-api';
-
 it.each([false, true])(
   'preserves person provenance through real Comlink messages (inspection/profiling %s)',
   async (enabled) => {

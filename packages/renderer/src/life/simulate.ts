@@ -7005,9 +7005,16 @@ export class LifeWorld {
     this.folklore.step(
       sources,
       { minutes: weather?.minutes, calendar: weather?.folkloreDate, clock: this.emojiClock, dt },
-      (geometry) => {
-        const bodies: FolkloreBody[] = [];
-        for (const life of this.tiles.values())
+      (geometry, ghosts) => {
+        const bodies: FolkloreBody[] = [],
+          pose: Pose = { x: 0, y: 0, hx: 0, hy: 0 };
+        const minX = Math.min(...ghosts.map((p) => p.x)),
+          maxX = Math.max(...ghosts.map((p) => p.x)),
+          minY = Math.min(...ghosts.map((p) => p.y)),
+          maxY = Math.max(...ghosts.map((p) => p.y));
+        for (const life of this.tiles.values()) {
+          const frame = frameBetween(life.tile, geometry.ref.tile),
+            scale = frame.scale / geometry.ref.perMeter;
           for (const m of life.movers) {
             if (
               (m.kind !== 'person' && m.kind !== 'vehicle') ||
@@ -7016,18 +7023,30 @@ export class LifeWorld {
               (this.lastLevels && m.rank >= this.lastLevels[m.kind])
             )
               continue;
-            const p = life.pose(m),
-              at = geometry.world(life, p),
+            const p = life.pose(m, pose),
+              x = frame.x / geometry.ref.perMeter + p.x * scale,
+              y = frame.y / geometry.ref.perMeter + p.y * scale,
               size = m.vehicle ? VEHICLES[m.vehicle] : undefined;
+            const length = size?.length ?? 0.6,
+              width = size?.width ?? 0.5,
+              reach = Math.max(
+                m.kind === 'person' ? 3 : 0,
+                Math.hypot(length / 2 + 0.35, width / 2 + 0.35),
+              );
+            // Filter the posed center, including lane/curve displacement and any body rotation.
+            if (x + reach < minX || x - reach > maxX || y + reach < minY || y - reach > maxY)
+              continue;
             bodies.push({
-              ...at,
+              x,
+              y,
               hx: p.hx,
               hy: p.hy,
-              length: size?.length ?? 0.6,
-              width: size?.width ?? 0.5,
+              length,
+              width,
               walker: m.kind === 'person',
             });
           }
+        }
         return bodies;
       },
     );

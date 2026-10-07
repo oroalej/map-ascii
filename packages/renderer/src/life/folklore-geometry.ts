@@ -1,4 +1,5 @@
 import earcut from 'earcut';
+import type { FolkloreSiteKind } from '@atlas/shared';
 import { EXTENT, insidePolygon, type TilePoint } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { frameBetween } from './frames';
@@ -24,7 +25,7 @@ export type FolkloreTile = {
 export type Fragment = { source: FolkloreTile; rings: TilePoint[][] };
 export type Site = {
   id: string;
-  kind: 'cemetery' | 'worship' | 'hospital';
+  kind: FolkloreSiteKind;
   at: Point;
   radius: number;
   fragments?: Fragment[];
@@ -36,6 +37,67 @@ export type Candidate = {
   lower: Point;
   centre: RoofAnchor;
 };
+
+/** Only immutable tile-local work belongs in this cache; residency/ownership stays live. */
+const localGeometry = new WeakMap<
+  LifeGeometry,
+  {
+    fields: (NonNullable<LifeGeometry['fields']>[number] & { edges: Point[] })[];
+    roofs: NonNullable<LifeGeometry['roofs']>;
+    worship: Map<number, string>;
+  }
+>();
+function localData(geo: LifeGeometry) {
+  let data = localGeometry.get(geo);
+  if (!data) {
+    data = {
+      fields: (geo.fields ?? []).map((field) => ({
+        ...field,
+        edges: (field.rings[0] ?? [])
+          .slice(1)
+          .map((point, i) => mixPoint(field.rings[0]![i]!, point, 0.5)),
+      })),
+      roofs: (geo.roofs ?? []).filter((roof) => insidePolygon(roof.rings, roof.anchor)),
+      worship: new Map(geo.worshipIds),
+    };
+    localGeometry.set(geo, data);
+  }
+  return data;
+}
+
+class RoofIndex {
+  private columns = new Map<number, Map<number, RoofAnchor[]>>();
+  constructor(
+    roofs: readonly RoofAnchor[],
+    private readonly size: number,
+  ) {
+    for (const roof of roofs) {
+      const x = Math.floor(roof.at.x / size),
+        y = Math.floor(roof.at.y / size);
+      let column = this.columns.get(x);
+      if (!column) this.columns.set(x, (column = new Map<number, RoofAnchor[]>()));
+      const values = column.get(y) ?? [];
+      values.push(roof);
+      column.set(y, values);
+    }
+  }
+  *near(p: Point, radius: number) {
+    for (
+      let x = Math.floor((p.x - radius) / this.size);
+      x <= Math.floor((p.x + radius) / this.size);
+      x++
+    ) {
+      const column = this.columns.get(x);
+      if (!column) continue;
+      for (
+        let y = Math.floor((p.y - radius) / this.size);
+        y <= Math.floor((p.y + radius) / this.size);
+        y++
+      )
+        for (const roof of column.get(y) ?? []) if (distance(p, roof.at) <= radius) yield roof;
+    }
+  }
+}
 export const distance = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 export const mixPoint = (a: Point, b: Point, t: number): Point => ({
   x: a.x + (b.x - a.x) * t,
@@ -71,30 +133,36 @@ export function segmentInside(rings: readonly (readonly Point[])[], a: Point, b:
   return insidePolygon(rings, mixPoint(a, b, 0.5));
 }
 
-/** Cached read-only geometry in a fixed world metric frame; no agent state is retained here. */
+/** Read-only night geometry; active ownership callbacks are released by the daytime observer. */
 export class FolkloreGeometry {
   readonly sites: Site[] = [];
   readonly roofs: RoofAnchor[] = [];
   readonly candidates: Candidate[] = [];
-  private fields = new Map<string, (Fragment & { kind: Candidate['kind'] })[]>();
+  private fields = new Map<
+    string,
+    (Fragment & { kind: Candidate['kind']; edges: readonly Point[] })[]
+  >();
   private roofFragments = new Map<string, Fragment[]>();
+  private roofIndex: RoofIndex;
   constructor(
     readonly sources: readonly FolkloreTile[],
     readonly ref: Pick<FolkloreTile, 'tile' | 'perMeter'>,
   ) {
-    const cemeteries = new Map<string, Fragment[]>(),
+    const cemeteries = new Map<string, { fragments: Fragment[]; at: Point }>(),
       sites = new Map<string, Site>(),
       roofs = new Map<string, RoofAnchor>();
     const ordered = [...sources].sort((a, b) => b.tile.z - a.tile.z || a.key.localeCompare(b.key));
     for (const source of ordered) {
+      const local = localData(source.geo);
       for (const area of source.geo.cemeteryAreas ?? []) {
         const fragment = { source, rings: area.rings };
-        if (!this.interior(fragment, hashString(area.id))) continue;
-        const fragments = cemeteries.get(area.id) ?? [];
-        fragments.push(fragment);
-        cemeteries.set(area.id, fragments);
+        const at = this.interior(fragment, hashString(area.id));
+        if (!at) continue;
+        const site = cemeteries.get(area.id) ?? { fragments: [], at };
+        site.fragments.push(fragment);
+        cemeteries.set(area.id, site);
       }
-      const worship = new Map(source.geo.worshipIds);
+      const worship = local.worship;
       for (let i = 0; i < source.geo.places.length; i += PLACE_STRIDE) {
         if (PLACE_CODES[source.geo.places[i + 2]!] !== 'worship') continue;
         const p = { x: source.geo.places[i]!, y: source.geo.places[i + 1]! };
@@ -117,16 +185,16 @@ export class FolkloreGeometry {
             at: this.world(source, site),
             radius: site.radius / source.perMeter,
           });
-      for (const area of source.geo.fields ?? []) {
+      for (const area of local.fields) {
         const fragments = this.fields.get(area.id) ?? [];
-        fragments.push({ source, rings: area.rings, kind: area.kind });
+        fragments.push({ source, rings: area.rings, kind: area.kind, edges: area.edges });
         this.fields.set(area.id, fragments);
       }
-      for (const roof of source.geo.roofs ?? []) {
+      for (const roof of local.roofs) {
         const fragments = this.roofFragments.get(roof.id) ?? [];
         fragments.push({ source, rings: roof.rings });
         this.roofFragments.set(roof.id, fragments);
-        if (this.owned(source, roof.anchor) && insidePolygon(roof.rings, roof.anchor)) {
+        if (this.owned(source, roof.anchor)) {
           const at = this.world(source, roof.anchor),
             previous = roofs.get(roof.id);
           if (!previous || at.x < previous.at.x || (at.x === previous.at.x && at.y < previous.at.y))
@@ -134,12 +202,12 @@ export class FolkloreGeometry {
         }
       }
     }
-    for (const [id, fragments] of cemeteries) {
+    for (const [id, { fragments, at }] of cemeteries) {
       fragments.sort((a, b) => a.source.key.localeCompare(b.source.key));
       this.sites.push({
         id,
         kind: 'cemetery',
-        at: this.interior(fragments[0]!, hashString(id))!,
+        at,
         radius: 0,
         fragments,
       });
@@ -147,53 +215,53 @@ export class FolkloreGeometry {
     this.sites.push(...sites.values());
     this.sites.sort((a, b) => `${a.kind}/${a.id}`.localeCompare(`${b.kind}/${b.id}`));
     this.roofs.push(...[...roofs.values()].sort((a, b) => a.id.localeCompare(b.id)));
-    // A spatial grid keeps roof neighborhoods and candidate admission bounded on dense city tiles.
-    const buckets = new Map<string, RoofAnchor[]>(),
-      size = FOLKLORE.roofRadius;
-    const bucket = (p: Point) => `${Math.floor(p.x / size)}/${Math.floor(p.y / size)}`;
-    for (const roof of this.roofs) {
-      const values = buckets.get(bucket(roof.at)) ?? [];
-      values.push(roof);
-      buckets.set(bucket(roof.at), values);
-    }
-    const around = (p: Point, radius: number) => {
-      const out: RoofAnchor[] = [];
-      for (let x = Math.floor((p.x - radius) / size); x <= Math.floor((p.x + radius) / size); x++)
-        for (let y = Math.floor((p.y - radius) / size); y <= Math.floor((p.y + radius) / size); y++)
-          for (const roof of buckets.get(`${x}/${y}`) ?? [])
-            if (distance(p, roof.at) <= radius) out.push(roof);
-      return out;
+    this.roofIndex = new RoofIndex(this.roofs, FOLKLORE.roofRadius);
+    const qualified = new Map<string, boolean>();
+    const qualifies = (roof: RoofAnchor) => {
+      let result = qualified.get(roof.id);
+      if (result === undefined) {
+        let count = 0;
+        const neighbors = this.roofIndex.near(roof.at, FOLKLORE.roofRadius);
+        while (count < FOLKLORE.roofMinimum && !neighbors.next().done) count++;
+        result = count >= FOLKLORE.roofMinimum;
+        qualified.set(roof.id, result);
+      }
+      return result;
     };
-    const centres = new Set(
-      this.roofs.filter((r) => around(r.at, size).length >= FOLKLORE.roofMinimum).map((r) => r.id),
-    );
     for (const [id, fragments] of this.fields) {
-      const anchors: { at: Point; kind: Candidate['kind'] }[] = [];
+      const anchors: { at: Point; kind: Candidate['kind']; rank: number; x: number; y: number }[] =
+        [];
       for (const fragment of fragments) {
-        const ring = fragment.rings[0] ?? [];
-        for (let i = 0; i + 1 < ring.length; i++) {
-          const p = mixPoint(ring[i]!, ring[i + 1]!, 0.5);
-          if (this.owned(fragment.source, p))
-            anchors.push({ at: this.world(fragment.source, p), kind: fragment.kind });
+        for (const p of fragment.edges) {
+          if (!this.owned(fragment.source, p)) continue;
+          // Absolute normalized Mercator coordinates survive reference-tile resets.
+          const { tile } = fragment.source,
+            scale = 2 ** tile.z,
+            x = (tile.x + p.x / EXTENT) / scale,
+            y = (tile.y + p.y / EXTENT) / scale;
+          anchors.push({
+            at: this.world(fragment.source, p),
+            kind: fragment.kind,
+            rank: hashString(`${id}/${x.toFixed(12)}/${y.toFixed(12)}`),
+            x,
+            y,
+          });
         }
       }
-      anchors.sort(
-        (a, b) =>
-          hashString(`${id}/${a.at.x.toFixed(3)}/${a.at.y.toFixed(3)}`) -
-            hashString(`${id}/${b.at.x.toFixed(3)}/${b.at.y.toFixed(3)}`) ||
-          a.at.x - b.at.x ||
-          a.at.y - b.at.y,
-      );
+      anchors.sort((a, b) => a.rank - b.rank || a.x - b.x || a.y - b.y);
       const anchor = anchors[0];
       if (!anchor) continue;
-      const centre = around(anchor.at, FOLKLORE.fieldToCentre)
-        .filter((r) => centres.has(r.id))
+      const centre = this.roofsNear(anchor.at, FOLKLORE.fieldToCentre)
         .sort(
           (a, b) =>
             distance(anchor.at, a.at) - distance(anchor.at, b.at) || a.id.localeCompare(b.id),
-        )[0];
+        )
+        .find(qualifies);
       if (centre) this.candidates.push({ id, kind: anchor.kind, lower: anchor.at, centre });
     }
+  }
+  roofsNear(p: Point, radius: number): RoofAnchor[] {
+    return [...this.roofIndex.near(p, radius)];
   }
   owned(source: FolkloreTile, p: Point) {
     return inTile(p) && source.owns(p);

@@ -22,9 +22,9 @@ describe.each([7, 11])('ghost isolation in month %s', (month) => {
     w.sync([structuredClone(entry)]);
   }
   let active = false;
-  for (let chunk = 0; chunk < 3; chunk++)
+  for (let chunk = 0; chunk < 6; chunk++)
     it(`compares physical state through part ${chunk + 1}`, () => {
-      for (let i = chunk * 40; i < (chunk + 1) * 40; i++) {
+      for (let i = chunk * 20; i < (chunk + 1) * 20; i++) {
         const total = 1260 + i * 4,
           minutes = total % 1440,
           date = calendar(month, total >= 1440 ? 2 : 1);
@@ -54,13 +54,34 @@ describe.each([7, 11])('ghost isolation in month %s', (month) => {
     const aa = tiles(a),
       bb = tiles(b);
     expect(aa.length).toBeGreaterThan(1);
+    expect(bb).toHaveLength(aa.length);
     for (let i = 0; i < aa.length; i++) {
       const x = aa[i] as unknown as Record<string, unknown>,
         y = bb[i] as unknown as Record<string, unknown>;
-      const streams = Object.keys(x).filter(
-        (k) => (/rng$/i.test(k) || k === 'looks') && typeof x[k] === 'function',
+      const streamsOf = (tile: Record<string, unknown>) =>
+        Object.keys(tile)
+          .filter((k) => (/rng$/i.test(k) || k === 'looks') && typeof tile[k] === 'function')
+          .sort();
+      const streams = streamsOf(x);
+      expect(streamsOf(y)).toEqual(streams);
+      expect(streams).toEqual(
+        expect.arrayContaining([
+          'rng',
+          'walkerRng',
+          'routeRng',
+          'looks',
+          'placeRng',
+          'visitorsRng',
+          'congregationsRng',
+          'birdRng',
+          'forageRng',
+          'dogRng',
+          'catRng',
+          'runRng',
+          'commerceStallsRng',
+          'commercePeopleRng',
+        ]),
       );
-      expect(streams).toHaveLength(14);
       for (const key of streams)
         expect(Array.from({ length: 32 }, () => (x[key] as () => number)())).toEqual(
           Array.from({ length: 32 }, () => (y[key] as () => number)()),

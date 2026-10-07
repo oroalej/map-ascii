@@ -82,6 +82,70 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it.each(['worker', 'inline', 'fallback'] as const)(
+    'invalidates only folklore across settings changes in the %s host',
+    async (mode) => {
+      const s = fixture(),
+        person: VisibleAgent = { kind: 'person', lng: 123, lat: 13, flap: 0 },
+        packet: FrameResult['folklore'] = {
+          sprites: [
+            {
+              id: 'ghost',
+              kind: 'ghost',
+              lng: 123,
+              lat: 13,
+              heading: 0,
+              pose: 'breath',
+              alpha: 0.5,
+              phase: 0,
+              wisp: 0,
+            },
+          ],
+          haunts: [{ id: 'ghost', lng: 123, lat: 13, radius: 8 }],
+        };
+      if (mode === 'fallback') mock.init.mockRejectedValueOnce(new Error('startup'));
+      if (mode !== 'worker') {
+        vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
+        vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue(packet);
+      }
+      const host = mode === 'inline' ? createInlineHost(new LifeWorld()) : createWorkerHost({}, []);
+      host.sync(s.tiles);
+      await flush();
+      mock.frame.mockResolvedValueOnce({ ...result(1), agents: [person], folklore: packet });
+      host.request(s.input);
+      await flush();
+      const previous = host.latest()!;
+      let resolve!: (reply: FrameResult) => void;
+      if (mode === 'worker') {
+        mock.frame.mockImplementationOnce(
+          () =>
+            new Promise((done) => {
+              resolve = done;
+            }),
+        );
+        host.request(s.input);
+      }
+      // Wind and fixed Time both clear observer output while the ordinary frame is usable.
+      host.invalidateFolklore();
+      host.invalidateFolklore();
+      expect(host.latest()?.agents).toBe(previous.agents);
+      expect(host.latest()?.puffs).toBe(previous.puffs);
+      expect(host.latest()?.cellGuard).toBe(previous.cellGuard);
+      expect(host.latest()?.folklore).toEqual({ sprites: [], haunts: [] });
+      if (mode === 'worker') {
+        resolve({ ...result(2), agents: [{ ...person, lng: 124 }], folklore: packet });
+        await flush();
+        expect(host.latest()?.agents[0]?.lng).toBe(124);
+        expect(host.latest()?.folklore).toEqual({ sprites: [], haunts: [] });
+      }
+      mock.frame.mockResolvedValueOnce({ ...result(3), agents: [person], folklore: packet });
+      host.request(s.input);
+      await flush();
+      expect(host.latest()?.folklore).toEqual(packet);
+      host.dispose();
+    },
+  );
+
   it('keeps folklore configuration after worker startup falls back inline', async () => {
     mock.init.mockRejectedValueOnce(new Error('startup'));
     const t = folkloreTile(),

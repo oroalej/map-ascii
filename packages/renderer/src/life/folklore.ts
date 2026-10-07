@@ -53,6 +53,9 @@ type Ghost = {
   speed: number;
   range: number;
   route: Point[];
+  routeLength: number;
+  breathPeriod: number;
+  fadeDuration: number;
   cycle: number;
   path?: { start: Point; end: Point };
   alphaNear: number;
@@ -112,6 +115,8 @@ function routePoint(route: readonly Point[], travel: number): Point {
   }
   return route.at(-1)!;
 }
+const routeLength = (route: readonly Point[]) =>
+  route.slice(1).reduce((sum, point, i) => sum + distance(route[i]!, point), 0);
 
 /** Independent observer state. It never receives mutable physical owners or their RNGs. */
 export class FolkloreObserver {
@@ -146,29 +151,29 @@ export class FolkloreObserver {
     this.creature = undefined;
   }
   private landing(geometry: FolkloreGeometry, candidate: Candidate, night: number, cycle: number) {
-    return geometry.roofs
-      .filter((r) => distance(r.at, candidate.centre.at) <= FOLKLORE.roofRadius)
-      .sort(
-        (a, b) =>
-          hashString(`${a.id}/${night}/${cycle}`) - hashString(`${b.id}/${night}/${cycle}`) ||
-          a.id.localeCompare(b.id),
-      )[0];
+    return geometry
+      .roofsNear(candidate.centre.at, FOLKLORE.roofRadius)
+      .map((roof) => ({ roof, rank: hashString(`${roof.id}/${night}/${cycle}`) }))
+      .sort((a, b) => a.rank - b.rank || a.roof.id.localeCompare(b.roof.id))[0]?.roof;
   }
   step(
     tiles: readonly FolkloreTile[],
     env: FolkloreEnvironment,
-    bodies: (geometry: FolkloreGeometry) => readonly FolkloreBody[] = () => [],
+    bodies: (
+      geometry: FolkloreGeometry,
+      ghosts: readonly Point[],
+    ) => readonly FolkloreBody[] = () => [],
   ) {
     const config = this.config,
       night = config && folkloreNight(config, env.calendar, env.minutes);
     this.sprites = [];
     this.creature = undefined;
     if (!this.enabled || !config || !night || !tiles.length) {
+      this.geometry = undefined;
       this.ghosts.clear();
       this.selection = undefined;
       this.nightKey = '';
       if (!tiles.length) {
-        this.geometry = undefined;
         this.ref = undefined;
         this.tileSeeds.clear();
       }
@@ -287,10 +292,12 @@ export class FolkloreObserver {
         }
       }
     }
-    const observations = bodies(geometry),
-      keep = new Set<string>();
-    for (const site of geometry.sites)
-      for (let index = 0; index < ghostCount(config, site, night); index++) {
+    const keep = new Set<string>(),
+      samples: { ghost: Ghost; at: Point; elapsed: number; age: number; site: Site; id: string }[] =
+        [];
+    for (const site of geometry.sites) {
+      const count = ghostCount(config, site, night);
+      for (let index = 0; index < count; index++) {
         const id = `ghost/${site.kind}/${site.id}/${night.day}/${index}`;
         keep.add(id);
         let ghost = this.ghosts.get(id);
@@ -299,6 +306,7 @@ export class FolkloreObserver {
               site.fragments?.[index % (site.fragments.length || 1)]?.source ?? ordered[0]!,
             seed = hashString(id) ^ this.tileSeeds.get(source.key)!;
           const rng = random(seed);
+          const route = site.kind === 'cemetery' ? [] : geometry.route(site);
           ghost = {
             id,
             site,
@@ -308,7 +316,10 @@ export class FolkloreObserver {
             period: between(rng, FOLKLORE.relocation),
             speed: between(rng, FOLKLORE.ghostSpeed),
             range: between(rng, config.ghosts.range_m),
-            route: site.kind === 'cemetery' ? [] : geometry.route(site),
+            route,
+            routeLength: routeLength(route),
+            breathPeriod: 3 + unitHash(id) * 2,
+            fadeDuration: 3 + unitHash(`${id}/fade`) * 3,
             cycle: -1,
             alphaNear: 1,
             overlap: false,
@@ -319,7 +330,10 @@ export class FolkloreObserver {
         if (changed) {
           ghost.site = site;
           ghost.cycle = -1;
-          if (site.kind !== 'cemetery') ghost.route = geometry.route(site);
+          if (site.kind !== 'cemetery') {
+            ghost.route = geometry.route(site);
+            ghost.routeLength = routeLength(ghost.route);
+          }
         }
         const elapsed = env.clock - ghost.born,
           cycle = Math.floor(elapsed / ghost.period),
@@ -350,55 +364,61 @@ export class FolkloreObserver {
             clamp(age / Math.max(1, ghost.period - 2)),
           );
         } else {
-          const length = ghost.route
-              .slice(1)
-              .reduce((sum, b, i) => sum + distance(ghost.route[i]!, b), 0),
-            range = Math.min(length, ghost.range);
+          const range = Math.min(ghost.routeLength, ghost.range);
           const progress = range ? (elapsed * ghost.speed) % (range * 2) : 0;
           at = routePoint(ghost.route, progress <= range ? progress : range * 2 - progress);
         }
-        let near = false,
-          overlap = false;
-        for (const body of observations) {
-          const dx = at.x - body.x,
-            dy = at.y - body.y;
-          if (body.walker && Math.hypot(dx, dy) < 3) near = true;
-          if (
-            Math.abs(dx * body.hx + dy * body.hy) < body.length / 2 + 0.35 &&
-            Math.abs(-dx * body.hy + dy * body.hx) < body.width / 2 + 0.35
-          )
-            overlap = true;
-        }
-        if (overlap && !ghost.overlap) ghost.wispAt = env.clock;
-        ghost.overlap = overlap;
-        ghost.alphaNear = near ? 0 : Math.min(1, ghost.alphaNear + Math.max(0, env.dt) / 2);
-        const breath = 0.55 + 0.2 * Math.sin((elapsed * Math.PI * 2) / (3 + unitHash(id) * 2));
-        const fade =
-          clamp(elapsed / (3 + unitHash(`${id}/fade`) * 3)) *
-          clamp((night.remaining * 60) / 6) *
-          (site.kind === 'cemetery'
-            ? Math.min(clamp(age / 2), clamp((ghost.period - age) / 2))
-            : 1);
-        const alpha = (0.15 + (breath - 0.15) * ghost.alphaNear) * fade,
-          wispAge = env.clock - ghost.wispAt,
-          wisp = wispAge >= 0 && wispAge < 0.8 ? wispAge / 0.8 : 0;
-        const [lng, lat] = tileToLngLat(this.ref.tile, {
-          x: at.x * this.ref.perMeter,
-          y: at.y * this.ref.perMeter,
-        });
-        this.sprites.push({
-          id,
-          kind: 'ghost',
-          lng,
-          lat,
-          heading: 0,
-          pose: wispAge >= 0 && wispAge < 0.8 ? 'wisp' : 'breath',
-          alpha,
-          phase: Math.sin(elapsed * 2),
-          wisp,
-        });
+        samples.push({ ghost, at, elapsed, age, site, id });
       }
+    }
     for (const id of this.ghosts.keys()) if (!keep.has(id)) this.ghosts.delete(id);
+    // Current admission must precede observations, including the first step of a new night.
+    const observations = samples.length
+      ? bodies(
+          geometry,
+          samples.map((sample) => sample.at),
+        )
+      : [];
+    for (const { ghost, at, elapsed, age, site, id } of samples) {
+      let near = false,
+        overlap = false;
+      for (const body of observations) {
+        const dx = at.x - body.x,
+          dy = at.y - body.y;
+        if (body.walker && Math.hypot(dx, dy) < 3) near = true;
+        if (
+          Math.abs(dx * body.hx + dy * body.hy) < body.length / 2 + 0.35 &&
+          Math.abs(-dx * body.hy + dy * body.hx) < body.width / 2 + 0.35
+        )
+          overlap = true;
+      }
+      if (overlap && !ghost.overlap) ghost.wispAt = env.clock;
+      ghost.overlap = overlap;
+      ghost.alphaNear = near ? 0 : Math.min(1, ghost.alphaNear + Math.max(0, env.dt) / 2);
+      const breath = 0.55 + 0.2 * Math.sin((elapsed * Math.PI * 2) / ghost.breathPeriod);
+      const fade =
+        clamp(elapsed / ghost.fadeDuration) *
+        clamp((night.remaining * 60) / 6) *
+        (site.kind === 'cemetery' ? Math.min(clamp(age / 2), clamp((ghost.period - age) / 2)) : 1);
+      const alpha = (0.15 + (breath - 0.15) * ghost.alphaNear) * fade,
+        wispAge = env.clock - ghost.wispAt,
+        wisp = wispAge >= 0 && wispAge < 0.8 ? wispAge / 0.8 : 0;
+      const [lng, lat] = tileToLngLat(this.ref.tile, {
+        x: at.x * this.ref.perMeter,
+        y: at.y * this.ref.perMeter,
+      });
+      this.sprites.push({
+        id,
+        kind: 'ghost',
+        lng,
+        lat,
+        heading: 0,
+        pose: wispAge >= 0 && wispAge < 0.8 ? 'wisp' : 'breath',
+        alpha,
+        phase: Math.sin(elapsed * 2),
+        wisp,
+      });
+    }
   }
   packet(zoom: number, center: readonly [number, number]): FolklorePacket {
     if (!this.ref) return EMPTY_FOLKLORE;

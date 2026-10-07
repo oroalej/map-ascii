@@ -80,6 +80,8 @@ it('extracts mapped hospital identities, field holes and solid roof anchors as s
     createIdRegistry(),
     { z: 16, x: 55192, y: 30266 },
     16,
+    false,
+    true,
   ).life;
   expect(geo.hospitals!.map((site) => site.id)).toEqual(['hospital/point', 'hospital/roof']);
   expect(geo.places).toHaveLength(2 * PLACE_STRIDE); // worship and the existing farmland population
@@ -91,6 +93,37 @@ it('extracts mapped hospital identities, field holes and solid roof anchors as s
   const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
   expect(copy.roofs).toEqual(geo.roofs);
   expect(copy.fields).toEqual(geo.fields);
+});
+
+it.each([
+  { folklore: false, z: 16 },
+  { folklore: true, z: 12 },
+])('skips observer sidecars with folklore=$folklore at z$z', ({ folklore, z }) => {
+  const input = {
+    map: layer([
+      feature(3, { id: 'field', class: 'farmland' }, [square(100, 100, 200)]),
+      feature(3, { id: 'hospital', class: 'building_hospital', height: 8 }, [
+        square(500, 500, 100),
+      ]),
+      feature(1, { id: 'hospital-point', class: 'building_hospital' }, [[[800, 800]]]),
+      feature(3, { id: 'church', class: 'building_religious', height: 8 }, [
+        square(1000, 1000, 100),
+      ]),
+      feature(3, { id: 'cemetery', class: 'grass', kind: 'landuse=cemetery' }, [
+        square(1500, 1500, 200),
+      ]),
+    ]),
+  };
+  const tile = { z, x: 1, y: 2 },
+    geometry = buildTileGeometry(input, createIdRegistry(), tile, 16, false, folklore).life,
+    enabled = buildTileGeometry(input, createIdRegistry(), tile, 16, false, true).life;
+  expect(geometry.fields).toBeUndefined();
+  expect(geometry.roofs).toBeUndefined();
+  expect(geometry.hospitals).toBeUndefined();
+  expect(geometry.places).toEqual(enabled.places);
+  expect(geometry.worshipIds).toEqual(enabled.worshipIds);
+  expect(geometry.cemeteryAreas).toEqual(enabled.cemeteryAreas);
+  if (z === 16) expect(geometry.cemeteryAreas).toHaveLength(1);
 });
 
 describe('seasonal cemetery and worship sidecars', () => {

@@ -17,6 +17,7 @@ import type { VisibleAgent } from './simulate';
 import { PROCESSION_GLYPHS } from './procession-glyphs';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './seasonal-glyphs';
 import { PEDESTRIAN_GLYPHS } from './pedestrian-glyphs';
+import { FOLKLORE_GLYPHS } from './folklore-glyphs';
 
 const glyphs = ['', ...mapGlyphs(themes.dark)];
 const index = (glyph: string) => glyphs.indexOf(glyph);
@@ -327,4 +328,3 @@ it('dispatches balls before figures, uses the correct byte, and never displaces 
     packLife(out, { ...grid, allowsGroundCell: () => false }, [ball], themes.dark, index),
   ).toBe(0);
 });
-import { FOLKLORE_GLYPHS } from './folklore-glyphs';

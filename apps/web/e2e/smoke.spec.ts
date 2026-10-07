@@ -416,7 +416,8 @@ for (const city of cities) {
         // The preference pauses Life without changing the viewer's saved settings.
         expect(await page.evaluate(() => localStorage.getItem('atlas.life'))).toBe(saved);
         if (city.folklore && city.cemeteryAnchor) {
-          // Date stays fixed while performance/animation clocks continue normally.
+          // Pin local 22:00 for the calendar date; fixed Night supplies the simulation hour.
+          // Performance and animation clocks keep advancing.
           const instant = await page.evaluate((timezone) => {
             const guess = new Date('2026-07-01T22:00:00Z');
             const parts = new Intl.DateTimeFormat('en-US', {
@@ -435,16 +436,15 @@ for (const city of cities) {
           await page.getByRole('button', { name: 'Time: 12:00', exact: true }).press('Enter');
           await page.getByRole('button', { name: 'Time: 18:00', exact: true }).press('Enter');
           const folklore = page.getByText('Folklore (simulated)', { exact: true });
-          await expect(folklore).toBeVisible({ timeout: 20000 });
-          const toggle = page.getByRole('button', { name: 'Life', exact: true });
-          await toggle.press('Enter');
+          await expect(folklore).toBeVisible({ timeout: 20_000 });
+          await life.press('Enter');
           await expect(folklore).toHaveCount(0);
-          await toggle.press('Enter');
-          await expect(folklore).toBeVisible({ timeout: 20000 });
+          await life.press('Enter');
+          await expect(folklore).toBeVisible({ timeout: 20_000 });
           await page.emulateMedia({ reducedMotion: 'reduce' });
           await expect(folklore).toHaveCount(0);
           await page.emulateMedia({ reducedMotion: 'no-preference' });
-          await expect(folklore).toBeVisible({ timeout: 20000 });
+          await expect(folklore).toBeVisible({ timeout: 20_000 });
         }
         expect(errors).toEqual([]);
       });

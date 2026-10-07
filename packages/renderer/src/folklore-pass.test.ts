@@ -1,7 +1,13 @@
 import { expect, it, vi } from 'vitest';
-import { folkloreLayout, folkloreHit, hauntUniforms, folklorePass } from './folklore-pass';
+import {
+  folkloreLayout,
+  folkloreHit,
+  hauntUniforms,
+  folklorePass,
+  createHauntUniformScratch,
+} from './folklore-pass';
 import { deletePrograms, type Programs, type ThemeResources } from './gpu-context';
-import type { GL, CellTargets } from './gpu';
+import { createProgram, type GL, type CellTargets } from './gpu';
 import { placeGrid, type View } from './grid';
 import type { FolklorePacket } from './life/folklore';
 vi.mock('./gpu', () => ({ createProgram: vi.fn(() => ({ program: {}, uniformSetters: {} })) }));
@@ -42,10 +48,27 @@ it('uses common quad bounds, gates ghosts and neighborhood creatures, and reject
   const quad = folkloreLayout(packet, view);
   expect(folkloreHit(quad, [400, 300], 1)?.id).toBe('ghost');
   expect(folkloreHit(quad, [0, 0], 1)).toBeUndefined();
+  const upper = { ...quad[0]!, sprite: { ...quad[0]!.sprite, id: 'upper' } };
+  expect(folkloreHit([...quad, upper], [400, 300], 1)?.id).toBe('upper');
   expect(
     folkloreLayout({ ...packet, sprites: packet.sprites.map((s) => ({ ...s, alpha: 0 })) }, view),
   ).toEqual([]);
   expect(folkloreLayout(packet, { ...view, camera: { ...view.camera, lng: 1 } })).toEqual([]);
+});
+it('keeps uniform scratch independent and clears unused or disabled haunts', () => {
+  const a = createHauntUniformScratch(),
+    b = createHauntUniformScratch(),
+    grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  const many = { ...packet, haunts: [packet.haunts[0]!, { ...packet.haunts[0]!, radius: 20 }] };
+  expect(hauntUniforms(many, view, grid, true, a)).toBe(a);
+  expect(a.u_haunts[5]).toBe(20);
+  expect(b.u_haunts.every((n) => n === 0)).toBe(true);
+  hauntUniforms(packet, view, grid, true, a);
+  expect(a.u_haunts[5]).toBe(0);
+  hauntUniforms(packet, view, grid, false, a);
+  expect(a.u_hauntCount).toBe(0);
+  expect(a.u_haunts.every((n) => n === 0)).toBe(true);
+  expect(a.u_haunts).not.toBe(b.u_haunts);
 });
 it('keeps haunt positions and meter radii consistent across pan, zoom and DPR and clears disabled uniforms', () => {
   for (const zoom of [15, 18])
@@ -80,52 +103,75 @@ it('keeps haunt positions and meter radii consistent across pan, zoom and DPR an
     ).u_hauntCount,
   ).toBe(8);
 });
-it('draws a folklore-only frame lazily and deletes all resources through program ownership', () => {
-  const gl = Object.fromEntries(
-    [
-      'createVertexArray',
-      'createBuffer',
-      'bindVertexArray',
-      'bindBuffer',
-      'bufferData',
-      'enableVertexAttribArray',
-      'vertexAttribPointer',
-      'vertexAttribDivisor',
-      'bindFramebuffer',
-      'viewport',
-      'disable',
-      'useProgram',
-      'enable',
-      'blendFunc',
-      'drawArraysInstanced',
-      'deleteProgram',
-      'deleteVertexArray',
-      'deleteBuffer',
-    ].map((k) => [k, vi.fn(() => ({}))]),
-  ) as unknown as GL;
-  const p = {
-    labels: { program: {} },
-    streetText: { vao: {}, buffer: {} },
-    cell: { program: {} },
-    select: { program: {} },
-    glyph: { program: {} },
-  } as Programs;
-  const theme = {
-      map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
-    } as unknown as ThemeResources,
-    targets = {} as CellTargets,
-    grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
-  folklorePass(gl, p, targets, theme, view, grid, []);
-  expect(p.folklore).toBeUndefined();
-  folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
-  const calls = gl as unknown as Record<string, ReturnType<typeof vi.fn>>;
-  expect(calls.drawArraysInstanced).toHaveBeenCalledWith(gl.TRIANGLES, 0, 6, 1);
-  const r = p.folklore!;
-  deletePrograms(gl, p);
-  expect(calls.deleteProgram).toHaveBeenCalledWith(r.program.program);
-  expect(calls.deleteBuffer).toHaveBeenCalledWith(r.buffer);
-  expect(calls.deleteVertexArray).toHaveBeenCalledWith(r.vao);
-  const restored = { ...p, folklore: undefined };
-  folklorePass(gl, restored, targets, theme, view, grid, folkloreLayout(packet, view));
-  expect(restored.folklore).not.toBe(r);
-});
+it.each(['cached', 'pending', 'demand'] as const)(
+  'draws folklore with %s preparation and owns each resource once',
+  (preparation) => {
+    vi.mocked(createProgram).mockClear();
+    const gl = Object.fromEntries(
+      [
+        'createVertexArray',
+        'createBuffer',
+        'bindVertexArray',
+        'bindBuffer',
+        'bufferData',
+        'enableVertexAttribArray',
+        'vertexAttribPointer',
+        'vertexAttribDivisor',
+        'bindFramebuffer',
+        'viewport',
+        'disable',
+        'useProgram',
+        'enable',
+        'blendFunc',
+        'drawArraysInstanced',
+        'deleteProgram',
+        'deleteVertexArray',
+        'deleteBuffer',
+      ].map((k) => [k, vi.fn(() => ({}))]),
+    ) as unknown as GL;
+    const p = {
+      labels: { program: {} },
+      streetText: { vao: {}, buffer: {} },
+      cell: { program: {} },
+      select: { program: {} },
+      glyph: { program: {} },
+    } as Programs;
+    const theme = {
+        map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
+      } as unknown as ThemeResources,
+      targets = {} as CellTargets,
+      grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+    const prepared = { program: {}, uniformSetters: {} } as ReturnType<typeof createProgram>,
+      finish = vi.fn(() => prepared);
+    if (preparation === 'cached') p.folkloreProgram = prepared;
+    if (preparation === 'pending')
+      p.glyphWarmup = {
+        clocks: false,
+        seasonal: false,
+        fireworks: false,
+        folklore: true,
+        cancel: vi.fn(),
+        pending: { key: 16, program: { ready: () => false, finish, cancel: vi.fn() } },
+      };
+    folklorePass(gl, p, targets, theme, view, grid, []);
+    expect(p.folklore).toBeUndefined();
+    folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
+    const calls = gl as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    expect(calls.drawArraysInstanced).toHaveBeenCalledWith(gl.TRIANGLES, 0, 6, 1);
+    const r = p.folklore!;
+    expect(createProgram).toHaveBeenCalledTimes(preparation === 'demand' ? 1 : 0);
+    expect(finish).toHaveBeenCalledTimes(preparation === 'pending' ? 1 : 0);
+    expect(p.folkloreProgram).toBeUndefined();
+    expect(p.glyphWarmup?.pending).toBeUndefined();
+    const data = r.data;
+    folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
+    expect(r.data).toBe(data);
+    deletePrograms(gl, p);
+    expect(calls.deleteProgram).toHaveBeenCalledWith(r.program.program);
+    expect(calls.deleteBuffer).toHaveBeenCalledWith(r.buffer);
+    expect(calls.deleteVertexArray).toHaveBeenCalledWith(r.vao);
+    const restored = { ...p, folklore: undefined };
+    folklorePass(gl, restored, targets, theme, view, grid, folkloreLayout(packet, view));
+    expect(restored.folklore).not.toBe(r);
+  },
+);

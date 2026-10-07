@@ -1,6 +1,6 @@
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
-import { hauntUniforms } from './folklore-pass';
+import { hauntUniforms, createHauntUniformScratch } from './folklore-pass';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
  * cell, the overlay places labels on the cell grid, the select pass picks each cell's glyph, and
@@ -984,7 +984,13 @@ export function glyphPass(
     u_time: time,
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
     u_lifeTime: lifeTime,
-    ...hauntUniforms(folklore, view, grid, !reducedMotion),
+    ...hauntUniforms(
+      folklore,
+      view,
+      grid,
+      !reducedMotion,
+      (programs.folkloreUniforms ??= createHauntUniformScratch()),
+    ),
     u_overlay: targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,

@@ -87,6 +87,8 @@ export type FrameView = {
 export interface LifeHost {
   /** Drop replies produced under a previous season without resetting the population. */
   invalidateFrame(): void;
+  /** Clear observer output while keeping compatible ordinary frames and pending replies. */
+  invalidateFolklore(): void;
   sync(tiles: readonly LifeTile[], focus?: readonly [number, number], view?: LifeViewContext): void;
   clearTiles(): void;
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
@@ -114,6 +116,9 @@ export function createInlineHost(
     invalidateFrame() {
       if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
       acceptedPost = undefined;
+    },
+    invalidateFolklore() {
+      if (view) view = { ...view, folklore: EMPTY_FOLKLORE };
     },
     sync: (tiles, focus, context) => {
       if (disposed) return;
@@ -233,6 +238,7 @@ export function createWorkerHost(
     disposed = false,
     generation = ++nextGeneration,
     agentEpoch = 0,
+    folkloreEpoch = 0,
     frames = 0,
     playedFrom = 0;
   let view: FrameView | undefined;
@@ -285,6 +291,11 @@ export function createWorkerHost(
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
       if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
+    },
+    invalidateFolklore() {
+      folkloreEpoch++;
+      if (fallback) fallback.invalidateFolklore();
+      if (view) view = { ...view, folklore: EMPTY_FOLKLORE };
     },
     sync(next, nextFocus, nextView) {
       if (disposed) return;
@@ -351,6 +362,7 @@ export function createWorkerHost(
       inFlight = true;
       const requestedGeneration = generation;
       const requestedAgentEpoch = agentEpoch;
+      const requestedFolkloreEpoch = folkloreEpoch;
       const frame = ++frames;
       const posted = profiler?.time();
       void remote
@@ -394,7 +406,10 @@ export function createWorkerHost(
           const cellTerrain = terrain;
           view = {
             agents: result.agents,
-            folklore: result.folklore ?? EMPTY_FOLKLORE,
+            folklore:
+              folkloreEpoch === requestedFolkloreEpoch
+                ? (result.folklore ?? EMPTY_FOLKLORE)
+                : EMPTY_FOLKLORE,
             puffs: result.puffs,
             generation,
             procession: result.procession,

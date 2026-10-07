@@ -276,14 +276,6 @@ export function legendEntries(
   const theme = themes[themeName];
   const onScreen = present && new Set(present);
   const byId = new Map<LegendEntryId, LegendEntry>();
-  if (life && folklore)
-    byId.set('info:folklore', {
-      id: 'info:folklore',
-      classes: [],
-      label: 'Folklore (simulated)',
-      glyphs: '◌',
-      color: '#b9efff',
-    });
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
     if (!life && (lifeClasses as readonly string[]).includes(cls)) continue;
     if (!visibleAt(cls, zoom)) continue;
@@ -353,6 +345,23 @@ export function legendEntries(
       label: 'Moods (simulated)',
       glyphs: `${MOOD_GLYPHS.happy} ${MOOD_GLYPHS.sleeping}`,
       color: css(theme.label),
+    });
+  }
+  if (life && folklore) {
+    let simulated = -1;
+    for (let i = entries.length - 1; i >= 0; i--) {
+      const entry = entries[i]!;
+      if (entry.id.startsWith('life:') || entry.id === 'info:emoji' || entry.id === 'info:fish') {
+        simulated = i;
+        break;
+      }
+    }
+    entries.splice(simulated < 0 ? entries.length : simulated + 1, 0, {
+      id: 'info:folklore',
+      classes: [],
+      label: 'Folklore (simulated)',
+      glyphs: theme.folkloreLegend.glyph,
+      color: css(theme.folkloreLegend.color),
     });
   }
   if (

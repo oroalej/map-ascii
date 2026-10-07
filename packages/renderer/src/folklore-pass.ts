@@ -6,6 +6,7 @@ import type { Programs, ThemeResources } from './gpu-context';
 import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from './life/folklore';
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
+import { folkloreVertex, folkloreFragment } from './shaders/folklore';
 
 export type FolkloreQuad = {
   sprite: FolkloreSprite;
@@ -58,54 +59,60 @@ export function folkloreHit(
 ) {
   const x = point[0] * dpr,
     y = point[1] * dpr;
-  return [...quads]
-    .reverse()
-    .find((q) => Math.abs(x - q.x) <= q.w / 2 && Math.abs(y - q.y) <= q.h / 2)?.sprite;
+  for (let i = quads.length - 1; i >= 0; i--) {
+    const q = quads[i]!;
+    if (Math.abs(x - q.x) <= q.w / 2 && Math.abs(y - q.y) <= q.h / 2) return q.sprite;
+  }
 }
-export function hauntUniforms(packet: FolklorePacket, view: View, grid: Grid, active = true) {
-  const values = new Float32Array(FOLKLORE.hauntCount * 3),
+export const createHauntUniformScratch = () => ({
+  u_haunts: new Float32Array(FOLKLORE.hauntCount * 3),
+  u_hauntCount: 0,
+  u_hauntOrigin: new Float32Array(2),
+  u_hauntCell: new Float32Array(2),
+});
+export function hauntUniforms(
+  packet: FolklorePacket,
+  view: View,
+  grid: Grid,
+  active = true,
+  scratch = createHauntUniformScratch(),
+) {
+  const values = scratch.u_haunts,
     mpp = metersPerCssPx(view.camera),
     [cx, cy] = project(view.camera.lng, view.camera.lat, view.camera.zoom);
-  const points = active ? packet.haunts.slice(0, FOLKLORE.hauntCount) : [];
-  points.forEach((p, i) => {
+  values.fill(0);
+  const count = active ? Math.min(packet.haunts.length, FOLKLORE.hauntCount) : 0;
+  for (let i = 0; i < count; i++) {
+    const p = packet.haunts[i]!;
     const [x, y] = project(p.lng, p.lat, view.camera.zoom);
-    values.set([(x - cx) * mpp, (y - cy) * mpp, p.radius], i * 3);
-  });
+    values[i * 3] = (x - cx) * mpp;
+    values[i * 3 + 1] = (y - cy) * mpp;
+    values[i * 3 + 2] = p.radius;
+  }
   const device = mpp / view.dpr;
-  return {
-    u_haunts: values,
-    u_hauntCount: points.length,
-    u_hauntOrigin: [
-      (-grid.shiftX - view.width / 2) * device,
-      (-grid.shiftY - view.height / 2) * device,
-    ],
-    u_hauntCell: [view.cellDev.w * device, view.cellDev.h * device],
-  };
+  scratch.u_hauntCount = count;
+  scratch.u_hauntOrigin[0] = (-grid.shiftX - view.width / 2) * device;
+  scratch.u_hauntOrigin[1] = (-grid.shiftY - view.height / 2) * device;
+  scratch.u_hauntCell[0] = view.cellDev.w * device;
+  scratch.u_hauntCell[1] = view.cellDev.h * device;
+  return scratch;
 }
-const vertex = `#version 300 es
-precision highp float;
-layout(location=0) in vec4 a_quad;
-layout(location=1) in vec4 a_style;
-uniform vec2 u_size;
-out vec2 v_uv;flat out vec4 v_style;
-void main(){vec2 p=vec2((gl_VertexID==1||gl_VertexID==2||gl_VertexID==4)?1.0:0.0,(gl_VertexID==2||gl_VertexID==4||gl_VertexID==5)?1.0:0.0);v_uv=p;v_style=a_style;vec2 xy=a_quad.xy+(p-0.5)*a_quad.zw;gl_Position=vec4(xy/u_size*vec2(2.0,-2.0)+vec2(-1.0,1.0),0,1);}`;
-const fragment = `#version 300 es
-precision highp float;precision highp int;
-in vec2 v_uv;flat in vec4 v_style;
-uniform sampler2D u_atlas;uniform int u_columns;uniform vec2 u_cell;
-uniform sampler2D u_overlay;uniform vec2 u_labelCell;uniform vec2 u_labelShift;uniform float u_height;
-out vec4 o_color;
-void main(){ivec2 label=ivec2(floor((vec2(gl_FragCoord.x,u_height-gl_FragCoord.y)+u_labelShift)/u_labelCell));vec4 cover=texelFetch(u_overlay,label,0);if(cover.r>0.0||cover.g>0.0||cover.b>0.0)discard;
-int code=int(v_style.x);vec2 slot=vec2(code%u_columns,code/u_columns);ivec2 pixel=ivec2(slot*u_cell+min(floor(v_uv*u_cell),u_cell-1.0));float ink=texelFetch(u_atlas,pixel,0).r;
-float halo=pow(max(0.0,1.0-length((v_uv-0.5)*2.0)),2.0)*0.22;bool ghost=v_style.z<0.5;vec3 color=ghost?vec3(0.73,0.94,1.0):mix(vec3(0.05,0.02,0.09),vec3(0.75,0.09,0.16),halo*3.0);float alpha=v_style.y*max(ink,halo);if(alpha<0.001)discard;o_color=vec4(color,alpha);}`;
 export type FolkloreResources = {
   program: twgl.ProgramInfo;
   vao: WebGLVertexArrayObject | null;
   buffer: WebGLBuffer | null;
+  data: Float32Array;
 };
-function createFolklore(gl: GL): FolkloreResources {
-  const program = createProgram(gl, vertex, fragment),
-    vao = gl.createVertexArray(),
+function createFolklore(gl: GL, programs: Programs): FolkloreResources {
+  const pending = programs.glyphWarmup?.pending;
+  let program = programs.folkloreProgram;
+  if (!program && pending?.key === 16) {
+    program = pending.program.finish();
+    programs.glyphWarmup!.pending = undefined;
+  }
+  program ??= createProgram(gl, folkloreVertex, folkloreFragment);
+  programs.folkloreProgram = undefined;
+  const vao = gl.createVertexArray(),
     buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
@@ -115,7 +122,7 @@ function createFolklore(gl: GL): FolkloreResources {
     gl.vertexAttribDivisor(i, 1);
   }
   gl.bindVertexArray(null);
-  return { program, vao, buffer };
+  return { program, vao, buffer, data: new Float32Array(64) };
 }
 export function deleteFolklore(gl: GL, r: FolkloreResources) {
   gl.deleteProgram(r.program.program);
@@ -132,23 +139,22 @@ export function folklorePass(
   quads: readonly FolkloreQuad[],
 ) {
   if (!quads.length) return;
-  const r = (programs.folklore ??= createFolklore(gl)),
-    data = new Float32Array(quads.length * 8);
-  quads.forEach((q, i) =>
-    data.set(
-      [
-        q.x,
-        q.y,
-        q.w,
-        q.h,
-        theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!),
-        q.sprite.alpha,
-        q.sprite.kind === 'ghost' ? 0 : 1,
-        0,
-      ],
-      i * 8,
-    ),
-  );
+  const r = (programs.folklore ??= createFolklore(gl, programs));
+  if (r.data.length < quads.length * 8)
+    r.data = new Float32Array(2 ** Math.ceil(Math.log2(quads.length * 8)));
+  const data = r.data;
+  for (let i = 0; i < quads.length; i++) {
+    const q = quads[i]!,
+      offset = i * 8;
+    data[offset] = q.x;
+    data[offset + 1] = q.y;
+    data[offset + 2] = q.w;
+    data[offset + 3] = q.h;
+    data[offset + 4] = theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!);
+    data[offset + 5] = q.sprite.alpha;
+    data[offset + 6] = q.sprite.kind === 'ghost' ? 0 : 1;
+    data[offset + 7] = 0;
+  }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.disable(gl.DEPTH_TEST);

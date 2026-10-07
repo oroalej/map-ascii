@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
 import type { ProcessionRun } from './life/simulate';
@@ -45,9 +45,15 @@ import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
-import { folklorePass } from './folklore-pass';
 import type * as FolklorePassModule from './folklore-pass';
+import type { FolkloreQuad } from './folklore-pass';
+import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
+
+const folkloreCapture = vi.hoisted(() => ({
+  quads: undefined as readonly FolkloreQuad[] | undefined,
+  packet: undefined as FolklorePacket | undefined,
+}));
 
 const vehicleBuffers = () => ({
   stampedVehicles: new Uint8Array(0),
@@ -79,7 +85,11 @@ vi.mock('./gpu-context', () => ({
 vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
 vi.mock('./folklore-pass', async (load) => ({
   ...(await load<typeof FolklorePassModule>()),
-  folklorePass: vi.fn(),
+  folklorePass: vi.fn<typeof FolklorePassModule.folklorePass>(
+    (_gl, _programs, _targets, _theme, _view, _grid, quads) => {
+      folkloreCapture.quads = quads;
+    },
+  ),
 }));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
@@ -100,7 +110,30 @@ vi.mock('./passes', async (load) => {
     cellPass: vi.fn(),
     crownPass: vi.fn(),
     selectPass: vi.fn(),
-    glyphPass: vi.fn(),
+    glyphPass: vi.fn<typeof PassesModule.glyphPass>(
+      (
+        _gl,
+        _programs,
+        _targets,
+        _themeRes,
+        _theme,
+        _view,
+        _grid,
+        _labelGrid,
+        _time,
+        _reduced,
+        _daylight,
+        _weather,
+        _lampShow,
+        _moon,
+        _sun,
+        _focus,
+        _lifeTime,
+        folklore,
+      ) => {
+        folkloreCapture.packet = folklore;
+      },
+    ),
     streetTextPass: vi.fn(),
     overlayPass: vi.fn(() => []),
     labelsInView: vi.fn(actual.labelsInView),
@@ -223,6 +256,40 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('keeps ordinary agents when Wind or Time changes clear folklore', () => {
+    atlas.destroy();
+    const original = Hosts.createInlineHost,
+      hosts: {
+        host: Hosts.LifeHost;
+        frame: MockInstance<() => void>;
+        folklore: MockInstance<() => void>;
+      }[] = [],
+      person = { kind: 'person' as const, lng: 0, lat: 0, flap: 0 };
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = original(...args);
+      const frame = vi.spyOn(host, 'invalidateFrame');
+      const folklore = vi.spyOn(host, 'invalidateFolklore');
+      hosts.push({ host, frame, folklore });
+      return host;
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    draw(100);
+    const { host, frame, folklore } = hosts[0]!;
+    expect(host.latest()?.agents).toEqual([person]);
+    atlas.setLife({ wind: 'storm' });
+    atlas.setLife({ time: 1320 });
+    expect(host.latest()?.agents).toEqual([person]);
+    expect(folklore).toHaveBeenCalledTimes(2);
+    expect(frame).not.toHaveBeenCalled();
+  });
+
   it('draws a folklore-only packet and clears visibility and haunts on inactive lifecycle gates', () => {
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([]);
     vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue({
@@ -245,11 +312,11 @@ describe('live motion preference', () => {
     atlas.on('folklorechange', changed);
     draw(100);
     expect(changed).toHaveBeenCalledWith(true);
-    expect(vi.mocked(folklorePass).mock.calls.at(-1)![6]).toHaveLength(1);
+    expect(folkloreCapture.quads).toHaveLength(1);
     atlas.setLife({ enabled: false });
     expect(changed).toHaveBeenLastCalledWith(false);
     draw(200);
-    expect(vi.mocked(glyphPass).mock.calls.at(-1)![17]?.haunts ?? []).toEqual([]);
+    expect(folkloreCapture.packet?.haunts ?? []).toEqual([]);
     atlas.setLife({ enabled: true });
     draw(300);
     expect(changed).toHaveBeenLastCalledWith(true);
@@ -310,6 +377,8 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    folkloreCapture.quads = undefined;
+    folkloreCapture.packet = undefined;
     labelFixture.enabled = false;
     vi.mocked(overlayPass).mockReset().mockReturnValue([]);
     visibility.watched = true;
@@ -534,6 +603,7 @@ describe('live motion preference', () => {
       false,
       false,
       true,
+      false,
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -644,6 +714,7 @@ describe('live motion preference', () => {
       true,
       false,
       false,
+      false,
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
@@ -711,6 +782,7 @@ describe('live motion preference', () => {
     });
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -869,6 +941,7 @@ describe('live motion preference', () => {
     const request = vi.fn<(input: FrameInput) => boolean>(() => true);
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -927,6 +1000,7 @@ describe('live motion preference', () => {
     };
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request: () => true,

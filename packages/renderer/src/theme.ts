@@ -67,6 +67,8 @@ export type ClassStyle = {
 };
 
 export type Theme = {
+  /** Legend ink is drawn on the same dark HUD panel in either map theme. */
+  folkloreLegend: { glyph: string; color: number };
   /** Hardware, housing, warm lamp, and red/amber/green lenses. */
   fixturePaints: readonly number[];
   awningPaints: readonly number[];
@@ -250,6 +252,7 @@ function makeTheme(background: number, c: Palette): Theme {
   if (c.birdPaints.length !== BIRD_SPECIES_ORDER.length) throw new Error('colors per bird species');
   return {
     background: rgb(background),
+    folkloreLegend: { glyph: '◌', color: 0xb9efff },
     label: c.label,
     accent: c.accent,
     fixturePaints:
