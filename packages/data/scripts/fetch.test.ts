@@ -189,6 +189,36 @@ describe('boundary-inclusive detail fetch', () => {
       }
     },
   );
+  it('adopts a covering peer aggregate online with response and query metadata intact', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-peer-'));
+    const peer = join(dir, 'peer');
+    await mkdir(peer);
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const query = detailParts(expanded, [119, 9, 135, 25])[0]!.query;
+    const response = {
+      version: 0.6,
+      generator: 'fixture',
+      osm3s: { timestamp_osm_base: new Date().toISOString() },
+      elements: [{ type: 'way', id: 777 }],
+    };
+    try {
+      await writeFile(join(peer, 'detail.osm.json'), JSON.stringify(response));
+      await writeFile(join(peer, 'detail.osm.json.query'), query);
+      expect(
+        await fetchDetail(expanded, [...bounds], dir, {
+          offline: false,
+          copies: (file) => [join(peer, basename(file))],
+        }),
+      ).toEqual(response);
+      expect(JSON.parse(await readFile(join(dir, 'detail.osm.json'), 'utf8'))).toEqual(response);
+      expect(await readFile(join(dir, 'detail.osm.json.query'), 'utf8')).toBe(query);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it('retries an interrupted refresh without the old aggregate or unfinished quarters', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'atlas-detail-refresh-'));
     const peer = join(dir, 'peer');

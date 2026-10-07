@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { Feature, Geometry, Polygon } from 'geojson';
-import { bboxPolygon, createTerritory, inTerritory, removeVoid } from './territory';
+import {
+  bboxPolygon,
+  createTerritory,
+  geometryOutsideVoid,
+  inTerritory,
+  removeVoid,
+} from './territory';
 
 const city: Polygon = {
   type: 'Polygon',
@@ -27,6 +33,72 @@ const feature = (geometry: Geometry): Feature => ({
 });
 
 describe('territory subtraction', () => {
+  it('admits a retained boundary triangle without using subtraction object identity', () => {
+    const boundary: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [0, 2],
+          [0, 0],
+        ],
+      ],
+    };
+    const t = createTerritory([0, 0, 2, 2], boundary, [0, 0, 0.1, 0.1]);
+    const triangle: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0.5, 1.50000000001],
+          [0.51, 1.49000000001],
+          [0.505, 1.485],
+          [0.5, 1.50000000001],
+        ],
+      ],
+    };
+    expect(triangle.coordinates[0]!.every(([lng, lat]) => inTerritory(lng!, lat!, t))).toBe(true);
+    expect(geometryOutsideVoid(triangle, t)).toBe(true);
+    const retained = feature(triangle);
+    expect(removeVoid(retained, t)).toBe(retained);
+    const intrusion: Polygon = {
+      ...triangle,
+      coordinates: [triangle.coordinates[0]!.map(([lng, lat]) => [lng!, lat! + 0.00001])],
+    };
+    expect(geometryOutsideVoid(intrusion, t)).toBe(false);
+  });
+  it('handles enclosed voids, feature holes and mixed polygon components independently', () => {
+    const retained = {
+      ...bboxPolygon([0, 0, 5, 5]),
+      coordinates: [
+        bboxPolygon([0, 0, 5, 5]).coordinates[0]!,
+        bboxPolygon([2, 2, 3, 3]).coordinates[0]!,
+      ],
+    };
+    const t = createTerritory([0, 0, 5, 5], retained, [0, 0, 1, 1]);
+    expect(geometryOutsideVoid(bboxPolygon([1, 1, 4, 4]), t)).toBe(false);
+    const withHole: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        bboxPolygon([1, 1, 4, 4]).coordinates[0]!,
+        bboxPolygon([1.5, 1.5, 3.5, 3.5]).coordinates[0]!,
+      ],
+    };
+    expect(geometryOutsideVoid(withHole, t)).toBe(true);
+    expect(removeVoid(feature(withHole), t)!.geometry).toBe(withHole);
+    const good = bboxPolygon([0.2, 0.2, 0.8, 0.8]),
+      bad = bboxPolygon([2.2, 2.2, 2.8, 2.8]);
+    const mixed = feature({
+      type: 'MultiPolygon',
+      coordinates: [good.coordinates, bad.coordinates],
+    });
+    expect(geometryOutsideVoid(mixed.geometry, t)).toBe(false);
+    expect(removeVoid(mixed, t)!.geometry).toEqual(good);
+    expect(removeVoid(feature(bad), t)).toBeUndefined();
+    const beyond = feature(bboxPolygon([5, 2, 6, 3]));
+    expect(removeVoid(beyond, t)).toBe(beyond);
+    expect(geometryOutsideVoid(beyond.geometry, t)).toBe(true);
+  });
   it('preserves downtown, closed city edges and exact feature identity', () => {
     for (const coordinates of [
       [0, 0.5],

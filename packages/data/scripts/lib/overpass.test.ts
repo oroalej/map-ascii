@@ -280,6 +280,23 @@ describe('overpass', () => {
     });
   });
 
+  it('omits bbox coverage text from bbox-free strict offline errors', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-bbox-free-'));
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    try {
+      const file = join(dir, 'missing.osm.json');
+      await expect(
+        overpass('rel(1); out;', file, { offline: true, requireCoverage: true }),
+      ).rejects.toThrow(`--offline: no matching cached download at ${file}`);
+      await expect(overpass(city, file, { offline: true, requireCoverage: true })).rejects.toThrow(
+        ' covering [123.1,13.5,123.4,13.7]',
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
   it('rejects smaller lighter/region caches and missing metadata without an offline network fallback', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'atlas-coverage-'));
     const fetch = vi.fn();

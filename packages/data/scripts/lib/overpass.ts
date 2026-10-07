@@ -171,13 +171,13 @@ export async function overpass(
   const { offline } = options;
   const saved = await readCached(query, cacheFile, options, check);
   if (saved) return saved;
-  if (offline)
+  if (offline) {
+    const bbox = options.requireCoverage ? splitOverpassBbox(query)?.bbox : undefined;
     throw new Error(
       `--offline: no ${options.requireCoverage ? 'matching ' : ''}cached download at ${cacheFile}` +
-        (options.requireCoverage
-          ? ` covering ${JSON.stringify(splitOverpassBbox(query)?.bbox ?? 'the query')}`
-          : ''),
+        (bbox ? ` covering ${JSON.stringify(bbox)}` : ''),
     );
+  }
 
   for (let attempt = 1; ; attempt++) {
     const current = endpoints.filter((url) => !behind.has(url));

@@ -83,12 +83,12 @@ export const step: Step = {
       features.push(f as Feature<Geometry, Record<string, unknown>>);
     }
     const { routes, warnings } = routeProcessions(features, content.processions);
+    for (const warning of warnings) console.warn(`  warning: ${warning}`);
     const emitted = quantizeGroundRoutes(routes);
     validateRouteTerritory(
       emitted,
       Territory.parse(await readJson(join(buildDir, files.territory))),
     );
-    for (const warning of warnings) console.warn(`  warning: ${warning}`);
     await writeJson(
       join(outDir, `${city.slug}.processions.json`),
       CityProcessions.parse({ processions: emitted }),

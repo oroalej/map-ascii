@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import { SubdivisionAreas, type BBox } from '@atlas/shared';
+import { SubdivisionAreas } from '@atlas/shared';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
@@ -74,9 +74,6 @@ export function addLabelAnchor(feature: AtlasFeature) {
   p.label_lat = Math.round(lat * 1e7) / 1e7;
 }
 
-const asTerritory = (region: BBox | Territory): Territory =>
-  Array.isArray(region) ? { regionBounds: region, territory: null, void: null } : region;
-
 const cameraProblem = (where: string, lng: number, lat: number, territory: Territory) =>
   inTerritory(lng, lat, territory)
     ? []
@@ -85,11 +82,7 @@ const cameraProblem = (where: string, lng: number, lat: number, territory: Terri
       ];
 
 /** Camera admission can fail before generating any curated display parts. */
-export function checkTourCameras(
-  tours: ContentBundle['tours'],
-  region: BBox | Territory,
-): string[] {
-  const territory = asTerritory(region);
+export function checkTourCameras(tours: ContentBundle['tours'], territory: Territory): string[] {
   return tours.flatMap((tour) =>
     tour.steps.flatMap((step, i) =>
       cameraProblem(`${tour.id} step ${i + 1}`, step.camera.lng, step.camera.lat, territory),

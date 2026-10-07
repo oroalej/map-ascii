@@ -2,9 +2,10 @@ import { BBox as BBoxSchema, type BBox } from '@atlas/shared';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfBbox from '@turf/bbox';
 import type { Feature, Geometry, MultiPolygon, Polygon, Position } from 'geojson';
-import { difference, intersection, union, type Geom } from 'polyclip-ts';
+import { difference, union, type Geom } from 'polyclip-ts';
 import { z } from 'zod';
 import { bboxesOverlap, inBbox } from './geo';
+import { interiorPoint } from './frontage';
 
 const multiPolygon = z.strictObject({
   type: z.literal('MultiPolygon'),
@@ -69,7 +70,7 @@ const edgeList = (geometry: MultiPolygon): Edge[] =>
   );
 const cache = new WeakMap<
   Territory,
-  { bounds: BBox | null; edges: Edge[]; retainedEdges: Edge[] }
+  { bounds: BBox | null; edges: Edge[]; retainedEdges: Edge[]; interior: Position[] }
 >();
 const prepared = (t: Territory) => {
   let value = cache.get(t);
@@ -78,6 +79,9 @@ const prepared = (t: Territory) => {
       bounds: t.void ? (turfBbox(t.void) as BBox) : null,
       edges: t.void ? edgeList(t.void) : [],
       retainedEdges: t.territory ? edgeList(t.territory) : [],
+      interior: t.void
+        ? t.void.coordinates.map((coordinates) => interiorPoint({ type: 'Polygon', coordinates }))
+        : [],
     };
     cache.set(t, value);
   }
@@ -153,6 +157,60 @@ const interpolate = (a: Position, b: Position, u: number): Position =>
 const same = (a: Position, b: Position) =>
   Math.abs(a[0]! - b[0]!) <= EPS && Math.abs(a[1]! - b[1]!) <= EPS;
 
+function segmentCuts(a: Position, b: Position, t: Territory): number[] {
+  const bounds: BBox = [
+    Math.min(a[0]!, b[0]!),
+    Math.min(a[1]!, b[1]!),
+    Math.max(a[0]!, b[0]!),
+    Math.max(a[1]!, b[1]!),
+  ];
+  return [
+    0,
+    1,
+    ...prepared(t).edges.flatMap((e) => (bboxesOverlap(bounds, e.bbox) ? crossings(a, b, e) : [])),
+  ]
+    .sort((a, b) => a - b)
+    .filter((u, i, all) => i === 0 || u - all[i - 1]! > EPS);
+}
+
+/** Polygon area admission uses the same boundary tolerance as point and line admission. */
+function polygonRelation(
+  coordinates: Position[][],
+  t: Territory,
+): 'outside' | 'inside' | 'crossing' {
+  const polygon: Polygon = { type: 'Polygon', coordinates };
+  const data = prepared(t),
+    edges = edgeList({ type: 'MultiPolygon', coordinates: [coordinates] });
+  let voidBoundary = false,
+    retainedBoundary = false;
+  for (const ring of coordinates) {
+    for (let i = 1; i < ring.length; i++) {
+      const a = ring[i - 1]!,
+        b = ring[i]!;
+      if (same(a, b)) continue;
+      const cuts = segmentCuts(a, b, t);
+      for (let j = 1; j < cuts.length; j++) {
+        const p = interpolate(a, b, (cuts[j - 1]! + cuts[j]!) / 2);
+        const inside = inVoid(p, t) && !data.edges.some((e) => onEdge(p, e));
+        voidBoundary ||= inside;
+        retainedBoundary ||= !inside;
+      }
+    }
+  }
+  const bounds = turfBbox(polygon) as BBox;
+  const contains = (p: Position) =>
+    inBbox(p[0]!, p[1]!, bounds) &&
+    !edges.some((e) => onEdge(p, e)) &&
+    booleanPointInPolygon(p, polygon, { ignoreBoundary: true });
+  // A void component can be enclosed without crossing any feature ring. Its holes can
+  // likewise contain retained islands, so classify each component and all rings.
+  const enclosedBoundary = data.edges.some(
+    (e) => contains(e.a) || contains(interpolate(e.a, e.b, 0.5)),
+  );
+  if (voidBoundary && !retainedBoundary && !enclosedBoundary) return 'inside';
+  return voidBoundary || enclosedBoundary || data.interior.some(contains) ? 'crossing' : 'outside';
+}
+
 function clipLine(line: Position[], t: Territory): { lines: Position[][]; changed: boolean } {
   const lines: Position[][] = [];
   let current: Position[] = [],
@@ -165,21 +223,7 @@ function clipLine(line: Position[], t: Territory): { lines: Position[][]; change
     const a = line[i - 1]!,
       b = line[i]!;
     if (same(a, b)) continue;
-    const bounds: BBox = [
-      Math.min(a[0]!, b[0]!),
-      Math.min(a[1]!, b[1]!),
-      Math.max(a[0]!, b[0]!),
-      Math.max(a[1]!, b[1]!),
-    ];
-    const cuts = [
-      0,
-      1,
-      ...prepared(t).edges.flatMap((e) =>
-        bboxesOverlap(bounds, e.bbox) ? crossings(a, b, e) : [],
-      ),
-    ]
-      .sort((a, b) => a - b)
-      .filter((u, i, all) => i === 0 || u - all[i - 1]! > EPS);
+    const cuts = segmentCuts(a, b, t);
     for (let j = 1; j < cuts.length; j++) {
       const start = cuts[j - 1]!,
         end = cuts[j]!;
@@ -221,9 +265,14 @@ function clipGeometry(geometry: Geometry, t: Territory): Geometry | undefined {
     }
     case 'Polygon':
     case 'MultiPolygon': {
-      if (!intersection(geometry.coordinates as Geom, t.void!.coordinates as Geom).length)
-        return geometry;
-      const coordinates = difference(geometry.coordinates as Geom, t.void!.coordinates as Geom);
+      const polygons = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+      const relations = polygons.map((p) => polygonRelation(p, t));
+      if (relations.every((r) => r === 'outside')) return geometry;
+      const partial = polygons.filter((_, i) => relations[i] === 'crossing');
+      const coordinates = [
+        ...polygons.filter((_, i) => relations[i] === 'outside'),
+        ...(partial.length ? difference(partial as Geom, t.void!.coordinates as Geom) : []),
+      ];
       return !coordinates.length
         ? undefined
         : coordinates.length === 1
@@ -269,8 +318,28 @@ export function removeVoid<F extends Feature>(feature: F, t: Territory): F | und
   return result;
 }
 
-export const geometryOutsideVoid = (geometry: Geometry, t: Territory) => {
+export const geometryOutsideVoid = (geometry: Geometry, t: Territory): boolean => {
   if (!t.void) return true;
-  const feature: Feature = { type: 'Feature', properties: {}, geometry };
-  return removeVoid(feature, t) === feature;
+  if (!mayMeetVoid(turfBbox(geometry) as BBox, t)) return true;
+  switch (geometry.type) {
+    case 'Point':
+      return !inVoid(geometry.coordinates, t);
+    case 'MultiPoint':
+      return geometry.coordinates.every((p) => !inVoid(p, t));
+    case 'LineString':
+      return (
+        geometry.coordinates.every((p) => !inVoid(p, t)) &&
+        !clipLine(geometry.coordinates, t).changed
+      );
+    case 'MultiLineString':
+      return geometry.coordinates.every((coordinates) =>
+        geometryOutsideVoid({ type: 'LineString', coordinates }, t),
+      );
+    case 'Polygon':
+      return polygonRelation(geometry.coordinates, t) === 'outside';
+    case 'MultiPolygon':
+      return geometry.coordinates.every((p) => polygonRelation(p, t) === 'outside');
+    case 'GeometryCollection':
+      return geometry.geometries.every((g) => geometryOutsideVoid(g, t));
+  }
 };

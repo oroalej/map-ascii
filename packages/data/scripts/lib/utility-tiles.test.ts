@@ -7,7 +7,7 @@ import { UtilityRecordSchema, type UtilityRecord, type UtilityPole } from '@atla
 import { auditUtilityArchive, buildUtilityTiles, openUtilityArchive } from './utility-tiles';
 import { tippecanoe } from './tippecanoe';
 import { step } from '../05-tiles';
-import type { StepContext } from '../step';
+import { files, type StepContext } from '../step';
 import { readJson } from './io';
 import { writeDetailLayouts } from './detail-layout';
 
@@ -255,7 +255,7 @@ it('excludes pipeline-only highway from base tiling while retaining it for utili
   } as unknown as StepContext;
   await writeDetailLayouts(context);
   await writeFile(
-    join(dir, 'territory.geojson'),
+    join(dir, files.territory),
     JSON.stringify({ regionBounds: [0, -0.005, 0.01, 0], territory: null, void: null }),
   );
   await step.run(context);

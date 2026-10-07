@@ -179,7 +179,7 @@ export function generateUtilities(
         reason: 'support-distance' | 'span-limit';
       }[],
     },
-    rejected: { blocked: 0, carriageway: 0, median: 0, bounds: 0, endpoint: 0 },
+    rejected: { blocked: 0, carriageway: 0, median: 0, bounds: 0, void: 0, endpoint: 0 },
   };
   const roads = features.filter(
     (f) => !f.properties.region && f.properties.class.startsWith('road_'),
@@ -256,7 +256,7 @@ export function generateUtilities(
     normal: XY,
   ): keyof typeof stats.rejected | undefined => {
     const geographic = projection.unproject(p);
-    if (territory && inVoid(geographic, territory)) return 'bounds';
+    if (territory && inVoid(geographic, territory)) return 'void';
     if (
       geographic[0] < bounds[0] ||
       geographic[0] > bounds[2] ||

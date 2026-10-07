@@ -449,6 +449,8 @@ it('admits utility supports after offsets and retains only spans wholly outside 
   };
   const legacy = generateUtilities([road], bounds);
   const admitted = generateUtilities([road], bounds, [], t);
+  expect(admitted.stats.rejected.void).toBeGreaterThan(0);
+  expect(admitted.stats.rejected.bounds).toBe(legacy.stats.rejected.bounds);
   expect(legacy.records.length).toBeGreaterThan(admitted.records.length);
   expect(admitted.records.length).toBeGreaterThan(0);
   const ids = new Set(admitted.records.flatMap((r) => (r.kind === 'pole' ? [r.pole.id] : [])));

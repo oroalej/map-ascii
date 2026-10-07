@@ -4,14 +4,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import { SiteDetail, OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
+import {
+  Procession,
+  SiteDetail,
+  OSM_ATTRIBUTION,
+  type City,
+  type CityArt,
+  type LngLat,
+} from '@atlas/shared';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTourCameras, checkTours, step as mergeContent } from './04-merge-content';
 import { buildMeta, tileRecords, step as tileStep } from './05-tiles';
 import { step as searchStep } from './06-search-index';
+import { step as processionStep } from './07-processions';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import {
   Territory,
@@ -119,6 +127,67 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('reports shortened routing before rejecting emitted procession geography', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-procession-warning-'));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const event = Procession.parse({
+      id: 'procession/short',
+      title: { en: 'Short' },
+      story: { en: 'Synthetic' },
+      status: 'draft',
+      kind: 'fluvial',
+      route: { to: 'osm:node/1', upstream_m: 200 },
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: 0,
+        start: '12:00',
+        duration_min: 60,
+        timezone: 'Etc/UTC',
+      },
+    });
+    try {
+      await writeFeatures(join(buildDir, files.merged), [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [0.001, 0],
+            ],
+          },
+          properties: { id: 'river', class: 'water_river' },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [0.001, 0] },
+          properties: { id: 'osm:node/1', class: 'poi' },
+        },
+      ]);
+      await writeJson(
+        join(buildDir, files.territory),
+        createTerritory(
+          [0, -0.0001, 0.001, 0.0001],
+          bboxPolygon([0.0005, -0.0001, 0.001, 0.0001]),
+          [0.0008, -0.0001, 0.001, 0.0001],
+        ),
+      );
+      await expect(
+        processionStep.run({
+          ...ctx,
+          buildDir,
+          outDir: join(buildDir, 'out'),
+          content: { ...content, processions: [event] },
+        }),
+      ).rejects.toThrow('emitted geography crosses the territory void');
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('warning:'));
+    } finally {
+      warning.mockRestore();
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
   it('checks tour cameras before enrichment and selections after generated survivors', async () => {
     const buildDir = await mkdtemp(join(tmpdir(), 'atlas-tour-territory-'));
     const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
@@ -560,9 +629,13 @@ describe('pipeline (02–04) on the fixture extract', () => {
         step({ lat: 5, lng: 0.005 }, { highlight: ['osm:way/104', 'osm:way/999999'] }),
       ],
     };
-    expect(checkTourCameras([tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
-      'tour/fixture step 2: camera 5, 0.005 is outside the region',
-    ]);
+    expect(
+      checkTourCameras([tour], {
+        regionBounds: [-0.1, -0.1, 0.1, 0.1],
+        territory: null,
+        void: null,
+      }),
+    ).toEqual(['tour/fixture step 2: camera 5, 0.005 is outside the region']);
     expect(checkTours(features, [tour])).toEqual([
       'tour/fixture step 2: osm:way/999999 is not in the data',
     ]);
