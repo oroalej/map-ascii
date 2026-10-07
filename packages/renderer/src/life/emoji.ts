@@ -520,6 +520,7 @@ export class EmojiObserver {
     for (const o of observations) {
       const existing = this.memory.get(o.owner);
       if (!o.eligible && !existing) continue;
+      // A bird's first track seeds only the observer RNG, never the physical bird stream.
       const t = existing ?? this.memory.track(o.owner, this.epoch, this.rng, this.ownerRng);
       t.eligible = o.eligible;
       t.speaking = o.speaking;

@@ -1,3 +1,5 @@
+import { MAX_STEP_S } from './config';
+
 /** A temporarily independent bird, in tile units, retaining its cruising velocity. */
 export type BirdFlight = {
   x: number;
@@ -20,13 +22,15 @@ export type BirdFlightStep = {
   targetX: number;
   targetY: number;
   speed: number;
+  /** Resting slots permit arrival braking; moving formations still need full catch-up speed. */
+  resting?: boolean;
   pointer?: { x: number; y: number; reach: number };
 };
 
 /** Room to turn from a head-on approach without an instantaneous heading change. */
-export function birdFlightMargin(speed: number, dt: number, settings: BirdFlightSettings) {
+export function birdFlightMargin(speed: number, settings: BirdFlightSettings) {
   const fastest = speed * settings.flee * 1.15;
-  return (2 * fastest) / settings.turn + fastest * dt;
+  return (2 * fastest) / settings.turn + fastest * MAX_STEP_S;
 }
 
 /** Advance one bird with bounded acceleration and turning; true when it rejoins its slot. */
@@ -47,7 +51,7 @@ export function stepBirdFlight(
     const dx = bird.x - step.pointer.x;
     const dy = bird.y - step.pointer.y;
     const distance = Math.hypot(dx, dy);
-    const safe = step.pointer.reach + birdFlightMargin(step.speed, step.dt, settings);
+    const safe = step.pointer.reach + birdFlightMargin(step.speed, settings);
     fleeing = distance < safe;
     if (!fleeing && targetDistance > 0) {
       const along = Math.max(
@@ -76,12 +80,16 @@ export function stepBirdFlight(
       }
     }
   }
-  const desiredSpeed = step.speed * (fleeing ? settings.flee : settings.regroup) * variation;
+  let desiredSpeed = step.speed * (fleeing ? settings.flee : settings.regroup) * variation;
+  if (step.resting && !fleeing && !blocked)
+    // Shrink the turning circle as the bird approaches its perch or ground slot.
+    desiredSpeed = Math.min(desiredSpeed, targetDistance * settings.turn * 0.5 * variation);
   const acceleration = step.speed * settings.accelerate * (0.75 + bird.phase * 0.5) * step.dt;
   const speed =
     bird.speed + Math.max(-acceleration, Math.min(acceleration, desiredSpeed - bird.speed));
   const distance = ((bird.speed + speed) / 2) * step.dt;
-  if (!fleeing && !blocked && targetDistance <= distance) {
+  const capture = step.resting ? Math.max(distance, step.speed * step.dt) : distance;
+  if (!fleeing && !blocked && targetDistance <= capture) {
     bird.x = step.targetX;
     bird.y = step.targetY;
     return true;

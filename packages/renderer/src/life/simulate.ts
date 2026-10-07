@@ -5351,7 +5351,7 @@ export class TileLife {
     for (const flock of this.birdEmojiOwners) {
       const spec = BIRD_SPECIES[flock.species];
       const share = levels ? (spec.nocturnal ? levels.night : levels.bird) : 1;
-      const admitted = this.flocks.includes(flock) && eligible(flock) && flock.rank < share * crowd;
+      const admitted = eligible(flock) && flock.rank < share * crowd;
       this.emojiInput(flock, 'bird', admitted);
     }
     return observations;
@@ -7304,7 +7304,7 @@ export class TileLife {
     const spec = BIRD_SPECIES[flock.species];
     const speed = spec.speed * this.perMeter * 1.4;
     const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
-    const margin = birdFlightMargin(speed, this.birdFlightStep.dt, BIRD_FLIGHT);
+    const margin = birdFlightMargin(speed, BIRD_FLIGHT);
     const bound = this.flockBound(flock);
     const bounds = flock.flightBounds;
     if (
@@ -7344,6 +7344,7 @@ export class TileLife {
     const step = this.birdFlightStep;
     const spec = BIRD_SPECIES[flock.species];
     step.speed = spec.speed * this.perMeter * 1.4;
+    step.resting = flock.perched || flock.landed;
     if (pointer) {
       step.pointer = this.birdFlightPointer;
       step.pointer.x = pointer.x;
@@ -7436,7 +7437,7 @@ export class TileLife {
     const reach = Math.max(spec.wary, BIRD_POINTER.cells * pointer.cellMeters) * this.perMeter;
     const margin =
       flock.flightBounds && !target
-        ? birdFlightMargin(spec.speed * this.perMeter * 1.4, this.birdFlightStep.dt, BIRD_FLIGHT)
+        ? birdFlightMargin(spec.speed * this.perMeter * 1.4, BIRD_FLIGHT)
         : 0;
     const bound = this.flockBound(flock);
     const distance2 = (flock.x - pointer.x) ** 2 + (flock.y - pointer.y) ** 2;

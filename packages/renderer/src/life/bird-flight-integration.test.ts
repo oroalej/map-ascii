@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BirdPose, BIRD_SPECIES } from './birds';
 import { BIRD_FLIGHT, BIRD_POINTER } from './config';
+import { birdFlightMargin } from './bird-flight';
 import { birdFixture, birdLngLat, birdPerMeter, birdPoint, birdTile } from './testing/bird-fixture';
 import { lngLatToTile } from '../raster/geometry';
 import { completeScenarioState } from './testing/scenarios';
@@ -16,6 +17,17 @@ const positions = (f: ReturnType<typeof flying>) =>
   f.visible().map((v) => lngLatToTile(birdTile, v.lng, v.lat));
 
 describe('airborne pointer escape in the world', () => {
+  it.each([30, 60, 120])('uses the same breakoff boundary at %s Hz', (rate) => {
+    for (const inside of [true, false]) {
+      const f = birdFixture('swallow', { roost: false });
+      Object.assign(f.flock, birdPoint(0, 0));
+      Object.assign(f.flock.birds[0]!, { ox: 0, oy: 0 });
+      const reach = Math.max(BIRD_SPECIES.swallow.wary, BIRD_POINTER.cells * f.cellMeters(19));
+      const margin = birdFlightMargin(BIRD_SPECIES.swallow.speed * 1.4, BIRD_FLIGHT);
+      f.step(birdLngLat(reach + margin + (inside ? -0.01 : 0.01), 0), 1 / rate);
+      expect(f.flock.birds[0]!.flight !== undefined).toBe(inside);
+    }
+  });
   it('replaces the shared shove with continuous individual flight paths', () => {
     const f = flying();
     const before = positions(f);
@@ -54,6 +66,25 @@ describe('airborne pointer escape in the world', () => {
     expect(f.flock.flightBounds).toBeUndefined();
     expect(f.flock.birds.every((b) => b.flight === undefined)).toBe(true);
     f.flock.birds.forEach((b, i) => expect(b).toBe(identities[i]));
+  });
+
+  it('clears every independent flight after a perch flush and rain shelter', () => {
+    const f = birdFixture('pigeon', { roost: false });
+    Object.assign(f.flock, birdPoint(50, 0), { perch: 0, perched: true });
+    const first = f.flock.birds[0]!;
+    f.flock.birds = Array.from({ length: 6 }, (_, i) => ({
+      ...first,
+      ox: 3 * birdPerMeter * Math.cos(i),
+      oy: 3 * birdPerMeter * Math.sin(i),
+      phase: i / 6,
+    }));
+    for (let frame = 0; frame < 60; frame++) f.step(birdLngLat(49, 0), 1 / 60);
+    expect(f.flock.flightBounds).toBeDefined();
+    for (let frame = 0; frame < 30 * 60 && (!f.flock.perched || f.flock.flightBounds); frame++)
+      f.step(undefined, 1 / 60, 19, { rain: 1 });
+    expect(f.flock.perched).toBe(true);
+    expect(f.flock.birds.every((bird) => bird.flight === undefined)).toBe(true);
+    expect(f.flock.flightBounds).toBeUndefined();
   });
 
   it('freezes individual flights while the tile is retired, and resumes them on revival', () => {

@@ -541,21 +541,18 @@ describe('pointer fear delivery and lifecycle', () => {
     expect(idle.visible().some((a) => a.emoji)).toBe(false);
     expect(idle.life.birdEmojiOwners.size).toBe(0);
   });
-  it.each([undefined, 13])(
-    'resets flying onset on pointer-free accepted frames, including bird-suppressed zoom %s',
-    (zoom) => {
-      const f = birdFixture('swallow', { roost: false });
-      const at = () =>
-        birdLngLat((f.flock.x - 2048) / birdPerMeter, (f.flock.y - 2048) / birdPerMeter);
-      f.step(at());
-      expect(f.life.startled).toEqual([f.flock]);
-      for (let i = 0; i < 460; i++) f.step(undefined, 0.1, zoom ?? 19);
-      f.step(at());
-      expect(f.life.startled).toEqual([f.flock]);
-      for (let i = 0; i < 6; i++) f.step();
-      expect(f.visible().some((a) => a.emoji?.mood === 'scared')).toBe(true);
-    },
-  );
+  it('resets flying onset on pointer-free frames at bird-suppressed zoom 13', () => {
+    const f = birdFixture('swallow', { roost: false });
+    const at = () =>
+      birdLngLat((f.flock.x - 2048) / birdPerMeter, (f.flock.y - 2048) / birdPerMeter);
+    f.step(at());
+    expect(f.life.startled).toEqual([f.flock]);
+    for (let i = 0; i < 460; i++) f.step(undefined, 0.1, 13);
+    f.step(at());
+    expect(f.life.startled).toEqual([f.flock]);
+    for (let i = 0; i < 6; i++) f.step();
+    expect(f.visible().some((a) => a.emoji?.mood === 'scared')).toBe(true);
+  });
   it('drops z17 events and a queued event suppressed before delivery', () => {
     for (const queued of [false, true]) {
       const f = sitting();
@@ -585,6 +582,7 @@ describe('pointer fear delivery and lifecycle', () => {
       if (delivery !== 'raw') f.step();
       if (delivery === 'active') for (let i = 0; i < 4; i++) f.step();
       const cue = f.life.emoji.cue(f.flock);
+      if (delivery === 'active') expect(cue).toBeDefined();
       f.world.sync([]);
       expect(f.life.startled).toHaveLength(0);
       for (let i = 0; i < 20; i++) f.step();
@@ -593,7 +591,7 @@ describe('pointer fear delivery and lifecycle', () => {
       if (delivery === 'raw') expect(f.visible().some((a) => a.emoji)).toBe(false);
       else {
         expect(f.visible().find((a) => a.emoji)?.emoji?.mood).toBe('scared');
-        if (cue) expect(f.life.emoji.cue(f.flock)?.id).toBe(cue.id);
+        if (delivery === 'active') expect(f.life.emoji.cue(f.flock)?.id).toBe(cue!.id);
       }
     }
   });

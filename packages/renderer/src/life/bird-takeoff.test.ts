@@ -110,15 +110,12 @@ describe('individual pointer takeoffs', () => {
     },
   );
 
-  it('bounds the longest individual takeoff below one second', () => {
+  it.each([true, false])('finishes takeoff within one second (keep pointer=%s)', (keep) => {
     expect(BIRD_TAKEOFF.stagger + BIRD_TAKEOFF.seconds[1]).toBeLessThan(1);
-  });
-
-  it.each([true, false])('finishes takeoff after mouse departure (keep pointer=%s)', (keep) => {
     const f = sitting();
     const pointer = birdLngLat(50, 0);
     f.step(pointer, 1 / 60);
-    for (let i = 0; i < 120; i++) f.step(keep ? pointer : undefined, 1 / 60);
+    for (let i = 0; i < 59; i++) f.step(keep ? pointer : undefined, 1 / 60);
     expect(f.flock.takeoff).toBeUndefined();
     expect(f.flock.birds.every((bird) => bird.takeoff === undefined)).toBe(true);
     expect(f.visible().every((view) => view.bird?.pose !== BirdPose.perched)).toBe(true);
