@@ -79,6 +79,7 @@ import {
   PERCH,
   DEFAULT_ROAD_WIDTH_M,
   FOLLOW,
+  DRIVE,
   frontClearance,
   LANE_WIDTH_M,
   TERMINAL,
@@ -161,6 +162,7 @@ import { CAT_PAINTS } from './cats';
 import { LocalScenes, type YieldHooks } from './interactions';
 import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { runPace } from './running';
+import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
@@ -481,6 +483,8 @@ export type Mover = {
   lying?: boolean;
   /** People: seconds left of a run (config.ts `RUN`). */
   run?: number;
+  /** Road vehicles: seconds left of a dry-weather burst (config.ts `DRIVE`). */
+  rush?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
   /** Position and heading (a unit vector), in tile units. */
@@ -883,6 +887,7 @@ export class TileLife {
   scenes!: LocalScenes;
   private readonly catRng: () => number;
   private readonly runRng: () => number;
+  private readonly rushRng: () => number;
   readonly movers: Mover[] = [];
   /** Inert seeds: never stepped, drawn, colliding, visiting sites or donating. */
   readonly pending: PendingSeed[] = [];
@@ -1080,6 +1085,12 @@ export class TileLife {
     m.entered = preview.entered;
     m.junctionRoute = preview.junctionRoute;
     m.waiting = preview.waiting;
+    m.rush = preview.rush;
+    if (
+      (m.rush ?? 0) > 0 &&
+      [...this.residentMovers()].some((resident) => (resident.rush ?? 0) > 0)
+    )
+      m.rush = 0;
     m.crossingWait = preview.crossingWait;
     m.routing = preview.routing;
     m.train = preview.train;
@@ -1312,6 +1323,7 @@ export class TileLife {
     this.dogRng = random(seed ^ 0xd3a2646c);
     this.catRng = random(seed ^ 0x68e31da4);
     this.runRng = random(seed ^ 0xcc9e2d51);
+    this.rushRng = random(seed ^ 0x5a17d3e9);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
@@ -1958,6 +1970,8 @@ export class TileLife {
   }
 
   private corner(m: Mover, vertex: number, identity = m): Curve | undefined {
+    // A recovery trial can advance onto another line before rechecking its old corner.
+    if (vertex < this.first(m.line) || vertex > this.last(m.line)) return;
     let incoming = vertex - m.dir,
       outgoing = vertex + m.dir;
     let inLine = m.line,
@@ -2238,21 +2252,29 @@ export class TileLife {
     m.curveCorner = undefined;
   }
 
+  private cruise(m: Mover): number {
+    return cruise(m, this.scenes.raining);
+  }
+
   private curveTarget(m: Mover): number {
-    if (!this.curvable[m.line]) return m.speed;
+    const speed = this.cruise(m);
+    if (!this.curvable[m.line]) return speed;
     if (
       this.last(m.line) - this.first(m.line) === 1 &&
       m.came === undefined &&
       m.routing?.plan === undefined &&
       m.next === undefined
     )
-      return m.speed;
+      return speed;
     const k = kinematicsOf(m.vehicle),
-      pm = this.perMeter;
-    let target = m.speed;
+      pm = this.perMeter,
+      lateral =
+        k.lateral *
+        (this.scenes.raining && m.kind === 'vehicle' && m.vehicle ? DRIVE.rain.lateral : 1);
+    let target = speed;
     const behind = this.corner(m, m.from);
     if (behind && m.d <= behind.after)
-      target = Math.min(target, Math.sqrt(k.lateral * pm * behind.radius));
+      target = Math.min(target, Math.sqrt(lateral * pm * behind.radius));
     let distance = -m.d;
     let v = m.from;
     const end = m.dir === 1 ? this.last(m.line) : this.first(m.line);
@@ -2264,7 +2286,7 @@ export class TileLife {
       if (curve)
         target = Math.min(
           target,
-          approach(distance - curve.before, Math.sqrt(k.lateral * pm * curve.radius), k.brake * pm),
+          approach(distance - curve.before, Math.sqrt(lateral * pm * curve.radius), k.brake * pm),
         );
     }
     return target;
@@ -4828,12 +4850,12 @@ export class TileLife {
     const { movers, perMeter: pm, speeds, caps, progress, offsets } = this;
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]!;
-      speeds[i] = m.speed;
+      speeds[i] = this.cruise(m);
       caps[i] = Infinity;
       const room =
         m.kind === 'vehicle' && this.geo.oneway?.[m.line] ? this.oneWayEndRoom(m) : undefined;
       if (room !== undefined) {
-        speeds[i] = Math.min(m.speed, approach(room, 0, kinematicsOf(m.vehicle).brake * pm));
+        speeds[i] = Math.min(speeds[i]!, approach(room, 0, kinematicsOf(m.vehicle).brake * pm));
         caps[i] = room / dt;
       }
     }
@@ -4863,13 +4885,18 @@ export class TileLife {
       }
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
       if (room < 0.5 * pm) diagnostics?.following(m, leader);
-      const target = Math.min(speeds[i]!, room / FOLLOW.headway);
+      const wetRoad = this.scenes.raining && m.kind === 'vehicle' && !!m.vehicle;
+      const targetRoom = Math.max(0, gap - (wetRoad ? DRIVE.rain.gap : FOLLOW.minGap)) * pm;
+      const target = Math.min(
+        speeds[i]!,
+        targetRoom / (wetRoad ? DRIVE.rain.headway : FOLLOW.headway),
+      );
       const lead = this.inspected === leader ? 0 : (leader.v ?? leader.speed);
       // Comfortable braking cannot lower a target already below the lead speed.
       speeds[i] =
         target <= Math.abs(lead)
           ? target
-          : Math.min(target, approach(room, lead, kinematicsOf(m.vehicle).brake * pm));
+          : Math.min(target, approach(targetRoom, lead, kinematicsOf(m.vehicle).brake * pm));
       caps[i] = Math.min(caps[i]!, room / dt);
     };
     const curbScenes =
@@ -5112,7 +5139,10 @@ export class TileLife {
     ) {
       const origin = (trial.origin ??= this.pose(before, undefined, m)),
         pose = this.pose(m);
-      if (Math.hypot(pose.x - origin.x, pose.y - origin.y) > m.speed * dt + 1e-8 * this.perMeter)
+      if (
+        Math.hypot(pose.x - origin.x, pose.y - origin.y) >
+        Math.max(distance, m.speed * dt) + 1e-8 * this.perMeter
+      )
         return false;
     }
     return fitsGround(m, before, undefined, rejected);
@@ -5233,6 +5263,7 @@ export class TileLife {
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
+    let rushing = this.reconcileRush();
     if (!pass) this.prepareLocalTraffic(table, clock, shows, near, env);
     const speeds = this.followLimits(dt, table, env?.diagnostics);
     if (guard) this.terminalLimits(speeds);
@@ -5474,6 +5505,13 @@ export class TileLife {
 
         if (m.v === undefined && (guard || pedestrianTarget || this.scenes.hasCurbScenes))
           m.v = Math.min(m.speed, speeds[i]!, this.caps[i]!);
+        if (m.kind === 'vehicle') {
+          const was = (m.rush ?? 0) > 0;
+          this.rushTick(m, dt, rushing < DRIVE.rush.maxPerTile);
+          rushing += Number((m.rush ?? 0) > 0) - Number(was);
+          // New starts keep this step's traffic limits; expiry eases back immediately.
+          if (was && (m.rush ?? 0) <= 0) speeds[i] = Math.min(speeds[i]!, this.cruise(m));
+        }
         const next = nextSpeed(
           m.v ?? m.speed,
           speeds[i]!,
@@ -6404,6 +6442,40 @@ export class TileLife {
     m.d = this.segment(m.from, to) - m.d;
     m.from = to;
     m.dir = m.dir === 1 ? -1 : 1;
+  }
+
+  /** Frozen and seasonally hidden residents retain a burst slot until it ends. */
+  private reconcileRush(): number {
+    let count = 0;
+    for (const m of this.residentMovers()) {
+      if ((m.rush ?? 0) <= 0) continue;
+      if (
+        this.scenes.raining ||
+        m.kind !== 'vehicle' ||
+        !DRIVE.rush.kinds.some((kind) => kind === m.vehicle) ||
+        this.scenes.visits.has(m) ||
+        this.scenes.services.has(m) ||
+        count >= DRIVE.rush.maxPerTile
+      )
+        m.rush = 0;
+      else count++;
+    }
+    return count;
+  }
+
+  /** Own random stream: admissions never perturb population, appearance or routing seeds. */
+  private rushTick(m: Mover, dt: number, room: boolean) {
+    if (this.scenes.raining || this.scenes.visits.has(m) || this.scenes.services.has(m)) {
+      if (m.rush) m.rush = 0;
+    } else if ((m.rush ?? 0) > 0) {
+      m.rush = (m.waiting ?? 0) > 0 ? 0 : Math.max(0, m.rush! - dt);
+    } else if (
+      room &&
+      (m.waiting ?? 0) <= 0 &&
+      DRIVE.rush.kinds.some((kind) => kind === m.vehicle) &&
+      this.rushRng() < DRIVE.rush.chance * dt
+    )
+      m.rush = between(this.rushRng, DRIVE.rush.seconds);
   }
 
   /** Cancel a live run, reporting whether it occupied a running slot. */
