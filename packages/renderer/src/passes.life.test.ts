@@ -109,82 +109,88 @@ it('uploads crowd-only masks, reuses a held frame, clears owned words and disabl
   expect(uploadLife).toHaveBeenCalled();
 });
 
-it('resumes bounded crowd construction while an accepted worker frame remains held', () => {
-  vi.clearAllMocks();
-  vi.mocked(packLife).mockImplementation(
-    (_out, _grid, _agents, _theme, _glyph, _sun, _glyphs, metadata) =>
-      metadata?.throng?.cells.length ?? 0,
-  );
-  const view: View = {
-    camera: { lng: 0, lat: 0, zoom: 16 },
-    dpr: 1,
-    cellDev: { w: 10, h: 18 },
-    labelDev: { w: 10, h: 18 },
-    width: 160,
-    height: 288,
-    detailZoom: 16,
-  };
-  const targets = { cols: 16, rows: 16 } as CellTargets;
-  const event = {
-    id: 'mass',
-    kind: 'mass' as const,
-    title: { en: 'Mass' },
-    status: 'draft' as const,
-    schedule: {
-      month: 9,
-      weekday: 6,
-      nth: 3,
-      offset_days: 0,
-      start: '12:00',
-      duration_min: 60,
-      timezone: 'Asia/Manila',
-    },
-    site: {
-      id: 'osm:way/2',
-      location: [0, 0] as [number, number],
-      anchor: [0, 0] as [number, number],
-      radius_m: 500,
-      grounds: [
-        [
-          [-0.01, -0.01],
-          [0.01, -0.01],
-          [0.01, 0.01],
-          [-0.01, 0.01],
-          [-0.01, -0.01],
-        ],
-      ] as [number, number][][],
-      blocked: [],
-      approaches: [],
-      roads: [],
-    },
-  };
-  const args: Parameters<typeof lifePass> = [
-    {} as GL,
-    targets,
-    { map: { atlas: { index: () => 1 } } } as unknown as ThemeResources,
-    themes.dark,
-    view,
-    placeGrid(view, view.cellDev, 16, 16),
-    [],
-    null,
-    undefined,
-    undefined,
-    undefined,
-    {},
-    undefined,
-    undefined,
-    { event, progress: 0.5, quality: 1 },
-  ];
-  lifePass(...args);
-  expect(lifeRaster(targets)!.crowdPending).toBe(true);
-  const first = lifeRaster(targets)!.revision;
-  lifePass(...args);
-  expect(lifeRaster(targets)!.revision).toBe(first + 1);
-  while (lifeRaster(targets)!.crowdPending) lifePass(...args);
-  const complete = lifeRaster(targets)!.revision;
-  lifePass(...args);
-  expect(lifeRaster(targets)!.revision).toBe(complete);
-});
+it.each(['geography', 'ink'] as const)(
+  'resumes bounded crowd %s construction while an accepted worker frame remains held',
+  (phase) => {
+    vi.clearAllMocks();
+    let inkFrames = 3;
+    vi.mocked(packLife).mockImplementation(
+      (_out, _grid, _agents, _theme, _glyph, _sun, _glyphs, metadata) => {
+        if (metadata?.throng && phase === 'ink') metadata.throng.stampPending = inkFrames-- > 0;
+        return metadata?.throng?.cells.length ?? 0;
+      },
+    );
+    const view: View = {
+      camera: { lng: 0, lat: 0, zoom: phase === 'geography' ? 16 : 19 },
+      dpr: 1,
+      cellDev: { w: 10, h: 18 },
+      labelDev: { w: 10, h: 18 },
+      width: 160,
+      height: 288,
+      detailZoom: 16,
+    };
+    const targets = { cols: 16, rows: 16 } as CellTargets;
+    const event = {
+      id: 'mass',
+      kind: 'mass' as const,
+      title: { en: 'Mass' },
+      status: 'draft' as const,
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: 0,
+        start: '12:00',
+        duration_min: 60,
+        timezone: 'Asia/Manila',
+      },
+      site: {
+        id: 'osm:way/2',
+        location: [0, 0] as [number, number],
+        anchor: [0, 0] as [number, number],
+        radius_m: 500,
+        grounds: [
+          [
+            [-0.01, -0.01],
+            [0.01, -0.01],
+            [0.01, 0.01],
+            [-0.01, 0.01],
+            [-0.01, -0.01],
+          ],
+        ] as [number, number][][],
+        blocked: [],
+        approaches: [],
+        roads: [],
+      },
+    };
+    const args: Parameters<typeof lifePass> = [
+      {} as GL,
+      targets,
+      { map: { atlas: { index: () => 1 } } } as unknown as ThemeResources,
+      themes.dark,
+      view,
+      placeGrid(view, view.cellDev, 16, 16),
+      [],
+      null,
+      undefined,
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      { event, progress: 0.5, quality: 1 },
+    ];
+    lifePass(...args);
+    expect(lifeRaster(targets)!.crowdPending).toBe(true);
+    const first = lifeRaster(targets)!.revision;
+    lifePass(...args);
+    expect(lifeRaster(targets)!.revision).toBe(first + 1);
+    while (lifeRaster(targets)!.crowdPending) lifePass(...args);
+    const complete = lifeRaster(targets)!.revision;
+    lifePass(...args);
+    expect(lifeRaster(targets)!.revision).toBe(complete);
+  },
+);
 
 it('reuses held uploads, invalidates packing inputs, and clears the raster when Life stops', () => {
   vi.mocked(packLife).mockImplementation(

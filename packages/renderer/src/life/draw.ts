@@ -68,7 +68,11 @@ export type LifeGrid = {
   /** A point's position on the grid, in fractional cells (passes.ts `GridPlacement.toCell`). */
   toCell: (lng: number, lat: number) => [number, number];
   /** Reject a complete ground agent when any of its ASCII cells crosses forbidden terrain. */
-  allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
+  allowsGroundCell?: ((agent: VisibleAgent, col: number, row: number) => boolean) & {
+    /** Immutable geographic terrain identities, when supplied by a paired life frame. */
+    terrainKey?: object;
+    hardTerrainKey?: object;
+  };
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
@@ -605,6 +609,7 @@ export function packLife(
 }
 
 /** Whole-footprint admission and final texel budget, with no simulated owner. */
+export const MAX_COLD_THRONG_STAMPS = 128;
 function packThrong(
   out: Uint8Array,
   grid: LifeGrid,
@@ -622,6 +627,8 @@ function packThrong(
   drawingFocus = 0;
   drawingClockCells = undefined;
   const reusable = crowdJournal;
+  let prepared = 0;
+  payload.stampPending = false;
   for (const cell of payload.cells) {
     reusable.before.clear();
     reusable.denied = false;
@@ -630,7 +637,168 @@ function packThrong(
     reusable.members = undefined;
     crowdRollbackSize = 0;
     journal = reusable;
-    const n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
+    const stamp = cell.stamp;
+    let n: number;
+    if (
+      stamp &&
+      ((stamp.cells && stamp.bytes) || stamp.single) &&
+      stamp.theme === theme &&
+      stamp.glyphs === glyphs &&
+      stamp.cellWidth === grid.cellWidth &&
+      stamp.cellHeight === grid.cellHeight &&
+      stamp.paint === cell.agent.paint &&
+      (!stamp.viewport ||
+        (stamp.viewport[0] === grid.cols &&
+          stamp.viewport[1] === grid.rows &&
+          stamp.viewport[2] === cell.col &&
+          stamp.viewport[3] === cell.row))
+    ) {
+      if (!stamp.complete) continue;
+      const guard = grid.allowsGroundCell;
+      const terrain = guard?.terrainKey ?? guard,
+        hardTerrain = guard?.hardTerrainKey ?? guard;
+      if (stamp.single) {
+        const [dc, dr, ink] = stamp.single;
+        const col = cell.col + dc,
+          row = cell.row + dr;
+        if (
+          col < 0 ||
+          row < 0 ||
+          col >= grid.cols ||
+          row >= grid.rows ||
+          groundCells[row * grid.cols + col]
+        )
+          continue;
+        if (
+          (guard && !guard.terrainKey) ||
+          stamp.permitted === undefined ||
+          stamp.terrain !== terrain ||
+          stamp.hardTerrain !== hardTerrain
+        ) {
+          stamp.permitted = !guard || guard(cell.agent, col, row);
+          stamp.terrain = terrain;
+          stamp.hardTerrain = hardTerrain;
+        }
+        if (!stamp.permitted) continue;
+        if (used + 1 > payload.cap) break;
+        used++;
+        drawn++;
+        const at = (row * grid.cols + col) * 4;
+        for (let b = 0; b < 4; b++) out[at + b] = (ink >>> (b * 8)) & 255;
+        if (drawingOwners) drawingOwners[at / 4] = 0;
+        groundCells[at / 4] = 1;
+        metadata.throngMask?.set(FULL_CROWD_MASK, at * 2);
+        metadata.throngCells?.push(at / 4);
+        continue;
+      }
+      const cells = stamp.cells!,
+        bytes = stamp.bytes!;
+      if (
+        (guard && !guard.terrainKey) ||
+        stamp.permitted === undefined ||
+        stamp.terrain !== terrain ||
+        stamp.hardTerrain !== hardTerrain
+      ) {
+        let permitted = true;
+        for (let i = 0; i < cells.length; i += 2) {
+          if (guard && !guard(cell.agent, cell.col + cells[i]!, cell.row + cells[i + 1]!)) {
+            permitted = false;
+            break;
+          }
+        }
+        stamp.terrain = terrain;
+        stamp.hardTerrain = hardTerrain;
+        stamp.permitted = permitted;
+      }
+      if (!stamp.permitted) continue;
+      let denied = false;
+      for (let i = 0; i < cells.length; i += 2) {
+        const col = cell.col + cells[i]!,
+          row = cell.row + cells[i + 1]!;
+        if (
+          col < 0 ||
+          row < 0 ||
+          col >= grid.cols ||
+          row >= grid.rows ||
+          groundCells[row * grid.cols + col]
+        ) {
+          denied = true;
+          break;
+        }
+      }
+      if (denied) continue;
+      if (used + cells.length / 2 > payload.cap) break;
+      used += cells.length / 2;
+      drawn++;
+      for (let i = 0; i < cells.length; i += 2) {
+        const col = cell.col + cells[i]!,
+          row = cell.row + cells[i + 1]!;
+        const at = (row * grid.cols + col) * 4;
+        for (let b = 0; b < 4; b++) out[at + b] = bytes[i * 2 + b]!;
+        if (drawingOwners) drawingOwners[at / 4] = 0;
+        groundCells[at / 4] = 1;
+        metadata.throngMask?.set(FULL_CROWD_MASK, at * 2);
+        metadata.throngCells?.push(at / 4);
+      }
+      continue;
+    } else {
+      if (stamp && prepared >= MAX_COLD_THRONG_STAMPS) {
+        payload.stampPending = true;
+        continue;
+      }
+      if (stamp) prepared++;
+      n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
+      // Interior ink survives integer pans; clipped ink belongs to this viewport only.
+      // Remember incomplete/empty shapes too, so edge candidates cannot starve preparation.
+      if (stamp && cell.agent.ahead && cell.agent.side) {
+        const centre = grid.toCell(cell.agent.lng, cell.agent.lat),
+          ahead = grid.toCell(...cell.agent.ahead),
+          side = grid.toCell(...cell.agent.side);
+        const extent = Math.max(
+          2,
+          Math.abs(ahead[0] - centre[0]) + Math.abs(side[0] - centre[0]),
+          Math.abs(ahead[1] - centre[1]) + Math.abs(side[1] - centre[1]),
+        );
+        const interior =
+          centre[0] > extent &&
+          centre[1] > extent &&
+          centre[0] < grid.cols - extent &&
+          centre[1] < grid.rows - extent;
+        const singleCell = reusable.before.size === 1;
+        let single: readonly [number, number, number] | undefined;
+        const cells = singleCell ? undefined : new Int32Array(reusable.before.size * 2),
+          bytes = singleCell ? undefined : new Uint8Array(reusable.before.size * 4);
+        let slot = 0;
+        for (const at of reusable.before.keys()) {
+          const dc = ((at / 4) % grid.cols) - cell.col,
+            dr = Math.floor(at / 4 / grid.cols) - cell.row;
+          if (singleCell)
+            single = [
+              dc,
+              dr,
+              out[at]! | (out[at + 1]! << 8) | (out[at + 2]! << 16) | (out[at + 3]! << 24),
+            ];
+          else {
+            cells![slot * 2] = dc;
+            cells![slot * 2 + 1] = dr;
+            bytes!.set(out.subarray(at, at + 4), slot++ * 4);
+          }
+        }
+        Object.assign(stamp, {
+          theme,
+          glyphs,
+          cellWidth: grid.cellWidth,
+          cellHeight: grid.cellHeight,
+          paint: cell.agent.paint,
+          cells,
+          bytes,
+          single,
+          permitted: undefined,
+          complete: !!n && !reusable.incomplete,
+          viewport: interior ? undefined : [grid.cols, grid.rows, cell.col, cell.row],
+        });
+      }
+    }
     const attempt = journal;
     if (!cell.mask && grid.allowsGroundCell)
       for (const at of attempt.before.keys())

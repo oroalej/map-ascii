@@ -24,6 +24,7 @@ import { worldTiles } from './testing/scenarios';
 import { createInlineHost } from './host';
 import { createLifeWorkerApi } from './worker-api';
 import { makeCellGuard } from './cell-guard';
+import { CrowdMaskRaster } from './crowd-mask';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';
 import { buildLifeGlyphs, packLife } from './draw';
 import { mapGlyphs, themes } from '../theme';
@@ -439,7 +440,7 @@ describe('street event simulation', () => {
     expect(w.visible(18, 1, center).some((a) => eventActor(a))).toBe(true);
   });
   it('caches cell permissions separately for each ground and cell', () => {
-    const permission = vi.spyOn(groundEvents, 'eventGroundAllows');
+    const permission = vi.spyOn(CrowdMaskRaster.prototype, 'mask');
     try {
       const ground = groundForRoute(street);
       const denied = { regions: ground.regions, blocked: ground.regions };

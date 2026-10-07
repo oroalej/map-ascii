@@ -18,14 +18,39 @@ import { figureFit } from './people';
 export const MAX_THRONG_CELLS = 16000;
 /** At most this many 256-subcell classifications run in one animation frame. */
 export const MAX_COLD_THRONG_CELLS = 8;
+/** Detailed cells need one classification, rather than 256 subcell classifications. */
+export const MAX_COLD_FINE_THRONG_CELLS = 128;
 export type ThrongCell = {
   col: number;
   row: number;
   agent: VisibleAgent;
   mask?: Uint32Array;
   hash: number;
+  stamp?: ThrongStampCache;
 };
-export type ThrongPayload = { cells: ThrongCell[]; cap: number; pending?: boolean };
+/** A world-anchored figure's ink; dynamic occupancy is checked when it is copied. */
+export type ThrongStampCache = {
+  theme?: object;
+  glyphs?: object;
+  cellWidth?: number;
+  cellHeight?: number;
+  paint?: number;
+  cells?: Int32Array;
+  bytes?: Uint8Array;
+  /** Most street-level figures occupy one texel: avoid two tiny typed allocations each. */
+  single?: readonly [number, number, number];
+  terrain?: object;
+  hardTerrain?: object;
+  permitted?: boolean;
+  complete?: boolean;
+  viewport?: readonly [number, number, number, number];
+};
+export type ThrongPayload = {
+  cells: ThrongCell[];
+  cap: number;
+  pending?: boolean;
+  stampPending?: boolean;
+};
 type Point = [number, number];
 type RouteIndex = {
   frame: ReturnType<typeof localMetricProjection>;
@@ -167,23 +192,41 @@ type SubGuard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
   hardTerrainKey?: object;
 };
 type StaticCell = {
-  mask: Uint32Array;
+  mask?: Uint32Array;
   point: Point;
   seated: boolean;
   along: Float64Array;
   flags: Uint8Array;
   count: number;
+  ahead?: Point;
+  side?: Point;
+  stamp?: ThrongStampCache;
+  agent?: VisibleAgent;
+  cell?: ThrongCell;
+  s?: number;
+  flag?: number;
 };
 type Cache = {
   scale?: readonly [number, number];
   fromCell?: GridPlacement['fromCell'];
   terrain?: object;
   hardTerrain?: object;
+  fine: boolean;
   raster: CrowdMaskRaster;
   seated?: CrowdMaskRaster;
   area?: CrowdMaskRaster;
   columns: Map<number, Map<number, StaticCell | null>>;
   size: number;
+  viewport?: readonly [number, number, number, number];
+  payload?: {
+    col: number;
+    row: number;
+    cols: number;
+    rows: number;
+    progress: number;
+    quality: number;
+    result: ThrongPayload;
+  };
 };
 const caches = new WeakMap<EventGround, Cache[]>();
 const areaGrounds = new WeakMap<ProcessionRoute, EventGround>();
@@ -206,6 +249,7 @@ function cacheFor(
   event: ProcessionRoute,
   grid: GridPlacement,
   guard?: SubGuard,
+  fine = false,
 ) {
   let saved = caches.get(ground);
   if (!saved) caches.set(ground, (saved = []));
@@ -217,15 +261,23 @@ function cacheFor(
     (c) =>
       c.terrain === terrain &&
       c.hardTerrain === hardTerrain &&
+      c.fine === fine &&
       (world ? c.scale?.[0] === world[0] && c.scale[1] === world[1] : c.fromCell === fromCell),
   );
   if (cache) return cache;
   const raster = (g: EventGround) =>
-    new CrowdMaskRaster(g, fromCell, grid.grid.originCol, grid.grid.originRow);
+    new CrowdMaskRaster(
+      g,
+      fromCell,
+      grid.grid.originCol,
+      grid.grid.originRow,
+      fine ? 1 : undefined,
+    );
   cache = {
     ...(world ? { scale: [world[0], world[1]] as const } : { fromCell }),
     terrain,
     hardTerrain,
+    fine,
     raster: raster(ground),
     seated: ground.seated && raster(ground.seated),
     area:
@@ -261,6 +313,8 @@ const weights = new Float64Array(16);
 const bucketCounts = new Uint32Array(256);
 const bucketOffsets = new Uint32Array(256);
 const sortedCells: ThrongCell[] = [];
+const EMPTY_ALONG = new Float64Array(0),
+  EMPTY_FLAGS = new Uint8Array(0);
 function movingDensity(
   event: ProcessionRoute,
   back: number,
@@ -337,7 +391,12 @@ export function throng(
     ? (((layout.blocks[0]?.columns ?? layout.columns) - 1) * PROCESSION_GEOMETRY.columnPitch) / 2 +
       PROCESSION_GEOMETRY.person.width / 2
     : 0;
-  const cache = zoom < 17 ? cacheFor(ground, event, grid, allowsSubcell) : undefined;
+  // Production placements expose a world scale, allowing detailed geometry to survive
+  // fresh accepted worker frames and integer-cell pans. Legacy forward placements remain direct.
+  const fine = zoom >= 17;
+  const cache =
+    !fine || grid.world ? cacheFor(ground, event, grid, allowsSubcell, fine) : undefined;
+  const coldLimit = fine ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS;
   const areaGround = areaFor(event, ground);
   const massFrame =
     event.kind === 'mass'
@@ -351,6 +410,41 @@ export function throng(
           (1 - progress) / (1 - PROCESSION.mass.disperseStart),
         )
       : 1;
+  const progressKey = event.kind === 'mass' ? massRamp : event.kind === 'fluvial' ? 0 : head;
+  const held = cache?.payload;
+  if (
+    held &&
+    held.col === origin.originCol &&
+    held.row === origin.originRow &&
+    held.cols === cols &&
+    held.rows === rows &&
+    held.progress === progressKey &&
+    held.quality === quality
+  )
+    return held.result;
+  if (cache) {
+    const viewport = [
+      minC + origin.originCol,
+      minR + origin.originRow,
+      maxC + origin.originCol,
+      maxR + origin.originRow,
+    ] as const;
+    if (!cache.viewport || viewport.some((value, i) => value !== cache.viewport![i])) {
+      // Keep a small pan margin, rather than every world cell visited during a long replay.
+      for (const [col, cells] of cache.columns) {
+        if (col < viewport[0] - 32 || col >= viewport[2] + 32) {
+          cache.size -= cells.size;
+          cache.columns.delete(col);
+        } else
+          for (const row of cells.keys())
+            if (row < viewport[1] - 32 || row >= viewport[3] + 32) {
+              cells.delete(row);
+              cache.size--;
+            }
+      }
+      cache.viewport = viewport;
+    }
+  }
   let coldCells = 0;
   for (
     let row = minR + ((stride - ((minR + origin.originRow) % stride)) % stride);
@@ -366,7 +460,7 @@ export function throng(
         ar = row + origin.originRow;
       const cached = cache?.columns.get(ac)?.get(ar);
       if (cached === null) continue;
-      if (cache && cached === undefined && coldCells >= MAX_COLD_THRONG_CELLS) {
+      if (cache && cached === undefined && coldCells >= coldLimit) {
         result.pending = true;
         continue;
       }
@@ -381,6 +475,44 @@ export function throng(
       let near: ReturnType<typeof nearest> | undefined;
       if (cache) {
         let cell: StaticCell | null | undefined = cached;
+        if (cell === undefined && fine) {
+          coldCells++;
+          const seated = !!cache.seated?.mask(ac, ar);
+          cell = null;
+          if (seated || cache.raster.mask(ac, ar)) {
+            const at = index && nearest(index, point);
+            const heading =
+              at && (event.kind === 'procession' || event.kind === 'parade')
+                ? index.line.at(at.s)
+                : undefined;
+            const local = localMetricProjection(point),
+              to = local.to(
+                event.kind === 'mass' ? (event.site.altar?.at ?? event.site.location) : at!.target,
+              ),
+              d = Math.hypot(...to) || 1;
+            const hx = heading?.hx ?? to[0] / d,
+              hy = heading?.hy ?? to[1] / d;
+            cell = {
+              seated,
+              point,
+              count: 1,
+              along: EMPTY_ALONG,
+              flags: EMPTY_FLAGS,
+              s: at?.s ?? 0,
+              flag:
+                event.kind === 'procession' || event.kind === 'parade'
+                  ? classify(event, at!, !!cache.area?.mask(ac, ar), blockWidth)
+                  : 0,
+              ahead: local.from([hx, hy]),
+              side: local.from([hy, -hx]),
+              stamp: {},
+            };
+          }
+          let column = cache.columns.get(ac);
+          if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
+          column.set(ar, cell);
+          cache.size++;
+        }
         if (cell === undefined) {
           const intersects = cache.raster.covers(ac, ar) || cache.seated?.covers(ac, ar);
           if (intersects) coldCells++;
@@ -471,8 +603,8 @@ export function throng(
           for (let i = 0; i < cell.count; i++) {
             const [d, p] = movingDensity(
               event,
-              head - cell.along[i]!,
-              cell.flags[i]!,
+              head - (cell.s ?? cell.along[i]!),
+              cell.flag ?? cell.flags[i]!,
               layout,
               paint,
             );
@@ -518,25 +650,34 @@ export function throng(
         );
       }
       if (share >= density) continue;
-      const agent: VisibleAgent = {
-        kind: 'person',
-        lng: point[0],
-        lat: point[1],
-        paint,
-        flap: hash & 1,
-        candle: (hash >>> 16) % 10 < 6,
-        eventGround: event.id,
-        ...(role && {
-          eventRole: role,
-          people: [{ figure: 'seated', paint, lateral: 0, back: 0, flap: 0 }],
-        }),
-      };
+      const staticCell = fine ? cache?.columns.get(ac)?.get(ar) : undefined;
+      const agent: VisibleAgent =
+        staticCell?.agent?.paint === paint
+          ? staticCell.agent
+          : {
+              kind: 'person',
+              lng: point[0],
+              lat: point[1],
+              paint,
+              flap: hash & 1,
+              candle: (hash >>> 16) % 10 < 6,
+              eventGround: event.id,
+              ...(role && {
+                eventRole: role,
+                people: [{ figure: 'seated', paint, lateral: 0, back: 0, flap: 0 }],
+              }),
+            };
+      if (staticCell) staticCell.agent = agent;
       if (zoom < 17) {
         const centre = fromCell(col + 0.5, row + 0.5);
         agent.lng = centre[0];
         agent.lat = centre[1];
         agent.prop = 'event';
         agent.glyph = String.fromCharCode(ProcessionGlyph.crowd0.charCodeAt(0) + (hash % 4));
+      } else if (cache) {
+        const cell = cache.columns.get(ac)!.get(ar)!;
+        agent.ahead = cell.ahead;
+        agent.side = cell.side;
       } else {
         if (!eventGroundAllows(role ? ground.seated! : ground, [point])) continue;
         const local = localMetricProjection(point),
@@ -549,7 +690,17 @@ export function throng(
         agent.ahead = local.from([heading.hx, heading.hy]);
         agent.side = local.from([heading.hy, -heading.hx]);
       }
-      result.cells.push({ col, row, agent, mask, hash });
+      let candidate = staticCell?.cell;
+      if (
+        !candidate ||
+        candidate.col !== col ||
+        candidate.row !== row ||
+        candidate.agent !== agent
+      ) {
+        candidate = { col, row, agent, mask, hash, stamp: staticCell?.stamp };
+        if (staticCell) staticCell.cell = candidate;
+      }
+      result.cells.push(candidate);
     }
   // Stable linear buckets spread cap thinning across the viewport without a full sort.
   bucketCounts.fill(0);
@@ -562,5 +713,15 @@ export function throng(
   for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
   for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
   sortedCells.length = 0;
+  if (cache && !result.pending)
+    cache.payload = {
+      col: origin.originCol,
+      row: origin.originRow,
+      cols,
+      rows,
+      progress: progressKey,
+      quality,
+      result,
+    };
   return result;
 }

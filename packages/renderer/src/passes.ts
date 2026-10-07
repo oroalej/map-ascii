@@ -731,6 +731,7 @@ export function lifePass(
     },
     puffs,
   );
+  buffers.crowdPending = !!(crowdPayload?.pending || crowdPayload?.stampPending);
   // Birds may overwrite crowd texels; their real owner clears the crowd permission mask.
   if (buffers.crowdMask)
     for (const i of buffers.crowdCells ?? [])

@@ -19,7 +19,6 @@ const BIN = 0.00025;
 export const THRONG_MASK_SIDE = 16;
 export const THRONG_MASK_BITS = THRONG_MASK_SIDE * THRONG_MASK_SIDE;
 export const THRONG_MASK_WORDS = THRONG_MASK_BITS / 32;
-const SIDE = THRONG_MASK_SIDE;
 const MAX_ROWS = 4096;
 const EMPTY: Point[][] = [];
 const indexes = new WeakMap<Point[][], RingIndex>();
@@ -178,11 +177,12 @@ export class CrowdMaskRaster {
     private fromCell: (col: number, row: number) => Point,
     private originCol = 0,
     private originRow = 0,
+    private side = THRONG_MASK_SIDE,
   ) {
     const start = fromCell(0, 0),
       end = fromCell(1, 0);
-    this.step = (end[0] - start[0]) / SIDE;
-    this.longitude = start[0] - originCol * SIDE * this.step;
+    this.step = (end[0] - start[0]) / this.side;
+    this.longitude = start[0] - originCol * this.side * this.step;
     this.regions = index(ground.regions);
     this.blocked = index(ground.blocked);
     this.water = index(ground.water ?? EMPTY);
@@ -191,10 +191,10 @@ export class CrowdMaskRaster {
   private row(subrow: number) {
     const saved = this.rows.get(subrow);
     if (saved) return saved;
-    const y = subrow / SIDE - this.originRow;
+    const y = subrow / this.side - this.originRow;
     const top = this.fromCell(0, y)[1],
-      bottom = this.fromCell(0, y + 1 / SIDE)[1];
-    const lat = this.fromCell(0, y + 0.5 / SIDE)[1];
+      bottom = this.fromCell(0, y + 1 / this.side)[1];
+    const lat = this.fromCell(0, y + 0.5 / this.side)[1];
     const south = Math.min(top, bottom),
       north = Math.max(top, bottom);
     const result: Row = {
@@ -210,43 +210,43 @@ export class CrowdMaskRaster {
     return result;
   }
   point(col: number, row: number, bit: number, out: Point): Point {
-    out[0] = this.longitude + (col * SIDE + (bit % SIDE) + 0.5) * this.step;
-    out[1] = this.row(row * SIDE + Math.floor(bit / SIDE)).lat;
+    out[0] = this.longitude + (col * this.side + (bit % this.side) + 0.5) * this.step;
+    out[1] = this.row(row * this.side + Math.floor(bit / this.side)).lat;
     return out;
   }
   hasPoint(col: number, row: number, bit: number) {
     return contains(
-      this.row(row * SIDE + Math.floor(bit / SIDE)).regions[1],
-      this.longitude + (col * SIDE + (bit % SIDE) + 0.5) * this.step,
+      this.row(row * this.side + Math.floor(bit / this.side)).regions[1],
+      this.longitude + (col * this.side + (bit % this.side) + 0.5) * this.step,
     );
   }
   covers(col: number, row: number) {
     let cover = this.coverage.get(row);
     if (!cover) {
       const spans: Span[] = [];
-      for (let y = 0; y < SIDE; y++)
-        for (const span of this.row(row * SIDE + y).cover) spans.push([span[0], span[1]]);
+      for (let y = 0; y < this.side; y++)
+        for (const span of this.row(row * this.side + y).cover) spans.push([span[0], span[1]]);
       cover = merge(spans);
-      if (this.coverage.size >= MAX_ROWS / SIDE)
+      if (this.coverage.size >= MAX_ROWS / this.side)
         this.coverage.delete(this.coverage.keys().next().value!);
       this.coverage.set(row, cover);
     }
-    const x0 = col * SIDE;
+    const x0 = col * this.side;
     const wholeWest = this.longitude + x0 * this.step;
-    const wholeEast = wholeWest + SIDE * this.step;
+    const wholeEast = wholeWest + this.side * this.step;
     return overlaps(cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast));
   }
   mask(col: number, row: number, allows?: (col: number, row: number) => boolean) {
     if (!this.covers(col, row)) return undefined;
     let words: Uint32Array | undefined;
-    const x0 = col * SIDE;
+    const x0 = col * this.side;
     const wholeWest = this.longitude + x0 * this.step;
-    const wholeEast = wholeWest + SIDE * this.step;
-    for (let y = 0; y < SIDE; y++) {
-      const line = this.row(row * SIDE + y);
+    const wholeEast = wholeWest + this.side * this.step;
+    for (let y = 0; y < this.side; y++) {
+      const line = this.row(row * this.side + y);
       if (!overlaps(line.cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast)))
         continue;
-      for (let x = 0; x < SIDE; x++) {
+      for (let x = 0; x < this.side; x++) {
         const a = this.longitude + (x0 + x) * this.step,
           b = a + this.step;
         const west = Math.min(a, b),
@@ -255,11 +255,11 @@ export class CrowdMaskRaster {
           !insideCell(line.regions, west, east) ||
           overlaps(line.blocked, west, east) ||
           (overlaps(line.water, west, east) && !insideCell(line.bridges, west, east)) ||
-          (allows && !allows(col * SIDE + x, row * SIDE + y))
+          (allows && !allows(col * this.side + x, row * this.side + y))
         )
           continue;
         words ??= new Uint32Array(THRONG_MASK_WORDS);
-        const bit = y * SIDE + x;
+        const bit = y * this.side + x;
         words[bit >>> 5]! |= (1 << (bit & 31)) >>> 0;
       }
     }

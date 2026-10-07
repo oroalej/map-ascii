@@ -398,6 +398,8 @@ type AtlasState = {
 
 Crowd raster budget: `MAX_THRONG_CELLS = 16,000` final texels at high quality; the four tier factors are 1, 0.7, 0.5 and 0.5. Complete figures roll back when a footprint conflicts or would exceed the cap. Crowd masks add two RGBA32UI texels per ASCII cell and are cleared on event/lifecycle changes.
 
+Static event crowds do not occupy simulated agents or receive worker ticks. Coarse permissions prepare at most eight intersecting cells per frame; detailed world-cell classifications and new figure stamps each prepare at most 128. Polygon scanlines are shared across a row, and immutable terrain permissions cover up to 65,536 cells so a dense desktop viewport does not evict itself every frame. Complete figure ink and unchanged crowd membership survive accepted worker frames and integer pans; viewport clipping, theme/paint changes and replacement terrain invalidate their respective caches. Occupancy and final-texel caps are checked on every draw. Ink preparation continues while an accepted worker frame is held. World-cell caches retain the viewport plus a 32-cell pan margin and at most four scale/terrain variants per event.
+
 | Metric | Target |
 |---|---|
 | Frame rate | 60 fps desktop, ≥30 fps mid-range Android |
