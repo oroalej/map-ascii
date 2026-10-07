@@ -219,6 +219,15 @@ export function projectMover(
     vehicle: m.vehicle,
     paint: m.paint,
     lane: m.lane,
+    chosenLane: m.chosenLane,
+    lat: m.lat,
+    latYaw: m.latYaw,
+    maneuver: m.maneuver,
+    laneSignal: m.laneSignal,
+    lanePatience: m.lanePatience,
+    laneCooldown: m.laneCooldown,
+    filterRetry: m.filterRetry,
+    roadScan: m.roadScan,
     roadShift: m.roadShift,
     pause: m.pause,
     rank: m.rank,
@@ -373,6 +382,38 @@ export function projectMover(
       stopY: frame.y + m.train.stopY * frame.scale,
       edge: false,
     };
+  if (m.chosenLane !== undefined || m.lat !== undefined || m.latYaw !== undefined || m.maneuver) {
+    // Lane intent remaps by fraction; metre-valued displacement never scales with tile units.
+    // Rebase against the destination's routed lane to retain the accepted physical pose.
+    preview.lat = undefined;
+    const offset =
+      ((oldX - preview.x) * -preview.hy + (oldY - preview.y) * preview.hx) / target.perMeter;
+    preview.lat = offset - target.offsetOf(preview);
+    const layout = target.directionalLanes(preview.line);
+    const chosen = Math.min(
+      layout.count - 1,
+      Math.floor((preview.chosenLane ?? preview.lane) * layout.count),
+    );
+    if (
+      preview.maneuver &&
+      (layout.count === 1 ||
+        (preview.maneuver.kind === 'lane' &&
+          Math.min(layout.count - 1, Math.floor(preview.maneuver.target * layout.count)) ===
+            chosen))
+    )
+      preview.maneuver = {
+        ...preview.maneuver,
+        kind: 'return',
+        target: preview.chosenLane ?? preview.lane,
+      };
+    else if (preview.maneuver?.kind === 'filter' && preview.maneuver.corridor !== undefined) {
+      const boundary = Math.max(
+        1,
+        Math.min(layout.count - 1, Math.round(preview.maneuver.corridor * layout.count)),
+      );
+      preview.maneuver = { ...preview.maneuver, corridor: boundary / layout.count };
+    }
+  }
   const pose = target.pose(preview);
   if (
     !m.train &&

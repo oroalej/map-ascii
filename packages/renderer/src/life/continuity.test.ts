@@ -47,6 +47,28 @@ function assertUnique(world: LifeWorld) {
 }
 
 describe('tile retirement', () => {
+  it('revives accepted maneuver pose and active timers without aging them while retired', () => {
+    const { world, life, movers, source } = fixture();
+    const m = movers[0]!;
+    Object.assign(m, {
+      chosenLane: 0.5,
+      lat: 0.2,
+      latYaw: 0.1,
+      maneuver: { kind: 'filter', target: 0.5, corridor: 0.5, queueSpeed: 0 },
+      laneSignal: 'right',
+      laneCooldown: 6,
+      filterRetry: 3,
+    });
+    const before = structuredClone(m);
+    world.sync([]);
+    for (let frame = 0; frame < 30; frame++) world.step(0.1);
+    expect(m).toEqual(before);
+    world.sync([structuredClone(source)]);
+    expect(worldTiles(world).get(source.key)).toBe(life);
+    expect(life.movers).toContain(m);
+    expect(m).toEqual(before);
+  });
+
   it('freezes retired state, draws nothing, and revives original motion after cloned geometry returns', () => {
     const { world, life, source } = fixture();
     world.step(0.1);
@@ -106,6 +128,62 @@ describe('tile retirement', () => {
 });
 
 describe('cross-zoom continuity', () => {
+  it.each(['lane', 'filter'] as const)(
+    'rebases an active %s maneuver across differing lane counts without teleporting',
+    (kind) => {
+      const a = continuityTile(parent, LifeLine.roadMajor, 77, 0, 1);
+      const b = continuityTile(left, LifeLine.roadMajor, 77, 0, 1);
+      a.life.widths[0] = 9.6;
+      b.life.widths[0] = 6.4;
+      const source = new TileLife(parent, a.life, 1),
+        target = new TileLife(left, b.life, 2);
+      source.movers.length = target.movers.length = 0;
+      const m = continuityMover(source, 1500);
+      Object.assign(m, {
+        lane: 0.9,
+        chosenLane: 0.9,
+        lat: kind === 'lane' ? -2 : -1.6,
+        latYaw: -0.1,
+        maneuver: {
+          kind,
+          target: 0.5,
+          corridor: kind === 'filter' ? 2 / 3 : undefined,
+          queueSpeed: 1,
+        },
+        laneSignal: 'left',
+        lanePatience: 1.4,
+        laneCooldown: 6,
+        filterRetry: 3,
+        roadScan: 0.3,
+      });
+      source.movers.push(m);
+      const before = structuredClone(m),
+        old = source.pose(m),
+        frame = frameBetween(parent, left);
+      const preview = target.projectFrom(m, source)!;
+      const pose = target.pose(preview);
+      expect(pose.x).toBeCloseTo(frame.x + old.x * frame.scale);
+      expect(pose.y).toBeCloseTo(frame.y + old.y * frame.scale);
+      expect(pose.hx).toBeCloseTo(old.hx);
+      expect(preview.maneuver?.kind).toBe(kind === 'lane' ? 'return' : 'filter');
+      if (kind === 'filter') expect(preview.maneuver?.corridor).toBe(0.5);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source, {}, () => false)).toBe(false);
+      expect(m).toEqual(before);
+      expect(target.adoptFrom(m, source)).toBe(true);
+      expect(m.speed / target.perMeter).toBe(before.speed / source.perMeter);
+      for (const field of [
+        'laneSignal',
+        'lanePatience',
+        'laneCooldown',
+        'filterRetry',
+        'roadScan',
+      ] as const)
+        expect(m[field]).toBe(before[field]);
+      expect(m.lat).toBeCloseTo(preview.lat!);
+    },
+  );
+
   for (const kind of [LifeLine.roadMajor, LifeLine.river, LifeLine.rail])
     it(`carries identity, rendered pose and physical velocity on line kind ${kind}`, () => {
       const { world, life, movers } = fixture(kind);
