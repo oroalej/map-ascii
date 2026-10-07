@@ -52,6 +52,7 @@ const planLetters: Readonly<Record<string, VehiclePart>> = {
   T: VehiclePart.taillight,
   D: VehiclePart.trim,
   A: VehiclePart.accent,
+  L: VehiclePart.trim,
 };
 
 /**
@@ -105,7 +106,9 @@ export const BOAT_PAINTS_AVOID: readonly number[] = [P.blue, P.sky, P.teal, P.gr
 
 /** Something the life layer draws from a plan: a vehicle, a boat, or a vendor's cart. */
 export type CraftType =
-  VehicleType | BoatType | ProcessionCraft | RailCraft | StallCraft | AnimalCraft;
+  VehicleType | BoatType | ProcessionCraft | RailCraft | StallCraft | AnimalCraft | EmergencyCraft;
+
+export type EmergencyCraft = 'ambulance' | 'police' | 'firetruck';
 
 /** A farm animal (life/simulate.ts `Gatherer`): a carabao, led along a field by its farmer. */
 export type AnimalCraft = 'carabao';
@@ -307,6 +310,31 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     mini: ['▪', '▪'],
     // A broad back, its head in front with horns sweeping out to both sides (trim); no lights.
     plan: ['......D.', '.BBBBB..', 'BBBBBBBB', '.BBBBB..', '......D.'],
+  },
+  // Append crafts: the simulation's earlier craft ordinals remain stable.
+  ambulance: {
+    length: 5.4,
+    width: 2,
+    speed: 1,
+    paints: [P.chrome],
+    mini: ['▬', '▮'],
+    plan: ['TAARRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAARRRLGGBAH'],
+  },
+  police: {
+    length: 4.6,
+    width: 1.8,
+    speed: 1,
+    paints: [P.blue],
+    mini: ['▬', '▮'],
+    plan: ['TAGRRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAGRRRLGGBAH'],
+  },
+  firetruck: {
+    length: 9.5,
+    width: 2.5,
+    speed: 0.85,
+    paints: [P.red],
+    mini: ['▬', '▮'],
+    plan: ['TBBDRRLLGBBH', 'BBBDRRLLGBBB', 'BBBDRRLLGBBB', 'TBBDRRLLGBBH'],
   },
 };
 

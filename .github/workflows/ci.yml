@@ -16,8 +16,9 @@ permissions:
 
 jobs:
   # Every job times out at 6 minutes, so a change that makes CI slow fails its PR instead of
-  # quietly adding minutes (AGENTS.md "Verifying changes"). The e2e shards start once `check` passes.
-  check:
+  # quietly adding minutes (AGENTS.md "Verifying changes"). Static checks and unit tests run
+  # in parallel; `check` requires both before the e2e shards can start.
+  static-checks:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -40,7 +41,51 @@ jobs:
 
       - run: pnpm --filter @atlas/content validate
 
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
       - run: pnpm test
+
+  check:
+    needs: [static-checks, unit-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Require all checks to pass
+        env:
+          STATIC_CHECKS_RESULT: ${{ needs.static-checks.result }}
+          UNIT_TESTS_RESULT: ${{ needs.unit-tests.result }}
+        run: |
+          test "$STATIC_CHECKS_RESULT" = success
+          test "$UNIT_TESTS_RESULT" = success
+
+      - uses: actions/checkout@v7
+        if: github.event_name == 'push'
+
+      - uses: pnpm/action-setup@v6
+        if: github.event_name == 'push'
+
+      - uses: actions/setup-node@v7
+        if: github.event_name == 'push'
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+        if: github.event_name == 'push'
 
       # PR-scoped caches cannot be restored by other PRs. Refresh the shared browser cache
       # on main without building the export, installing system dependencies, or running e2e.

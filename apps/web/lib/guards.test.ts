@@ -1,6 +1,8 @@
 import { CityMeta, CityProcessions, SearchIndexFile, SubdivisionAreas } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { isCityMeta, isCityProcessions, isSearchIndexFile, isSubdivisionAreas } from './guards';
+import { isCityEmergency } from './guards';
+import { emergencyFixture } from '../components/emergency-fixtures.test-utils';
 
 const meta = {
   slug: 'fixture',
@@ -36,6 +38,23 @@ const index = {
 
 /** Each guard must accept what its schema accepts, and reject these broken copies. */
 describe('browser shape guards agree with the schemas', () => {
+  it('validates finite emergency geography and every decoded graph reference', () => {
+    expect(isCityEmergency(emergencyFixture)).toBe(true);
+    for (const broken of [
+      { ...emergencyFixture, version: 2 },
+      { ...emergencyFixture, origin: [NaN, 0] },
+      { ...emergencyFixture, nodes: 'invalid!' },
+      {
+        ...emergencyFixture,
+        targets: emergencyFixture.targets.map((t) => {
+          const copy = [...t];
+          copy[4] = 9999;
+          return copy;
+        }),
+      },
+    ])
+      expect(isCityEmergency(broken)).toBe(false);
+  });
   it('accepts all event kinds and rejects cross-kind or misaligned geography', () => {
     const base = {
       id: 'procession/test',

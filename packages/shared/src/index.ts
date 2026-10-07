@@ -30,3 +30,4 @@ export * from './tile-space';
 export * from './utilities';
 export * from './flat-geometry';
 export * from './processions';
+export * from './emergency-network';
