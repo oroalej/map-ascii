@@ -67,7 +67,8 @@ export type ReviewState = Identity & {
   rejected: string;
   report: { [key: string]: Json };
   ci: {
-    status: 'not-run' | 'pending' | 'green' | 'fixed';
+    /** As observed by `$review-pr`, or `fixed` once `$merge-pr`'s gate repaired it. */
+    status: 'not-run' | 'pending' | 'green' | 'failing' | 'fixed';
     headSha: string | null;
     needsReview: boolean;
     data: Json;
@@ -161,7 +162,7 @@ export function parseState(v: unknown): ReviewState {
     !record(v.report) ||
     !json(v.report) ||
     !record(v.ci) ||
-    !['not-run', 'pending', 'green', 'fixed'].includes(String(v.ci.status)) ||
+    !['not-run', 'pending', 'green', 'failing', 'fixed'].includes(String(v.ci.status)) ||
     !nullableString(v.ci.headSha) ||
     typeof v.ci.needsReview !== 'boolean' ||
     !json(v.ci.data) ||

@@ -96,7 +96,7 @@ It never changes Claude, which runs at normal speed, or the coordinating session
 1. Initialize the PR identity and current head with `review:state init` ([recovery.md](recovery.md)), passing `claudeEffort` only when explicitly supplied. Initialization continues earlier verified work automatically. `<review-scratch>` is the returned invocation path.
 2. Follow the review skill from its step 1.5 (baseline) to step 7 in this session, then write its result object to `<review-scratch>/result.json` and to the caller's result path.
 3. Act on the result:
-   - `clean`: the review is clean and CI is green. Entries carried as `open` and the listed nits are in the PR body and don't block.
+   - `clean`: the review is clean; `ci.status` is what was observed, and `$merge-pr` gates CI before merging. Entries carried as `open` and the listed nits are in the PR body and don't block.
    - `error`: an Ends case; use its `stopReason`.
    - `interrupted` (a quota receipt or wrapper exit 75 from a reviewer or validator): end the caller with saved progress. Report the checkpoint, reset text and resume command, and preserve all scratch, WIP and worktrees. Never relaunch the exhausted process.
 

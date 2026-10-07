@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a pull request in at most 2 rounds and get CI green, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (round 2 reviews only the fixes), Sol 6.1 validates round 1's blockers and should-fix items, and this session fixes and pushes. Nits are reported, not fixed. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
+description: Review a pull request in at most 2 rounds and report CI as observed, automatically continuing verified progress from an interrupted review. Claude Opus 5.5 reviews with configurable effort (round 2 reviews only the fixes), Sol 6.1 validates round 1's blockers and should-fix items, and this session fixes and pushes. Nits are reported, not fixed. Saves a checkpoint and ends on usage exhaustion; never merges. Use for $review-pr with a PR number or branch, optional --fast, --claude-effort, --fresh or --resume, or requests to get a Claude PR review and fix its findings.
 ---
 
 # Claude review → (round 1) Codex validation → fixes, at most 2 rounds, then CI
@@ -9,9 +9,9 @@ Invoking `$review-pr` authorizes the whole flow, without confirmation between st
 
 - opening the branch's PR if it has none
 - creating the PR branch's worktree, or a detached work tree
-- merging `origin/main` into the PR's branch (resolving every conflict, including regenerating and publishing tiles) and pushing
+- merging `origin/main` into the PR's branch only when GitHub reports it conflicting (resolving every conflict, including regenerating and publishing tiles) and pushing
 - at most 2 review rounds: round 1 is Claude's full review, the validation run, then fixes for the blockers and should-fix items; round 2 is Claude's review of those fixes and the fixes for what it still finds
-- the CI gate until CI is green, with CI fixes committed and pushed
+- observing CI for the report (the CI gate itself, with its fixes, belongs to `$merge-pr`)
 
 Never merge the PR.
 
@@ -23,7 +23,7 @@ Read [shared.md](references/shared.md) (Ends, Shared patterns, Rules, Binaries, 
 | --- | --- | --- | --- |
 | Review (every round) | Claude Opus 5.5 (`claude-opus-5-5`) | `<claude-effort>` | normal |
 | Codex #1: validates Claude's blockers and should-fix items (analysis only, round 1 only) | Sol 6.1 (`gpt-6.1-sol`) | high | `<speed>` |
-| This session: fixes, commits, pushes, CI fixes | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
+| This session: fixes, commits, pushes | Sol 6.1 (`gpt-6.1-sol`) | xhigh | the session's own setting |
 
 Round 2 has no validator: Claude's delta review judges the fixes against the ledger, and this session fixes what it reports.
 
@@ -90,10 +90,10 @@ shared.md's Rules apply, plus:
    - Report the recovered phase and source invocation. Carry the cumulative round numbers, history and rejected decisions.
 5. **Baseline.** Save `git status --porcelain=v1 -z --untracked-files=all` as `<scratch>/status-baseline.txt` and use this NUL-separated form for every comparison. In the PR's task worktree, step 1.3 already committed the leftovers, so it holds only held-back files. In a detached work tree, never adopt dirty files as the review's own.
 6. **Settings.** Set `<speed>` and `<claude-effort>` (`state.claudeEffort`), and print both in the first line of output. Resolve `<codex>` and `<claude>` (shared.md, Binaries) and note their versions.
-7. **Merge `origin/main`** so Claude reviews the branch as it will merge. Follow [merge-main.md](references/merge-main.md) in `<pr-checkout>` with the step 1.5 baseline, setting `mainMerge`. Around it:
-   - `record` `mainSha` before the merge and `headSha`/`remoteSha` after the push.
-   - If synchronization changed HEAD, keep the historical records and review the new commit in a new round. Otherwise continue at the recovered phase (step 2 for a new review); never restart at round 1.
-   - A saved clean result counts only when local HEAD equals the refreshed PR head, current main is an ancestor, and a fresh GitHub CI check passes.
+7. **Review the branch as it is.** GitHub's PR diff is already against the merge base, so Claude sees the same change whether or not `main` was merged in; `$merge-pr` synchronizes once before the merge and gates CI on that head. Merging here on every round cost three syncs per PR (24 in two days) with tile rebuilds. So:
+   - `gh pr view <N> --json mergeable,mergeStateStatus`. `MERGEABLE` (or `UNKNOWN` after one Retry): record `mainMerge: current` and go on.
+   - `CONFLICTING`: the diff isn't reviewable until the conflict is resolved. Follow [merge-main.md](references/merge-main.md) in `<pr-checkout>` with the step 1.5 baseline, setting `mainMerge` to `resolved <n> files`; `record` `mainSha` before and `headSha`/`remoteSha` after the push. A changed HEAD is reviewed as a new round, keeping earlier rounds as history; never restart at round 1.
+   - A saved clean result counts only when local HEAD equals the refreshed PR head.
 
 ## 2. Round k: Claude reviews the PR
 
@@ -197,34 +197,23 @@ Round 1 is the full review that should find everything; round 2 checks the fixes
 
 A round whose only entries are nits is clean; nits never start a round and are never fixed here (step 4).
 
-## 6. CI gate (until green)
+## 6. Observe CI, then confirm nothing is left behind
 
-Checkpoint CI attempts, reruns and fixes:
-- Record `pending` while waiting, the checked head, and `needsReview: true` after a non-test source fix.
-- Save completed local check commands with the working-tree hash, and reuse them only while that hash matches.
-- Recovery always rechecks GitHub CI against the current remote head.
+`$merge-pr` owns the CI gate (its gate 4 waits for green CI on the synced head and fixes failures); this skill only records what CI says, so a PR no longer waits for CI twice.
 
-1. **Wait** until the PR has checks for its current head (`gh pr view <N> --json headRefOid,statusCheckRollup`), then poll `gh pr checks <N>` every 2 minutes until no check is pending (CI jobs time out at 6 minutes each, so this takes 10–20 minutes; a `--watch` call needs a background launch, shared.md). If everything passes, go to 3 when a CI fix or leftovers commit in this run touched non-test source and no round has run since. Otherwise go to 4.
-2. **A check fails:** read `gh run view <run-id> --log-failed`. For e2e failures, also run `gh run download <run-id> -n playwright-results-<shard> -D <scratch>/ci`.
-   - **Infrastructure flake** (runner, network or dependency-download error, or a timeout with no failing test): run `gh run rerun <run-id> --failed`, then back to 1. The same failure twice counts as real.
-   - **Real failure:**
-     - Reproduce it in `<pr-checkout>` with the narrowest command: the failing Vitest file, or `pnpm test:e2e --project=chromium -g "<test>"`. It may wait for a heavy slot.
-     - Fix the cause. Change the test only if the test is wrong. A failure that also happens on plain `origin/main` gets fixed too; record why the fix is outside the diff.
-     - Commit (`🐛 fix(<scope>): …` or `💚 ci(<scope>): …`) with step 4's staging rules, push, and go back to 1.
-     - Count each attempt in `ci.attempts`. There's no attempt cap; change the approach when one keeps failing.
-3. **Review CI fixes:** after a CI fix or leftovers commit to non-test source, run one more round (steps 2–4) once CI is green, if fewer than 2 rounds have run. It counts toward the 2. Not clean → step 5. Clean → repeat this step from 1 for its pushes. With 2 rounds already run, skip the review, list those commits as unreviewed in the report, and go to 4.
-4. **Nothing left uncommitted.** Before reporting `clean`, in the PR's task worktree (`<pr-checkout>`, or the untouched original worktree when a detached tree was used for another reason), `git status --porcelain=v1 --untracked-files=all` lists only held-back files, and `HEAD` equals the PR head (fast-forward an untouched worktree that is merely behind). Otherwise follow "Commit task leftovers" (shared.md) with `<scratch>` there, including bytes recorded with `protect` and fix WIP this run left behind, and go back to 1. Skip the main checkout. Then go to step 7 with `clean`.
+1. **Observe:** `gh pr checks <N>` once for the current head. `record` `ci` as `green` (every check passed), `failing` (a check failed; name it in the report), or `pending`, with `headSha`. Never wait, rerun or fix here.
+2. **Nothing left uncommitted.** Before reporting `clean`, in the PR's task worktree (`<pr-checkout>`, or the untouched original worktree when a detached tree was used for another reason), `git status --porcelain=v1 --untracked-files=all` lists only held-back files, and `HEAD` equals the PR head (fast-forward an untouched worktree that is merely behind). Otherwise follow "Commit task leftovers" (shared.md) with `<scratch>` there, including fix WIP this run left behind, and review the new commits as one more round if fewer than 2 have run (steps 2–4); with 2 rounds run, list them as unreviewed in the report. Skip the main checkout. Then go to step 7 with `clean`.
 
 ## 7. Report and clean up
 
 The report covers:
 
 - **Main merge:** `mainMerge` with its `Conflict decisions:`, and failures that also happen on `main`.
-- **Rounds:** the round count (every round, including one after a CI fix), and `round cap reached; round 2 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
+- **Rounds:** the round count (every round, including one after a leftovers commit), and `round cap reached; round 2 fixes not re-reviewed` when `roundCap` is true. One line per round: `round <k> · <clean|fixed> · <full|delta> (<reason>) · effort <effort> · Claude tokens <main input+cache> / <subagent input+cache> over <n> subagents` (or `usage unavailable`), then its repeats and decisions.
 - **Per round:** Claude's verdict and the validation table (# / Claude's severity / verdict / evidence / final severity).
 - **Entries:** fixed entries with commit hashes; open entries carried into the PR body, with what was tried; nits (not fixed, listed in the PR body); noticed items with severity.
 - **Checkout:** the detached work tree used, if any, and the untouched worktree's state. Every leftovers commit (step 1.3 or 6.4) and every held-back file.
-- **CI:** the gate's reruns, fix attempts, fix commits and final state, plus which checks ran locally and which were left to CI.
+- **CI:** the observed state for the final head (`green`, `failing` with the check named, or `pending`), plus which checks ran locally and which were left to CI.
 - **Settings and status:** the PR URL, Codex #1's speed, the selected Claude effort, the `codex` and `claude` versions, and the final status.
 
 End with a fenced `review-pr-result` block holding one JSON object:
@@ -273,14 +262,14 @@ End with a fenced `review-pr-result` block holding one JSON object:
   "noticed": [
     { "round": 1, "path": "scripts/y.ts", "line": 7, "claim": "one line", "severity": "nit" }
   ],
-  "ci": { "status": "green", "reruns": 0, "attempts": 0, "fixCommits": [] },
+  "ci": { "status": "green", "headSha": "def5678" },
   "roundCap": false,
   "stopReason": null
 }
 ```
 
 - **`status`:**
-  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 2 ended with its fixes pushed (`roundCap: true`), and `ci.status` is `green` or `fixed`.
+  - `clean`: the last round was clean (no valid blocker or should-fix, noticed ones included, apart from `open` entries), or round 2 ended with its fixes pushed (`roundCap: true`). CI is reported, not gated: `$merge-pr` waits for green CI on the synced head before merging.
   - `error`: an Ends case; `stopReason` names it.
   - `interrupted`: usage exhaustion or an abruptly ended coordinator. It adds `resume: {checkpoint, phase, round, reason, reset, command}`, where `reset` is the literal reset text or null. Completed rounds stay in `rounds`; unfinished fixes stay uncommitted in the worktree (the next run commits them as leftovers and reviews them), and no clean result is implied for them. `resume` is null otherwise.
 - **`headSha`:** the PR head when the run ends (`gh pr view <N> --json headRefOid`). The results apply to this commit only.
@@ -295,14 +284,14 @@ End with a fenced `review-pr-result` block holding one JSON object:
   - `claudeSeverity` is `null` for a promoted noticed item.
   - `outOfDiff` is `null`, or the files outside the diff and why.
 - **`noticed`:** every round's noticed items with the validator's severity. Blockers and should-fix items among them also appear as entries.
-- **`ci.status`:** `green` (no fixes), `fixed` (after fix commits), `pending` (unfinished checks on an interrupted run), or `not-run`.
+- **`ci.status`:** `green`, `failing`, `pending` or `not-run`, as observed for `headSha` (`fixed` appears only in results `$merge-pr`'s CI gate wrote).
 
 **Publishing:**
 - Record the final status, reporting metadata and CI state in the checkpoint before writing the result.
 - Write the object, without the fence, to `<scratch>/result.json` at the invocation root, and identically to the `Result file` if one was given.
 - Interrupted results are published with the helper's `interrupt`. The process wrapper already publishes one on quota failure, even if the coordinator dies.
 
-**Index:** in `<main-checkout>/.plans/README.md`, set the **PR review** cell of every row whose Evidence names the PR's branch or `#<N>` to `<status> <roundCount> rounds · CI <ci.status> · <short headSha> · <YYYY-MM-DD>`, adding `· <n> open` when entries were carried (for example `clean 2 rounds · CI green · d0c7322 · 2026-10-05`). Change only that cell; the caller owns Status and Next step. If the `pr<N>-review-fixes` row is missing, create it:
+**Index:** in `<main-checkout>/.plans/README.md`, find the rows whose Evidence names the PR's branch or `#<N>` with a search (`Select-String`/`grep`; never read the whole index), and set their **PR review** cell to `<status> <roundCount> rounds · CI <ci.status> · <short headSha> · <YYYY-MM-DD>`, adding `· <n> open` when entries were carried (for example `clean 2 rounds · CI green · d0c7322 · 2026-10-05`). Change only that cell; the caller owns Status and Next step. If the `pr<N>-review-fixes` row is missing, create it:
 
 | Task | Status | Handoff review | PR review | Evidence | Keep | Next step |
 | --- | --- | --- | --- | --- | --- | --- |
