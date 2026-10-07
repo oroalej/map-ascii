@@ -77,10 +77,13 @@ function crossing(x = 100, y = 100) {
 
 describe('shared road junction splits', () => {
   it('covers linked route preparation plus the full front-bumper allowance', () => {
-    for (const vehicle of VEHICLE_TYPES)
+    for (const vehicle of [...VEHICLE_TYPES, 'ambulance', 'police', 'firetruck'] as const) {
+      expect(VEHICLES[vehicle].length).toBeLessThanOrEqual(11);
+      expect(VEHICLES[vehicle].width).toBeLessThanOrEqual(2.5);
       expect(clearance).toBeGreaterThanOrEqual(
         JUNCTION.linkedLookaheadM + SIGNAL.gap + VEHICLES[vehicle].length / 2,
       );
+    }
   });
 
   it('splits both arms of an X while preserving vertices and road attributes', () => {

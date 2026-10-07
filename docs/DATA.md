@@ -67,6 +67,11 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Resolve `follows` dependencies by ID, independent of file order, carrying predecessor duration across midnight into the annual offset. Generated schedules are explicit and retain predecessor IDs for crowd handover. Missing references and cycles fail validation.
    - Write `<city>.processions.json` (the `CityProcessions` schema), published with the tiles. Cities without processions get no file.
 
+8. **`08-emergency`**
+   - Skip packs without `life.emergency`. Build the main strongly connected directed component of major/mid/minor roads, respecting one-way transitions, then contract compatible degree-two source chains.
+   - Snap hospital and station centroids within 120 m against complete source polylines. Keep source road identity, cumulative interior progress, canonical tangent and signed side; thin building targets to one per 100 m cell within 30 m of a road.
+   - Fail for missing configured targets. Write validated `<city>.emergency.json` with delta/varint geometry and a 32 KiB gzip cap. Re-running `--from 08` uses current merged intermediates and changes only this file.
+
 Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `pmtiles` CLI. Document the install steps in `packages/data/README.md`. Consider a Dockerfile so the pipeline is reproducible.
 
 ## 3. Class mapping (starter)
@@ -127,6 +132,8 @@ The small traffic query also fetches `highway=stop` nodes. Resolved signals gene
 
 ## 4. Content schemas (defined in `packages/shared`)
 
+Optional `life.emergency` supplies per-kind `max` (0–3) and `[min,max]` simulated-second intervals. Ambulance/fire include `dwell_s`; police include `call_every_s` and `call_s`. At least one kind and a `source` are required. `exclude` lists station OSM identities to omit. These are illustrative settings, without dispatch or construction-history claims. Step 08 validates the generated `CityEmergency` payload and its graph/target references; the browser uses the corresponding plain codec guard.
+
 ```ts
 City {                           // cities/<slug>/city.json
   slug: string;                  // "naga", also the route and file prefix
@@ -165,6 +172,7 @@ City {                           // cities/<slug>/city.json
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
   life?: {
+    emergency?: EmergencyConfig; // optional illustrative vehicles and OSM station exclusions
     // Annual illustrative decorations; source calendars and placement estimates.
     seasons?: Season[];
     // Source each mode override or missing site. Give exactly one of osm_id or position.
@@ -498,6 +506,8 @@ Adding a city needs no renderer or web app changes. If it seems to, the engine h
 7. Add any extra attribution the city's sources need (§6).
 8. Publish the tiles with `pnpm data:publish -- --city <slug>` and commit the `tiles.lock.json` it writes (§9), so CI and deploys have them.
 
+For emergency vehicles, configure `life.emergency`, verify eligible hospital/police/fire tags and station exclusions, then build step 08. Every configured kind must have a snapped target. The client disables emergencies when the optional file is unavailable or malformed.
+
 ### Optional ambient dialogue
 
 Catalogs may override greeting periods with `periods: { morningStart, afternoonStart, eveningStart }`, using city-local integer minutes from 0 through 1439 in strictly increasing order. Defaults are 300, 720 and 1080 (05:00, 12:00, 18:00). Each period starts inclusively; evening continues across midnight until morning. Omitted periods preserve the defaults.
@@ -510,6 +520,8 @@ The content validator loads the optional catalog and fails on malformed or incom
 Scenes may add a `profile` (scene category), `delivery`, `speakers` (one zero-based participant slot per turn), and `conditions`. Conditions match nearby anchor kinds, simulated weather, participant age mix and service/ball events. Metadata is optional for existing packs. Profiled scripts require explicit speaker roles and a compatible mechanism; vendor orders have two short exchange turns, while thanks may be a one-line utterance by the vendor. An utterance may use slot 1 without inventing a reply. Worker choices carry metadata, never localized strings. Naga's checks require exactly 100 scenes (40 utterances and 60 exchanges) with the documented category allocation, complete Bikol/English/Tagalog and no duplicate complete native scripts. Other cities retain the optional 1–100 catalog size. For dialogue JSON edits, run both `pnpm --filter @atlas/content exec vitest run src/validate.test.ts` (content invariants) and `pnpm --filter @atlas/renderer exec vitest run src/life/dialogue-catalog.test.ts` (all-city reachability), alongside pack validation as listed in `AGENTS.md`; dynamic JSON reads are not covered by Vitest's changed-file graph. Naga's `dialogue-review.md` documents composed wording, provenance and the outstanding native-speaker review.
 
 ## 9. Publishing tiles
+
+`data:publish` includes `<slug>.emergency.json` with other `<slug>.*` outputs. A committed emergency file can ship before the next owner-approved publication; `data:fetch --force` restores only lock-listed files and leaves unlisted optional outputs alone. Never edit generated graph geography by hand.
 
 Generated files are gitignored (never commit tiles), so builds get them from GitHub releases instead:
 

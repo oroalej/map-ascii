@@ -277,7 +277,7 @@ export function admitBirths(context: BirthContext, dt: number) {
   }
 }
 
-function birthFits(
+export function birthFits(
   context: BirthContext,
   life: TileLife,
   m: Mover,

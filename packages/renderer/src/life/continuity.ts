@@ -229,6 +229,7 @@ export function projectMover(
     rush: m.rush,
   };
   if (m.roadSteering !== undefined) preview.roadSteering = m.roadSteering;
+  if (m.emergency) preview.emergency = m.emergency;
   if (m.curveLengthM !== undefined) preview.curveLengthM = m.curveLengthM;
   if (m.curveCorner) {
     const x = frame.x + m.curveCorner.x * frame.scale;

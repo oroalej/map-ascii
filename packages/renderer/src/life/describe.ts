@@ -23,6 +23,9 @@ const crafts: Record<CraftType, string> = {
   sailboat: 'Sailboat',
   cart: "Street vendor's cart",
   carabao: 'Carabao',
+  ambulance: 'Ambulance',
+  police: 'Police car',
+  firetruck: 'Fire truck',
 };
 const figures: Record<PersonFigure, string> = {
   adult: 'Person',
