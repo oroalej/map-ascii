@@ -44,6 +44,18 @@ function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = ()
   return { observer, o, m, tile, step };
 }
 describe('read-only emoji observer', () => {
+  it('shows relief on shade arrival and excludes ambient heat after arrival', () => {
+    const f = fixture();
+    f.step(0.1);
+    f.o.visit = { state: 'approach', time: 40, site: {} } as Visit;
+    f.step(0.1);
+    f.o.visit.state = 'shade';
+    f.step(0.3, { sunAltitude: 60 });
+    expect(f.observer.cue(f.m)?.mood).toBe('relaxed');
+    const moods = ambientPool(f.o, { rain: 0, minutes: 720, sunAltitude: 60 }).map((p) => p.mood);
+    expect(moods).not.toContain('hot');
+    expect(moods).not.toContain('melting');
+  });
   it.each([
     [0, 2],
     [0.5, 4.5],

@@ -29,7 +29,18 @@ export const DialogueConditions = z
   .object({
     anchor: DialogueAnchor.optional(),
     weather: z
-      .enum(['daylight', 'calm', 'breeze', 'gust', 'rain', 'heavy-rain', 'easing', 'evening-calm'])
+      .enum([
+        'daylight',
+        'calm',
+        'breeze',
+        'gust',
+        'rain',
+        'heavy-rain',
+        'easing',
+        'evening-calm',
+        'heat',
+        'clearing',
+      ])
       .optional(),
     audience: z.enum(['adults', 'adult-child']).optional(),
     event: z.enum(['arrival', 'catch', 'pass']).optional(),
@@ -90,7 +101,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
             .strict(),
         )
         .min(1)
-        .max(100),
+        .max(120),
     })
     .strict()
     .superRefine((catalog, ctx) => {
@@ -209,7 +220,7 @@ export const RuntimeDialogueCatalog = z
     exchanges: z
       .array(DialogueCatalog.shape.exchanges.element.omit({ sources: true }))
       .min(1)
-      .max(100),
+      .max(120),
   })
   .strict();
 export type RuntimeDialogueCatalog = z.infer<typeof RuntimeDialogueCatalog>;

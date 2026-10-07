@@ -11,6 +11,7 @@ import {
   type GreetingPeriods,
 } from '@atlas/shared';
 import { random } from './random';
+import { hotAt } from './config';
 
 export type DialogueContext = {
   minutes: number;
@@ -18,6 +19,9 @@ export type DialogueContext = {
   wind: number;
   easing?: boolean;
   sheltered?: boolean;
+  sunAltitude?: number;
+  shaded?: boolean;
+  clearing?: boolean;
   arrival?: boolean;
   place?: string;
   anchors?: readonly DialogueAnchor[];
@@ -145,6 +149,8 @@ export function dialogueEligible(
   if (p === 'daily-plans' && c.figures.some((f) => f === 'child')) return false;
   if (p === 'place-reaction' && !c.anchors?.some((a) => LOOK_ANCHORS.includes(a))) return false;
   const q = entry.conditions;
+  if ((c.shaded && q?.weather !== 'heat') || (c.clearing && q?.weather !== 'clearing'))
+    return false;
   if (!q) return true;
   if (q.anchor && !c.anchors?.includes(q.anchor)) return false;
   if (q.audience === 'adults' && c.figures.some((f) => f === 'child')) return false;
@@ -155,6 +161,10 @@ export function dialogueEligible(
     return false;
   if (q.event === 'arrival' && !c.arrival) return false;
   switch (q.weather) {
+    case 'heat':
+      return !!c.shaded && hotAt(c.minutes, c.rain, c.sunAltitude);
+    case 'clearing':
+      return !!c.sheltered && !!c.clearing && c.rain <= WEATHER.easing;
     case 'daylight':
       return (
         c.minutes >= WEATHER.daylightStart &&

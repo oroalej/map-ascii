@@ -44,6 +44,7 @@ export function valid(world: LifeWorld) {
       assert.ok(tile.movers.includes(m), 'orphan visit');
       if (['return', 'board', 'aboard'].includes(visit.state))
         assert.equal(queued.has(m), false, 'released visit still reserves a queue slot');
+      else assert.equal(queued.has(m), true, 'active visit must reserve a seat, including shade');
       assert.equal(tile.scenes.hidden(m), visit.state === 'aboard');
     }
     for (const m of tile.scenes.services.keys())

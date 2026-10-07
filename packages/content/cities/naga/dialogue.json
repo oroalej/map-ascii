@@ -2553,6 +2553,112 @@
       "conditions": {
         "anchor": "plaza"
       }
+    },
+    {
+      "id": "weather-heat-rest",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Abang init!",
+          "en": "So hot!",
+          "fil": "Ang init!"
+        },
+        {
+          "bcl": "Digdi sana kita.",
+          "en": "Let's just stay here.",
+          "fil": "Dito na lang tayo."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol Dictionary — Malcolm W. Mintz (University of Hawaii Press, 1971)",
+          "url": "https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary",
+          "note": "Original fictional dialogue. Lexical forms checked in the dictionary entries ABANG, INIT, DIGDI, SANA, KITA, MAYO, NA, NIN, URAN, SIGE, PA and AKO; ordinary spellings omit stress marks. This supports vocabulary, not a quotation or native-speaker approval. See dialogue-review.md."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "heat"
+      },
+      "delivery": "exchange"
+    },
+    {
+      "id": "weather-heat-here",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mainit digdi.",
+          "en": "It's hot here.",
+          "fil": "Mainit dito."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol Dictionary — Malcolm W. Mintz (University of Hawaii Press, 1971)",
+          "url": "https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary",
+          "note": "Original fictional dialogue. Lexical forms checked in the dictionary entries ABANG, INIT, DIGDI, SANA, KITA, MAYO, NA, NIN, URAN, SIGE, PA and AKO; ordinary spellings omit stress marks. This supports vocabulary, not a quotation or native-speaker approval. See dialogue-review.md."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0],
+      "conditions": {
+        "weather": "heat"
+      },
+      "delivery": "utterance"
+    },
+    {
+      "id": "weather-clearing-leave",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Mayo na nin uran.",
+          "en": "It's no longer raining.",
+          "fil": "Wala nang ulan."
+        },
+        {
+          "bcl": "Sige na.",
+          "en": "Go ahead.",
+          "fil": "Sige na."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol Dictionary — Malcolm W. Mintz (University of Hawaii Press, 1971)",
+          "url": "https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary",
+          "note": "Original fictional dialogue. Lexical forms checked in the dictionary entries ABANG, INIT, DIGDI, SANA, KITA, MAYO, NA, NIN, URAN, SIGE, PA and AKO; ordinary spellings omit stress marks. This supports vocabulary, not a quotation or native-speaker approval. See dialogue-review.md."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0, 1],
+      "conditions": {
+        "weather": "clearing"
+      },
+      "delivery": "exchange"
+    },
+    {
+      "id": "weather-clearing-linger",
+      "kind": "talk",
+      "lines": [
+        {
+          "bcl": "Digdi pa ako.",
+          "en": "I'm still here.",
+          "fil": "Nandito pa ako."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Bikol Dictionary — Malcolm W. Mintz (University of Hawaii Press, 1971)",
+          "url": "https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary",
+          "note": "Original fictional dialogue. Lexical forms checked in the dictionary entries ABANG, INIT, DIGDI, SANA, KITA, MAYO, NA, NIN, URAN, SIGE, PA and AKO; ordinary spellings omit stress marks. This supports vocabulary, not a quotation or native-speaker approval. See dialogue-review.md."
+        }
+      ],
+      "profile": "weather",
+      "speakers": [0],
+      "conditions": {
+        "weather": "clearing"
+      },
+      "delivery": "utterance"
     }
   ]
 }

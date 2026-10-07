@@ -25,7 +25,11 @@ it.each(entries)(
   ({ entry, periods }) => {
     const weather = entry.conditions?.weather;
     const rainScene = ['rain', 'heavy-rain', 'easing'].includes(weather ?? '');
-    const sceneOwned = rainScene || SCENE_PROFILES.includes(entry.profile!);
+    const sceneOwned =
+      rainScene ||
+      weather === 'heat' ||
+      weather === 'clearing' ||
+      SCENE_PROFILES.includes(entry.profile!);
     const slots = Math.max(2, ...(entry.speakers ?? []).map((slot) => slot + 1));
     const owners = Array.from({ length: slots }, () => ({}));
     const context: DialogueContext = {
@@ -36,7 +40,10 @@ it.each(entries)(
             ? 1200
             : 720,
       rain: rainScene ? 0.9 : 0,
-      sheltered: rainScene,
+      sheltered: rainScene || weather === 'clearing',
+      shaded: weather === 'heat',
+      clearing: weather === 'clearing',
+      sunAltitude: 60,
       easing: weather === 'easing',
       arrival: entry.conditions?.event === 'arrival',
       wind: weather === 'breeze' ? 0.7 : weather === 'gust' ? 1 : 0,

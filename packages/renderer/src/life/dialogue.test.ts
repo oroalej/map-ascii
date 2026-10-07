@@ -17,6 +17,42 @@ const entries: DialogueChoice[] = Array.from({ length: 12 }, (_, i) => ({
   speakers: [0, 1],
 }));
 describe('contextual dialogue', () => {
+  it('restricts shade and clearing scenes to explicit conditions and current weather', () => {
+    const heat: DialogueChoice = {
+      id: 'heat',
+      kind: 'talk',
+      profile: 'weather',
+      turns: 2,
+      conditions: { weather: 'heat' },
+    };
+    const clearing: DialogueChoice = {
+      ...heat,
+      id: 'clearing',
+      conditions: { weather: 'clearing' },
+    };
+    const shaded = { ...context, profiles: ['weather'] as const, shaded: true, sunAltitude: 60 };
+    expect(dialogueEligible(heat, shaded)).toBe(true);
+    for (const change of [
+      { shaded: false },
+      { sunAltitude: undefined },
+      { sunAltitude: 40 },
+      { minutes: 540 },
+      { rain: 0.01 },
+    ])
+      expect(dialogueEligible(heat, { ...shaded, ...change })).toBe(false);
+    const pending = { ...context, profiles: ['weather'] as const, sheltered: true, clearing: true };
+    expect(dialogueEligible(clearing, pending)).toBe(true);
+    for (const change of [{ sheltered: false }, { clearing: false }, { rain: 1 }])
+      expect(dialogueEligible(clearing, { ...pending, ...change })).toBe(false);
+    for (const c of [shaded, pending])
+      for (const weather of [undefined, 'calm'] as const)
+        expect(
+          dialogueEligible({ ...heat, conditions: weather ? { weather } : undefined }, c),
+        ).toBe(false);
+    expect(
+      dialogueEligible({ ...heat, conditions: undefined }, { ...context, profiles: ['weather'] }),
+    ).toBe(true);
+  });
   it('shares defaults, participants and all-participant anchor reach while retaining focus', () => {
     const people = [
       { x: 0, y: 0, figure: 'adult', place: 'monument' },
