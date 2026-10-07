@@ -31,6 +31,56 @@ const cells = (out: Uint8Array) =>
   Array.from({ length: out.length / 4 }, (_, i) =>
     Array.from(out.subarray(i * 4, i * 4 + 4)),
   ).filter((t) => t[2]);
+it('keeps the emoji anchor on a complete mapped person moved into the second ring', () => {
+  for (const scale of [0.2, 3]) {
+    const agent: VisibleAgent = {
+      kind: 'person',
+      mappedPersonMover: true,
+      lng: 40.35,
+      lat: 40.45,
+      ahead: [40.35 + scale, 40.45],
+      side: [40.35, 40.45 + scale],
+      flap: 0,
+      people: [{ figure: 'adult', paint: 2, lateral: 0, back: 0, flap: 0 }],
+      emoji: { id: 'walker', subject: 'person', mood: 'happy' },
+    };
+    const owners = new Uint32Array(grid.cols * grid.rows);
+    const speakers = {
+      members: new Uint8Array(owners.length),
+      points: new Map<number, [number, number]>(),
+    };
+    const original = new Uint8Array(owners.length * 4);
+    expect(packLife(original, { ...grid, owners, speakers }, [agent], themes.dark, index)).toBe(1);
+    const point = speakers.points.get(1)!;
+    const sourceCells = [...owners.entries()].filter(([, owner]) => owner === 1).map(([i]) => i);
+    expect(sourceCells).toHaveLength(scale === 3 ? 4 : 1);
+    const shift = 2 * grid.cols;
+    const allowed = new Set(sourceCells.map((i) => i + shift));
+    const out = new Uint8Array(original.length);
+    expect(
+      packLife(
+        out,
+        {
+          ...grid,
+          owners,
+          speakers,
+          allowsGroundCell: (_agent, col, row) => allowed.has(row * grid.cols + col),
+        },
+        [agent],
+        themes.dark,
+        index,
+      ),
+    ).toBe(1);
+    expect(speakers.points.get(1)).toEqual([point[0], point[1] + 2]);
+    for (const i of sourceCells) {
+      expect(out.subarray((i + shift) * 4, (i + shift + 1) * 4)).toEqual(
+        original.subarray(i * 4, (i + 1) * 4),
+      );
+      expect(owners[i + shift]).toBe(1);
+      expect(speakers.members[i + shift]).toBe(1);
+    }
+  }
+});
 it('records emoji driver, pet and human anchors without changing packed bytes', () => {
   for (const scale of [1, 4]) {
     const agents: VisibleAgent[] = [
@@ -141,8 +191,13 @@ it('preserves packed bytes and restores final ownership when a complete speaker 
   const legacy = new Uint8Array(grid.cols * grid.rows * 4),
     owned = new Uint8Array(legacy.length);
   const owners = new Uint32Array(grid.cols * grid.rows);
-  const n = packLife(legacy, grid, agents, themes.dark, index);
-  expect(packLife(owned, { ...grid, owners }, agents, themes.dark, index)).toBe(n);
+  const blocked = {
+    ...grid,
+    allowsGroundCell: (agent: VisibleAgent, col: number, row: number) =>
+      agent === agents[0] || (col === 40 && row === 40),
+  };
+  const n = packLife(legacy, blocked, agents, themes.dark, index);
+  expect(packLife(owned, { ...blocked, owners }, agents, themes.dark, index)).toBe(n);
   expect(owned).toEqual(legacy);
   expect([...owners].filter(Boolean)).toEqual([1]);
   packLife(owned, { ...grid, owners, allowsGroundCell: () => false }, agents, themes.dark, index);
@@ -163,7 +218,7 @@ it('preserves packed bytes and restores final ownership when a complete speaker 
       index,
     ),
   ).toThrow('guard');
-  expect(packLife(owned, grid, agents, themes.dark, index)).toBe(n);
+  expect(packLife(owned, blocked, agents, themes.dark, index)).toBe(n);
   expect(owned).toEqual(legacy);
 });
 function draw(

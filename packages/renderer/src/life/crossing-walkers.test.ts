@@ -171,10 +171,17 @@ describe('people at crossings', () => {
     (life as unknown as { walkerRng: () => number }).walkerRng = () => 1;
     const walker = person(-30, 1);
     life.movers.push(walker);
-    life.step(0.1, undefined, undefined, undefined, undefined, (next, _previous, reject) => {
-      reject?.('kind' in next && (next.avoid ?? 0) > 0 ? 'terrain' : 'occupancy');
-      return false;
-    });
+    life.step(
+      0.1,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (next, _previous, _reserve, reject) => {
+        reject?.('kind' in next && (next.avoid ?? 0) > 0 ? 'terrain' : 'occupancy');
+        return false;
+      },
+    );
     expect(walker.dir).toBe(1);
     expect(walker.turning).toBeUndefined();
     expect(walker.waiting).toBeCloseTo(0.1);
@@ -329,6 +336,6 @@ describe('people at crossings', () => {
       longest = Math.max(longest, stood);
     }
     expect(walker.dir).toBe(-1);
-    expect(longest).toBeLessThan(WALK_RECOVERY.seconds / 2);
+    expect(longest).toBeLessThan(WALK_RECOVERY.blockedTurnSeconds / 2);
   });
 });

@@ -134,46 +134,51 @@ describe('street event simulation', () => {
       expect(worldTiles(w).get('road')).toBe(life);
     },
   );
-  it('skips distant closure checks but rejects a swept car entering the route', () => {
-    const { w, life } = world();
-    w.setLive(street.id, 0.5, '2026');
-    const internal = w as unknown as {
-      trafficClosure: () => PolygonIndex;
-      groundGuard: () => (tileLife: typeof life, owner: Mover, before?: Mover) => boolean;
-    };
-    const closure = internal.trafficClosure();
-    const hits = vi.spyOn(closure, 'hits');
-    try {
-      const guard = internal.groundGuard();
-      const car: Mover = {
-        kind: 'vehicle',
-        vehicle: 'car',
-        line: 0,
-        from: 0,
-        dir: 1,
-        d: 3500,
-        x: 3500,
-        y: 2000,
-        hx: 1,
-        hy: 0,
-        speed: 0,
-        v: 0,
-        paint: 0,
-        lane: 0,
-        pause: 0,
-        rank: 0,
+  it.each([0, 3])(
+    'skips distant closure checks but rejects swept cars at minimum %s',
+    (minimum) => {
+      const { w, life } = world();
+      w.setLive(street.id, 0.5, '2026');
+      const internal = w as unknown as {
+        trafficClosure: () => PolygonIndex;
+        groundGuard: (
+          minimum: number,
+        ) => (tileLife: typeof life, owner: Mover, before?: Mover) => boolean;
       };
-      // Lane profiles also query closures once; measure the subsequent swept guard.
-      life.groundBodies(car, 0, []);
-      hits.mockClear();
-      expect(guard(life, { ...car, x: 3501 }, car)).toBe(true);
-      expect(hits).not.toHaveBeenCalled();
-      expect(guard(life, { ...car, x: 1500 }, car)).toBe(false);
-      expect(hits.mock.calls.length).toBeGreaterThan(0);
-    } finally {
-      hits.mockRestore();
-    }
-  });
+      const closure = internal.trafficClosure();
+      const hits = vi.spyOn(closure, 'hits');
+      try {
+        const guard = internal.groundGuard(minimum);
+        const car: Mover = {
+          kind: 'vehicle',
+          vehicle: 'car',
+          line: 0,
+          from: 0,
+          dir: 1,
+          d: 3500,
+          x: 3500,
+          y: 2000,
+          hx: 1,
+          hy: 0,
+          speed: 0,
+          v: 0,
+          paint: 0,
+          lane: 0,
+          pause: 0,
+          rank: 0,
+        };
+        // Lane profiles also query closures once; measure the subsequent swept guard.
+        life.groundBodies(car, 0, []);
+        hits.mockClear();
+        expect(guard(life, { ...car, x: 3501 }, car)).toBe(true);
+        expect(hits).not.toHaveBeenCalled();
+        expect(guard(life, { ...car, x: 1500 }, car)).toBe(false);
+        expect(hits.mock.calls.length).toBeGreaterThan(0);
+      } finally {
+        hits.mockRestore();
+      }
+    },
+  );
   it('caches fixed street permissions while checking moving Mass poses and preserving span objects', () => {
     const scene = new GroundProcessionScene(street);
     scene.actors.splice(0, scene.actors.length, ...scene.actors.filter((a) => a.destination));

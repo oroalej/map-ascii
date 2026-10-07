@@ -69,6 +69,58 @@ function obstacleRoad(angle = 0, oneway: 0 | 1 = 1) {
 }
 
 describe('terrain-blocked road vehicles', () => {
+  it.each([0, 1] as const)('plans around a parked footprint on a road with oneway %s', (oneway) => {
+    const point = (x: number, y = 0) => ({ x: 1000 + x * pm, y: 2000 + y * pm });
+    const builder = new LifeBuilder();
+    builder.line([point(0), point(200)], LifeLine.roadMinor, 6, 1, oneway);
+    const { world, life } = bareRoad(builder);
+    const parked = { ...point(70, 0.25), hx: 1, hy: 0, vehicle: 'car' as const, paint: 0 };
+    life.parked.push(parked);
+    const queries = world as unknown as { laneTerrain(source: typeof life): LaneTerrain };
+    life.setLaneTerrain(queries.laneTerrain(life));
+    const car: Mover = {
+      kind: 'vehicle',
+      vehicle: 'tricycle',
+      line: 0,
+      from: 0,
+      dir: 1,
+      d: 40 * pm,
+      ...point(40),
+      hx: 1,
+      hy: 0,
+      speed: 3 * pm,
+      v: 3 * pm,
+      lane: 0.67,
+      paint: 1,
+      pause: 0,
+      rank: 0,
+    };
+    life.movers.push(car);
+    const parkedBody = { ...parked, x: parked.x / pm, y: parked.y / pm, ...VEHICLES.car };
+    expect(
+      queries
+        .laneTerrain(life)
+        .near(parkedBody.x - 3, parkedBody.y - 3, parkedBody.x + 3, parkedBody.y + 3),
+    ).toBe(true);
+    for (let frame = 0; frame < 30 * 30; frame++) {
+      world.step(1 / 30, undefined, 21);
+      expect(bodiesOverlap(life.groundBodies(car)[0]!, parkedBody)).toBe(false);
+      expect(car.dir).toBe(1);
+      expect(car.guardWait ?? 0).toBe(0);
+      if (car.d > 90 * pm) break;
+    }
+    expect(car.d / pm).toBeGreaterThan(90);
+    expect(life.parked).toEqual([parked]);
+    // A terrain refresh must stop using a removed parking footprint.
+    life.parked.length = 0;
+    life.setLaneTerrain(queries.laneTerrain(life));
+    expect(
+      queries
+        .laneTerrain(life)
+        .near(parkedBody.x - 3, parkedBody.y - 3, parkedBody.x + 3, parkedBody.y + 3),
+    ).toBe(false);
+  });
+
   it('recognizes a straight handoff with repeated endpoint vertices', () => {
     const p = (x: number, y = 0) => ({ x: 1000 + x * pm, y: 2000 + y * pm });
     const b = new LifeBuilder();

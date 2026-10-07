@@ -1,4 +1,9 @@
-import type { ContinuityCounter, ContinuitySample, TravelerTrace } from './life/diagnostics';
+import type {
+  ContinuityCounter,
+  ContinuitySample,
+  TravelerTrace,
+  LifeDiagnostics,
+} from './life/diagnostics';
 
 export const PROFILE_CAPACITY = 4096;
 export const PROFILE_STAGES = [
@@ -61,7 +66,10 @@ export class FrameProfiler {
   private selected: string | undefined;
   private selectionOverride = false;
   private trace: TravelerTrace[] = [];
-  constructor(private readonly now: () => number = () => performance.now()) {}
+  constructor(
+    private readonly now: () => number = () => performance.now(),
+    readonly lifeDiagnostics?: LifeDiagnostics,
+  ) {}
   registerPopulation(tile: string, movers: readonly object[]) {
     const incarnation = (this.incarnations.get(tile) ?? 0) + 1;
     this.incarnations.set(tile, incarnation);

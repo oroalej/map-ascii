@@ -80,7 +80,9 @@ it('counts only accepted seam distance with and without unrelated controlled cro
     expect(m.walked! - 10).toBeCloseTo(moved);
     const stopped = clippedWalkingStep(controlled, true).m;
     expect(stopped.walked).toBe(10);
-    expect(stopped.turnedAt).toBe(stopped.walked);
+    // The seam has accepted no movement, and the task's four-second recovery
+    // threshold has not elapsed yet. Failed travel must not advance the gait.
+    expect(stopped.turnedAt).toBeUndefined();
   }
 });
 

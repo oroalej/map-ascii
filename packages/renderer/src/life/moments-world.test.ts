@@ -118,7 +118,9 @@ describe('moments through the simulation', () => {
       for (let frame = 0; frame < 20; frame++) {
         f.step(0, zoom, width);
         const visible = f.world.visible(zoom, levels, f.center);
-        balls += visible.filter((a) => a.prop === 'ball').length;
+        const airborne = visible.filter((a) => a.prop === 'ball');
+        for (const ball of airborne) expect(ball.glyph).toBe('•');
+        balls += airborne.length;
       }
       for (const kind of Object.keys(counts) as (keyof typeof counts)[])
         counts[kind] += f.tile.momentHost.moments.stats.started[kind];

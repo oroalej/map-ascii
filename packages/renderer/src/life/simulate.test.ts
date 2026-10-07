@@ -1003,9 +1003,9 @@ describe('vehicles and boats', () => {
     expect(boats.every((m) => m.vehicle === 'banca')).toBe(true);
   });
 
-  /** A tile holding only the given vehicles on a 6 m road running east. */
-  const road = (...movers: Partial<Mover>[]) => {
-    const life = new TileLife(tile, line(LifeLine.roadMinor, 6), 1);
+  /** A tile holding only the given vehicles on a road running east. */
+  const roadOn = (width: number, ...movers: Partial<Mover>[]) => {
+    const life = new TileLife(tile, line(LifeLine.roadMinor, width), 1);
     life.movers.length = 0;
     life.flocks.length = 0;
     life.parked.length = 0;
@@ -1031,6 +1031,7 @@ describe('vehicles and boats', () => {
     }
     return life;
   };
+  const road = (...movers: Partial<Mover>[]) => roadOn(6, ...movers);
 
   it('queues behind a slower vehicle instead of driving through it', () => {
     const life = road({ d: 1000, speed: 2 * perMeter }, { d: 900, speed: 10 * perMeter });
@@ -1057,8 +1058,14 @@ describe('vehicles and boats', () => {
     }
     expect(m.v! / perMeter).toBeCloseTo(10);
     const before = m.d;
-    let tries = 0;
-    life.step(0.1, undefined, undefined, undefined, undefined, () => ++tries === 3);
+    life.step(
+      0.1,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (owner) => 'd' in owner && owner.d > before && owner.d - before <= 0.25 * perMeter + 1e-9,
+    );
     expect(m.v! / perMeter).toBeCloseTo(2.5);
     expect(m.v!).toBeCloseTo((m.d - before) / 0.1);
     life.step(0.1, undefined, undefined, undefined, undefined, () => false);
@@ -1075,13 +1082,21 @@ describe('vehicles and boats', () => {
     expect(life.movers[0]!.d).toBe(30);
   });
 
-  it('passes a bicycle riding by the curb', () => {
-    const life = road({ vehicle: 'bicycle', d: 1000, speed: 3 * perMeter }, { d: 990 });
+  it('passes a bicycle riding by the curb when the road has physical clearance', () => {
+    const life = roadOn(8, { vehicle: 'bicycle', d: 1000, speed: 3 * perMeter }, { d: 990 });
     const car = life.movers[1]!;
     life.step(0.1);
     const before = car.x;
     life.step(0.1);
     expect((car.x - before) / perMeter / 0.1).toBeCloseTo(10);
+  });
+  it('queues behind a curb bicycle when passing would overlap its physical footprint', () => {
+    const life = road({ vehicle: 'bicycle', d: 1000, speed: 3 * perMeter }, { d: 990 });
+    const car = life.movers[1]!,
+      before = car.d;
+    life.step(0.1);
+    expect(car.d).toBe(before);
+    expect(car.v).toBe(0);
   });
 });
 
@@ -1208,6 +1223,47 @@ describe('parked vehicles', () => {
     expect(life.parked.length).toBeGreaterThan(40);
     expect(life.parked.length).toBeLessThan(90);
     expect(life.parked.every((p) => p.y === 500 && p.hy === 1)).toBe(true);
+  });
+
+  it('keeps mapped lot footprints out of through-junction zones without shifting later parking draws', () => {
+    const make = (junction: boolean) => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: 1000, y: 2000 },
+          { x: 2000, y: 2000 },
+          { x: 3000, y: 2000 },
+        ],
+        LifeLine.roadMajor,
+        6,
+      );
+      if (junction)
+        b.line(
+          [
+            { x: 2000, y: 1000 },
+            { x: 2000, y: 2000 },
+          ],
+          LifeLine.roadMinor,
+          6,
+        );
+      b.spot({ x: 2000, y: 2000 + 5 * perMeter }, 1, 0);
+      b.spot({ x: 2500, y: 2300 }, 1, 0);
+      return b.finish();
+    };
+    let excludedWitness = false,
+      laterWitness = false;
+    for (const seed of seeds) {
+      const ordinary = new TileLife(tile, make(false), seed),
+        through = new TileLife(tile, make(true), seed);
+      excludedWitness ||= ordinary.parked.some((p) => p.x === 2000);
+      laterWitness ||= ordinary.parked.some((p) => p.x === 2500);
+      expect(through.parked.some((p) => p.x === 2000)).toBe(false);
+      expect(through.parked.filter((p) => p.x === 2500)).toEqual(
+        ordinary.parked.filter((p) => p.x === 2500),
+      );
+    }
+    expect(excludedWitness).toBe(true);
+    expect(laterWitness).toBe(true);
   });
 
   it('show from their zoom, day and night, lamps off', () => {
