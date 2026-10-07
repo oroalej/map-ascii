@@ -297,6 +297,60 @@ describe('life worker protocol', () => {
     },
   );
   afterEach(() => vi.useRealTimers());
+  it('transports the mouse equally to worker and inline worlds containing birds', async () => {
+    vi.useFakeTimers();
+    const builder = new LifeBuilder();
+    builder.roost({ x: 2048, y: 2048 });
+    builder.perch({ x: 2048, y: 2048 });
+    const entry = { key: `${left.z}/${left.x}/${left.y}`, tile: left, life: builder.finish() };
+    const center = tileToLngLat(left, { x: 2048, y: 2048 });
+    const remote = new LifeWorld();
+    const local = new LifeWorld();
+    const api = createLifeWorkerApi(
+      () => 0,
+      () => remote,
+    );
+    api.init({ processions: [] });
+    const inline = createInlineHost(local, undefined, () => 0);
+    api.sync([structuredClone(entry)]);
+    inline.sync([entry]);
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: center[0], lat: center[1], zoom: 19 },
+        size: { width: 400, height: 300 },
+        cssCell: { w: 5, h: 9 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 19,
+        bounds: undefined,
+        wind: undefined,
+        weather: undefined,
+        cellMeters: 0.9,
+      },
+      visible: [19, 1, center],
+    };
+    api.frame(input);
+    inline.request(input);
+    await vi.runAllTimersAsync();
+    api.frame(input);
+    inline.request(input);
+    expect(remote.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
+    expect(local.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
+    const a = vi.spyOn(remote, 'step');
+    const b = vi.spyOn(local, 'step');
+    for (const pointer of [center, center, undefined]) {
+      input.step.pointer = pointer;
+      const actual = api.frame(structuredClone(input));
+      inline.request(input);
+      expect(a.mock.calls.at(-1)![9]).toEqual(pointer);
+      expect(b.mock.calls.at(-1)![9]).toEqual(pointer);
+      expect(actual.agents).toEqual(inline.latest()!.agents);
+    }
+    inline.dispose();
+  });
   it('publishes identical complete staged worker and inline frames through camera changes and cancellation', async () => {
     vi.useFakeTimers();
     const s = makeScenario('sparse', 1, false);

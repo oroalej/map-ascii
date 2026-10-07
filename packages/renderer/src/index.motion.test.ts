@@ -46,6 +46,7 @@ import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
 import { solarPosition } from './life/sun';
+import { viewportFor } from './camera';
 
 const vehicleBuffers = () => ({
   stampedVehicles: new Uint8Array(0),
@@ -640,6 +641,49 @@ describe('live motion preference', () => {
     draw(150);
     draw(200);
   };
+
+  it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', () => {
+    const frames: FrameInput[] = [];
+    const createInline = Hosts.createInlineHost;
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = createInline(...args);
+      const request = host.request;
+      host.request = (frame) => {
+        frames.push(frame);
+        return request(frame);
+      };
+      return host;
+    });
+    usePauseMode('item');
+    draw(100);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(150);
+    const frame = frames.at(-1)!;
+    expect(frame.step.pointer).toEqual(
+      viewportFor(frame.gust.camera, frame.gust.size).unproject([120, 90]),
+    );
+    // Press and leave both clear hover in attachInput; the renderer receives null.
+    input.intents!.hover(null);
+    draw(200);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(250);
+    input.intents!.pan(1, 0);
+    draw(300);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    atlas.flyTo({ lng: 0.01 }, { duration: 1000 });
+    draw(350);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    draw(1400);
+    input.intents!.hover([120, 90]);
+    atlas.setLife({ enabled: false });
+    draw(1450);
+    atlas.setLife({ enabled: true });
+    draw(1500);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+  });
 
   it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
     atlas.destroy();

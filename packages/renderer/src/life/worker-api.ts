@@ -38,6 +38,8 @@ export type FrameInput = {
     cellMeters: Step[6];
     /** Actual rounded render grid scale; movement still uses CSS clearance. */
     effectCellMeters?: number;
+    /** Mouse hover in longitude/latitude; absent after hover clears. */
+    pointer?: readonly [number, number];
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -99,6 +101,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.cellMeters,
     gust.cssCell.h / gust.cssCell.w,
     step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
+    step.pointer,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();

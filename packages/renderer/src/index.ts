@@ -1025,6 +1025,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
+            ...(lifeHover.pointerPoint
+              ? { pointer: viewportFor(camera, size).unproject([...lifeHover.pointerPoint]) }
+              : {}),
           },
           visible: [
             camera.zoom,

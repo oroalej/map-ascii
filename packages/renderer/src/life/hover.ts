@@ -48,6 +48,10 @@ export class LifeHoverController {
     return this.point !== null;
   }
 
+  get pointerPoint(): readonly [number, number] | null {
+    return this.point;
+  }
+
   clear() {
     this.lastUpdate = undefined;
     this.intervals.length = 0;

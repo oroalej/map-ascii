@@ -514,6 +514,8 @@ export type Mover = {
  * tile units) and its strength 0–1 (life/wind.ts).
  */
 export type LifeEnv = {
+  /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
+  pointer?: { lngLat: readonly [number, number]; cellMeters: number };
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -9412,6 +9414,7 @@ export class LifeWorld {
     cellMeters = 0,
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
+    pointer?: readonly [number, number],
   ) {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
@@ -9448,6 +9451,7 @@ export class LifeWorld {
       cityLife: this.cityLife,
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
+      ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
     };
     const event = this.procession();
     const eventScene = event && this.scenes.get(event.id);
