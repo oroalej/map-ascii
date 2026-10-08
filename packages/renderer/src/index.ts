@@ -988,7 +988,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let candleFlare: CandleFlare | undefined;
   let requestedFireworks: FireworkRequest[] | undefined;
   let tapPointer = { revision: 0, left: false };
-  let feedTrackingUntil = 0;
+  let acceptedPointerRevision = 0;
   let tapEpoch = 0;
   const clearTaps = () => {
     tapEpoch++;
@@ -998,7 +998,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       carnivalBoosts = undefined;
       candleFlare = undefined;
       if (programs?.fireworks) clearRequestedFireworks(programs.fireworks.display);
-      feedTrackingUntil = 0;
+      acceptedPointerRevision = 0;
     }
   };
   let hostTurn = 0;
@@ -1136,6 +1136,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const pointer = lifePointer(size);
       if (flight) clearTaps();
       const tapBatch = taps.batch(drawnLife?.generation);
+      const stepDelta = lifePause.delta;
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1150,7 +1151,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             : {}),
           gust: { camera, size, cssCell: { w: cssCell.width, h: cssCell.height }, time, wind },
           step: {
-            dt: lifePause.delta,
+            dt: stepDelta,
             zoom: camera.zoom,
             bounds: viewBounds(),
             wind: worldWind(time),
@@ -1167,7 +1168,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
             ...(pointer ? { pointer } : {}),
             ...(tapBatch && { taps: tapBatch }),
-            ...(at < feedTrackingUntil ? { tapPointer } : {}),
+            ...(tapPointer.revision !== acceptedPointerRevision ? { tapPointer } : {}),
           },
           visible: [
             camera.zoom,
@@ -1180,6 +1181,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           ],
         });
       if (accepted) {
+        // Zero-time requests do not visit flock pointer logic; retain activity for the next step.
+        if (stepDelta > 0) acceptedPointerRevision = tapPointer.revision;
         lifePause.accept();
         taps.accepted(tapBatch);
       }
@@ -2293,6 +2296,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           dpr,
           geometry: `${geometry}`,
           owners: raster.owners,
+          crowdMask: raster.crowdMask,
           life: raster.life,
           agents: lifeAgents,
           generation: source.generation!,
@@ -2319,7 +2323,6 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           drawnLife?.generation === source.generation,
         (tap) => {
           taps.add(tap);
-          feedTrackingUntil = performance.now() + 20_000;
           drawDirty = true;
         },
       );

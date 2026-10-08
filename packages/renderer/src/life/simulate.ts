@@ -8840,6 +8840,7 @@ export class LifeWorld {
         this.momentOptions,
         this.emojiMemory,
         this.emojiObserver,
+        this.scenes.get(run.id)!.route.kind,
       );
     return this.eventTaps;
   }
@@ -8850,6 +8851,10 @@ export class LifeWorld {
       (this.tapSources?.latest() ?? []).flatMap((t) => (t?.agent.event ? [t.owner] : [])),
     );
     state.step(dt, zoom, this.emojiClock, visible);
+    if (state.idle) {
+      state.clear();
+      this.eventTaps = undefined;
+    }
   }
   private tapProcession(tap: LifeTap, minutes: number, zoom: number) {
     if (!this.procession()) return false;
@@ -8872,7 +8877,7 @@ export class LifeWorld {
           distance(t.agent) <= 6 * tap.cellMeters,
       )
     )
-      return false;
+      return tap.crowd === true;
     if (zoom < MOMENTS.zoom) return true;
     const seen = new Set<object>();
     const crowd = targets

@@ -152,7 +152,7 @@ it('reuses the sourced pack cheer and preserves requested speech over ambient ev
     {
       id: 'pack-cheer',
       kind: 'cheer',
-      conditions: { occasions: ['procession', 'fluvial'] },
+      conditions: { occasions: ['fluvial'] },
       delivery: 'utterance',
       speakers: [0],
       turns: 1,
@@ -174,11 +174,27 @@ it('reuses the sourced pack cheer and preserves requested speech over ambient ev
     expect(visible.some((agent) => agent.speech?.exchangeId === 'background')).toBe(true);
     expect(catalog.find((choice) => choice.id === 'pack-cheer')).toMatchObject({
       kind: 'cheer',
-      conditions: { occasions: ['procession', 'fluvial'] },
+      conditions: { occasions: ['fluvial'] },
     });
   } finally {
     cues.mockRestore();
   }
+});
+it('does not request a street-only chant during a fluvial event', () => {
+  const catalog: DialogueChoice[] = [
+    {
+      id: 'street-only',
+      kind: 'cheer',
+      conditions: { occasions: ['procession'] },
+      delivery: 'utterance',
+      speakers: [0],
+      turns: 1,
+    },
+  ];
+  const f = eventWorld(false, false, catalog);
+  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+  expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
+  expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(false);
 });
 it.each([false, true])(
   'cheers through stable owners without physical movers (played=%s)',
@@ -222,6 +238,33 @@ it('clears event presentation on occurrence replacement and removal', () => {
   f.world.setLive(undefined);
   expect(f.world.visible(19, 1, [0, 0]).some((a) => a.event)).toBe(false);
 });
+it('retires idle event tap state and recreates it for the next request', () => {
+  const f = eventWorld();
+  const step = vi.spyOn(EventTaps.prototype, 'step');
+  try {
+    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+    expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(
+      true,
+    );
+    f.world.step(9, undefined, 19);
+    f.world.visible(19, 1, [0, 0]);
+    f.world.step(0.1, undefined, 19);
+    step.mockClear();
+    f.world.visible(19, 1, [0, 0]);
+    f.world.step(0.1, undefined, 19);
+    expect(step).not.toHaveBeenCalled();
+    f.world.visible(19, 1, [0, 0]);
+    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
+      { ...f.tap, id: 2, frame: f.world.tapSources!.frame },
+    ]);
+    expect(step).toHaveBeenCalledOnce();
+    expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(
+      true,
+    );
+  } finally {
+    step.mockRestore();
+  }
+});
 it.each([false, true])(
   'greets a tapped event person and defers its wave (inspection=%s)',
   (inspection) => {
@@ -258,6 +301,20 @@ it('declines a distant tap or an event that is not running', () => {
   f.world.visible(19, 1, [0, 0]);
   f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
     { ...f.tap, frame: f.world.tapSources!.frame },
+  ]);
+  expect(f.world.tapReceipts).toEqual([{ id: 1 }]);
+});
+it('consumes a distant crowd tap only while its event is running', () => {
+  const f = eventWorld();
+  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
+    { ...f.tap, crowd: true, at: [1, 1], firework: true },
+  ]);
+  expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
+  expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(false);
+  f.world.setLive(undefined);
+  f.world.visible(19, 1, [0, 0]);
+  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
+    { ...f.tap, frame: f.world.tapSources!.frame, crowd: true, firework: true },
   ]);
   expect(f.world.tapReceipts).toEqual([{ id: 1 }]);
 });

@@ -1,11 +1,12 @@
 /** Tap-only presentation for regenerated event actors; no physical actors are created. */
-import type { DialogueProfile, EmojiMood } from '@atlas/shared';
+import type { DialogueOccasion, DialogueProfile, EmojiMood } from '@atlas/shared';
 import { type EmojiMemory, EmojiObserver } from './emoji';
 import { SceneSpeech } from './scene-speech';
 import { MOMENTS } from './moments';
 import type { MomentOptions } from './moments-host';
 import type { LifeEnv, VisibleAgent } from './simulate';
 import { TapReactions, type TapTarget } from './tap';
+import { eventCheers } from './event-cues';
 
 export class EventTaps {
   private readonly speech: SceneSpeech;
@@ -13,21 +14,23 @@ export class EventTaps {
   private readonly reactions = new TapReactions();
   private readonly owners = new Map<object, number>();
   private readonly greeted = new WeakMap<object, number>();
+  get idle() {
+    return this.owners.size === 0 && this.speech.size === 0 && this.reactions.size === 0;
+  }
   constructor(
     readonly scope: string,
     private readonly options: MomentOptions | undefined,
     memory: EmojiMemory,
     emojiEnabled: boolean,
+    occasion: DialogueOccasion,
   ) {
     const choices = options?.dialogue ?? [];
-    // A pack's first procession cheer supplies the requested chant as well as ambient events.
+    const cheerId = eventCheers(choices)[occasion][0];
+    // A pack's first cheer for this occasion supplies requested and ambient chants.
     // Adapt it only in this tap-only host, retaining its authored id and spoken text.
     const cheer = choices.some((choice) => choice.profile === 'procession-cheer')
       ? undefined
-      : choices.find(
-          (choice) =>
-            choice.kind === 'cheer' && choice.conditions?.occasions?.includes('procession'),
-        );
+      : choices.find((choice) => choice.id === cheerId);
     this.speech = new SceneSpeech(
       0,
       choices.map((choice) =>

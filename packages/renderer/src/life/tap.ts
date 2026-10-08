@@ -21,6 +21,7 @@ export type LifeTap = {
   pointerRevision?: number;
   cellMeters: number;
   agent?: number;
+  crowd?: boolean;
   folklore?: string;
   signal?: { seed: number; midBlock: boolean };
   carnival?: { key: string; at: readonly [number, number]; record?: SeasonalCarnivalRecord };
@@ -99,6 +100,8 @@ export function resolveTap(tap: LifeTap, sources: TapSources, h: TapHandlers): T
   else if (source.target) {
     h.agent(source.target, tap);
     action = 'agent';
+  } else if (tap.crowd) {
+    if (h.procession(tap)) action = 'procession';
   } else if (h.signal(tap)) action = 'signal';
   else if (h.procession(tap)) action = 'procession';
   else if (tap.carnival) {
@@ -151,6 +154,9 @@ export class TapQueue {
 /** Bounded presentation requests, including waves deferred until an utterance ends. */
 export class TapReactions {
   private entries: { cue: EmojiRequest; at: number }[] = [];
+  get size() {
+    return this.entries.length;
+  }
   add(cue: EmojiRequest, at: number) {
     if (this.entries.length < 32) this.entries.push({ cue, at });
   }

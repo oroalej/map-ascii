@@ -9,11 +9,13 @@ import type { FolkloreQuad } from '../folklore-pass';
 import type { LifeTap } from './tap';
 import { classId } from '../classes';
 import { CellBit } from './config';
+import { THRONG_MASK_SIDE, THRONG_MASK_WORDS } from './crowd-mask';
 
 export type TapCaptureFrame = LifeSurfaceFrame & {
   generation: number;
   frame: number;
   folklore: readonly FolkloreQuad[];
+  crowdMask?: Uint32Array;
 };
 
 /** Captures the displayed frame independently of mouse hover and inspection. */
@@ -68,6 +70,36 @@ export function captureTap(
     );
   };
   if (!agent || !describeAgent(agent)) {
+    const mx = Math.floor(
+      ((point[0] * f.dpr + f.grid.shiftX) / f.grid.cellWidth - col) * THRONG_MASK_SIDE,
+    );
+    const my = Math.floor(
+      ((point[1] * f.dpr + f.grid.shiftY) / f.grid.cellHeight - row) * THRONG_MASK_SIDE,
+    );
+    const bit = my * THRONG_MASK_SIDE + mx;
+    const word = f.crowdMask?.[(row * f.targets.cols + col) * THRONG_MASK_WORDS + (bit >> 5)];
+    // Snapshot the displayed mask bit before the mutable raster is packed again.
+    const crowd =
+      col >= 0 &&
+      col < f.targets.cols &&
+      row >= 0 &&
+      row < f.targets.rows &&
+      word !== undefined &&
+      (word & (1 << (bit & 31))) !== 0;
+    if (crowd) {
+      readLifeSurface(
+        reads,
+        attachment,
+        f.targets,
+        { col, row, sx, sy, cls: classId('life_person'), flags: CellBit.person },
+        (visible) => {
+          if (visible === undefined || !current()) return;
+          if (visible) done({ ...tap, crowd: true });
+          else fixture();
+        },
+      );
+      return;
+    }
     fixture();
     return;
   }

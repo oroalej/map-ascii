@@ -470,6 +470,17 @@ function fixture() {
   return { sources, tap, handlers };
 }
 describe('tap arbitration', () => {
+  it.each([false, true])('consumes crowd taps with an active procession=%s', (running) => {
+    const f = fixture();
+    f.handlers.procession = vi.fn(() => running);
+    expect(resolveTap({ ...f.tap, crowd: true, firework: true }, f.sources, f.handlers)).toEqual({
+      id: 1,
+      ...(running && { action: 'procession' }),
+    });
+    expect(f.handlers.signal).not.toHaveBeenCalled();
+    expect(f.handlers.tree).not.toHaveBeenCalled();
+    expect(f.handlers.rice).not.toHaveBeenCalled();
+  });
   it('consumes a matched inactive cat instead of reaching a firework or feed', () => {
     const f = fixture();
     expect(resolveTap({ ...f.tap, agent: 0, firework: true }, f.sources, f.handlers).action).toBe(

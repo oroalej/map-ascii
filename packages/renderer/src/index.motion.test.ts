@@ -727,6 +727,54 @@ describe('live motion preference', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+  it('delivers pointer departure after a long pause, zero-time frame and busy rejection', async () => {
+    const original = InlineHosts.createConfiguredInlineHost;
+    const requests: FrameInput[] = [];
+    let reject = false;
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation(
+      (world, profiler, clock) => {
+        const host = original(world, profiler, clock);
+        const request = host.request.bind(host);
+        host.request = (frame) => {
+          requests.push(frame);
+          if (reject) {
+            reject = false;
+            return false;
+          }
+          return request(frame);
+        };
+        return host;
+      },
+    );
+    await usePauseMode('all');
+    vi.spyOn(TapCapture, 'captureTap').mockImplementation(
+      (_point, tap, _frame, _reads, _attachment, _current, done) => done(tap),
+    );
+    vi.mocked(lifeRaster).mockReturnValue({
+      owners: new Uint32Array(0),
+      life: new Uint8Array(0),
+      revision: 1,
+    } as NonNullable<ReturnType<typeof lifeRaster>>);
+    draw(100);
+    input.intents!.tap([20, 20], 'mouse');
+    draw(140);
+    visibility.watched = false;
+    visibility.changed!(false);
+    time = 30_140;
+    input.intents!.pointerActivity!(true);
+    visibility.watched = true;
+    visibility.changed!(true);
+    draw(30_140);
+    expect(requests.at(-1)!.step.dt).toBe(0);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    reject = true;
+    draw(30_180);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    draw(30_220);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    draw(30_260);
+    expect(requests.at(-1)!.step.tapPointer).toBeUndefined();
+  });
   it('captures night-season fireworks and consumes a chosen launch receipt once', async () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {

@@ -67,6 +67,31 @@ it('targets touch without hover or any owner selection', () => {
   expect(f.done).toHaveBeenCalledWith(expect.objectContaining({ pointer: 'touch', agent: 0 }));
   expect(f.frame.agents[0]!.inspectionId).toBeUndefined();
 });
+it('captures unowned crowd ink before its raster is reused', () => {
+  const f = fixture();
+  f.frame.owners.fill(0);
+  f.frame.crowdMask = new Uint32Array(8).fill(0xffffffff);
+  f.start();
+  f.frame.crowdMask.fill(0);
+  f.finish();
+  expect(f.done).toHaveBeenCalledWith(expect.objectContaining({ crowd: true }));
+});
+it.each(['tree_crown', 'building'])('does not capture crowd behind %s', (cls) => {
+  const f = fixture();
+  f.frame.owners.fill(0);
+  f.frame.crowdMask = new Uint32Array(8).fill(0xffffffff);
+  f.start();
+  f.finish(cls, 5);
+  expect(f.done.mock.calls[0]![0].crowd).toBeUndefined();
+});
+it('does not treat a hole in the crowd mask as a person', () => {
+  const f = fixture();
+  f.frame.owners.fill(0);
+  f.frame.crowdMask = new Uint32Array(8);
+  f.start();
+  expect(f.reads.request).not.toHaveBeenCalled();
+  expect(f.done.mock.calls[0]![0].crowd).toBeUndefined();
+});
 it.each(['building_part', 'building', 'tree_crown'])(
   'candle admission matches the shader burial exception on %s',
   (cls) => {
