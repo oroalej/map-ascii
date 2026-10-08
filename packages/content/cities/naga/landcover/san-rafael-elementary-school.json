@@ -3,83 +3,111 @@
   "title": "San Rafael Elementary School SPED Center grounds",
   "trees": [
     {
-      "at": [123.22755823611, 13.63267250854],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.22754568814,
+        13.63267149361
+      ],
+      "crown_m": 5.8,
+      "height_m": 6.7
     },
     {
-      "at": [123.22751333221, 13.6326475995],
-      "crown_m": 7.0,
-      "height_m": 8.4
-    },
-    {
-      "at": [123.22740153471, 13.63254697933],
-      "crown_m": 4.0,
-      "height_m": 5
-    },
-    {
-      "at": [123.22732587022, 13.63250853479],
-      "crown_m": 6.0,
-      "height_m": 7.2
-    },
-    {
-      "at": [123.22730923553, 13.63245864668],
-      "crown_m": 7.0,
-      "height_m": 8.4
-    },
-    {
-      "at": [123.22729251945, 13.63239799976],
-      "crown_m": 6.0,
-      "height_m": 7.2
-    },
-    {
-      "at": [123.22730419415, 13.63235574348],
-      "crown_m": 5.0,
+      "at": [
+        123.22749711389,
+        13.6326274244
+      ],
+      "crown_m": 5.2,
       "height_m": 6.0
     },
     {
-      "at": [123.22728953236, 13.63234023493],
-      "crown_m": 5.0,
+      "at": [
+        123.22745081663,
+        13.63258882551
+      ],
+      "crown_m": 5.2,
       "height_m": 6.0
     },
     {
-      "at": [123.22725619743, 13.63204535922],
-      "crown_m": 4.0,
-      "height_m": 5
+      "at": [
+        123.22740863057,
+        13.63255889305
+      ],
+      "crown_m": 4.5,
+      "height_m": 5.2
     },
     {
-      "at": [123.22731830855, 13.63198068397],
-      "crown_m": 5.0,
+      "at": [
+        123.22753875927,
+        13.63251140899
+      ],
+      "crown_m": 3.2,
+      "height_m": 4
+    },
+    {
+      "at": [
+        123.22732226598,
+        13.63248879431
+      ],
+      "crown_m": 4.5,
+      "height_m": 5.2
+    },
+    {
+      "at": [
+        123.22730879341,
+        13.63243827061
+      ],
+      "crown_m": 5.2,
       "height_m": 6.0
     },
     {
-      "at": [123.22750110185, 13.63203321171],
-      "crown_m": 5.0,
+      "at": [
+        123.22730819145,
+        13.63238538027
+      ],
+      "crown_m": 5.2,
       "height_m": 6.0
+    },
+    {
+      "at": [
+        123.22729127183,
+        13.63232960141
+      ],
+      "crown_m": 5.2,
+      "height_m": 6.0
+    },
+    {
+      "at": [
+        123.22759374361,
+        13.63210909084
+      ],
+      "crown_m": 5.2,
+      "height_m": 6.0
+    },
+    {
+      "at": [
+        123.22726789445,
+        13.63196053721
+      ],
+      "crown_m": 5.2,
+      "height_m": 6.0
+    },
+    {
+      "at": [
+        123.22732529031,
+        13.63194409427
+      ],
+      "crown_m": 5.2,
+      "height_m": 6.0
+    },
+    {
+      "at": [
+        123.22739549366,
+        13.63193118528
+      ],
+      "crown_m": 4.5,
+      "height_m": 5.2
     }
   ],
-  "areas": [
-    {
-      "ring": [
-        [123.22752503049, 13.6323297193],
-        [123.22752883711, 13.63242390234],
-        [123.22754578911, 13.63241979471],
-        [123.22752757007, 13.63233002134],
-        [123.22752503049, 13.6323297193]
-      ],
-      "cover": "planting"
-    },
-    {
-      "ring": [
-        [123.22744660317, 13.63213527645],
-        [123.22744271908, 13.63215601041],
-        [123.22747830768, 13.63215159274],
-        [123.22747993393, 13.63213266275],
-        [123.22744660317, 13.63213527645]
-      ],
-      "cover": "planting"
-    }
-  ],
+  "areas": [],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -91,7 +119,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6323077,123.2274764,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-rafael-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Compact roof-filled site: diagonal-roof northwest canopy, narrow west-edge crowns, small southeast crown and two visibly green narrow gaps beside classroom ends. Central and east links stay narrow; no lawn or hedge inferred from shadows. Northwest crowns beyond the mapped parent can overhang it but trunks stay inside. Diagonal upper roof, long eastern strip and lower central strip; no lawn inferred from shadowed narrow gaps. Independent excluded check errors: 2.90 m, 0.91 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied san-rafael-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit). Mostly roofs. Crowns: the large-leaved canopy north-west of the angled roof, the palm line on the west edge, a small tree beside the angled roof, the crown at the long east roof's south end and the canopy along the south yard. Hardscape: the south yard in front of the west classroom block and the long corridor between the middle blocks and the east block. The pale ground north-west of the light roof and the narrow shadowed gaps stay bare. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.56 m, 1.33 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }
