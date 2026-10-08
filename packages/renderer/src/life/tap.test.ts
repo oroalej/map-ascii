@@ -387,12 +387,29 @@ describe('tap arbitration', () => {
     const f = fixture();
     f.sources.finish([]);
     expect(resolveTap({ ...f.tap, agent: 0 }, f.sources, f.handlers).action).toBe('agent');
-    f.sources.finish([]);
+    for (let i = 0; i < 7; i++) f.sources.finish([]);
     expect(resolveTap(f.tap, f.sources, f.handlers).action).toBeUndefined();
     expect(
       resolveTap({ ...f.tap, frame: f.sources.frame, agent: 5 }, f.sources, f.handlers).action,
     ).toBeUndefined();
     expect(agent.inspectionId).toBeUndefined();
+  });
+  it('retains a surface-read target across two GPU frames, worker pipelining and a busy rejection', () => {
+    const f = fixture();
+    const queue = new TapQueue();
+    // Surface callback arrives after two draws; a worker request already in flight rejects it.
+    for (let i = 0; i < 3; i++) f.sources.finish([]);
+    queue.add({ ...f.tap, agent: 0 });
+    const batch = queue.batch(1)!;
+    f.sources.finish([]);
+    expect(queue.batch(1)).toEqual(batch);
+    queue.accepted(batch);
+    const receipt = resolveTap(batch[0]!, f.sources, f.handlers);
+    expect(receipt.action).toBe('agent');
+    expect(queue.consume([receipt], 1)).toHaveLength(1);
+    expect(f.handlers.agent).toHaveBeenCalledOnce();
+    f.sources.clear();
+    expect(resolveTap(batch[0]!, f.sources, f.handlers).action).toBeUndefined();
   });
 });
 describe('tap queue', () => {

@@ -50,7 +50,9 @@ export class TapSources {
       return owner ? { owner, agent } : undefined;
     });
     this.frames.push({ frame: ++this.serial, targets });
-    if (this.frames.length > 2) this.frames.shift();
+    // Two GPU-read frames, the pipelined worker and a rejected busy request can overlap.
+    // Keep a bounded window without recycling handles or extending lifecycle validity.
+    if (this.frames.length > 8) this.frames.shift();
     this.owners.clear();
   }
   read(tap: Pick<LifeTap, 'frame' | 'agent'>) {
