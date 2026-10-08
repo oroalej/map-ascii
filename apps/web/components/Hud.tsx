@@ -3,6 +3,7 @@
 import {
   cityTime,
   legendEntries,
+  legendGroup,
   type Atlas,
   type FixtureVisibility,
   type LegendIcon,
@@ -234,7 +235,9 @@ function LegendControls({
   const displayLabel = (entry: (typeof entries)[number]) =>
     entry.id === 'class:admin_subdivision'
       ? `${capitalize(subdivisionLabel)} boundary`
-      : entry.label;
+      : legendGroup(entry) === 'Simulated'
+        ? entry.label.replace(/ \(simulated\)$/, '')
+        : entry.label;
   const clearFocus = () => {
     useUiStore.setState({ legendFocus: null });
     const target = !hidden
@@ -274,42 +277,53 @@ function LegendControls({
         }}
       >
         <summary ref={summary}>Legend</summary>
-        <ul aria-label="What the glyphs on screen mean">
-          {entries.map((entry) => {
-            const content = (
-              <>
-                <span
-                  className={`${styles.glyphs} ${entry.id === 'info:emoji' ? styles.emojiGlyphs : ''}`}
-                  style={{ color: entry.color }}
-                  aria-hidden="true"
-                >
-                  {entry.icons
-                    ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
-                    : entry.glyphs}
-                </span>
-                <span className={styles.legendLabel}>{displayLabel(entry)}</span>
-              </>
-            );
-            return (
-              <li key={entry.id}>
-                {entry.focus ? (
-                  <button
-                    type="button"
-                    className={styles.legendEntry}
-                    aria-pressed={focused === entry.id}
-                    onClick={() =>
-                      useUiStore.setState({ legendFocus: focused === entry.id ? null : entry.id })
-                    }
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  content
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        {(['Map', 'Simulated'] as const).map((group) => {
+          const grouped = entries.filter((entry) => legendGroup(entry) === group);
+          if (!grouped.length) return null;
+          return (
+            <section key={group} className={styles.legendGroup} aria-label={group}>
+              <h3>{group}</h3>
+              <ul aria-label={`${group} glyphs on screen`}>
+                {grouped.map((entry) => {
+                  const content = (
+                    <>
+                      <span
+                        className={`${styles.glyphs} ${entry.id === 'info:emoji' ? styles.emojiGlyphs : ''}`}
+                        style={{ color: entry.color }}
+                        aria-hidden="true"
+                      >
+                        {entry.icons
+                          ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
+                          : entry.glyphs}
+                      </span>
+                      <span className={styles.legendLabel}>{displayLabel(entry)}</span>
+                    </>
+                  );
+                  return (
+                    <li key={entry.id}>
+                      {entry.focus ? (
+                        <button
+                          type="button"
+                          className={styles.legendEntry}
+                          aria-pressed={focused === entry.id}
+                          onClick={() =>
+                            useUiStore.setState({
+                              legendFocus: focused === entry.id ? null : entry.id,
+                            })
+                          }
+                        >
+                          {content}
+                        </button>
+                      ) : (
+                        content
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
       </details>
     </>
   );

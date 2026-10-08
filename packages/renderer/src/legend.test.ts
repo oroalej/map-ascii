@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legendEntries } from './legend';
+import { legendEntries, legendGroup } from './legend';
 import { DOG_ICON, dogPixels } from './life/dogs';
 import { FIGURE_MASTERS } from './life/people';
 import { classId } from './classes';
@@ -8,6 +8,47 @@ import { themes } from './theme';
 import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('keeps seasonal hardware in Map and seasonal crowds and atmospheric events in Simulated', () => {
+  const entries = legendEntries('dark', 19, ['path', 'park'], {
+    life: true,
+    season: {
+      id: 'feast',
+      title: 'Feast',
+      labels: {
+        lanterns: 'Lanterns',
+        bunting: 'Bunting',
+        installations: 'Installations',
+        visitors: 'Visitors',
+        congregations: 'Congregations',
+        stalls: 'Stalls',
+        fireworks: 'Fireworks',
+      },
+    },
+    fixtures: {
+      streetlights: true,
+      trafficSignals: true,
+      seasonal: { lanterns: true, bunting: true, installations: true },
+    },
+  }).filter((entry) => entry.id.startsWith('info:season-'));
+  expect(entries.filter((entry) => legendGroup(entry) === 'Map').map((entry) => entry.id)).toEqual([
+    'info:season-lanterns',
+    'info:season-installations',
+    'info:season-bunting',
+  ]);
+  expect(
+    entries.filter((entry) => legendGroup(entry) === 'Simulated').map((entry) => entry.id),
+  ).toEqual([
+    'info:season-visitors',
+    'info:season-congregations',
+    'info:season-fireworks',
+    'info:season-stalls',
+  ]);
+  expect(
+    entries.every(
+      (entry) => legendGroup({ ...entry, label: 'Translated label' }) === legendGroup(entry),
+    ),
+  ).toBe(true);
+});
 it('discloses configured illustrative rice stages while retaining farmland identity and focus', () => {
   const regular = legendEntries('dark', 18, ['farmland']).find((e) => e.id === 'class:farmland')!;
   const draft = legendEntries('dark', 18, ['farmland'], { riceCalendar: true }).find(

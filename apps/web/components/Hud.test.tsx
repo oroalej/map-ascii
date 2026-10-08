@@ -298,12 +298,46 @@ const mount = async (instance: ReturnType<typeof renderer>) => {
     await Promise.resolve();
   });
 };
+it('groups agents separately from map features, omits repeated suffixes and hides empty groups', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  act(() => {
+    instance.emit('classeschange', ['road_mid', 'water_river']);
+    instance.emit('folklorechange', true);
+    instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: false });
+  });
+  const group = (name: string) => legend().querySelector(`section[aria-label="${name}"]`);
+  const map = group('Map')!;
+  const simulated = group('Simulated')!;
+  expect(map.querySelector('h3')?.textContent).toBe('Map');
+  expect(map.textContent).toContain('Streetlights');
+  expect(map.textContent).toContain('Traffic signals (simulated phases)');
+  expect(map.textContent).not.toContain('Folklore');
+  expect(simulated.querySelector('h3')?.textContent).toBe('Simulated');
+  for (const label of ['Traffic', 'People', 'Fish', 'Moods', 'Folklore'])
+    expect(simulated.textContent).toContain(label);
+  expect(simulated.textContent).not.toContain('(simulated)');
+  expect(simulated.textContent).not.toContain('Streetlights');
+  const people = [...simulated.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes('People'),
+  )!;
+  act(() => people.click());
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: [], life: ['people'] });
+  expect(container.querySelector('button[aria-label="Clear legend focus: People"]')).not.toBeNull();
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(group('Simulated')).toBeNull();
+  expect(group('Map')).not.toBeNull();
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+});
+
 it('shows folklore at z15 and drops visibility on Life off, events and renderer replacement', async () => {
   const instance = renderer();
   useLifeStore.setState({ enabled: true });
   useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 15 } });
   await mount(instance);
-  const shown = () => labels().some((l) => l?.includes('Folklore (simulated)'));
+  const shown = () => labels().some((l) => l?.includes('Folklore'));
   expect(shown()).toBe(false);
   act(() => instance.emit('folklorechange', true));
   expect(shown()).toBe(true);
@@ -326,7 +360,7 @@ it('toggles folklore focus and clears it when spirits disappear', async () => {
   await mount(instance);
   act(() => instance.emit('folklorechange', true));
   const button = [...legend().querySelectorAll('button')].find((b) =>
-    b.textContent?.includes('Folklore (simulated)'),
+    b.textContent?.includes('Folklore'),
   )!;
   expect(button.getAttribute('aria-pressed')).toBe('false');
   act(() => button.click());
@@ -347,8 +381,7 @@ it('updates the mood legend when emoji is toggled without replacing the atlas', 
   const instance = renderer();
   useLifeStore.setState({ enabled: true });
   await mount(instance);
-  const moods = () =>
-    labels().some((label) => label?.includes('simulated') && /moods/i.test(label));
+  const moods = () => labels().some((label) => /moods/i.test(label ?? ''));
   expect(moods()).toBe(true);
   act(() => useEmojiStore.setState({ enabled: false }));
   expect(moods()).toBe(false);
@@ -434,9 +467,9 @@ it('replaces focus, updates merged descriptors and clears Life focus when Life i
   act(() => instance.emit('classeschange', ['building_school', 'marker_school', 'road_mid']));
   expect(useUiStore.getState().legendFocus).toBe(label);
   expect(instance.focus.mock.calls.at(-1)![0]?.classes).toContain('marker_school');
-  act(() => button('Street vendors (simulated)').click());
+  act(() => button('Street vendors').click());
   expect(button('School').getAttribute('aria-pressed')).toBe('false');
-  expect(button('Street vendors (simulated)').getAttribute('aria-pressed')).toBe('true');
+  expect(button('Street vendors').getAttribute('aria-pressed')).toBe('true');
   act(() =>
     instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: true }),
   );
