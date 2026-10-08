@@ -71,7 +71,7 @@ it.each(['building_part', 'building', 'tree_crown'])(
   'candle admission matches the shader burial exception on %s',
   (cls) => {
     const f = fixture(),
-      done = vi.fn();
+      done = vi.fn<Parameters<typeof captureTap>[6]>();
     f.frame.owners.fill(0);
     captureTap(
       [5, 5],
