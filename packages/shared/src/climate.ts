@@ -4,6 +4,59 @@
  * can use it; the `Climate` schema in `schemas.ts` validates it.
  */
 
+import { epochDay, occurrence, validMonthDay } from './seasons';
+
+export const CROP_STAGES = [
+  'fallow',
+  'flooded',
+  'transplanted',
+  'growing',
+  'ripe',
+  'harvested',
+] as const;
+export type CropStage = (typeof CROP_STAGES)[number];
+/** A city-calendar stage beginning on canonical MM-DD, until the next entry. */
+export type CropCalendarEntry = { from: string; stage: CropStage };
+export type CropCalendar = {
+  status: 'draft' | 'verified';
+  calendar: CropCalendarEntry[];
+  source: string;
+  notes?: string;
+};
+export type CropNow = { stage: CropStage; progress: number };
+
+/** Parse an annual crop date without accepting rolled-over or noncanonical dates. */
+export function cropDate(from: string): { month: number; day: number } | undefined {
+  if (!/^\d{2}-\d{2}$/.test(from)) return undefined;
+  const date = { month: Number(from.slice(0, 2)), day: Number(from.slice(3)) };
+  return validMonthDay(date) ? date : undefined;
+}
+
+/** Resolve a validated calendar on a zero-based city day, preserving leap-day semantics. */
+export function cropStageAt(
+  crops: ClimateConfig['crops'],
+  year: number,
+  dayOfYear: number,
+): CropNow | undefined {
+  if (!crops?.rice) return undefined;
+  const day = epochDay(year, 1, 1) + dayOfYear;
+  const starts = [year - 1, year, year + 1]
+    .flatMap((y) =>
+      crops.rice!.calendar.flatMap((entry) => {
+        const date = cropDate(entry.from);
+        if (!date) throw new Error(`Invalid crop date: ${entry.from}`);
+        const start = occurrence(y, date);
+        return start === undefined ? [] : [{ day: start, stage: entry.stage }];
+      }),
+    )
+    .sort((a, b) => a.day - b.day);
+  const nextIndex = starts.findIndex((start) => start.day > day);
+  const start = starts[nextIndex - 1];
+  const next = starts[nextIndex];
+  if (!start || !next) throw new Error('Crop calendar must contain an annual stage start');
+  return { stage: start.stage, progress: (day - start.day) / (next.day - start.day) };
+}
+
 /** How hard the wind blows, calmest first. */
 export const WIND_STRENGTHS = ['calm', 'breeze', 'gusty', 'storm'] as const;
 export type WindStrength = (typeof WIND_STRENGTHS)[number];
@@ -20,6 +73,7 @@ export type ClimateConfig = {
   default: PrevailingWind;
   /** Where the seasons come from (content rule: claims carry a source). */
   source: string;
+  crops?: { rice?: CropCalendar };
 };
 
 /** The wind when a city has no climate: a breeze from the east. */

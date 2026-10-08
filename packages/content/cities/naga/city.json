@@ -1462,6 +1462,26 @@
       "from": 90,
       "strength": "calm"
     },
-    "source": "PAGASA, Climate of the Philippines: the northeast monsoon (amihan) blows about November to March, the southwest monsoon (habagat) about June to September, with easterly trade winds between them. https://www.pagasa.dost.gov.ph/information/climate-philippines"
+    "source": "PAGASA, Climate of the Philippines: the northeast monsoon (amihan) blows about November to March, the southwest monsoon (habagat) about June to September, with easterly trade winds between them. https://www.pagasa.dost.gov.ph/information/climate-philippines",
+    "crops": {
+      "rice": {
+        "status": "draft",
+        "calendar": [
+          { "from": "04-20", "stage": "fallow" },
+          { "from": "06-01", "stage": "flooded" },
+          { "from": "06-15", "stage": "transplanted" },
+          { "from": "07-01", "stage": "growing" },
+          { "from": "08-25", "stage": "ripe" },
+          { "from": "09-15", "stage": "harvested" },
+          { "from": "11-15", "stage": "flooded" },
+          { "from": "12-01", "stage": "transplanted" },
+          { "from": "12-20", "stage": "growing" },
+          { "from": "03-01", "stage": "ripe" },
+          { "from": "03-20", "stage": "harvested" }
+        ],
+        "source": "DA RFO 5, 13 April 2026: Bicol wet-season planting advanced from July to June for September harvest, and dry-season harvest underway by March 31. https://bicol.da.gov.ph/da-bicol-tiniyak-na-sapat-ang-bigas-sa-rehiyon-at-patuloy-ang-mga-interbensyon-para-sa-mga-magsasaka-ngayong-wet-cropping-season/ ; DA RFO 5 Regional Seasonal Climate Outlook September 2024-February 2025: December conducive for dry-season planting. https://bicol.da.gov.ph/wp-content/uploads/2024/09/v2RSCOA_Sept2024-to-feb2025.pdf ; PhilRice, Competitiveness of Philippine Rice in Asia: illustrative Philippine dry December-April and wet June-October cropping seasons. https://www.philrice.gov.ph/competitiveness-philippine-rice-asia/",
+        "notes": "TODO(verify): illustrative citywide stage dates inferred from regional planting/harvest windows; verify land preparation, transplanting dates, varieties, irrigation and actual Naga crop types with farmers. Applies to every mapped farmland area; Naga's mapped and owner-marked fields carry no crop tag and are assumed to be irrigated rice. Sentinel-derived eastern fields are draft agricultural geometry; neither imagery nor the owner statement verifies rice cultivation."
+      }
+    }
   }
 }
