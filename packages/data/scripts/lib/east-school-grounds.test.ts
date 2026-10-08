@@ -51,6 +51,8 @@ const sites = [
   ['carolina-national-high-school', 'osm:way/881084574'],
   ['don-bosco-training-center-of-naga', 'osm:way/833125855'],
   ['panicuason-elementary-school', 'osm:way/881087491'],
+  ['morada-ramos-elementary-school', 'osm:way/1395444066'],
+  ['grand-view-elementary-school', 'osm:way/780476076'],
   // Owner-added religious grounds on the same eastern corridor.
   ['sisters-sacred-heart-formation-center', 'osm:way/1203433147'],
   ['mary-coredemptrix-church', 'osm:way/871438572'],
@@ -60,16 +62,6 @@ const omissions = [
     slug: 'american-school-of-english-math-and-science',
     parents: ['osm:node/644622000'],
     reason: 'No supplied image; a point anchor does not establish the campus grounds.',
-  },
-  {
-    slug: 'grand-view-elementary-school',
-    parents: ['osm:way/780476076'],
-    reason: 'No supplied image establishes the outdoor surfaces or canopy layout.',
-  },
-  {
-    slug: 'morada-ramos-elementary-school',
-    parents: ['osm:way/1395444066'],
-    reason: 'No supplied image; unsupported outdoor landscaping is omitted.',
   },
   {
     slug: 'naga-view-adventist-college',
@@ -107,10 +99,10 @@ const boundaryDistance = (at: LngLat, area: Area) =>
   );
 
 describe('eastern school grounds from the owner references', () => {
-  it('covers 21 distinct parents and explicitly preserves the four unsupported sites', () => {
+  it('covers 23 distinct parents and explicitly preserves the two unsupported sites', () => {
     // 23 eastern school sites plus the two owner-added religious grounds.
     expect(sites.length + omissions.length).toBe(25);
-    expect(new Set(details.map((d) => d.osm_id)).size).toBe(21);
+    expect(new Set(details.map((d) => d.osm_id)).size).toBe(23);
     for (const [i, [slug, parent]] of sites.entries()) {
       const detail = details[i]!;
       const cover = covers[i]!;

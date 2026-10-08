@@ -63,6 +63,11 @@
           "at": [123.219753175, 13.612752647],
           "imagePixel": [330, 330],
           "observation": "Hand re-trace: the central field is lawn."
+        },
+        {
+          "at": [123.219753175, 13.612752647],
+          "imagePixel": [330, 330],
+          "observation": "Hand re-trace: the central field is lawn."
         }
       ]
     },
@@ -329,6 +334,11 @@
           "at": [123.234353927, 13.646041653],
           "imagePixel": [1200, 630],
           "observation": "Hand re-trace: dry lawn west of the grade-school stage."
+        },
+        {
+          "at": [123.234353927, 13.646041653],
+          "imagePixel": [1200, 630],
+          "observation": "Hand re-trace: dry lawn west of the grade-school stage."
         }
       ]
     },
@@ -549,6 +559,11 @@
           "at": [123.238995044, 13.618480892],
           "imagePixel": [200, 385],
           "observation": "Hand re-trace: lawn covers the open ground south of the classroom blocks."
+        },
+        {
+          "at": [123.238995044, 13.618480892],
+          "imagePixel": [200, 385],
+          "observation": "Hand re-trace: lawn covers the open ground south of the classroom blocks."
         }
       ]
     },
@@ -687,6 +702,11 @@
       "surfaceConnections": [],
       "opaqueCanopyGroundChecks": [],
       "grassChecks": [
+        {
+          "at": [123.23978815, 13.629159146],
+          "imagePixel": [80, 420],
+          "observation": "Hand re-trace: bright lawn west of the front classroom block."
+        },
         {
           "at": [123.23978815, 13.629159146],
           "imagePixel": [80, 420],
@@ -865,6 +885,11 @@
           "at": [123.287290524, 13.663972685],
           "imagePixel": [260, 160],
           "observation": "Hand re-trace: the yard's west half is patchy dry turf."
+        },
+        {
+          "at": [123.287290524, 13.663972685],
+          "imagePixel": [260, 160],
+          "observation": "Hand re-trace: the yard's west half is patchy dry turf."
         }
       ]
     },
@@ -939,6 +964,11 @@
       "surfaceConnections": [],
       "opaqueCanopyGroundChecks": [],
       "grassChecks": [
+        {
+          "at": [123.288579745, 13.664733525],
+          "imagePixel": [400, 800],
+          "observation": "Open field west of the covered court is lawn."
+        },
         {
           "at": [123.288579745, 13.664733525],
           "imagePixel": [400, 800],
@@ -1026,6 +1056,16 @@
           "at": [123.233996823, 13.649820372],
           "imagePixel": [700, 350],
           "observation": "Lawn garden around the winding water course."
+        },
+        {
+          "at": [123.2333866, 13.649923508],
+          "imagePixel": [440, 250],
+          "observation": "Curved lawn east of the formation house."
+        },
+        {
+          "at": [123.233996823, 13.649820372],
+          "imagePixel": [700, 350],
+          "observation": "Lawn garden around the winding water course."
         }
       ]
     },
@@ -1053,6 +1093,62 @@
       "hasLowPlanting": false,
       "lowPlantingOmission": "The walled forecourt is bare dirt with separate crowns; no low bed is visible.",
       "bareYardChecks": [[123.215632391, 13.647006846]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "morada-ramos-elementary-school",
+      "minimumTrees": 40,
+      "canopyGroups": [
+        {
+          "name": "south-west canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.277082507, 13.652713701],
+                [123.277392288, 13.652714465],
+                [123.277392667, 13.652569525],
+                [123.277082885, 13.652568761],
+                [123.277082507, 13.652713701]
+              ]
+            ]
+          },
+          "minimumCrowns": 15
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The yard is bare soil framed by canopy and roofs; no separate low bed is visible.",
+      "bareYardChecks": [[123.277530056, 13.652681357]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "grand-view-elementary-school",
+      "minimumTrees": 3,
+      "canopyGroups": [
+        {
+          "name": "crown cluster by the east yard",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.251554934, 13.656784786],
+                [123.251652064, 13.656783834],
+                [123.251651084, 13.656689451],
+                [123.251553955, 13.656690402],
+                [123.251554934, 13.656784786]
+              ]
+            ]
+          },
+          "minimumCrowns": 2
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The campus is roofs and hardscape courtyards; no low bed or lawn is visible.",
+      "bareYardChecks": [],
       "surfaceConnections": [],
       "opaqueCanopyGroundChecks": [],
       "grassChecks": []
