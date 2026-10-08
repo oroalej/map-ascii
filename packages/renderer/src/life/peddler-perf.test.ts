@@ -1,13 +1,12 @@
-/// <reference types="vite/client" />
 import { expect, it } from 'vitest';
 import {
   makePeddlerPerfWorld,
   peddlerPerfCounts,
   peddlerPerfWeather,
   peddlerPerfCenter,
-} from './peddler-fixture';
-import { completeScenarioState } from '../src/life/testing/scenarios';
-import.meta.glob('../../content/cities/*/city.json');
+} from '../../scripts/peddler-fixture';
+import { completeScenarioState } from './testing/scenarios';
+import.meta.glob('../../../content/cities/*/city.json');
 it('really admits both required hot-afternoon trades and preserves the same ordinary population', () => {
   const configured = makePeddlerPerfWorld(),
     ordinary = makePeddlerPerfWorld(undefined, false);
