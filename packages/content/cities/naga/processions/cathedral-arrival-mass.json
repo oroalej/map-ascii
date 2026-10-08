@@ -4,7 +4,7 @@
     "en": "Mass after the Traslación"
   },
   "story": {
-    "en": "Holy Mass follows the images arriving at Porta Mariae around 18:30 in the 2026 report. The ninety-minute replay, outdoor altar and car-free precinct are illustrative. The project owner marked the altar and crowd boundary on 2026-10-07; people face the altar, leaving its platform and clear apron for celebrants and the images."
+    "en": "Holy Mass follows the images arriving at Porta Mariae around 18:30 in the 2026 report. The ninety-minute replay and car-free precinct are illustrative. The project owner marked the crowd boundary on 2026-10-07; devotees fill the forecourt and east garden facing the Cathedral, with no outdoor stage."
   },
   "status": "verified",
   "kind": "mass",
@@ -29,7 +29,7 @@
     {
       "title": "Project owner: Cathedral precinct annotation",
       "url": "https://www.openstreetmap.org/way/23666715",
-      "note": "Project owner annotated atlas image, 2026-10-07. Boundary fitted around the annotated forecourt and mapped east garden with a four-metre curb margin. Altar shifted four metres north within the annotation tolerance to clear the mapped overhead arch; placement is approximate, not a surveyed festival arrangement."
+      "note": "Project owner annotated atlas image, 2026-10-07. Boundary fitted around the annotated forecourt and mapped east garden with a four-metre curb margin. On 2026-10-08 the owner removed the illustrative outdoor altar stage; placement is approximate, not a surveyed festival arrangement."
     }
   ],
   "crowd_boundary": [
@@ -43,9 +43,5 @@
     [123.1866297, 13.6282563],
     [123.1864502, 13.6279664],
     [123.186198, 13.6275521]
-  ],
-  "altar": {
-    "at": [123.18688, 13.627796],
-    "radius_m": 5
-  }
+  ]
 }

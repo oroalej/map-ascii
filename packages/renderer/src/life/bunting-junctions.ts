@@ -19,7 +19,10 @@ export type BuntingProjection = {
   base?: { key: string; scale: number; toCell: (lng: number, lat: number) => Point };
 };
 type Grid = { toCell: BuntingProjection['toCell']; buntingProjection?: BuntingProjection };
-const admitted = new WeakMap<readonly Fixture[], { scale: string; rows: readonly Row[] }>();
+const admitted = new WeakMap<
+  readonly Fixture[],
+  { scale: string; rows: readonly Row[]; accepted?: Uint8Array }
+>();
 const ordered = new WeakMap<readonly Fixture[], readonly Row[]>();
 type CandidateGeometry = {
   rows: readonly Row[];
@@ -29,6 +32,8 @@ type CandidateGeometry = {
   candidates: readonly number[][];
   valid: Uint8Array;
   accepted: Uint8Array;
+  /** Every valid row by base-space bucket, for culling to the view. */
+  index: Map<number, Map<number, number[]>>;
 };
 const prepared = new WeakMap<readonly Fixture[], { key: string; geometry: CandidateGeometry }>();
 const BUCKET = 16;
@@ -167,6 +172,16 @@ function prepareCandidates(
       bucket.push(i);
     });
   }
+  const index = new Map<number, Map<number, number[]>>();
+  for (let i = 0; i < rows.length; i++)
+    if (valid[i])
+      buckets(base[i]!, (x, y) => {
+        let column = index.get(x);
+        if (!column) index.set(x, (column = new Map<number, number[]>()));
+        let bucket = column.get(y);
+        if (!bucket) column.set(y, (bucket = []));
+        bucket.push(i);
+      });
   return {
     rows,
     origin,
@@ -175,7 +190,48 @@ function prepareCandidates(
     valid,
     accepted: new Uint8Array(rows.length),
     spans: rows.map(() => ({ from: [0, 0], to: [0, 0] })),
+    index,
   };
+}
+let visitMarks = new Uint32Array(0);
+let visitMark = 0;
+/**
+ * Admitted rows whose base-zoom span (plus hanging offset) can reach the view. The current
+ * projection is the base one scaled uniformly, so one projected row anchors the view.
+ */
+function visibleRows(
+  geometry: CandidateGeometry,
+  accepted: Uint8Array,
+  scale: number,
+  grid: Grid,
+  view: { cols: number; rows: number },
+): Row[] {
+  const anchor = geometry.rows.findIndex((_, i) => accepted[i]);
+  if (anchor < 0) return [];
+  const at = grid.toCell(...geometry.rows[anchor]!.from),
+    base = geometry.base[anchor]!.from;
+  const ox = at[0] - base[0] * scale,
+    oy = at[1] - base[1] * scale;
+  const margin = 4;
+  const x0 = Math.floor((-margin - ox) / scale / BUCKET),
+    x1 = Math.floor((view.cols + margin - ox) / scale / BUCKET),
+    y0 = Math.floor((-margin - oy) / scale / BUCKET),
+    y1 = Math.floor((view.rows + margin - oy) / scale / BUCKET);
+  if (visitMarks.length < geometry.rows.length) visitMarks = new Uint32Array(geometry.rows.length);
+  visitMark = (visitMark + 1) >>> 0 || 1;
+  const found: number[] = [];
+  for (let x = x0; x <= x1; x++) {
+    const column = geometry.index.get(x);
+    if (column)
+      for (let y = y0; y <= y1; y++)
+        for (const i of column.get(y) ?? [])
+          if (accepted[i] && visitMarks[i] !== visitMark) {
+            visitMarks[i] = visitMark;
+            found.push(i);
+          }
+  }
+  // Keep admission priority order, independent of bucket iteration.
+  return found.sort((a, b) => a - b).map((i) => geometry.rows[i]!);
 }
 
 function admit(geometry: CandidateGeometry, scale: number): Row[] {
@@ -216,16 +272,18 @@ function admit(geometry: CandidateGeometry, scale: number): Row[] {
 export function selectBuntingRows(
   fixtures: readonly Fixture[],
   grid: Grid,
+  view?: { cols: number; rows: number },
 ): Map<Row, ProjectedBunting> {
   const projection = grid.buntingProjection;
   if (projection) {
     const scaleKey = `${projection.scale}/${projection.base?.key ?? ''}`;
+    const base = projection.base;
+    const canonical = !!base && base.scale >= 1;
     let cache = admitted.get(fixtures);
     if (!cache || cache.scale !== scaleKey) {
       // Canonical coordinates have no grid-origin translation; offscreen rows still compete.
-      const base = projection.base;
       let geometry: CandidateGeometry;
-      if (base && base.scale >= 1) {
+      if (canonical) {
         let entry = prepared.get(fixtures);
         if (!entry || entry.key !== base.key) {
           entry = { key: base.key, geometry: prepareCandidates(fixtures, base.toCell) };
@@ -233,10 +291,21 @@ export function selectBuntingRows(
         }
         geometry = entry.geometry;
       } else geometry = prepareCandidates(fixtures, projection.toCell);
-      cache = { scale: scaleKey, rows: admit(geometry, base && base.scale >= 1 ? base.scale : 1) };
+      const rows = admit(geometry, canonical ? base.scale : 1);
+      cache = {
+        scale: scaleKey,
+        rows,
+        accepted: canonical ? geometry.accepted.slice() : undefined,
+      };
       admitted.set(fixtures, cache);
     }
-    return new Map(cache.rows.map((row) => [row, projectBunting(row, grid)]));
+    // Panning projects only the admitted rows that can reach the view.
+    const geometry = canonical ? prepared.get(fixtures)?.geometry : undefined;
+    const rows =
+      view && geometry && cache.accepted
+        ? visibleRows(geometry, cache.accepted, base!.scale, grid, view)
+        : cache.rows;
+    return new Map(rows.map((row) => [row, projectBunting(row, grid)]));
   }
   const geometry = prepareCandidates(fixtures, grid.toCell);
   admit(geometry, 1);

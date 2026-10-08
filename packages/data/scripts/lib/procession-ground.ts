@@ -30,7 +30,10 @@ const BRIDGE_APPROACH_M = 25,
   MASS_CORRIDOR_INSET_M = 0.7,
   SIDEWALK_FALLBACK_M = 2,
   ROUTE_BOUNDS_MARGIN_DEG = 0.001,
-  MASS_PROXIMITY_MARGIN_M = 20;
+  MASS_PROXIMITY_MARGIN_M = 20,
+  // Misregistered building corners can graze a mapped carriageway; less than one person's
+  // footprint inside a route's clearance band does not cut the street.
+  BUILDING_SLIVER_M2 = 0.1;
 const isExclusion = (f: F) =>
   isStandingBuilding(f as AtlasFeature) ||
   String(f.properties.class).startsWith('water') ||
@@ -127,8 +130,15 @@ function obstacles(
   clip?: ReturnType<typeof union>,
   water?: Point[][],
   ignoreWater = false,
+  sliver = 0,
 ): Point[][] {
   const out: Point[][] = [];
+  const area = (ring: Point[]) => {
+    const m = ring.map(frame.toMeters);
+    let sum = 0;
+    for (let i = 1; i < m.length; i++) sum += m[i - 1]![0] * m[i]![1] - m[i]![0] * m[i - 1]![1];
+    return Math.abs(sum) / 2;
+  };
   for (const f of nearbyFeatures(features, bounds)) {
     const [w, s, e, n] = featureBox(f);
     if (e < bounds[0] || w > bounds[2] || n < bounds[1] || s > bounds[3]) continue;
@@ -142,8 +152,13 @@ function obstacles(
       continue;
     if (isExclusion(f)) {
       const target = cls.startsWith('water') && water ? water : out;
+      const tolerated = sliver > 0 && isStandingBuilding(f as AtlasFeature);
       const save = (poly: Point[][]) => {
-        if (clip) for (const part of intersection(poly, clip)) target.push(asPoints(part[0]!));
+        if (clip)
+          for (const part of intersection(poly, clip)) {
+            const ring = asPoints(part[0]!);
+            if (!tolerated || area(ring) >= sliver) target.push(ring);
+          }
         else target.push(poly[0]!);
       };
       for (const poly of polygons(f.geometry)) save(poly.map(asPoints));
@@ -216,22 +231,18 @@ function assembleExclusions(
     const [w, s, e, n] = featureBox(f);
     return boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!);
   });
-  const blocked = obstacles(nearby, frame, bounds, square, undefined, true).filter((ring) => {
+  // Only the part of an obstacle inside the crowd corridor shapes event ground; clipping
+  // keeps deep building outlines from inflating the shipped event file.
+  const cover = balancedUnion(pieces.map((poly) => [poly]));
+  const blocked: Point[][] = [];
+  for (const ring of obstacles(nearby, frame, bounds, square, undefined, true)) {
     const w = Math.min(...ring.map((p) => p[0])),
       s = Math.min(...ring.map((p) => p[1])),
       e = Math.max(...ring.map((p) => p[0])),
       n = Math.max(...ring.map((p) => p[1]));
-    return pieces.some((poly, i) => {
-      const b = boxes[i]!;
-      return (
-        w <= b[2]! &&
-        e >= b[0]! &&
-        s <= b[3]! &&
-        n >= b[1]! &&
-        intersection([ring], poly).length > 0
-      );
-    });
-  });
+    if (!boxes.some((b) => w <= b[2]! && e >= b[0]! && s <= b[3]! && n >= b[1]!)) continue;
+    for (const part of intersection([ring], cover)) blocked.push(asPoints(part[0]!));
+  }
   water.push(
     ...obstacles(
       (allWater ? [...nearbyFeatures(features, bounds)] : nearby).filter((f) =>
@@ -298,18 +309,21 @@ export function routeStreet(features: readonly F[], p: Street) {
       Math.max(...points.map((q) => q[1])),
     ];
     return (
-      obstacles(exclusions, localFrame(a), bounds, footprint, undefined, bridgeAllowed(road, a, b))
-        .length === 0
+      obstacles(
+        exclusions,
+        localFrame(a),
+        bounds,
+        footprint,
+        undefined,
+        bridgeAllowed(road, a, b),
+        BUILDING_SLIVER_M2,
+      ).length === 0
     );
   };
-  const { selected, dist, root, unproject, project } = roadGraph(byId, roads, p.route, p.id, {
+  const { path, root, unproject, project } = roadGraph(byId, roads, p.route, p.id, {
     event: { allows },
   });
-  const ordered = selected
-    .slice()
-    .sort(
-      (a, b) => Math.min(dist.get(a.a)!, dist.get(a.b)!) - Math.min(dist.get(b.a)!, dist.get(b.b)!),
-    );
+  const ordered = path.map((step) => step.edge);
   const route: Point[] = [root.at];
   const segments: {
     id: string;
@@ -320,9 +334,7 @@ export function routeStreet(features: readonly F[], p: Street) {
     clear_m: number;
   }[] = [];
   let length_m = 0;
-  for (const e of ordered) {
-    const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b;
-    const b = a === e.a ? e.b : e.a;
+  for (const { edge: e, from: a, to: b } of path) {
     const count = Math.ceil(e.length / ROUTE_STEP_M);
     const road = byId.get(e.road)!;
     const sidewalks_m = sidewalks(road, a !== e.a);

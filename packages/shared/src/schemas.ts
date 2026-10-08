@@ -38,7 +38,12 @@ import {
   type SeasonEmojiEntry,
 } from './emoji';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
-export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
+export {
+  BuntingCorridorSchema,
+  SeasonalRecordSchema,
+  SeasonalBuntingRunSchema,
+  SeasonalTileRecordSchema,
+} from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
@@ -975,6 +980,8 @@ export function contentSchemas(languages?: readonly string[]) {
     from: OsmId,
     to: OsmId,
     via: z.array(OsmWayId).min(1).optional(),
+    /** Ordered stops: each leg is the shortest path to the next, so loops keep their order. */
+    through: z.array(OsmId).min(1).optional(),
   });
   const Procession = z
     .discriminatedUnion('kind', [

@@ -12,7 +12,7 @@ import type {
   SeasonalCarnivalRecord,
   SeasonalRecord,
 } from '@atlas/shared';
-import { parseSeasonalRecord } from '@atlas/shared';
+import { parseSeasonalTileRecord } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
@@ -31,10 +31,8 @@ export function seasonalRecords(payload: SeasonalPayload | undefined): readonly 
   try {
     const value: unknown = JSON.parse(new TextDecoder().decode(payload));
     const values: unknown[] = Array.isArray(value) ? value : [];
-    for (const raw of values) {
-      const record = typeof raw === 'string' ? parseSeasonalRecord(raw) : undefined;
-      if (record) records.push(record);
-    }
+    // Bunting runs decode into their rows here; everything downstream sees rows.
+    for (const raw of values) records.push(...parseSeasonalTileRecord(raw));
   } catch {
     /* A malformed envelope cannot invalidate ordinary map geometry. */
   }

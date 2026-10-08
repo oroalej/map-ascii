@@ -120,7 +120,7 @@ it('ignores malformed and future decoration records without losing the map or va
   ).toEqual([]);
 });
 it('transfers raw bytes without validating inactive records and caches validation on demand', () => {
-  const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+  const parse = vi.spyOn(shared, 'parseSeasonalTileRecord');
   const result = buildTileGeometry({ seasons: seasonal }, createIdRegistry(), tile, 16);
   expect(parse).not.toHaveBeenCalled();
   expect(result.seasonal).toBeInstanceOf(Uint8Array);
