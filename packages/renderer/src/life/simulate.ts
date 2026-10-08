@@ -8754,6 +8754,8 @@ export class LifeWorld {
   private sampleFolklore(
     weather: Pick<LifeEnv, 'minutes' | 'folkloreDate'> | undefined,
     dt: number,
+    pointer?: readonly [number, number],
+    cellMeters = 0,
   ) {
     if (!this.folklore.configured) return;
     const sources = [...this.tiles].map(([key, life]) => ({
@@ -8765,7 +8767,13 @@ export class LifeWorld {
     }));
     this.folklore.step(
       sources,
-      { minutes: weather?.minutes, calendar: weather?.folkloreDate, clock: this.emojiClock, dt },
+      {
+        minutes: weather?.minutes,
+        calendar: weather?.folkloreDate,
+        clock: this.emojiClock,
+        dt,
+        ...(pointer ? { pointer: { lngLat: pointer, reachM: POINTER.folklore * cellMeters } } : {}),
+      },
       (geometry, ghosts) => {
         const bodies: FolkloreBody[] = [],
           pose: Pose = { x: 0, y: 0, hx: 0, hy: 0 };
@@ -11405,7 +11413,7 @@ export class LifeWorld {
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
-      this.sampleFolklore(weather, 0);
+      this.sampleFolklore(weather, 0, pointer, cellMeters);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
@@ -11456,7 +11464,7 @@ export class LifeWorld {
       ...(pointer && pointerRest !== undefined ? { pointerRest } : {}),
       ...(pointer && gust ? { gust } : {}),
     };
-    this.sampleFolklore(weather, Math.max(0, dt));
+    this.sampleFolklore(weather, Math.max(0, dt), pointer, cellMeters);
     const folklore = this.folklore.manananggal;
     if (folklore && folklore.alpha > 0.001) env.folkloreDisturber = folklore;
     const event = this.procession();
@@ -11932,15 +11940,13 @@ export class LifeWorld {
         hy: hy / norm,
       };
       delete sample.boatShift; // The sample coordinates already contain the accepted offset.
-      const bodies = life
-        .groundBodies(sample)
-        .map((body) => ({
-          ...body,
-          x: o.x + body.x * o.scale,
-          y: o.y + body.y * o.scale,
-          length: body.length * o.scale,
-          width: body.width * o.scale,
-        }));
+      const bodies = life.groundBodies(sample).map((body) => ({
+        ...body,
+        x: o.x + body.x * o.scale,
+        y: o.y + body.y * o.scale,
+        length: body.length * o.scale,
+        width: body.width * o.scale,
+      }));
       if (
         terrain.blocked.hits(bodies) ||
         bodies.some(
