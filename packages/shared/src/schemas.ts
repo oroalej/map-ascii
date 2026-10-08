@@ -44,7 +44,12 @@ import {
   type SeasonEmojiEntry,
 } from './emoji';
 import { BuntingCorridorSchema, CarnivalComponentSchema } from './seasonal-schema';
-export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
+export {
+  BuntingCorridorSchema,
+  SeasonalRecordSchema,
+  SeasonalBuntingRunSchema,
+  SeasonalTileRecordSchema,
+} from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
@@ -57,6 +62,7 @@ import {
   YEAR_RANGE,
   RoofShape,
   PROCESSION_LIMITS,
+  processionActorCount,
   TODO_VERIFY,
   PROCESSION_DEFAULTS,
   PROCESSION_VEHICLES,
@@ -634,11 +640,17 @@ export type ProcessionSchedule = z.infer<typeof ProcessionSchedule>;
 
 /** A procession's boats: paddle-boat columns and ranks ahead of the pagoda, and escorts. */
 const formationCount = (range: readonly [number, number]) => z.int().min(range[0]).max(range[1]);
-export const ProcessionFormation = z.strictObject({
-  columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
-  ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
-  escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
-});
+export const ProcessionFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.fluvial.columns).optional(),
+    ranks: formationCount(PROCESSION_LIMITS.fluvial.ranks).optional(),
+    escorts: formationCount(PROCESSION_LIMITS.fluvial.escorts).optional(),
+    followers: formationCount(PROCESSION_LIMITS.fluvial.followers).optional(),
+  })
+  .refine(
+    (f) => processionActorCount('fluvial', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
 export type ProcessionFormation = z.infer<typeof ProcessionFormation>;
 const ProcessionId = z.string().regex(/^procession\/[a-z0-9-]+$/, 'expected procession/<slug>');
 export const FollowingSchedule = z.strictObject({
@@ -648,28 +660,42 @@ export const FollowingSchedule = z.strictObject({
     .min(PROCESSION_LIMITS.schedule.duration_min[0])
     .max(PROCESSION_LIMITS.schedule.duration_min[1]),
 });
-export const StreetFormation = z.strictObject({
-  bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
-    PROCESSION_DEFAULTS.procession.bearers,
-  ),
-  ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
-    PROCESSION_DEFAULTS.procession.ranks,
-  ),
-  marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
-    PROCESSION_DEFAULTS.procession.marshals,
-  ),
-});
-export const ParadeFormation = z.strictObject({
-  contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
-    PROCESSION_DEFAULTS.parade.contingents,
-  ),
-  ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
-  band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
-  color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
-    PROCESSION_DEFAULTS.parade.color_guard,
-  ),
-  vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
-});
+export const StreetFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.procession.columns).optional(),
+    images: formationCount(PROCESSION_LIMITS.procession.images).optional(),
+    bearers: formationCount(PROCESSION_LIMITS.procession.bearers).default(
+      PROCESSION_DEFAULTS.procession.bearers,
+    ),
+    ranks: formationCount(PROCESSION_LIMITS.procession.ranks).default(
+      PROCESSION_DEFAULTS.procession.ranks,
+    ),
+    marshals: formationCount(PROCESSION_LIMITS.procession.marshals).default(
+      PROCESSION_DEFAULTS.procession.marshals,
+    ),
+  })
+  .refine(
+    (f) => processionActorCount('procession', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
+export const ParadeFormation = z
+  .strictObject({
+    columns: formationCount(PROCESSION_LIMITS.parade.columns).optional(),
+    bands: formationCount(PROCESSION_LIMITS.parade.bands).optional(),
+    contingents: formationCount(PROCESSION_LIMITS.parade.contingents).default(
+      PROCESSION_DEFAULTS.parade.contingents,
+    ),
+    ranks: formationCount(PROCESSION_LIMITS.parade.ranks).default(PROCESSION_DEFAULTS.parade.ranks),
+    band: formationCount(PROCESSION_LIMITS.parade.band).default(PROCESSION_DEFAULTS.parade.band),
+    color_guard: formationCount(PROCESSION_LIMITS.parade.color_guard).default(
+      PROCESSION_DEFAULTS.parade.color_guard,
+    ),
+    vehicles: z.array(z.enum(PROCESSION_VEHICLES)).max(PROCESSION_LIMITS.vehicles).default([]),
+  })
+  .refine(
+    (f) => processionActorCount('parade', f) <= PROCESSION_LIMITS.actors,
+    'physical formation exceeds actor budget',
+  );
 const EventPoint = LngLat;
 const EventRing = z
   .array(EventPoint)
@@ -678,7 +704,23 @@ const EventRing = z
     (r) => !!r[0] && r[0][0] === r.at(-1)![0] && r[0][1] === r.at(-1)![1],
     'expected closed ring',
   );
+const EventAltar = z.strictObject({
+  at: EventPoint,
+  radius_m: z.number().positive().max(PROCESSION_LIMITS.altar.radius),
+});
+const CrowdGround = z.strictObject({
+  grounds: z.array(EventRing),
+  blocked: z.array(EventRing),
+  water: z.array(EventRing),
+  bridges: z.array(EventRing),
+  /** Car-free while the event plays: the owner-marked crowd ground on roads. */
+  closure_zone: z.array(EventRing).optional(),
+});
 export const ProcessionSite = z.strictObject({
+  closure_zone: z.array(EventRing).optional(),
+  seated_grounds: z.array(EventRing).optional(),
+  altar_ground: z.array(EventRing).optional(),
+  altar: EventAltar.extend({ images: formationCount(PROCESSION_LIMITS.altar.images) }).optional(),
   id: OsmId,
   location: EventPoint,
   anchor: EventPoint,
@@ -935,6 +977,8 @@ export function contentSchemas(languages?: readonly string[]) {
     from: OsmId,
     to: OsmId,
     via: z.array(OsmWayId).min(1).optional(),
+    /** Ordered stops: each leg is the shortest path to the next, so loops keep their order. */
+    through: z.array(OsmId).min(1).optional(),
   });
   const Procession = z
     .discriminatedUnion('kind', [
@@ -946,28 +990,55 @@ export function contentSchemas(languages?: readonly string[]) {
             to: OsmId,
             from: OsmId.optional(),
             upstream_m: z.number().positive().max(20_000).optional(),
+            /** River kept past `to` (the landing) for the boats ahead of the pagoda, m. */
+            beyond_m: z.number().positive().max(2_000).optional(),
+            /** River kept behind `from` (the departure) for the boats following the pagoda, m. */
+            before_m: z.number().positive().max(2_000).optional(),
           })
           .refine((r) => (r.from === undefined) !== (r.upstream_m === undefined), {
             message: 'give exactly one of from and upstream_m',
           }),
         formation: ProcessionFormation.optional(),
+        /** Owner-marked crowd ground beyond the river sides, closed to traffic. */
+        crowd_rings: z.array(EventRing).min(1).optional(),
+        /** Where the riverside crowd reaches further inland, such as beside a bridge. */
+        crowd_focus: z
+          .array(
+            z.strictObject({
+              near: OsmId,
+              radius_m: z.number().positive().max(500),
+              reach_m: z.number().positive().max(40),
+            }),
+          )
+          .min(1)
+          .optional(),
       }),
       z.strictObject({
         ...eventBase,
         kind: z.literal('procession'),
         route: streetRoute,
         formation: StreetFormation.optional(),
+        crowd_areas: z.array(OsmAreaId).optional(),
+        /** Areas the roadside crowd stays out of, such as private grounds beside the route. */
+        crowd_exclude: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,
         kind: z.literal('parade'),
         route: streetRoute,
         formation: ParadeFormation.optional(),
+        crowd_areas: z.array(OsmAreaId).optional(),
+        /** Areas the roadside crowd stays out of, such as private grounds beside the route. */
+        crowd_exclude: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,
         kind: z.literal('mass'),
         site: OsmId,
+        crowd_boundary: EventRing.optional(),
+        /** Car-free precinct while the Mass lasts; defaults to the crowd boundary. */
+        traffic_closure: EventRing.optional(),
+        altar: EventAltar.optional(),
         grounds: z.array(OsmAreaId).min(1),
         /** Authored exterior forecourt; the pipeline snaps only to safe connected cells. */
         gathering_anchor: LngLat.optional(),
@@ -1060,17 +1131,30 @@ const streetEventBase = {
   ...movingEventBase,
   segments: z
     .array(
-      z.strictObject({
-        id: OsmId,
-        width_m: z.number().positive(),
-        // Legacy symmetric allowance; new archives carry route-relative sides.
-        sidewalk_m: z.number().min(0),
-        sidewalks_m: z
-          .strictObject({ left: z.number().min(0), right: z.number().min(0) })
-          .optional(),
-      }),
+      z
+        .strictObject({
+          id: OsmId,
+          width_m: z.number().positive(),
+          clear_m: z.number().positive().optional(),
+          verge_m: z
+            .strictObject({
+              left: z.number().min(0).max(PROCESSION_LIMITS.verge),
+              right: z.number().min(0).max(PROCESSION_LIMITS.verge),
+            })
+            .optional(),
+          // Legacy symmetric allowance; new archives carry route-relative sides.
+          sidewalk_m: z.number().min(0),
+          sidewalks_m: z
+            .strictObject({ left: z.number().min(0), right: z.number().min(0) })
+            .optional(),
+        })
+        .refine(
+          (s) => s.clear_m === undefined || s.clear_m <= s.width_m,
+          'clear_m exceeds width_m',
+        ),
     )
     .min(1),
+  crowd_grounds: z.array(EventRing).optional(),
   blocked: z.array(EventRing),
   water: z.array(EventRing).optional(),
   bridges: z.array(EventRing).optional(),
@@ -1083,6 +1167,11 @@ export const CityProcessions = z.object({
           ...generatedEventBase,
           ...movingEventBase,
           kind: z.literal('fluvial'),
+          /** Where the pagoda stops, m along the route; the river beyond it holds the boats ahead. */
+          landing_m: z.number().positive().optional(),
+          /** Where the pagoda sets off, m along the route; the river behind it holds its followers. */
+          departure_m: z.number().positive().optional(),
+          crowd_ground: CrowdGround.optional(),
           banks: z.array(z.tuple([z.number().min(0), z.number().min(0)])).optional(),
           formation: ProcessionFormation.optional(),
         }),

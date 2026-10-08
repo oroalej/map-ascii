@@ -156,7 +156,7 @@
   ],
   "lamps": [],
   "status": "draft",
-  "credit": "Peñafrancia Basilica grounds — Belfry reference: © Carlo Joseph Moskito, 2016 (https://commons.wikimedia.org/wiki/User:Carlojoseph14), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); substantially schematic adaptation. Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.; facade reference: Dominic McArthur, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/).",
+  "credit": "Peñafrancia Basilica grounds — Belfry reference: © Carlo Joseph Moskito, 2016 (https://commons.wikimedia.org/wiki/User:Carlojoseph14), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/); substantially schematic adaptation. Geometry: © OpenStreetMap contributors (ODbL). Schematic detail estimated from imagery; ground survey pending.; facade reference: Dominic McArthur, CC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -174,12 +174,12 @@
       "note": "CC BY-SA 3.0. Independent facade photograph inspected for bell-tower, lawn, planting, trees and paving appearance; coordinates remain schematic OSM-based estimates."
     },
     {
-      "title": "Draft surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {
       "title": "Owner correction: palm rows and approaches",
-      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Existing cross footways have explicit three-metre paving; roads, standing roofs and canonical Basilica selection stay intact."
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Existing cross footways have explicit three-metre paving; roads, standing roofs and canonical Basilica selection stay intact."
     }
   ],
   "selection_osm_id": "osm:way/23670362"

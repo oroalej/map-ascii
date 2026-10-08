@@ -1,7 +1,12 @@
 import { join } from 'node:path';
 import type { PMTiles } from 'pmtiles';
-import { type SeasonConfig, type SeasonalRecord } from '@atlas/shared';
-import { SeasonalRecordSchema } from '@atlas/shared/schemas';
+import {
+  type SeasonConfig,
+  type SeasonalRecord,
+  type SeasonalBuntingRunRecord,
+} from '@atlas/shared';
+import { SeasonalTileRecordSchema } from '@atlas/shared/schemas';
+type TileRecord = SeasonalRecord | SeasonalBuntingRunRecord;
 import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeJson } from './io';
 import { generateSeasonalBunting } from './seasonal';
@@ -15,26 +20,23 @@ import {
 } from './overlay-tiles';
 
 /** Admit complete records, including geometry embedded in their serialized payload. */
-export function seasonalRecordsInTerritory(
-  records: readonly SeasonalRecord[],
-  territory?: Territory,
-) {
+export function seasonalRecordsInTerritory(records: readonly TileRecord[], territory?: Territory) {
   if (!territory?.void) return [...records];
   return records.filter(
     (r) =>
       geometryOutsideVoid(seasonalRecordGeometry(r), territory) &&
-      (r.kind !== 'bunting' ||
+      ((r.kind !== 'bunting' && r.kind !== 'bunting-run') ||
         geometryOutsideVoid({ type: 'LineString', coordinates: r.segment }, territory)),
   );
 }
 
-const format: OverlayFormat<SeasonalRecord> = {
+const format: OverlayFormat<TileRecord> = {
   layer: 'seasons',
   property: 'seasonal',
   label: 'Seasonal',
   recordName: 'seasonal row',
   duplicateError: 'Duplicate seasonal identities',
-  parse: (value) => SeasonalRecordSchema.parse(value),
+  parse: (value) => SeasonalTileRecordSchema.parse(value),
   id: (r) => r.id,
   geometry: seasonalRecordGeometry,
 };
@@ -43,7 +45,7 @@ const format: OverlayFormat<SeasonalRecord> = {
 export async function auditSeasonalArchive(
   base: PMTiles,
   output: PMTiles,
-  records: readonly SeasonalRecord[],
+  records: readonly TileRecord[],
 ) {
   return auditOverlayArchive(
     base,

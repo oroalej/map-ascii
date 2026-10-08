@@ -90,7 +90,7 @@ it('measures cemetery edge reach in meters across source zooms and excludes unre
 describe('seasonal fixtures', () => {
   afterEach(() => vi.restoreAllMocks());
   it('does not validate raw records while inactive and reuses decoding through season changes', () => {
-    const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+    const parse = vi.spyOn(shared, 'parseSeasonalTileRecord');
     const payload = encodeSeasonalPayload(['{', JSON.stringify({ version: 2 })]);
     const groups = [
       { tile, life: new LifeBuilder().finish(), fixtures: [lamp], seasonal: payload },

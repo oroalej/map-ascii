@@ -101,7 +101,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied ground/overhead references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -110,7 +110,7 @@
     },
     {
       "title": "Owner-supplied memorial and school enhancement references",
-      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+      "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
     }
   ]
 }

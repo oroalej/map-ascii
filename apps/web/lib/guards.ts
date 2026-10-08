@@ -7,6 +7,7 @@ import {
   isEmergencyData,
   CAMERA_RANGES,
   PROCESSION_LIMITS,
+  processionActorCount,
   PROCESSION_VEHICLES,
   CLOCK_TIME_PATTERN,
   TIME_ZONE_PATTERN,
@@ -239,13 +240,17 @@ function eventFormation(p: Record<string, unknown>): boolean {
       : p.kind === 'procession'
         ? PROCESSION_LIMITS.procession
         : PROCESSION_LIMITS.parade;
-  return Object.entries(p.formation).every(([k, v]) =>
+  const valid = Object.entries(p.formation).every(([k, v]) =>
     k === 'vehicles' && p.kind === 'parade'
       ? Array.isArray(v) &&
         v.length <= PROCESSION_LIMITS.vehicles &&
         v.every((x: unknown) => PROCESSION_VEHICLES.some((vehicle) => vehicle === x))
       : !!limits[k] && integer(v, ...limits[k]),
   );
+  if (!valid || (p.kind !== 'fluvial' && p.kind !== 'procession' && p.kind !== 'parade'))
+    return false;
+  // Every present field was checked against its numeric or vehicle limits above.
+  return processionActorCount(p.kind, p.formation) <= PROCESSION_LIMITS.actors;
 }
 export function isCityProcessions(v: unknown): v is CityProcessions {
   if (!isRecord(v) || !Array.isArray(v.processions)) return false;
@@ -322,7 +327,22 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
           'blocked',
           'approaches',
           'roads',
+          'closure_zone',
+          'seated_grounds',
+          'altar_ground',
+          'altar',
         ]) &&
+        ['closure_zone', 'seated_grounds', 'altar_ground'].every(
+          (k) => site[k] === undefined || rings(site[k]),
+        ) &&
+        (site.altar === undefined ||
+          (isRecord(site.altar) &&
+            only(site.altar, ['at', 'radius_m', 'images']) &&
+            point(site.altar.at) &&
+            isNumber(site.altar.radius_m) &&
+            site.altar.radius_m > 0 &&
+            site.altar.radius_m <= PROCESSION_LIMITS.altar.radius &&
+            integer(site.altar.images, ...PROCESSION_LIMITS.altar.images))) &&
         isText(site.id) &&
         OSM_ID_PATTERN.test(site.id) &&
         point(site.location) &&
@@ -350,7 +370,26 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
     if (!line(p.route) || !isNumber(p.length_m) || p.length_m <= 0) return false;
     if (p.kind === 'fluvial')
       return (
-        only(p, [...base, 'route', 'length_m', 'banks', 'formation']) &&
+        only(p, [
+          ...base,
+          'route',
+          'length_m',
+          'departure_m',
+          'landing_m',
+          'banks',
+          'formation',
+          'crowd_ground',
+        ]) &&
+        (p.departure_m === undefined || (isNumber(p.departure_m) && p.departure_m > 0)) &&
+        (p.landing_m === undefined || (isNumber(p.landing_m) && p.landing_m > 0)) &&
+        (p.crowd_ground === undefined ||
+          (isRecord(p.crowd_ground) &&
+            only(p.crowd_ground, ['grounds', 'blocked', 'water', 'bridges', 'closure_zone']) &&
+            rings(p.crowd_ground.grounds) &&
+            rings(p.crowd_ground.blocked) &&
+            rings(p.crowd_ground.water) &&
+            rings(p.crowd_ground.bridges) &&
+            (p.crowd_ground.closure_zone === undefined || rings(p.crowd_ground.closure_zone)))) &&
         (p.banks === undefined ||
           (Array.isArray(p.banks) &&
             p.banks.length === (p.route as unknown[]).length &&
@@ -366,7 +405,9 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
         'water',
         'bridges',
         'formation',
+        'crowd_grounds',
       ]) &&
+      (p.crowd_grounds === undefined || rings(p.crowd_grounds)) &&
       rings(p.blocked) &&
       (p.water === undefined || rings(p.water)) &&
       (p.bridges === undefined || rings(p.bridges)) &&
@@ -375,11 +416,22 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       p.segments.every(
         (e) =>
           isRecord(e) &&
-          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m']) &&
+          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m', 'clear_m', 'verge_m']) &&
           isText(e.id) &&
           OSM_ID_PATTERN.test(e.id) &&
           isNumber(e.width_m) &&
           e.width_m > 0 &&
+          (e.clear_m === undefined ||
+            (isNumber(e.clear_m) && e.clear_m > 0 && e.clear_m <= e.width_m)) &&
+          (e.verge_m === undefined ||
+            (isRecord(e.verge_m) &&
+              only(e.verge_m, ['left', 'right']) &&
+              isNumber(e.verge_m.left) &&
+              e.verge_m.left >= 0 &&
+              e.verge_m.left <= PROCESSION_LIMITS.verge &&
+              isNumber(e.verge_m.right) &&
+              e.verge_m.right >= 0 &&
+              e.verge_m.right <= PROCESSION_LIMITS.verge)) &&
           isNumber(e.sidewalk_m) &&
           e.sidewalk_m >= 0 &&
           (e.sidewalks_m === undefined ||

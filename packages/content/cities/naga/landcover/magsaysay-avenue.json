@@ -236,7 +236,7 @@
   "rows": [],
   "areas": [],
   "status": "draft",
-  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: Magsaysay Avenue carriageways",
@@ -245,7 +245,7 @@
     },
     {
       "title": "Owner-supplied Magsaysay Avenue ground reference",
-      "note": "Inspected 2026-10-02. Mature broad canopy is visible on both street sides and reaches above the road. Estimated crown dimensions remain draft; all mapped trunks/heights and road geometry are preserved. No reference bitmap ships."
+      "note": "Inspected 2026-10-02. Mature broad canopy is visible on both street sides and reaches above the road. Estimated crown dimensions remain schematic; all mapped trunks/heights and road geometry are preserved. No reference bitmap ships."
     },
     {
       "title": "Owner-requested southern Magsaysay tree removal",

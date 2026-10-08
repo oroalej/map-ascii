@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Procession, type ProcessionSchedule } from './schemas';
+import { Procession, type FluvialRoute, type ProcessionSchedule } from './schemas';
 import {
   eventOccurrence,
+  eventStart,
   eventTime,
   processionReferenceErrors,
   resolveProcessionSchedules,
@@ -105,4 +106,24 @@ describe('event occurrence and dependency resolution', () => {
       spy.mockRestore();
     }
   });
+});
+
+it('starts a river procession at its departure, past the river kept behind it', () => {
+  const river: FluvialRoute = {
+    id: 'procession/river',
+    kind: 'fluvial',
+    title: { en: 'River' },
+    status: 'draft',
+    schedule: annualSchedule,
+    route: [
+      [0, 0],
+      [1000 / 111_320, 0],
+    ],
+    length_m: 1000,
+  };
+  expect(eventStart(river)).toEqual([0, 0]);
+  const [lng, lat] = eventStart({ ...river, departure_m: 400 });
+  expect(lng * 111_320).toBeCloseTo(400, 6);
+  expect(lat).toBe(0);
+  expect(eventStart({ ...river, departure_m: 5000 })).toEqual(river.route[1]);
 });

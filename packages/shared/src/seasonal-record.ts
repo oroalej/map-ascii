@@ -1,4 +1,6 @@
 /** Pipeline-baked bunting. Geographic endpoints survive tile clipping unchanged. */
+import { localMetricProjection, LEGACY_LOCAL_METERS_PER_DEGREE } from './flat-geometry';
+import { utilitySeed } from './utilities';
 export type SeasonalPoint = [number, number];
 export type SeasonalBuntingRecord = {
   version: 1;
@@ -13,6 +15,120 @@ export type SeasonalBuntingRecord = {
   segment: [SeasonalPoint, SeasonalPoint];
   seed: number;
 };
+
+/**
+ * One corridor edge's evenly spaced hanging rows, as shipped in tiles: decoding expands it
+ * into `bunting` rows (`expandBuntingRun`), so a dense corridor costs one record per edge.
+ */
+export type SeasonalBuntingRunRecord = {
+  version: 1;
+  kind: 'bunting-run';
+  id: string;
+  season: string;
+  corridor: string;
+  road: string;
+  /** The trimmed source segment, oriented along the corridor's row order. */
+  segment: [SeasonalPoint, SeasonalPoint];
+  /** First row's distance from `segment[0]`, row spacing, and rows, m. */
+  start_m: number;
+  spacing_m: number;
+  count: number;
+  /** Each row hangs this far either side of the segment, m. */
+  reach_m: number;
+  seed: number;
+};
+/** Rows of a run, curb to curb across its segment, each with its own identity and seed. */
+export function expandBuntingRun(run: SeasonalBuntingRunRecord): SeasonalBuntingRecord[] {
+  const frame = localMetricProjection(run.segment[0], {
+    east: LEGACY_LOCAL_METERS_PER_DEGREE,
+    north: LEGACY_LOCAL_METERS_PER_DEGREE,
+  });
+  const [ex, ey] = frame.to(run.segment[1]),
+    length = Math.hypot(ex, ey);
+  if (!length) return [];
+  const nx = -ey / length,
+    ny = ex / length;
+  const rows: SeasonalBuntingRecord[] = [];
+  for (let k = 0; k < run.count; k++) {
+    const u = (run.start_m + k * run.spacing_m) / length,
+      x = ex * u,
+      y = ey * u;
+    const id = `${run.id}/${k}`;
+    rows.push({
+      version: 1,
+      kind: 'bunting',
+      id,
+      season: run.season,
+      corridor: run.corridor,
+      road: run.road,
+      from: frame.from([x - nx * run.reach_m, y - ny * run.reach_m]),
+      to: frame.from([x + nx * run.reach_m, y + ny * run.reach_m]),
+      segment: run.segment,
+      seed: utilitySeed(id),
+    });
+  }
+  return rows;
+}
+const runFields = new Set([
+  'version',
+  'kind',
+  'id',
+  'season',
+  'corridor',
+  'road',
+  'segment',
+  'start_m',
+  'spacing_m',
+  'count',
+  'reach_m',
+  'seed',
+]);
+export function isSeasonalBuntingRun(value: unknown): value is SeasonalBuntingRunRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  const finite = (n: unknown, lo: number, hi: number) =>
+    typeof n === 'number' && Number.isFinite(n) && n >= lo && n <= hi;
+  const segment: unknown = v.segment;
+  const position = (p: unknown): p is SeasonalPoint =>
+    Array.isArray(p) && p.length === 2 && finite(p[0], -180, 180) && finite(p[1], -90, 90);
+  return (
+    Object.keys(v).length === runFields.size &&
+    Object.keys(v).every((k) => runFields.has(k)) &&
+    v.version === 1 &&
+    v.kind === 'bunting-run' &&
+    typeof v.id === 'string' &&
+    !!v.id &&
+    typeof v.season === 'string' &&
+    !!v.season &&
+    typeof v.corridor === 'string' &&
+    !!v.corridor &&
+    typeof v.road === 'string' &&
+    /^osm:way\/\d+$/.test(v.road) &&
+    Array.isArray(segment) &&
+    segment.length === 2 &&
+    position(segment[0]) &&
+    position(segment[1]) &&
+    (segment[0][0] !== segment[1][0] || segment[0][1] !== segment[1][1]) &&
+    finite(v.start_m, 0, 80) &&
+    finite(v.spacing_m, 3, 80) &&
+    Number.isInteger(v.count) &&
+    finite(v.count, 1, 10000) &&
+    finite(v.reach_m, 0.5, 40) &&
+    Number.isInteger(v.seed) &&
+    finite(v.seed, 0, 0xffffffff)
+  );
+}
+/** A tile's seasonal record: ordinary records as they are, bunting runs as their rows. */
+export function parseSeasonalTileRecord(value: unknown): readonly SeasonalRecord[] {
+  if (typeof value !== 'string') return [];
+  try {
+    const record: unknown = JSON.parse(value);
+    if (isSeasonalBuntingRun(record)) return expandBuntingRun(record);
+    return isSeasonalRecord(record) ? [record] : [];
+  } catch {
+    return [];
+  }
+}
 
 type SeasonalInstallationRecord = {
   version: 1;

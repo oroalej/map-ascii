@@ -4,9 +4,9 @@
     "en": "Mass after the fluvial procession"
   },
   "story": {
-    "en": "TODO(verify): The Mass follows the fluvial landing. The illustrative 18:30 start inherits the selected 15:00–18:30 afternoon simulation and the original Archdiocese listing. The later 2026 advisory instead gives 21:00 fluvial start and approximately 23:00 Mass; this replay retains the owner’s afternoon choice. Ninety-minute duration, gathering geometry and density are schematic."
+    "en": "The concluding Mass follows the fluvial landing, a gathering documented in 2022 and 2024. Its 18:00 replay start follows the illustrative 16:00–18:00 river window; the ninety-minute duration is illustrative. The owner marked the Basilica Loop as a car-free crowd precinct on 2026-10-07 and limited the crowd to the forecourt on 2026-10-08, as at the Cathedral. People fill the north park, the Centennial Globe lawn and Basilica Road, facing the Basilica; selected outdoor seating remains seated. The side parking and the loop behind the church stay clear of people, and the whole loop stays car-free."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "mass",
   "season": "penafrancia-fiesta",
   "label": {
@@ -22,24 +22,62 @@
   },
   "sources": [
     {
-      "title": "Archdiocese of Caceres: Peñafrancia calendar",
-      "url": "https://www.archdioceseofcaceres.org/caceresevents",
-      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+      "title": "Naga Tourism: 2024 fluvial gathering",
+      "url": "https://tourism.naga.gov.ph/fluvial-procession-draws-1-5-million-devotees/",
+      "note": "Reports 1.5 million devotees and a concluding Basilica Pontifical Mass. The crowd layout and ninety-minute Mass are illustrative."
     },
     {
       "title": "Naga Tourism: updated 2026 fluvial schedule",
       "url": "https://tourism.naga.gov.ph/public-advisory-updated-schedule-for-the-fluvial-procession/",
-      "note": "The later 2026 advisory moved boarding/start to 21:00 and estimated concluding Mass at 23:00. This simulation retains the owner-selected usual afternoon window 15:00–18:30 and inherited 18:30 Basilica Mass from the original listings; it does not depict the final actual 2026 schedule. TODO(verify)."
+      "note": "2026 advisory: departure 21:00; estimated Mass start 23:00. Illustrative annual replay: river 16:00–18:00, Mass 18:00–19:30."
     },
     {
-      "title": "City of Naga: 2022 fluvial procession",
+      "title": "City of Naga: 2022 fluvial procession and concluding Mass",
       "url": "https://www2.naga.gov.ph/fluvial-procession-highlights-festival/",
-      "note": "Cathedral-to-Danlugan foot procession after afternoon Mass, then fluvial procession and a concluding Mass. Supports Danlugan departure; river path, 210-minute window and formation are illustrative TODO(verify)."
+      "note": "Documents the foot procession after the 14:00 Cathedral Mass and the concluding Mass; does not establish a 16:00 fluvial departure."
     },
     {
-      "title": "OpenStreetMap: event anchors and grounds",
-      "url": "https://www.openstreetmap.org/way/23670362",
-      "note": "Mapped anchors: osm:way/23670362, osm:way/838935827. The authored illustrative forecourt anchor and mapped grounds seed a connected exterior gathering within the radius, with approaches and exits excluding the standing church footprint; this event has no snapped route endpoints. Grounds, road overflow and crowd density are illustrative TODO(verify), not surveyed festival arrangements."
+      "title": "OSM Basilica Loop and owner annotation",
+      "url": "https://www.openstreetmap.org/way/20301218",
+      "note": "OSM Basilica Loop curb; owner annotation, 2026-10-07: main loop and short northern pieces, offset four metres outward from the mapped six-metre carriageway centreline. On 2026-10-08 the owner limited the crowd to the forecourt: the boundary is cut along the south curb of Basilica Road (OSM way 23523456), in front of the facade. The whole annotated loop remains the car-free traffic closure, with its parking emptied of cars."
     }
+  ],
+  "traffic_closure": [
+    [123.1989881, 13.6331684],
+    [123.1990192, 13.633078],
+    [123.1990313, 13.6330436],
+    [123.1991693, 13.632651],
+    [123.1992973, 13.6322868],
+    [123.1993368, 13.6322531],
+    [123.1993364, 13.6321746],
+    [123.1995445, 13.631494],
+    [123.1996779, 13.6315382],
+    [123.2003938, 13.63179],
+    [123.2005668, 13.6318426],
+    [123.2003104, 13.6324522],
+    [123.2002785, 13.6325534],
+    [123.2002852, 13.6326138],
+    [123.200182, 13.6330103],
+    [123.2000751, 13.633402],
+    [123.2000648, 13.6334328],
+    [123.2000406, 13.633536],
+    [123.1989881, 13.6331684]
+  ],
+  "crowd_boundary": [
+    [123.1989881, 13.6331684],
+    [123.1990192, 13.633078],
+    [123.1990313, 13.6330436],
+    [123.1991693, 13.632651],
+    [123.1992973, 13.6322868],
+    [123.1993368, 13.6322531],
+    [123.1993365, 13.6321923],
+    [123.2002918, 13.6325113],
+    [123.2002785, 13.6325534],
+    [123.2002852, 13.6326138],
+    [123.200182, 13.6330103],
+    [123.2000751, 13.633402],
+    [123.2000648, 13.6334328],
+    [123.2000406, 13.633536],
+    [123.1989881, 13.6331684]
   ]
 }

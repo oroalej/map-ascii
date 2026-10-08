@@ -2,7 +2,10 @@ import { z } from 'zod';
 import { dialogueDelivery, SCENE_PROFILES } from './dialogue-options';
 import { LanguageCode, localizedText, Source } from './schemas';
 
-export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look']);
+/** `cheer`: a one-line call from people at a running event (`conditions.occasions`). */
+export const DialogueKind = z.enum(['greet', 'talk', 'ball', 'look', 'cheer']);
+export const DialogueOccasion = z.enum(['procession', 'parade', 'fluvial', 'mass']);
+export type DialogueOccasion = z.infer<typeof DialogueOccasion>;
 export const DialogueDelivery = z.enum(['exchange', 'utterance']);
 export type DialogueDelivery = z.infer<typeof DialogueDelivery>;
 export const DialogueProfile = z.enum([
@@ -44,6 +47,8 @@ export const DialogueConditions = z
       .optional(),
     audience: z.enum(['adults', 'adult-child']).optional(),
     event: z.enum(['arrival', 'catch', 'pass']).optional(),
+    /** The events a cheer belongs to (event kinds: river, street, parade or Mass). */
+    occasions: z.array(DialogueOccasion).min(1).optional(),
   })
   .strict();
 export type DialogueConditions = z.infer<typeof DialogueConditions>;
@@ -127,7 +132,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
         const count = exchange.lines.length;
         const delivery = dialogueDelivery(exchange);
         const slots =
-          exchange.kind === 'look'
+          exchange.kind === 'look' || exchange.kind === 'cheer'
             ? 1
             : exchange.kind === 'talk' &&
                 !(exchange.profile && SCENE_PROFILES.includes(exchange.profile))
@@ -185,12 +190,23 @@ export function dialogueCatalog(languages?: readonly string[]) {
           ((exchange.kind === 'greet' || exchange.kind === 'ball') &&
             delivery === 'exchange' &&
             count !== 2) ||
-          (exchange.kind === 'look' && delivery !== 'utterance')
+          ((exchange.kind === 'look' || exchange.kind === 'cheer') && delivery !== 'utterance')
         )
           ctx.addIssue({
             code: 'custom',
             path: ['exchanges', i, 'lines'],
             message: 'invalid speaking turn count',
+          });
+        if (
+          (exchange.kind === 'cheer') !== (exchange.conditions?.occasions !== undefined) ||
+          (exchange.kind === 'cheer' &&
+            (exchange.profile !== undefined ||
+              Object.keys(exchange.conditions ?? {}).some((key) => key !== 'occasions')))
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i, 'conditions'],
+            message: 'event cheers take only occasions, and only cheers take occasions',
           });
         if ((exchange.kind === 'greet') !== (exchange.period !== undefined))
           ctx.addIssue({

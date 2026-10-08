@@ -111,19 +111,83 @@ export type TrafficMix = Partial<
 export const YEAR_RANGE = [1000, 3000] as const;
 /** Zod-free event validation and formation defaults, shared by authoring and runtime. */
 export const PROCESSION_LIMITS = {
-  fluvial: { columns: [1, 6], ranks: [1, 20], escorts: [0, 40] },
-  procession: { bearers: [4, 24], ranks: [1, 20], marshals: [0, 12] },
-  parade: { contingents: [1, 6], ranks: [1, 10], band: [0, 24], color_guard: [0, 8] },
+  fluvial: { columns: [1, 6], ranks: [1, 20], escorts: [0, 40], followers: [0, 200] },
+  procession: {
+    bearers: [4, 64],
+    ranks: [1, 20],
+    marshals: [0, 32],
+    columns: [2, 10],
+    images: [1, 3],
+  },
+  parade: {
+    contingents: [1, 100],
+    ranks: [1, 10],
+    band: [0, 48],
+    color_guard: [0, 8],
+    bands: [0, 6],
+    columns: [2, 10],
+  },
   radius: 500,
+  actors: 300,
+  verge: 6,
+  altar: { radius: 20, images: [0, 3], apron: 3 },
   vehicles: 4,
   schedule: { offset_days: [-31, 31], duration_min: [1, 1440] },
 } as const;
 export const PROCESSION_DEFAULTS = {
-  fluvial: { columns: 3, ranks: 8, escorts: 6 },
-  procession: { bearers: 8, ranks: 12, marshals: 4 },
-  parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4 },
+  fluvial: { columns: 3, ranks: 8, escorts: 6, followers: 14 },
+  procession: { bearers: 8, ranks: 12, marshals: 4, columns: 6, images: 1 },
+  parade: { contingents: 3, ranks: 4, band: 12, color_guard: 4, bands: 1, columns: 4 },
 } as const;
 export const PROCESSION_VEHICLES = ['car', 'truck', 'motorcycle'] as const;
+type ActorFormation = Partial<
+  Record<
+    | 'columns'
+    | 'ranks'
+    | 'images'
+    | 'bearers'
+    | 'marshals'
+    | 'contingents'
+    | 'bands'
+    | 'band'
+    | 'color_guard'
+    | 'escorts'
+    | 'followers',
+    number
+  >
+> & { vehicles?: readonly unknown[] };
+/** Physical actors only; raster contingent blocks and decorations have no simulated owners. */
+export function processionActorCount(
+  kind: 'fluvial' | 'procession' | 'parade',
+  formation: ActorFormation = {},
+) {
+  if (kind === 'procession') {
+    const f = PROCESSION_DEFAULTS.procession;
+    return (
+      (formation.images ?? f.images) * ((formation.bearers ?? f.bearers) + 1) +
+      (formation.marshals ?? f.marshals) +
+      (formation.ranks ?? f.ranks) * (formation.columns ?? f.columns)
+    );
+  }
+  if (kind === 'fluvial') {
+    const f = PROCESSION_DEFAULTS.fluvial;
+    return (
+      1 +
+      (formation.columns ?? f.columns) * (formation.ranks ?? f.ranks) +
+      (formation.escorts ?? f.escorts) +
+      (formation.followers ?? f.followers)
+    );
+  }
+  const f = PROCESSION_DEFAULTS.parade;
+  const contingents = formation.contingents ?? f.contingents,
+    bands = formation.bands ?? f.bands;
+  const groups = bands ? Math.ceil(contingents / Math.ceil(contingents / bands)) : 0;
+  return (
+    groups * (formation.band ?? f.band) +
+    (formation.color_guard ?? f.color_guard) +
+    (formation.vehicles?.length ?? 0)
+  );
+}
 /** Physical geometry used by event routing, probes and collision reservations, in metres. */
 export const PROCESSION_GEOMETRY = {
   person: { length: 0.9, width: 1 },
@@ -133,25 +197,71 @@ export const PROCESSION_GEOMETRY = {
     truck: { length: 8, width: 2.5 },
     motorcycle: { length: 2, width: 0.8 },
   },
-  bearerOffset: 1.6,
-  marshalOffset: 1.1,
-  columns: 4,
   columnPitch: 0.8,
+  rowPitch: 2,
   probePadding: 0.05,
   clearanceMargin: 0.5,
   massCell: 2,
 } as const;
+export const ALTAR_IMAGE_SPACING_M = 10;
+export type ProcessionAltarMember = {
+  x: number;
+  y: number;
+  paint: number;
+  prop?: 'platform' | 'table' | 'canopy' | 'support' | 'andas';
+  footprint?: { length: number; width: number };
+  scenery?: boolean;
+};
+/** Shared fixed composition supplies actor reservations and complete permission extents. */
+export function processionAltarLayout(images: number): ProcessionAltarMember[] {
+  const members: ProcessionAltarMember[] = Array.from({ length: 8 }, (_, i) => ({
+    x: ((i % 4) - 1.5) * 1.2,
+    y: -2 + Math.floor(i / 4) * 1.5,
+    paint: i < 5 ? 0 : 7,
+  }));
+  members.push(
+    { x: 0, y: 0, paint: 6, prop: 'platform', footprint: { length: 5, width: 7 }, scenery: true },
+    { x: 0, y: 2, paint: 3, prop: 'table', footprint: { length: 1.2, width: 2.4 } },
+    { x: 0, y: 0, paint: 3, prop: 'canopy', footprint: { length: 5, width: 6 }, scenery: true },
+    { x: -3, y: 2, paint: 6, prop: 'support', footprint: { length: 0.4, width: 0.4 } },
+    { x: 3, y: 2, paint: 6, prop: 'support', footprint: { length: 0.4, width: 0.4 } },
+  );
+  for (let i = 0; i < images; i++)
+    members.push({
+      x: (i - (images - 1) / 2) * ALTAR_IMAGE_SPACING_M,
+      y: -0.5,
+      paint: 4,
+      prop: 'andas',
+      footprint: PROCESSION_GEOMETRY.andas,
+    });
+  return members;
+}
+/** A padded radial envelope contains complete members at any heading, plus the audience apron. */
+export function processionAltarRadius(radius: number, images: number): number {
+  let extent = radius;
+  for (const member of processionAltarLayout(images)) {
+    const size = member.footprint ?? PROCESSION_GEOMETRY.person;
+    extent = Math.max(
+      extent,
+      Math.hypot(member.x, member.y) +
+        Math.hypot(size.length, size.width) / 2 +
+        Math.SQRT2 * PROCESSION_GEOMETRY.probePadding,
+    );
+  }
+  return extent + PROCESSION_LIMITS.altar.apron;
+}
 export function processionFormationWidth(
   kind: 'procession' | 'parade',
   vehicles: readonly (typeof PROCESSION_VEHICLES)[number][] = [],
 ): number {
   const g = PROCESSION_GEOMETRY;
-  const people = (g.columns - 1) * g.columnPitch + g.person.width;
+  // A narrow road may require single file; larger rosters add rows, never drop members.
+  const people = g.person.width;
   return (
     Math.max(
       people,
       ...(kind === 'procession'
-        ? [2 * g.bearerOffset + g.person.width, 2 * g.marshalOffset + g.person.width, g.andas.width]
+        ? [g.andas.width]
         : vehicles.map((vehicle) => g.vehicles[vehicle].width)),
     ) +
     2 * (g.probePadding + g.clearanceMargin)
