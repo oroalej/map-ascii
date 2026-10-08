@@ -1,0 +1,71 @@
+{
+  "id": "landcover/leon-q-mercado-high-school",
+  "title": "Leon Q. Mercado High School grounds",
+  "trees": [
+    {
+      "at": [123.249971181, 13.652947888],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.250086349, 13.652896838],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.25015904, 13.652860627],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.250248406, 13.652850431],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.250394857, 13.652794637],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.250513333, 13.652758197],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.250616582, 13.652710075],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.250163512, 13.652602482],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.250262938, 13.652589082],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.250067978, 13.652557642],
+      "crown_m": 4,
+      "height_m": 5
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/780476088",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6527594,123.2502190,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied leon-q-mercado-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 3.56 m, 4.41 m. Meets 5 m check limit. Long central classroom, northern angled classroom chain and bottom road frontage; central yard appears bare. Corrected the lower classroom corner from bottom to top edge; far eastern roof lies outside the crop and is not used as a check. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

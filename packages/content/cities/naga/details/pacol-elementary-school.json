@@ -1,0 +1,125 @@
+{
+  "id": "detail/pacol-elementary-school",
+  "osm_id": "osm:way/312531363",
+  "title": "Pacol Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.232167607, 13.651295741],
+        [123.232168312, 13.651294533],
+        [123.232168768, 13.651293196],
+        [123.232168947, 13.651291797],
+        [123.232168842, 13.651290392],
+        [123.232168456, 13.651289034],
+        [123.232167805, 13.651287775],
+        [123.232166915, 13.651286664],
+        [123.232165818, 13.651285743],
+        [123.232164557, 13.651285047],
+        [123.232163181, 13.651284604],
+        [123.232161742, 13.651284431],
+        [123.232160296, 13.651284533],
+        [123.232158898, 13.651284908],
+        [123.232157603, 13.65128554],
+        [123.232156459, 13.651286406],
+        [123.232152684, 13.651289893],
+        [123.232105379, 13.651271355],
+        [123.232092522, 13.651306655],
+        [123.232103311, 13.651310882],
+        [123.232079885, 13.651369694],
+        [123.232134143, 13.651390586],
+        [123.232156257, 13.65133163],
+        [123.232537074, 13.651480864],
+        [123.232550972, 13.651445973],
+        [123.232167607, 13.651295741]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.232013289, 13.651275605],
+        [123.232018907, 13.651277806],
+        [123.232031713, 13.651242487],
+        [123.232027684, 13.651240908],
+        [123.232013289, 13.651275605]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.231875558, 13.651221631],
+        [123.231877478, 13.651222383],
+        [123.231891923, 13.651187707],
+        [123.231888663, 13.651186429],
+        [123.231875558, 13.651221631]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4",
+      "ring": [
+        [123.232014718, 13.651580554],
+        [123.232056623, 13.651597255],
+        [123.2320795, 13.651536264],
+        [123.232022309, 13.651514242],
+        [123.231998775, 13.651573327],
+        [123.232014718, 13.651580554]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-5",
+      "ring": [
+        [123.232359617, 13.65170421],
+        [123.232417938, 13.651727064],
+        [123.232518245, 13.651475239],
+        [123.232459923, 13.651452384],
+        [123.232359617, 13.65170421]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.232161554, 13.651291615],
+        [123.232128222, 13.651322398],
+        [123.23210763, 13.651374096]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/312531363",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 2.37 m, 11.40 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. First attempt matched the top-left roof to the northeastern row, creating a reflected fit. Corrected to the northwestern mapped roof 780476062; east-side Educare roof is an independent check. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+    }
+  ]
+}

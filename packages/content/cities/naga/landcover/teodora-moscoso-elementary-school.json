@@ -1,0 +1,31 @@
+{
+  "id": "landcover/teodora-moscoso-elementary-school",
+  "title": "Teodora Moscoso Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.268101931, 13.66385888],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.268239798, 13.663885389],
+      "crown_m": 3,
+      "height_m": 5
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1395444073",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6637505,123.2682093,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.77 m, 1.52 m. Meets 5 m check limit. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "landcover/pacol-elementary-school",
+  "title": "Pacol Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.232088722, 13.651627867],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.231691877, 13.651396939],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.232272797, 13.651372038],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.232391038, 13.651625325],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.232436729, 13.651711628],
+      "crown_m": 5,
+      "height_m": 6.0
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.231832699, 13.651387233],
+        [123.231829551, 13.651326369],
+        [123.231732957, 13.651288516],
+        [123.231677989, 13.651437096],
+        [123.231765471, 13.651471378],
+        [123.231832699, 13.651387233]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/312531363",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 2.37 m, 11.40 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. First attempt matched the top-left roof to the northeastern row, creating a reflected fit. Corrected to the northwestern mapped roof 780476062; east-side Educare roof is an independent check. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+    }
+  ]
+}

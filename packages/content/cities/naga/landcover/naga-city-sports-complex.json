@@ -1,0 +1,117 @@
+{
+  "id": "landcover/naga-city-sports-complex",
+  "title": "Naga City Sports Complex grounds",
+  "trees": [
+    {
+      "at": [123.236257119, 13.645919059],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.236525536, 13.645896886],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.236963969, 13.64588975],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.237259045, 13.646216539],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.237266521, 13.646561645],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.237231403, 13.646878213],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.237138459, 13.647309749],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.236796814, 13.647610549],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.236118732, 13.647458067],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.235924347, 13.647389767],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.235783823, 13.646448262],
+      "crown_m": 10,
+      "height_m": 12.0
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.237193963, 13.646384512],
+        [123.237156276, 13.647003372],
+        [123.237344295, 13.647067027],
+        [123.237348151, 13.646377862],
+        [123.237193963, 13.646384512]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.235682544, 13.646744031],
+        [123.235679285, 13.646582136],
+        [123.235679118, 13.646579235],
+        [123.235629064, 13.646504286],
+        [123.235622145, 13.646498391],
+        [123.235593132, 13.646529991],
+        [123.235422816, 13.647052568],
+        [123.235562307, 13.647216905],
+        [123.235664347, 13.64713836],
+        [123.235682544, 13.646744031]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.23566215, 13.64645482],
+        [123.235671807, 13.646463048],
+        [123.235672445, 13.646463644],
+        [123.235671356, 13.646444792],
+        [123.23566215, 13.64645482]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1208006588",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "OpenStreetMap: stadium identity",
+      "url": "https://www.openstreetmap.org/node/643030925",
+      "note": "Identity only; existing soccer pitch anchors detail. Stadium fetching and a new complex label are a separate pipeline follow-up."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6466754,123.2368358,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied naga-city-sports-complex.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 6.60 m, 9.35 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Grandstand roof strip is matched tentatively to the complete mapped strip; track, courts and pool provide independent visible checks. Existing mapped pitches are not traced or replaced. Corrected the yellow court check to its actual northwest corner. The mapped stand is one coarse strip while the image shows stepped roofs; that disagreement is retained in measured checks. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+    }
+  ]
+}

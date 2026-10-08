@@ -1,0 +1,181 @@
+{
+  "id": "landcover/ateneo-pacol",
+  "title": "Ateneo de Naga University Junior High School grounds",
+  "trees": [
+    {
+      "at": [123.23296389, 13.646390057],
+      "crown_m": 13,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.232484332, 13.646215884],
+      "crown_m": 13,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.232726875, 13.64619875],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.232292189, 13.64605138],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.232502905, 13.646056562],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.232716206, 13.646053583],
+      "crown_m": 12,
+      "height_m": 14.4
+    },
+    {
+      "at": [123.233029247, 13.646032727],
+      "crown_m": 12,
+      "height_m": 14.4
+    },
+    {
+      "at": [123.233126068, 13.646076151],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.233229423, 13.646074644],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.233012068, 13.645793511],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.233019907, 13.64567501],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.233298729, 13.645680546],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.233454617, 13.6456834],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.233580599, 13.645806684],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.233583355, 13.645933415],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.233905224, 13.645865597],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.233913688, 13.645687828],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.234350977, 13.646472885],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.234637849, 13.646447805],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.234909608, 13.64600162],
+      "crown_m": 9,
+      "height_m": 10.8
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.23444504, 13.6458357],
+        [123.234713863, 13.645837097],
+        [123.234713889, 13.645823096],
+        [123.234713901, 13.645822876],
+        [123.234713934, 13.645822658],
+        [123.23471399, 13.645822444],
+        [123.234714067, 13.645822237],
+        [123.234714164, 13.645822037],
+        [123.234714281, 13.645821849],
+        [123.234714417, 13.645821672],
+        [123.234714569, 13.645821509],
+        [123.234714738, 13.645821361],
+        [123.23471492, 13.64582123],
+        [123.234715115, 13.645821117],
+        [123.23471532, 13.645821023],
+        [123.234715534, 13.645820949],
+        [123.234715754, 13.645820896],
+        [123.234715979, 13.645820865],
+        [123.234716205, 13.645820854],
+        [123.234845794, 13.645821149],
+        [123.234845983, 13.645729461],
+        [123.234450196, 13.645727405],
+        [123.23444504, 13.6458357]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.233031055, 13.646040912],
+        [123.233169464, 13.646041631],
+        [123.233189406, 13.645622751],
+        [123.233050997, 13.645622032],
+        [123.233031055, 13.646040912]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.232170513, 13.646253086],
+        [123.232137154, 13.646722992],
+        [123.232726236, 13.646719921],
+        [123.232866736, 13.646399771],
+        [123.23285807, 13.646258702],
+        [123.232170513, 13.646253086]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.233891256, 13.645558951],
+        [123.233606873, 13.645577912],
+        [123.233585179, 13.646033572],
+        [123.233870787, 13.646035056],
+        [123.233891256, 13.645558951]
+      ],
+      "cover": "parking"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/871497903",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6461969,123.2337541,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied ateneo-pacol.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 4.12 m, 3.75 m. Meets 5 m check limit. Large courtyard roof, gym and southern grade-school block all visible. Complete mapped courtyard hole is preserved. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

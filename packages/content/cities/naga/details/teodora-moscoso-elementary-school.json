@@ -1,0 +1,114 @@
+{
+  "id": "detail/teodora-moscoso-elementary-school",
+  "osm_id": "osm:way/1395444073",
+  "title": "Teodora Moscoso Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.26809283, 13.663813207],
+        [123.268143003, 13.663819771],
+        [123.268154945, 13.663710127],
+        [123.268101569, 13.663703145],
+        [123.26809283, 13.663813207]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.268245225, 13.663726203],
+        [123.268268575, 13.663730524],
+        [123.268269737, 13.663719849],
+        [123.268246252, 13.663716777],
+        [123.268245225, 13.663726203]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.268225976, 13.663914294],
+        [123.26822591, 13.663915607],
+        [123.268226124, 13.663917],
+        [123.268226612, 13.663918327],
+        [123.268227358, 13.663919535],
+        [123.268228084, 13.663920312],
+        [123.268235212, 13.663922182],
+        [123.268236461, 13.663921748],
+        [123.268237705, 13.663921023],
+        [123.268238779, 13.663920077],
+        [123.268239642, 13.663918945],
+        [123.268240261, 13.663917671],
+        [123.268240613, 13.663916305],
+        [123.268240628, 13.663916211],
+        [123.268248242, 13.663917207],
+        [123.268257341, 13.66383367],
+        [123.268263723, 13.663775068],
+        [123.268246871, 13.663861219],
+        [123.268246817, 13.663861434],
+        [123.268246743, 13.663861642],
+        [123.268246647, 13.663861842],
+        [123.268246532, 13.663862032],
+        [123.268246399, 13.66386221],
+        [123.268246248, 13.663862375],
+        [123.268246081, 13.663862524],
+        [123.2682459, 13.663862657],
+        [123.268245706, 13.663862772],
+        [123.268245502, 13.663862868],
+        [123.268245289, 13.663862944],
+        [123.26824507, 13.663862999],
+        [123.268244845, 13.663863033],
+        [123.268244619, 13.663863046],
+        [123.268244392, 13.663863037],
+        [123.268244168, 13.663863006],
+        [123.268226354, 13.663859709],
+        [123.268220487, 13.663913576],
+        [123.268225976, 13.663914294]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.268233297, 13.663915252],
+        [123.268240456, 13.663868263]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.268234457, 13.663915936],
+        [123.268231643, 13.663866632]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1395444073",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6637505,123.2682093,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.77 m, 1.52 m. Meets 5 m check limit. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}
