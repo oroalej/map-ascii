@@ -1,0 +1,60 @@
+{
+  "id": "landmark/old-abella-mansion-arch",
+  "osm_id": "osm:way/23665222",
+  "name": { "en": "Old Abella Mansion Arch" },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap RAD Building host footprint",
+      "url": "https://www.openstreetmap.org/way/23665222",
+      "note": "ODbL. The existing footprint hosts selection and display for the surviving arch; it is not the historic mansion. Geometry is retained and edit dates are not construction dates. The neighboring way/23671432 is across Panganiban Drive. No construction date is assigned to the modern host."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Spanish-style gate ruins at Blumentritt Street corner Panganiban Avenue for preservation."
+    },
+    {
+      "title": "Naga City Tourism: The Old Abella Mansion Arch",
+      "url": "https://tourism.naga.gov.ph/attractions/the-old-abella-arch/",
+      "note": "Supports the arch, former mansion, Mariano Abella and the June 12, 2024 marker installation. Inspected October 8, 2026; its location is Abella Residence Arch, J5FQ+738, Panganiban Drive. Historical facts concern the arch or former mansion, not the RAD Building."
+    },
+    {
+      "title": "Bicol Mail: Naga fetes Phil-Spanish Friendship Day",
+      "url": "https://www.bicolmail.net/single-post/2019/07/04/naga-fetes-phil-spanish-friendship-day",
+      "note": "July 4, 2019 report and JRM-PIA5 photograph inspected October 8, 2026. Identifies the arch within the RAD Building perimeter at Panganiban Drive and Blumentritt Street; the photograph shows the brick arch incorporated into the modern glass-fronted host. It reports an earlier June 30, 2019 marker unveiling; the 2024 installation is not claimed to be the first marker."
+    },
+    {
+      "title": "Esri World Imagery: Panganiban and Blumentritt corner reference",
+      "url": "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/18/121057/220774",
+      "note": "Inspected October 8, 2026 alongside source street geometry and the published RAD photograph/address. The host footprint is on the south side of Panganiban Drive, west of Blumentritt Street, distinct from the building across Panganiban. Imagery date is unknown and the older roofs do not establish the host's age. No imagery bitmap or new geometry ships. Direct Google Maps and Street View inspection was unavailable."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The red-brick arch is the surviving remnant of Don Mariano Abella's former mansion."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Mariano Abella took part in the Propaganda Movement and served as provincial governor early in the American period."
+      },
+      "source": 2
+    },
+    {
+      "text": { "en": "Japanese forces occupied the former mansion during World War II." },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Naga City Tourism records a historical marker installation at the site on June 12, 2024."
+      },
+      "source": 2,
+      "year": 2024,
+      "certainty": "exact"
+    }
+  ]
+}

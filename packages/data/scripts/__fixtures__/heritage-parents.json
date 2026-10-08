@@ -1,0 +1,32 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1876304, 13.6227469],
+          [123.1876544, 13.6228729],
+          [123.1874144, 13.6229159],
+          [123.1873984, 13.6228319],
+          [123.1875734, 13.6227999],
+          [123.1875654, 13.6227579],
+          [123.1876304, 13.6227469]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23665222",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Lerma",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  }
+]
