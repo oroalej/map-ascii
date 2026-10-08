@@ -413,11 +413,18 @@ Static event crowds do not occupy simulated agents or receive worker ticks. Figu
 | Frame rate | 60 fps desktop, ≥30 fps mid-range Android |
 | Initial JS (web app, gzipped) | < 250 KB; the map renderer loads as a separate chunk |
 | Map renderer chunk (gzipped) | < 120 KB |
+| Canvas async dependency set (gzipped, normal worker startup; excludes initial, worker-only and nested lazy-import graphs) | < 200 KiB |
+| City page HTML (raw) | < 48 KiB; aim below 40 KiB |
+| Startup JSON (gzipped, before the first tile frame) | < 16 KiB; no sidecar JSON is required after build-time meta inlining |
 | First meaningful render | < 2.5 s on 4G |
 | `<city>.pmtiles` size | < 40 MB per city (the city plus its region at low zoom) |
 | `<city>.processions.json` (gzipped) | < 60 KB; ground permissions and exclusions are clipped and coordinates are compact |
 | `<city>.emergency.json` (gzipped) | ≤ 32 KiB; contracted directed graph and compact roadside targets |
 | Tile decode | off main thread; < 16 ms per tile on desktop |
+
+Startup export (2026-10-08, `tiles-naga-20261008-0851`, with the Zod-free renderer): Naga initial JS is 212,659 bytes (208 KiB) gzip, the normal canvas startup set is 166,969 bytes (163 KiB) gzip, the renderer leaf is 91,073 bytes (89 KiB) gzip, and automatic startup JSON is zero. The canvas set counts every entry in its parent import loader, including main-thread dependencies also used by workers. Nested import factories belong to separately deferred graphs: inline Life loads only when the worker path is unavailable or fails. Moving such a dependency into the canvas loader makes the budget count it and its dependencies again.
+
+City HTML is 31,072 raw bytes (15,033 bytes gzip), below both the unchanged 48 KiB cap and the below-40 KiB aspiration. Metadata stays inline and directly available; the existing runtime Life and dialogue objects use lossless build-time gzip/base64 transport. The client synchronously decodes them once per payload with `fflate` before the canvas and HUD consume them, retaining every existing runtime field and source value. The canvas download still starts when its parent client module evaluates, in parallel with hydration; decoding adds no JSON fetch or asynchronous initialization step. Initial chunks contain no GL handler, shader or compression/ZIP encoder exports. The earlier startup export was 65,683 raw HTML bytes and 321,845 bytes canvas gzip; those measurements are historical.
 
 Zod schemas live behind the server/pipeline-only `@atlas/shared/schemas` entry. Zod stays out of every browser chunk: the pipeline validates each generated file with its schema when it writes it, the web app checks only their shape (`apps/web/lib/guards.ts`), and `packages/shared` keeps the plain values the browser needs (class list, camera ranges, search options) in zod-free modules and is marked side-effect free. CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, the separate renderer chunk, each `<city>.pmtiles`, and gzip-compressed `<city>.processions.json` / `<city>.emergency.json`). The tile worker and legacy `nomodule` polyfills are excluded from initial JS. Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
 
@@ -695,6 +702,14 @@ The September 30, 2026 run (Node 24.12.0, Windows x64, snapshot SHA-256 `99e0309
 
 Candidate pooling improved the large artificial crowd but regressed small views. Following buckets regressed all three traffic sizes; a second complete traffic run confirmed the direction (600 vehicles: median 78.5% slower, p95 52.7% slower). Exact output and mover-state comparisons passed. The JSON reports are written to ignored `test-results/` files. These are local experimental results, not a claim that the frame-rate budgets have been reached.
 
+### Cold startup measurement
+
+`pnpm perf:browser --startup --interleaved --runs=8 --baseline=<absolute export directory> --output=<absolute task-folder>/startup.json` measures the first qualifying tile canvas frame's completed draw submission. It is not a GPU-completion or display-presentation timestamp. The renderer emits `ready` and marks `atlas:ready` once per context generation; `getStats().readyMs` measures from renderer construction. The benchmark measures from navigation using the mark and navigation timing's common `performance.timeOrigin`.
+
+Each arm has eight fresh browser contexts at 1920×1080, DPR 1, high quality, active Life at noon/calm, no reduced motion, and a June 15, 2026 fixed city date. HTTP cache and origin storage (including owned ranges) are cleared. Both page and dedicated-worker traffic use 170 ms latency, 9 Mbps download (1,125,000 bytes/s) and 3 Mbps upload (375,000 bytes/s). Baseline-first and candidate-first pairs alternate. Missing marks, failed navigation and page/worker exceptions fail the measurement. Reports retain raw milliseconds, median, nearest-rank p75, export hashes and machine information.
+
+`--control` compares two logical arms of the current export with the same eight-per-arm protocol. The control spread is the absolute difference of their medians. The shared load-time gate improves over an instrumentation-only pre-task baseline, or increases by at most twice this spread; the absolute 2.5-second first-meaningful-render budget is reported separately. Older exports must first receive exactly the same renderer readiness instrumentation, with no startup optimizations. An intermediate measurement while related load-time work is unmerged does not satisfy the combined gate. The exclusive heavy slot prevents local build/performance contention.
+
 ## 9. Testing
 
 - **Unit (Vitest):**
@@ -721,7 +736,7 @@ Candidate pooling improved the large artificial crowd but regressed small views.
 
 - `next build` with `output: 'export'` produces a static site on Vercel. The web app's `build` script reuses an unchanged, complete export; when rebuilding, it fetches each city's published tiles first (the GitHub release its `tiles.lock.json` names, DATA.md §9) into `public/tiles/`. Its fingerprint in `.next/cache/atlas-export.json` covers build inputs and export file hashes and is saved only after a successful build with stable inputs. E2E prepares the export before Playwright can reuse a running static server. `pnpm build:force` bypasses export reuse. This repository is public, so Vercel can fetch its release assets without a token. Without a token, downloads use public release URLs; supplying a `GITHUB_TOKEN` selects the GitHub API, which is required for private repositories. CI uses the workflow's token.
 - PMTiles and imagery are static files. If they exceed Vercel limits, host them on Cloudflare R2 or similar with CORS and range requests enabled.
-- Set long cache headers on tiles, and add a content hash in the filename (e.g. `<city>.<hash>.pmtiles`) for cache busting.
+- Equivalent `vercel.json` header rules at the repository root and `apps/web` support either Vercel project Root Directory. PMTiles URLs use `?v=<first eight SHA-256 hex digits>` only when the actual public archive matches the complete city-pack lock hash. Matching pinned URLs receive one-year immutable caching; unversioned local rebuilds revalidate. JSON sidecars retain CDN revalidation (one day plus a seven-day stale window). A query-conditioned header rule must also apply to 206 range responses. The tile worker retains pmtiles’ Windows sparse-HTTP-cache workaround on misses and stores complete exact-range responses separately in owned CacheStorage entries, retaining two recently used pins per archive pathname. Storage failures fall back to network loading.
 
 **Traffic-motion measurement.** Both CPU harnesses accept `--allow-diff` for intentional behavior changes: it skips equivalence assertions and prints `behavior differs from baseline: timing only`; equality remains the default. Use separate `--output` paths. Traffic acceptance compares world step median/p95 against +15%/+20% and `traffic/600` median against +30%, independently of the harness's older optimization gate.
 

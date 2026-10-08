@@ -78,7 +78,7 @@ export async function writeMetadata(
   ]);
 
   await mkdir(outDir, { recursive: true });
-  await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+  await writeJson(join(outDir, `${city.slug}.meta.json`), meta);
   return meta;
 }
 

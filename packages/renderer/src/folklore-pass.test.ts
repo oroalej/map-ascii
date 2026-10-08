@@ -204,6 +204,7 @@ it.each(['cached', 'pending', 'demand'] as const)(
     }
     folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
     expect(r.data).toBe(data);
+    gl.isContextLost = () => false;
     deletePrograms(gl, p);
     expect(calls.deleteProgram).toHaveBeenCalledWith(r.program.program);
     expect(calls.deleteBuffer).toHaveBeenCalledWith(r.buffer);

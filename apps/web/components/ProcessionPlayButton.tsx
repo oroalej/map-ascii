@@ -12,7 +12,9 @@ export function ProcessionPlayButton({ id, label }: { id: string; label: string 
       className={styles.button}
       disabled={!available}
       title={available ? 'Play it as a time-lapse' : 'Turn Life on to see it'}
-      onClick={() => play(id)}
+      onClick={() => {
+        void play(id);
+      }}
     >
       ▶ {label}
     </button>

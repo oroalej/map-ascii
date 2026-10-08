@@ -4,9 +4,10 @@ import styles from './ArtView.module.css';
 
 /** Widest drawing the panel shows, in characters. */
 const MAX_WIDTH = 36;
+type Drawing = Pick<LandmarkArt, 'title' | 'palette' | 'variants'>;
 
 /** The largest variant that fits (variants are smallest first). */
-function pickVariant(art: LandmarkArt) {
+function pickVariant(art: Drawing) {
   const fits = art.variants.filter((v) => artChars(v.rows[0] ?? '').length <= MAX_WIDTH);
   return fits.at(-1) ?? art.variants[0]!;
 }
@@ -15,7 +16,7 @@ function pickVariant(art: LandmarkArt) {
  * A landmark's front-view drawing (the city pack's `art/`), colored by its palette roles. It
  * belongs in the facts dialog's Drawing disclosure; the map is strictly top-down (SPEC.md §4).
  */
-export function ArtView({ art }: { art: LandmarkArt }) {
+export function ArtView({ art }: { art: Drawing }) {
   const variant = pickVariant(art);
   const firstRole = Object.values(art.palette)[0];
   const roleOf = (key: string): ArtRole | undefined =>
