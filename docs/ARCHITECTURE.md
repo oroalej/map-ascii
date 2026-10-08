@@ -94,7 +94,7 @@ atlas.setSpeech(enabled: boolean);
 atlas.setEmoji(enabled: boolean);
 atlas.getLabelObstacles(): readonly { left: number; top: number; width: number; height: number }[];
 atlas.setSelected(featureId | null);
-atlas.setFocus(focus: LegendFocus | null);            // transient map-class/Life-group focus
+atlas.setFocus(focus: LegendFocus | null);            // transient map-class/Life-group/folklore focus
 atlas.setHighlighted(featureIds: string[]);          // at most 64, e.g. a street's ways
 atlas.getFeature(featureId): FeatureInfo | undefined; // once a tile with it has loaded
 atlas.setLife(partial: Partial<LifeSettings>);        // includes season selection

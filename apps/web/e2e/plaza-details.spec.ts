@@ -71,9 +71,15 @@ for (const city of cities.filter((city) => city.hasMeta)) {
         expect(currentLayout, 'Served tiles must match this detail layout').toBe(true);
       }
       test.skip(!hasCredit || !currentLayout, 'Pinned tiles predate this detail layout');
+      const sources = page.getByRole('region', { name: 'Additional map sources' });
+      await expect(sources).toBeHidden();
+      await page.getByRole('button', { name: 'Sources', exact: true }).click();
+      await expect(sources).toBeVisible();
       for (const credit of additionalCredits([detail.credit]))
-        await expect(page.locator('footer')).toContainText(credit);
+        await expect(sources).toContainText(credit);
       await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(sources).toBeHidden();
       const footer = await page.locator('footer').boundingBox();
       expect(footer!.height).toBeLessThan(200);
       const box = (await canvas.boundingBox())!;

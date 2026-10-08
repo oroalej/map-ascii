@@ -490,9 +490,9 @@ Installations extend the same optional `seasons` layer with strict version-1 `ch
 - **Demolished features** go in content as standalone geometry. They are traced from old maps or imagery, with the tracing source recorded.
 - **Old maps** are georeferenced in QGIS (Georeferencer) or Allmaps, exported as COG/XYZ, and listed in `content/cities/<slug>/historic-maps/*.json`, which records the year range covered, the source, and the permission.
 
-## 6. Attribution (always visible in the UI)
+## 6. Attribution
 
-"© OpenStreetMap contributors" is always shown outside the bounded, keyboard-accessible scrolling region for additional map credits. Credits for base-map geometry, including curated vegetation and landmark details, remain available in that region at every zoom and with Life off or on. DEM attribution is retained when the generated base map uses it.
+"© OpenStreetMap contributors" is always shown. Additional map credits stay one click away under "Sources" in a bounded, keyboard-accessible scrolling popover above the footer. Credits for base-map geometry, including curated vegetation and landmark details, remain available there at every zoom and with Life off or on. DEM attribution is retained when the generated base map uses it.
 
 Credits for optional underlays and displayed media accompany that content:
 - Satellite underlays: "Esri Wayback" or "Copernicus Sentinel-2" while the underlay is active

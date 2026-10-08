@@ -2,9 +2,17 @@ import { classId, type RenderClass } from './classes';
 import type { VisibleAgent } from './life/simulate';
 
 export type LifeFocus = (typeof groups)[number];
-export type LegendFocus = { classes: readonly RenderClass[]; life: readonly LifeFocus[] };
+export type LegendFocus = {
+  classes: readonly RenderClass[];
+  life: readonly LifeFocus[];
+  folklore?: boolean;
+};
 export const LIFE_FOCUS_BIT = 32;
 export const FOCUS_DIM = 0.5;
+/** Matches focusPulse() in the glyph shader, using elapsed renderer seconds. */
+export function focusPulse(time: number, shimmer: boolean): number {
+  return shimmer ? 0.75 + 0.25 * Math.sin(3 * time) : 1;
+}
 const groups = ['traffic', 'people', 'vendors', 'pets', 'boats', 'trains', 'birds'] as const;
 
 export function lifeFocusOf(agent: VisibleAgent): LifeFocus {
@@ -28,9 +36,11 @@ export function classMask(ids: readonly number[]): Uint32Array {
 export function normalizeFocus(input: LegendFocus | null): {
   mask: Uint32Array;
   life: ReadonlySet<LifeFocus>;
+  folklore: boolean;
   key: string;
 } {
   const mask = classMask(input?.classes.map(classId) ?? []);
   const life = new Set(groups.filter((group) => input?.life.includes(group)));
-  return { mask, life, key: `${mask[0]}/${mask[1]}/${[...life].join(',')}` };
+  const folklore = input?.folklore === true;
+  return { mask, life, folklore, key: `${mask[0]}/${mask[1]}/${[...life].join(',')}/${folklore}` };
 }

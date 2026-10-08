@@ -83,7 +83,7 @@ If one fails, fix it and rerun only that check.
 - App state that affects the view (city, lat, lng, zoom, year, tour) is mirrored in the URL. The city is the path (`/<city>`).
 - Don't hardcode any city's name, boundary, landmark coordinates, or tile filenames in the renderer or web app. City specifics live in the city pack, and geography is derived from OSM by the pipeline (exposed via `<city>.meta.json`).
 - Use the generic term "subdivision" in code and schemas. The UI shows the city's local label (e.g. "barangay").
-- Show OSM attribution (and any other source attribution) in the UI at all times. See `docs/DATA.md`.
+- Always show the OSM attribution; other source credits stay one click away (Sources) in the UI. See `docs/DATA.md`.
 - Historical claims in content must carry a `source` field. If a date is uncertain, mark `certainty: "circa"` rather than guessing.
 
 ## Git
