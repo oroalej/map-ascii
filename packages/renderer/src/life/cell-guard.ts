@@ -120,5 +120,6 @@ export function makeCellGuard(
   return Object.assign(guard, {
     terrainKey: ordinaryTerrain,
     hardTerrainKey: hardBlocked ?? ordinaryTerrain,
+    terrainRef: ref,
   });
 }

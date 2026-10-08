@@ -4,10 +4,12 @@
  * Crowd geography is classified once per event on a fixed metric lattice (the field), in
  * chunks prepared within a per-frame time budget, visible chunks first. A zoom or pan only
  * projects the prepared field onto the current cells; moving events then only recompute
- * membership as the formation advances.
+ * membership as the formation advances. With a worker pool (`throng-pool.ts`), chunks are
+ * classified and terrain-checked off the main thread, several at once.
  */
 import { localMetricProjection, PROCESSION_GEOMETRY, type ProcessionRoute } from '@atlas/shared';
 import type { GridPlacement } from '../grid';
+import type { TileId } from '../tiles';
 import { project, unproject, TILE_SIZE } from '../camera';
 import { MERCATOR_METERS } from '../raster/geometry';
 import type { VisibleAgent } from './simulate';
@@ -71,11 +73,29 @@ type Point = [number, number];
 type Guard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
   terrainKey?: object;
   hardTerrainKey?: object;
+  /** The terrain's tile frame, so a worker can rebuild the same guard. */
+  terrainRef?: { tile: TileId; perMeter: number };
 };
 /** Builds a terrain guard over the field lattice (whole 1 m lattice cells). */
 export type ThrongGuardFactory = (
   toCell: (lng: number, lat: number) => [number, number],
 ) => Guard | undefined;
+/** Prepares field chunks off the main thread; results arrive through `acceptFieldChunk`. */
+export interface ThrongFieldPool {
+  readonly alive: boolean;
+  /** Whether a worker can rebuild this guard (its terrain can be sent). */
+  accepts(guard: Guard | undefined): boolean;
+  /** Queues one chunk; false while every worker is busy. */
+  submit(event: ProcessionRoute, index: number, guard: Guard | undefined): boolean;
+}
+/** A prepared chunk's arrays, as a worker returns them. */
+export type ThrongFieldChunk = {
+  kind: Uint8Array;
+  blocks: Uint8Array;
+  heading: Uint8Array;
+  along?: Float32Array;
+  clear?: Uint8Array;
+};
 type RouteIndex = {
   frame: ReturnType<typeof localMetricProjection>;
   line: ReturnType<typeof routePolyline>;
@@ -281,6 +301,8 @@ export function movingDensity(
 }
 
 type FieldChunk = {
+  /** Order of the terrain this chunk was checked against, for worker results. */
+  seq?: number;
   kind: Uint8Array;
   /** 8×8 blocks of 4×4 points: 1 where any point has ground (coarse cells skip the rest). */
   blocks: Uint8Array;
@@ -377,6 +399,8 @@ type Field = {
   ch: number;
   chunks: (FieldChunk | null | undefined)[];
   cursor: number;
+  /** Chunks a worker is preparing, by the terrain they were requested with. */
+  inflight: Map<number, object>;
   /** Bumped by any preparation; `terrainVersion` only by rechecks of prepared chunks. */
   version: number;
   terrainVersion: number;
@@ -446,6 +470,7 @@ function fieldFor(event: ProcessionRoute): Field {
     ch,
     chunks: new Array<FieldChunk | null | undefined>(cw * ch),
     cursor: 0,
+    inflight: new Map(),
     version: 0,
     terrainVersion: 0,
     raster: raster(ground),
@@ -539,15 +564,19 @@ function checkTerrain(field: Field, index: number, guard: Guard, terrain: object
   chunk.terrain = terrain;
   chunk.hardTerrain = hard;
 }
+/** In-flight marker of chunks requested without a terrain guard. */
+const NO_TERRAIN = {};
 /**
  * Classify unprepared visible chunks nearest the view centre first, recheck stale terrain,
- * then continue with the rest of the event. Returns whether visible work remains.
+ * then continue with the rest of the event. Returns whether visible work remains. A worker
+ * pool takes the same chunks in the same order, and the frame only waits for its results.
  */
 function prepare(
   field: Field,
   guard: Guard | undefined,
   rect: readonly [number, number, number, number],
   budgetMs: number,
+  pool?: ThrongFieldPool,
 ) {
   const deadline = budgetMs === Infinity ? Infinity : now() + budgetMs;
   const terrain = guard && (guard.terrainKey ?? guard),
@@ -569,6 +598,22 @@ function prepare(
       db = ((b % field.cw) - mx) ** 2 + (Math.floor(b / field.cw) - my) ** 2;
     return da - db;
   });
+  if (pool?.alive && pool.accepts(guard)) {
+    const requested = terrain ?? NO_TERRAIN;
+    const ask = (index: number) => {
+      if (field.inflight.get(index) === requested) return true;
+      if (!pool.submit(field.event, index, guard)) return false;
+      field.inflight.set(index, requested);
+      return true;
+    };
+    for (const index of visible) if (!ask(index)) return true;
+    while (field.cursor < field.chunks.length) {
+      const index = field.cursor;
+      if (field.chunks[index] === undefined && !field.inflight.has(index) && !ask(index)) break;
+      field.cursor++;
+    }
+    return visible.length > 0;
+  }
   let worked = false,
     pending = false;
   const unit = (index: number) => {
@@ -590,6 +635,65 @@ function prepare(
     if (field.chunks[index] === undefined) unit(index);
   }
   return pending;
+}
+
+/**
+ * Worker side: classify one chunk of `event` and check it against the guard's terrain. The
+ * worker keeps no chunks; the main thread installs the result with `acceptFieldChunk`.
+ */
+export function buildFieldChunk(
+  event: ProcessionRoute,
+  index: number,
+  guardFor?: ThrongGuardFactory,
+): ThrongFieldChunk | null {
+  const field = fieldFor(event);
+  if (index < 0 || index >= field.chunks.length) return null;
+  buildChunk(field, index);
+  const guard = guardFor?.(field.toLattice);
+  if (guard) checkTerrain(field, index, guard, guard, guard);
+  const chunk = field.chunks[index];
+  field.chunks[index] = undefined;
+  if (!chunk) return null;
+  return {
+    kind: chunk.kind,
+    blocks: chunk.blocks,
+    heading: chunk.heading,
+    ...(chunk.along && { along: chunk.along }),
+    ...(chunk.clear && { clear: chunk.clear }),
+  };
+}
+/**
+ * Main side: install a worker's chunk, checked against `terrain`/`hard` (the guard's keys)
+ * as the `seq`-th terrain. An older terrain's result never replaces a newer one.
+ */
+export function acceptFieldChunk(
+  event: ProcessionRoute,
+  index: number,
+  result: ThrongFieldChunk | null,
+  terrain: object | undefined,
+  hard: object | undefined,
+  seq: number,
+) {
+  const field = fields.get(event);
+  if (!field || index < 0 || index >= field.chunks.length) return;
+  if (field.inflight.get(index) === (terrain ?? NO_TERRAIN)) field.inflight.delete(index);
+  const prior = field.chunks[index];
+  if (prior && (prior.seq ?? -1) > seq) return;
+  const chunk: FieldChunk | null = result && {
+    ...result,
+    seq,
+    ...(terrain && { terrain, hardTerrain: hard }),
+  };
+  if (prior !== undefined) field.terrainVersion++;
+  field.chunks[index] = chunk;
+  field.version++;
+}
+/** Main side: a worker failed to prepare this chunk; it is requested again. */
+export function abandonFieldChunk(event: ProcessionRoute, index: number) {
+  const field = fields.get(event);
+  if (!field) return;
+  field.inflight.delete(index);
+  field.cursor = Math.min(field.cursor, index);
 }
 
 const sampled = { chunk: undefined as FieldChunk | undefined, k: 0 };
@@ -911,6 +1015,7 @@ export function throng(
   quality = 1,
   guardFor?: ThrongGuardFactory,
   budgetMs = THRONG_FIELD_BUDGET_MS,
+  pool?: ThrongFieldPool,
 ): ThrongPayload {
   const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
   if (zoom < 15 || progress < 0 || progress >= 1 || quality <= 0) return result;
@@ -953,7 +1058,7 @@ export function throng(
     Math.min(field.ch - 1, Math.floor(Math.max(...js) / CHUNK)),
   ] as const;
   const guard = guardFor?.(field.toLattice);
-  const preparing = prepare(field, guard, rect, budgetMs);
+  const preparing = prepare(field, guard, rect, budgetMs, pool);
   const key = [a, b, c, d, e, f, fine ? 1 : 0];
   let view = field.views.find(
     (v) =>

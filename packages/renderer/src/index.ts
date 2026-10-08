@@ -137,6 +137,7 @@ import { FIREWORKS } from './fireworks-layout';
 import { configureLifeWorld } from './life/worker-api';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { createThrongPool } from './life/throng-pool';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { EmojiController, type EmojiInView } from './life/emoji-view';
@@ -265,6 +266,11 @@ export type AtlasOptions = {
   profiling?: boolean;
   /** Run Life in a worker when available; false selects the synchronous in-process path. */
   lifeWorker?: boolean;
+  /**
+   * Prepare event crowd ground in a pool of workers when available; false prepares it on the
+   * main thread within a per-frame budget.
+   */
+  crowdWorkers?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -577,6 +583,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
@@ -1137,6 +1144,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
     const guardLife = drawnLife;
+    if (crowdEvent && !crowdPool && options.crowdWorkers !== false && typeof Worker !== 'undefined')
+      crowdPool = createThrongPool(() => {
+        drawDirty = true;
+      });
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -1159,6 +1170,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             quality: knobs.throng,
             clock: drawnLife?.signalClock,
             guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
+            pool: crowdPool,
           }
         : undefined,
     );
@@ -2269,6 +2281,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      crowdPool?.destroy();
       names.clear();
       lifeHover.pointer(null);
       speech.clear();

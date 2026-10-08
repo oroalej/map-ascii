@@ -1,4 +1,4 @@
-import { throng, type ThrongGuardFactory } from './life/throng';
+import { throng, type ThrongFieldPool, type ThrongGuardFactory } from './life/throng';
 import type { ProcessionRoute } from '@atlas/shared';
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
@@ -651,6 +651,7 @@ export function lifePass(
     quality: number;
     clock?: number;
     guardFor?: ThrongGuardFactory;
+    pool?: ThrongFieldPool;
   },
 ): number {
   const { cols, rows } = targets;
@@ -694,6 +695,8 @@ export function lifePass(
         view.camera.zoom,
         crowd.quality,
         crowd.guardFor,
+        undefined,
+        crowd.pool,
       )
     : undefined;
   buffers.crowdPending = crowdPayload?.pending;
