@@ -1,6 +1,6 @@
 {
   "source": "OpenStreetMap standing church footprints extracted from the source snapshot for the pinned Naga geometry archive; refresh from source extraction whenever geometrySha256 changes; test fixture only",
-  "geometrySha256": "7e84f42e2a43b09cd136a1d733adb5dd43bcb5a800897e1c208a6de467135362",
+  "geometrySha256": "ef18e0306ee831df5a319df5bef175852a7cc8fa77bee80a8d75fc7e7e86dad3",
   "buildings": {
     "osm:way/23666715": [
       [
