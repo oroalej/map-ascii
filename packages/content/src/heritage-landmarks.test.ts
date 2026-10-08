@@ -12,6 +12,7 @@ const ordinance = 'https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003
 // Every requested site and conditional ruin is either a heritage landmark or omitted with a reason.
 const sites = [
   'almeda-ancestral-house',
+  'ateneo-de-naga-main-building',
   'bichara-theatre',
   'roco-ancestral-house',
   'old-abella-mansion-arch',
@@ -22,6 +23,7 @@ const sites = [
   'amanse-house',
   'barlin-dimasalang-corner-house',
   'abella-paz-stone-structure',
+  'usi-main-building',
   'elias-angeles-dimasalang-corner-house',
   'abella-business-buildings',
   'de-la-rosa-buildings',
@@ -75,12 +77,10 @@ describe('Naga heritage scope', () => {
   it('sources each heritage identity and attaches it to a unique OSM footprint or outline', () => {
     for (const landmark of heritage) {
       const way = landmark.osm_id ?? landmark.replaces;
-      expect(way).toMatch(/^osm:way\/\d+$/);
+      expect(way).toMatch(/^osm:(way|relation)\/\d+$/);
       // Curated outlines replace an OSM building; every other site keeps its OSM footprint.
       expect(landmark.geometry?.type ?? 'osm').toBe(landmark.replaces ? 'Polygon' : 'osm');
-      expect(landmark.sources[0]!.url).toBe(
-        `https://www.openstreetmap.org/way/${way!.split('/')[1]}`,
-      );
+      expect(landmark.sources[0]!.url).toBe(`https://www.openstreetmap.org/${way!.slice(4)}`);
       expect(
         landmark.sources.some(
           (source) => source.url === ordinance || /owner.*request/i.test(source.title),
@@ -138,5 +138,21 @@ describe('Naga heritage scope', () => {
     expect(row.start_year).toBeUndefined();
     expect(row.sources.some((source) => source.url?.includes('jollibee-naga-gen-luna'))).toBe(true);
     expect(row.sources[0]!.note).toContain('representative');
+  });
+
+  it('lists registered churches as heritage while keeping their type', () => {
+    const listed = landmarks.filter((landmark) => landmark.heritage);
+    expect(listed.map((landmark) => landmark.id.replace('landmark/', '')).sort()).toEqual([
+      'naga-metropolitan-cathedral',
+      'penafrancia-basilica',
+      'penafrancia-shrine',
+      'san-francisco-parish',
+    ]);
+    for (const landmark of listed) {
+      expect(landmark.type).toBe('church');
+      expect(
+        landmark.sources.some((source) => source.url?.includes('talapamana.ncca.gov.ph')),
+      ).toBe(true);
+    }
   });
 });
