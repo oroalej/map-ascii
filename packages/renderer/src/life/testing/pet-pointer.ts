@@ -36,7 +36,7 @@ export function petPointer(kind: 'cat' | 'dog', observer = true) {
     );
   };
   const stream = life as unknown as { catRng: () => number; dogRng: () => number };
-  return { world, life, pet, at, step, stream };
+  return { world, life, pet, at, step, stream, entry };
 }
 
 export function addPet(

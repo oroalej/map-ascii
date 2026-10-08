@@ -493,6 +493,8 @@ export type Mover = {
   momentFacing?: { hx: number; hy: number };
   /** Cats' resting or grooming pose. */
   grooming?: boolean;
+  /** Cursor-owned pet episode; absent in ordinary wandering. */
+  pointerDog?: 'follow' | 'sit';
   kind: Exclude<AgentKind, 'bird'>;
   line: number;
   /** The vertex it last passed (an index into the tile's `coords` pairs). */
@@ -591,6 +593,7 @@ export type LifeEnv = {
   pointerRest?: number;
   gust?: CursorGust;
   pointerPeople?: ReadonlySet<object>;
+  pointerDogs?: ReadonlySet<Mover>;
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -1027,6 +1030,7 @@ export class TileLife {
   private tilePointer?: FlockPointer;
   private catPointer?: WeakMap<Mover, { left: number }>;
   private readonly pointerEvents: PointerEvent[] = [];
+  private readonly followedDogs = new Set<Mover>();
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -4647,6 +4651,7 @@ export class TileLife {
         plan?.exit,
         m.vehicle ? m.next : undefined,
       ) ??
+      this.pointerExit(m, options, vertex) ??
       (m.train
         ? this.straightest(m, options)
         : options[
@@ -6214,6 +6219,23 @@ export class TileLife {
       Object.assign(this.flockPointer, at, { cellMeters: env.pointer.cellMeters });
       this.tilePointer = this.flockPointer;
     }
+    for (const dog of this.followedDogs)
+      if (!env?.pointerDogs?.has(dog)) {
+        if (dog.pointerDog === 'sit') {
+          dog.pause = 0;
+          dog.momentFacing = undefined;
+        }
+        delete dog.pointerDog;
+        this.followedDogs.delete(dog);
+      }
+    for (const dog of env?.pointerDogs ?? [])
+      if (this.movers.includes(dog) && !dog.pointerDog) {
+        dog.pointerDog = 'follow';
+        dog.pause = 0;
+        dog.lying = false;
+        dog.trot = 0;
+        this.followedDogs.add(dog);
+      }
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -6540,7 +6562,10 @@ export class TileLife {
         continue;
       }
       if (m.kind === 'dog') {
-        const speed = this.dogSpeed(m, dt, this.canIdle(m));
+        const speed =
+          m.pointerDog && this.tilePointer
+            ? this.followPointer(m, this.tilePointer, fitsGround)
+            : this.dogSpeed(m, dt, this.canIdle(m));
         if (speed === undefined) {
           m.waiting = 0;
           continue;
@@ -7818,6 +7843,60 @@ export class TileLife {
    * A street dog (config.ts `DOG`): it stops to sniff, now and then lies down a long while,
    * turns back, and trots in short bursts.
    */
+  private followPointer(m: Mover, pointer: FlockPointer, guard: GroundGuard): number | undefined {
+    const pose = this.pose(m),
+      dx = pointer.x - pose.x,
+      dy = pointer.y - pose.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= POINTER.sit * pointer.cellMeters * this.perMeter && this.canIdle(m)) {
+      const before = snapshotMover(m);
+      if (distance > 1e-9) m.momentFacing = { hx: dx / distance, hy: dy / distance };
+      if (guard(m, before)) {
+        if (m.pointerDog !== 'sit') this.pointerEvents.push({ owner: m, mood: 'happy' });
+        m.pointerDog = 'sit';
+        m.pause = 1;
+        m.lying = false;
+        m.waiting = 0;
+        return;
+      }
+      restoreMover(m, before);
+    }
+    m.pointerDog = 'follow';
+    m.pause = 0;
+    m.momentFacing = undefined;
+    if (dx * m.hx + dy * m.hy < 0) {
+      const before = snapshotMover(m);
+      this.turnBack(m);
+      this.advance(m, 0, false);
+      if (!guard(m, before)) {
+        restoreMover(m, before);
+        return;
+      }
+    }
+    return Math.max(m.speed, DOG.trot.speed * this.perMeter);
+  }
+
+  private pointerExit(m: Mover, options: readonly number[], vertex: number) {
+    const pointer = m.pointerDog && this.tilePointer;
+    if (!pointer || !options.length) return;
+    let best = options[0]!,
+      score = -Infinity;
+    const dx = pointer.x - m.x,
+      dy = pointer.y - m.y;
+    for (const code of options) {
+      const target = this.directedExit(code, vertex),
+        next = target.vertex + target.dir;
+      const x = this.geo.coords[next * 2]! - this.geo.coords[target.vertex * 2]!,
+        y = this.geo.coords[next * 2 + 1]! - this.geo.coords[target.vertex * 2 + 1]!;
+      const value = (dx * x + dy * y) / (Math.hypot(x, y) || 1);
+      if (value > score || (value === score && code < best)) {
+        best = code;
+        score = value;
+      }
+    }
+    return best;
+  }
+
   private dogSpeed(m: Mover, dt: number, idle: boolean): number | undefined {
     const rng = this.dogRng;
     if (!idle) {
@@ -11354,6 +11433,40 @@ export class LifeWorld {
     );
     const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
     if (pointer) env.pointerPeople = guard.pointerPeople(pointer, POINTER.person * cellMeters);
+    if (pointer && (!shows || shows('dog'))) {
+      const candidates: { mover: Mover; tile: string; index: number; distance: number }[] = [];
+      for (const [key, life] of this.tiles) {
+        const p = lngLatToTile(life.tile, ...pointer),
+          radius = POINTER.dog * cellMeters * life.perMeter;
+        for (let index = 0; index < life.movers.length; index++) {
+          const m = life.movers[index]!;
+          if (
+            m.kind !== 'dog' ||
+            !this.owns(life, m) ||
+            !life.visibleMover(m, this.lastLevels, this.lastCrowd) ||
+            life.scenes.visits.has(m)
+          )
+            continue;
+          const pose = life.pose(m),
+            distance = (pose.x - p.x) ** 2 + (pose.y - p.y) ** 2;
+          if (distance < radius ** 2)
+            candidates.push({
+              mover: m,
+              tile: key,
+              index,
+              distance: distance / life.perMeter ** 2,
+            });
+        }
+      }
+      candidates.sort(
+        (a, b) =>
+          a.distance - b.distance ||
+          a.mover.rank - b.mover.rank ||
+          a.tile.localeCompare(b.tile) ||
+          a.index - b.index,
+      );
+      env.pointerDogs = new Set(candidates.slice(0, 2).map((c) => c.mover));
+    }
     const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
       owners.find((life) => {
         const f = frameBetween(source.tile, life.tile);

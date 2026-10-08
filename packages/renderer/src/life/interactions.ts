@@ -1607,6 +1607,7 @@ export class LocalScenes {
         }
       } else if (
         (m.kind === 'person' || m.kind === 'dog' || m.kind === 'cat') &&
+        !m.pointerDog &&
         !this.visits.has(m) &&
         !this.cooldown.has(m)
       ) {
