@@ -85,6 +85,39 @@ describe('street event routing', () => {
     );
     expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
   });
+  it('keeps the roadside crowd out of excluded grounds but never the carriageway', () => {
+    // A 2 m square beside the first leg, 7 m from the centreline: in the verge, off the road.
+    const frame = localFrame([0.0005, 0.0005]);
+    const square = (id: string, offset: number): F => {
+      const c: [number, number] = [-offset / Math.SQRT2, offset / Math.SQRT2];
+      const ring = [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+        [-1, -1],
+      ].map(([x, y]) => frame.toLngLat([c[0] + x!, c[1] + y!]));
+      return {
+        type: 'Feature',
+        properties: { id, class: 'park' },
+        geometry: { type: 'Polygon', coordinates: [ring] },
+      };
+    };
+    const inside = frame.toLngLat([-7 / Math.SQRT2, 7 / Math.SQRT2]);
+    const bake = (exclude?: string[]) => {
+      const route = routeProcessions(
+        [...features, square('osm:way/13', 7), square('osm:way/14', 0)],
+        [Procession.parse({ ...base, ...(exclude && { crowd_exclude: exclude }) })],
+      ).routes[0]!;
+      if (route.kind !== 'procession') throw Error();
+      return route;
+    };
+    expect(bake().blocked.some((ring) => pointInPolygon(inside, [ring]))).toBe(false);
+    const route = bake(['osm:way/13']);
+    expect(route.blocked.some((ring) => pointInPolygon(inside, [ring]))).toBe(true);
+    expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+    expect(() => bake(['osm:way/14'])).toThrow(/overlaps the route carriageway/);
+  });
   it.each([undefined, 2])(
     'derives altar image count from the preceding procession (%s)',
     (images) => {

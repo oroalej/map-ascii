@@ -4,7 +4,7 @@
     "en": "Mass after the Traslación"
   },
   "story": {
-    "en": "Holy Mass follows the images arriving at Porta Mariae around 18:30 in the 2026 report. The ninety-minute replay and car-free precinct are illustrative. The project owner marked the crowd boundary on 2026-10-07; devotees fill the forecourt and east garden facing the Cathedral, with no outdoor stage."
+    "en": "Holy Mass follows the images arriving at Porta Mariae around 18:30 in the 2026 report. The ninety-minute replay and car-free precinct are illustrative. The project owner marked the crowd boundary on 2026-10-07; devotees fill the forecourt facing the Cathedral, with no outdoor stage. The garden of the Archbishop's Residence stays clear."
   },
   "status": "verified",
   "kind": "mass",
@@ -29,15 +29,15 @@
     {
       "title": "Project owner: Cathedral precinct annotation",
       "url": "https://www.openstreetmap.org/way/23666715",
-      "note": "Project owner annotated atlas image, 2026-10-07. Boundary fitted around the annotated forecourt and mapped east garden with a four-metre curb margin. On 2026-10-08 the owner removed the illustrative outdoor altar stage; placement is approximate, not a surveyed festival arrangement."
+      "note": "Project owner annotated atlas image, 2026-10-07. Boundary fitted around the annotated forecourt with a four-metre curb margin. On 2026-10-08 the owner removed the illustrative outdoor altar stage and the crowd from the Archbishop's Residence garden (OSM way 1314309818), whose west edge now bounds the crowd; placement is approximate, not a surveyed festival arrangement."
     }
   ],
   "crowd_boundary": [
     [123.186198, 13.6275521],
     [123.1864897, 13.6273466],
     [123.1870525, 13.626974],
-    [123.1877989, 13.6265453],
-    [123.1884405, 13.6275053],
+    [123.1870723, 13.6270043],
+    [123.1876128, 13.6279445],
     [123.1876324, 13.6280193],
     [123.1867987, 13.6284196],
     [123.1866297, 13.6282563],

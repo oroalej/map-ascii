@@ -60,7 +60,13 @@
       "title": "Bicol Mail: 2026 Traslación streets",
       "url": "https://www.bicolmail.net/single-post/bicol-devotees-flock-to-naga-for-pe%C3%B1afrancia-traslacion",
       "note": "Reports a noon Shrine departure and the named street sequence. Iglesia Road is represented by the mapped Paz/Callejon segment adjacent to Porta Mariae; this mapping uses OSM geography."
+    },
+    {
+      "title": "Project owner: Archbishop's Residence grounds",
+      "url": "https://www.openstreetmap.org/way/1314309818",
+      "note": "On 2026-10-08 the project owner asked for no crowd in the Archbishop's Residence grounds; the roadside and Cathedral Grounds crowds stop at the mapped garden outline."
     }
   ],
-  "crowd_areas": ["osm:way/724187419", "osm:way/1203045057"]
+  "crowd_areas": ["osm:way/724187419", "osm:way/1203045057"],
+  "crowd_exclude": ["osm:way/1314309818"]
 }

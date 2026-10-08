@@ -1005,6 +1005,8 @@ export function contentSchemas(languages?: readonly string[]) {
         route: streetRoute,
         formation: StreetFormation.optional(),
         crowd_areas: z.array(OsmAreaId).optional(),
+        /** Areas the roadside crowd stays out of, such as private grounds beside the route. */
+        crowd_exclude: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,
@@ -1012,6 +1014,8 @@ export function contentSchemas(languages?: readonly string[]) {
         route: streetRoute,
         formation: ParadeFormation.optional(),
         crowd_areas: z.array(OsmAreaId).optional(),
+        /** Areas the roadside crowd stays out of, such as private grounds beside the route. */
+        crowd_exclude: z.array(OsmAreaId).optional(),
       }),
       z.strictObject({
         ...eventBase,

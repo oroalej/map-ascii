@@ -429,6 +429,22 @@ export function routeStreet(features: readonly F[], p: Street) {
     ...corridors.flat(),
     ...crowdPolys,
   ]);
+  // Excluded grounds keep the roadside and area crowds out; the carriageway must stay open.
+  if (p.crowd_exclude?.length) {
+    const cover = balancedUnion([...corridors, ...crowdPolys.map((poly) => [poly])]);
+    const carriageway = balancedUnion(
+      ordered.map((e) => seatingFootprint([e.a.at, e.b.at], e.width).coordinates as Point[][][]),
+    );
+    for (const id of p.crowd_exclude) {
+      const f = byId.get(id);
+      if (!f || !polygons(f.geometry).length)
+        throw new Error(`${p.id}: missing crowd exclusion ${id}`);
+      const area = polygons(f.geometry).map((poly) => poly.map(asPoints));
+      if (intersection(area, carriageway).length)
+        throw new Error(`${p.id}: crowd exclusion ${id} overlaps the route carriageway`);
+      for (const part of intersection(area, cover)) blocked.push(asPoints(part[0]!));
+    }
+  }
   const bridges = ordered
     .filter((e) => {
       return bridgeAllowed(byId.get(e.road)!, e.a.at, e.b.at);
