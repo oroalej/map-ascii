@@ -1,6 +1,6 @@
 /** Tap-only presentation for regenerated event actors; no physical actors are created. */
 import type { DialogueProfile, EmojiMood } from '@atlas/shared';
-import { EmojiMemory, EmojiObserver } from './emoji';
+import { type EmojiMemory, EmojiObserver } from './emoji';
 import { SceneSpeech } from './scene-speech';
 import { MOMENTS } from './moments';
 import type { MomentOptions } from './moments-host';

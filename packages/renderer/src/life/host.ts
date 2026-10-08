@@ -24,6 +24,7 @@ import { runtimeFolklore } from './folklore-config';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './folklore';
 import { isEmergencyCraft } from './emergency';
 import type { TapReceipt } from './tap';
+import type { SignalOffsets } from './signals';
 let nextGeneration = 0;
 export const allocateLifeGeneration = () => ++nextGeneration;
 
@@ -80,7 +81,7 @@ export type FrameView = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
-  signalOffsets?: import('./signals').SignalOffsets;
+  signalOffsets?: SignalOffsets;
   tapFrame?: number;
   tapReceipts?: readonly TapReceipt[];
   cellGuard: LifeWorld['groundCellGuard'];

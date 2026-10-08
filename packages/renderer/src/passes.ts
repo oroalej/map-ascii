@@ -2,6 +2,7 @@ import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
 import type { CarnivalUniforms } from './life/carnival-boost';
 import type { CandleFlareUniforms } from './life/candle-flare';
+import type { SignalOffsets } from './life/signals';
 import type { cropTint } from './glyphs/select';
 
 export type CropPass = { stage: number; progress: number } & ReturnType<typeof cropTint>;
@@ -826,7 +827,7 @@ export function fixturePass(
   clock: number,
   repack: boolean,
   motion: FixtureMotion = { time: 0, strength: 0 },
-  signalOffsets?: import('./life/signals').SignalOffsets,
+  signalOffsets?: SignalOffsets,
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;

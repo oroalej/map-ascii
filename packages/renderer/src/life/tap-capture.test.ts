@@ -36,7 +36,7 @@ function fixture() {
     pointer: 'touch',
     cellMeters: 1,
   };
-  const done = vi.fn();
+  const done = vi.fn<Parameters<typeof captureTap>[6]>();
   let valid = true;
   const start = () => captureTap([5, 5], tap, frame, reads, 100, () => valid, done);
   const finish = (cls = 'path', height = 0) =>
@@ -100,7 +100,7 @@ it.each(['path', 'tree_crown', 'building'])(
   (cls) => {
     const f = fixture();
     f.frame.owners.fill(0);
-    const done = vi.fn();
+    const done = vi.fn<Parameters<typeof captureTap>[6]>();
     captureTap(
       [5, 5],
       {

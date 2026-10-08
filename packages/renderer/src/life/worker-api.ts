@@ -20,6 +20,7 @@ import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
+import type { SignalOffsets } from './signals';
 import type { RuntimeFolklore } from './folklore-config';
 import type { FolklorePacket } from './folklore';
 import type { LifeTap, TapReceipt } from './tap';
@@ -57,7 +58,7 @@ export type FrameResult = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
-  signalOffsets?: import('./signals').SignalOffsets;
+  signalOffsets?: SignalOffsets;
   tapFrame?: number;
   tapReceipts?: readonly TapReceipt[];
   terrain?: TerrainSnapshot | null;
