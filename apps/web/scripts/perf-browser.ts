@@ -7,6 +7,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cities } from '../e2e/helpers';
 import { serveExport } from './serve-export';
+import { runStartup } from './startup-browser';
 // This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 
@@ -18,6 +19,10 @@ const port = Number(process.env.E2E_PORT ?? 3198);
 const pan = process.argv.includes('--pan');
 const city = cities.find((c) => c.hasMeta);
 if (!city) throw new Error('Build city tiles before capturing a profile');
+if (process.argv.includes('--startup')) {
+  await runStartup(root, port, city.slug, process.argv.slice(2));
+  process.exit(0);
+}
 const server = await serveExport(root, port, city.slug);
 let browser: Browser | undefined;
 try {

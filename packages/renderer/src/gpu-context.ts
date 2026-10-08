@@ -35,7 +35,15 @@ export type StreetTextMesh = {
   count: number;
 };
 
+type BaseName = 'labels' | 'cell' | 'select' | 'glyph';
+type BaseLinks = {
+  pending: Map<BaseName, PendingProgram>;
+  finished: Map<BaseName, twgl.ProgramInfo>;
+};
+
 export type Programs = {
+  /** Separate ownership lets teardown cancel links without resolving lazy getters. */
+  baseLinks?: BaseLinks;
   folklore?: FolkloreResources;
   folkloreProgram?: twgl.ProgramInfo;
   folkloreUniforms?: ReturnType<typeof createHauntUniformScratch>;
@@ -78,20 +86,68 @@ export function createPrograms(gl: GL): Programs {
     gl.vertexAttribPointer(slot!, size!, gl.FLOAT, false, 20, offset!);
   }
   gl.bindVertexArray(null);
-  const glyph = createProgram(
-    gl,
-    fullscreenVertex,
-    glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
-  );
-  return {
-    labels: createProgram(gl, labelVertex, labelFragment),
-    streetText: { vao, buffer, count: 0 },
-    cell: createProgram(gl, cellVertex, cellFragment),
-    select: createProgram(gl, fullscreenVertex, selectFragment),
-    glyph,
-    glyphVariants: new Map([[0, glyph]]),
-    emptyVao: gl.createVertexArray(),
+  const links: BaseLinks = { pending: new Map(), finished: new Map() };
+  const sources = {
+    glyph: [
+      fullscreenVertex,
+      glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
+    ],
+    labels: [labelVertex, labelFragment],
+    cell: [cellVertex, cellFragment],
+    select: [fullscreenVertex, selectFragment],
+  } as const;
+  const parallel = !!gl.getExtension('KHR_parallel_shader_compile');
+  const variants = new Map<number, twgl.ProgramInfo>();
+  let emptyVao: WebGLVertexArrayObject | null = null;
+  const finish = (name: BaseName) => {
+    let info = links.finished.get(name);
+    if (!info) {
+      const pending = links.pending.get(name);
+      if (!pending) throw new Error('ASCII Atlas: program set disposed');
+      info = pending.finish();
+      links.pending.delete(name);
+      links.finished.set(name, info);
+      if (name === 'glyph') variants.set(0, info);
+    }
+    return info;
   };
+  try {
+    for (const name of Object.keys(sources) as BaseName[]) {
+      const [vertex, fragment] = sources[name];
+      if (parallel) links.pending.set(name, prepareProgram(gl, vertex, fragment));
+      else links.finished.set(name, createProgram(gl, vertex, fragment));
+    }
+    if (!parallel) variants.set(0, links.finished.get('glyph')!);
+    emptyVao = gl.createVertexArray();
+    if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
+    return {
+      baseLinks: links,
+      get labels() {
+        return finish('labels');
+      },
+      get cell() {
+        return finish('cell');
+      },
+      get select() {
+        return finish('select');
+      },
+      get glyph() {
+        return finish('glyph');
+      },
+      streetText: { vao, buffer, count: 0 },
+      glyphVariants: variants,
+      emptyVao,
+    };
+  } catch (error) {
+    for (const pending of links.pending.values()) pending.cancel();
+    if (!gl.isContextLost()) {
+      for (const info of links.finished.values()) gl.deleteProgram(info.program);
+      gl.deleteVertexArray(vao);
+      gl.deleteBuffer(buffer);
+      if (emptyVao) gl.deleteVertexArray(emptyVao);
+    }
+    throw error;
+  }
 }
 
 export function glyphProgram(
@@ -105,6 +161,7 @@ export function glyphProgram(
   const variants = programs.glyphVariants;
   if (!variants) return programs.glyph;
   const key = Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2);
+  if (key === 0) return programs.glyph;
   let program = variants.get(key);
   if (!program) {
     const pending = programs.glyphWarmup?.pending;
@@ -250,18 +307,25 @@ export function prewarmGlyphPrograms(
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
-  if (p.folklore) deleteFolklore(gl, p.folklore);
   p.glyphWarmup?.cancel();
-  if (p.fireworks) deleteFireworks(gl, p.fireworks);
-  if (p.fireworksProgram) gl.deleteProgram(p.fireworksProgram.program);
-  if (p.folkloreProgram) gl.deleteProgram(p.folkloreProgram.program);
-  gl.deleteProgram(p.labels.program);
-  gl.deleteVertexArray(p.streetText.vao);
-  gl.deleteBuffer(p.streetText.buffer);
-  for (const info of [p.cell, p.select, ...(p.glyphVariants?.values() ?? [p.glyph])])
-    gl.deleteProgram(info.program);
+  for (const pending of p.baseLinks?.pending.values() ?? []) pending.cancel();
+  p.baseLinks?.pending.clear();
+  if (!gl.isContextLost()) {
+    if (p.folklore) deleteFolklore(gl, p.folklore);
+    if (p.fireworks) deleteFireworks(gl, p.fireworks);
+    const owned = new Set([
+      ...(p.baseLinks ? p.baseLinks.finished.values() : [p.labels, p.cell, p.select, p.glyph]),
+      ...(p.glyphVariants?.values() ?? []),
+      ...(p.fireworksProgram ? [p.fireworksProgram] : []),
+      ...(p.folkloreProgram ? [p.folkloreProgram] : []),
+    ]);
+    for (const info of owned) gl.deleteProgram(info.program);
+    gl.deleteVertexArray(p.streetText.vao);
+    gl.deleteBuffer(p.streetText.buffer);
+    gl.deleteVertexArray(p.emptyVao);
+  }
+  p.baseLinks?.finished.clear();
   p.glyphVariants?.clear();
-  gl.deleteVertexArray(p.emptyVao);
 }
 
 /** Cell size in device pixels. */

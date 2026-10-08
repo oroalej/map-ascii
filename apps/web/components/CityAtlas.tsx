@@ -55,6 +55,7 @@ export type CityAtlasProps = {
   metaState: MetaState;
   hasTours: boolean;
   slug: string;
+  tilesVersion?: string | undefined;
   name: string;
   /** The city's local word for a subdivision, e.g. "barangay". */
   subdivisionLabel: string;
@@ -76,6 +77,7 @@ export function CityAtlas({
   metaState,
   hasTours,
   slug,
+  tilesVersion,
   name,
   subdivisionLabel,
   traffic,
@@ -152,6 +154,7 @@ export function CityAtlas({
         metaState={metaState}
         requestLandmarks={loaded ? undefined : request}
         slug={slug}
+        tilesVersion={tilesVersion}
         name={name}
         subdivisionLabel={subdivisionLabel}
         traffic={traffic}

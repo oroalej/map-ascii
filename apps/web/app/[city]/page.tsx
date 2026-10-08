@@ -3,6 +3,7 @@ import { runtimeDialogueCatalog, runtimeCityLife } from '@atlas/shared';
 import { notFound } from 'next/navigation';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity, loadRegistry } from '@/lib/cities';
+import { tilesVersion } from '@/lib/tiles-version';
 import { readCityMeta } from '@/lib/city-meta';
 import { encodeInlineRuntime } from '@/lib/inline-runtime-server';
 
@@ -29,6 +30,7 @@ export default async function CityPage({ params }: Props) {
       <CityAtlas
         metaState={await readCityMeta(city.slug)}
         slug={city.slug}
+        tilesVersion={await tilesVersion(pack)}
         name={city.name.en}
         subdivisionLabel={city.subdivision.label.en}
         traffic={city.traffic}
