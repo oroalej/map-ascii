@@ -1,4 +1,3 @@
-import { THRONG_MASK_SIDE } from './life/throng';
 import { MOMENTS } from './life/moments';
 export type { EmojiCue } from './life/emoji';
 import { spawnMargin } from './life/births';
@@ -1127,6 +1126,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       (emojiEnabled && camera.zoom >= EMOJI_ZOOM);
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
+    const guardLife = drawnLife;
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -1148,10 +1148,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             progress: acceptedCrowd.progress,
             quality: knobs.throng,
             clock: drawnLife?.signalClock,
-            subGuard: drawnLife?.cellGuard((lng, lat) => {
-              const [c, r] = placement!.toCell(lng, lat);
-              return [c * THRONG_MASK_SIDE, r * THRONG_MASK_SIDE];
-            }, true),
+            guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
           }
         : undefined,
     );

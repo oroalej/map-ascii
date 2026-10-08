@@ -1,60 +1,81 @@
-/** Stateless crowd raster candidates. No population, owners, inspection or worker agents. */
+/**
+ * Ownerless crowd raster candidates: no population, owners, inspection or worker agents.
+ *
+ * Crowd geography is classified once per event on a fixed metric lattice (the field), in
+ * chunks prepared within a per-frame time budget, visible chunks first. A zoom or pan only
+ * projects the prepared field onto the current cells; moving events then only recompute
+ * membership as the formation advances.
+ */
 import { localMetricProjection, PROCESSION_GEOMETRY, type ProcessionRoute } from '@atlas/shared';
 import type { GridPlacement } from '../grid';
+import { project, unproject, TILE_SIZE } from '../camera';
+import { MERCATOR_METERS } from '../raster/geometry';
 import type { VisibleAgent } from './simulate';
 import {
-  eventGroundAllows,
   eventGroundBounds,
   groundForRoute,
   type EventGround,
   streetSidewalks,
 } from './ground-events';
-import { CrowdMaskRaster, THRONG_MASK_SIDE, THRONG_MASK_BITS } from './crowd-mask';
+import { CrowdMaskRaster, THRONG_MASK_WORDS } from './crowd-mask';
 export { THRONG_MASK_SIDE } from './crowd-mask';
 import { formationLayout } from './formation-layout';
 import { PROCESSION, routePolyline } from './procession';
 import { ProcessionGlyph } from './procession-glyphs';
 import { figureFit } from './people';
 export const MAX_THRONG_CELLS = 16000;
-/** At most this many 256-subcell classifications run in one animation frame. */
-export const MAX_COLD_THRONG_CELLS = 8;
-/** Detailed cells need one classification, rather than 256 subcell classifications. */
-export const MAX_COLD_FINE_THRONG_CELLS = 128;
-/** Fixed world patches, independent of the viewport. Retain several distant locations. */
-export const THRONG_CHUNK_COLS = 32;
-export const THRONG_CHUNK_ROWS = 16;
-export const MAX_THRONG_CHUNKS = 256;
+/** Lattice pitch of the zoom-independent crowd field, m. */
+export const THRONG_FIELD_PITCH_M = 1;
+/** Lattice points per field chunk side; a chunk is classified and terrain-checked at once. */
+export const THRONG_FIELD_CHUNK = 32;
+/** Field preparation per call, ms: visible chunks first, then the rest of the event. */
+export const THRONG_FIELD_BUDGET_MS = 3;
+/** Coarse cells sample at most this many points per side, at least this far apart (m). */
+const COARSE_SAMPLES = 8,
+  COARSE_SPACING_M = 1.5;
+/** Shared figure ink quantizes facing to this many directions (`draw.ts`). */
+export const THRONG_HEADINGS = 8;
+const CHUNK = THRONG_FIELD_CHUNK,
+  CHUNK_POINTS = CHUNK * CHUNK,
+  BLOCK = 4;
+// Field point bits: ground permission, then street classification (`classify`) shifted.
+const STANDING = 1,
+  SEATED = 2,
+  FLAG_SHIFT = 2;
 export type ThrongCell = {
   col: number;
   row: number;
   agent: VisibleAgent;
   mask?: Uint32Array;
   hash: number;
-  stamp?: ThrongStampCache;
-};
-/** A world-anchored figure's ink; dynamic occupancy is checked when it is copied. */
-export type ThrongStampCache = {
-  theme?: object;
-  glyphs?: object;
-  cellWidth?: number;
-  cellHeight?: number;
-  paint?: number;
-  cells?: Int32Array;
-  bytes?: Uint8Array;
-  /** Most street-level figures occupy one texel: avoid two tiny typed allocations each. */
-  single?: readonly [number, number, number];
-  terrain?: object;
-  hardTerrain?: object;
+  /** Shared figure ink identity (paint, flap, candle, seated, facing); detailed cells only. */
+  look?: number;
+  /** Whole-figure admission, cached for one ink and field version. */
   permitted?: boolean;
-  complete?: boolean;
+  permitInk?: object;
+  permitVersion?: number;
 };
+/** Cells per metre of the shared ink frame, quantized so nearby zooms reuse figure ink. */
+export type ThrongInkScale = { x: number; y: number; key: string };
 export type ThrongPayload = {
   cells: ThrongCell[];
   cap: number;
   pending?: boolean;
   stampPending?: boolean;
+  ink?: ThrongInkScale;
+  /** Field ground and terrain permission of one view cell for a detailed figure's texel. */
+  allows?: (agent: VisibleAgent, col: number, row: number) => boolean;
+  version?: number;
 };
 type Point = [number, number];
+type Guard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
+  terrainKey?: object;
+  hardTerrainKey?: object;
+};
+/** Builds a terrain guard over the field lattice (whole 1 m lattice cells). */
+export type ThrongGuardFactory = (
+  toCell: (lng: number, lat: number) => [number, number],
+) => Guard | undefined;
 type RouteIndex = {
   frame: ReturnType<typeof localMetricProjection>;
   line: ReturnType<typeof routePolyline>;
@@ -150,7 +171,7 @@ function visitSegment(index: RouteIndex, i: number, x: number, y: number) {
     result.y = py;
   }
 }
-function nearest(index: RouteIndex, point: Point, geographicTarget = true) {
+function nearest(index: RouteIndex, point: Point) {
   const x = (point[0] - index.origin[0]) * index.kx,
     y = (point[1] - index.origin[1]) * index.ky;
   const bx = Math.floor(x / 32),
@@ -184,127 +205,10 @@ function nearest(index: RouteIndex, point: Point, geographicTarget = true) {
     if (result.distance2 > edge * edge)
       for (let i = 0; i < index.segments.length; i++) visitSegment(index, i, x, y);
   }
-  if (geographicTarget) {
-    result.target[0] = index.origin[0] + result.x / index.kx;
-    result.target[1] = index.origin[1] + result.y / index.ky;
-  }
+  // Facing towards the route (fluvial banks), in the route's metric frame.
+  result.target[0] = result.x - x;
+  result.target[1] = result.y - y;
   return result;
-}
-type SubGuard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
-  terrainKey?: object;
-  hardTerrainKey?: object;
-};
-type StaticCell = {
-  mask?: Uint32Array;
-  point: Point;
-  seated: boolean;
-  along: Float64Array;
-  flags: Uint8Array;
-  count: number;
-  ahead?: Point;
-  side?: Point;
-  stamp?: ThrongStampCache;
-  agent?: VisibleAgent;
-  cell?: ThrongCell;
-  s?: number;
-  flag?: number;
-};
-type CrowdChunk = { col: number; row: number; payload?: Cache['payload'] };
-type Cache = {
-  scale?: readonly [number, number];
-  fromCell?: GridPlacement['fromCell'];
-  terrain?: object;
-  hardTerrain?: object;
-  fine: boolean;
-  raster: CrowdMaskRaster;
-  seated?: CrowdMaskRaster;
-  area?: CrowdMaskRaster;
-  columns: Map<number, Map<number, StaticCell | null>>;
-  size: number;
-  chunks: Map<string, CrowdChunk>;
-  cursor: number;
-  viewPayload?: Cache['payload'];
-  payload?: {
-    col: number;
-    row: number;
-    cols: number;
-    rows: number;
-    progress: number;
-    quality: number;
-    result: ThrongPayload;
-  };
-};
-const caches = new WeakMap<EventGround, Cache[]>();
-const areaGrounds = new WeakMap<ProcessionRoute, EventGround>();
-function areaFor(event: ProcessionRoute, ground: EventGround) {
-  if (event.kind !== 'procession' && event.kind !== 'parade') return undefined;
-  let area = areaGrounds.get(event);
-  if (!area) {
-    area = {
-      regions: event.crowd_grounds ?? [],
-      blocked: ground.blocked,
-      water: ground.water,
-      bridges: ground.bridges,
-    };
-    areaGrounds.set(event, area);
-  }
-  return area;
-}
-function cacheFor(
-  ground: EventGround,
-  event: ProcessionRoute,
-  grid: GridPlacement,
-  guard?: SubGuard,
-  fine = false,
-) {
-  let saved = caches.get(ground);
-  if (!saved) caches.set(ground, (saved = []));
-  const world = grid.world,
-    fromCell = grid.fromCell!;
-  // Fine geometry is purely geographic. Its ink permissions are checked against the
-  // accepted terrain in packLife; a new worker snapshot must not rebuild the patches.
-  const terrain = fine ? undefined : (guard?.terrainKey ?? guard),
-    hardTerrain = fine ? undefined : (guard?.hardTerrainKey ?? guard);
-  let cache = saved.find(
-    (c) =>
-      c.terrain === terrain &&
-      c.hardTerrain === hardTerrain &&
-      c.fine === fine &&
-      (world ? c.scale?.[0] === world[0] && c.scale[1] === world[1] : c.fromCell === fromCell),
-  );
-  if (cache) {
-    // Scale variants share one retention budget; put the used variant last.
-    saved.splice(saved.indexOf(cache), 1);
-    saved.push(cache);
-    return cache;
-  }
-  const raster = (g: EventGround) =>
-    new CrowdMaskRaster(
-      g,
-      fromCell,
-      grid.grid.originCol,
-      grid.grid.originRow,
-      fine ? 1 : undefined,
-    );
-  cache = {
-    ...(world ? { scale: [world[0], world[1]] as const } : { fromCell }),
-    terrain,
-    hardTerrain,
-    fine,
-    raster: raster(ground),
-    seated: ground.seated && raster(ground.seated),
-    area:
-      (event.kind === 'procession' || event.kind === 'parade') && event.crowd_grounds?.length
-        ? raster(areaFor(event, ground)!)
-        : undefined,
-    columns: new Map(),
-    size: 0,
-    chunks: new Map(),
-    cursor: 0,
-  };
-  if (saved.length >= 4) saved.shift();
-  saved.push(cache);
-  return cache;
 }
 function classify(
   event: Exclude<ProcessionRoute, { kind: 'mass' | 'fluvial' }>,
@@ -324,26 +228,38 @@ function classify(
   );
 }
 const densityScratch: [number, number] = [0, 0];
-const weights = new Float64Array(16);
-const bucketCounts = new Uint32Array(256);
-const bucketOffsets = new Uint32Array(256);
-const sortedCells: ThrongCell[] = [];
-const EMPTY_ALONG = new Float64Array(0),
-  EMPTY_FLAGS = new Uint8Array(0);
-function movingDensity(
+/**
+ * Membership density of one street point `back` metres behind the formation's head. A
+ * procession's crowd travels with the images: spectators gather ahead of the head, walk
+ * beside and behind it, and thin out once it has passed; the stream fills the road behind.
+ */
+export function movingDensity(
   event: ProcessionRoute,
   back: number,
   flags: number,
   layout: ReturnType<typeof formationLayout> | undefined,
   paint: number,
 ): [number, number] {
-  let density = flags & 1 ? PROCESSION.throng.verge : 0;
+  const t = PROCESSION.throng;
+  let density = 0;
+  if (flags & 1)
+    density =
+      event.kind !== 'procession'
+        ? t.verge
+        : back < -layout!.leading
+          ? // Waiting spectators: denser where the images will arrive next.
+            Math.max(
+              t.waiting,
+              t.verge - ((-layout!.leading - back) / t.gather) * (t.verge - t.waiting),
+            )
+          : back <= layout!.tail
+            ? t.stream
+            : // Passed: most devotees have joined the stream, a few remain.
+              Math.max(t.passed, t.tail - ((back - layout!.tail) / t.gather) * (t.tail - t.passed));
   if (flags & 2) {
     if (event.kind === 'procession' && back >= -layout!.leading && back <= layout!.tail)
       density =
-        back <= Math.min(PROCESSION.throng.streamLength, layout!.tail)
-          ? PROCESSION.throng.stream
-          : PROCESSION.throng.tail;
+        back <= Math.min(t.streamLength, layout!.tail) ? t.stream : Math.max(density, t.tail);
     if (event.kind === 'parade' && flags & 4) {
       let lo = 0,
         hi = layout!.blocks.length;
@@ -363,7 +279,629 @@ function movingDensity(
   densityScratch[1] = paint;
   return densityScratch;
 }
-function rasterThrong(
+
+type FieldChunk = {
+  kind: Uint8Array;
+  /** 8×8 blocks of 4×4 points: 1 where any point has ground (coarse cells skip the rest). */
+  blocks: Uint8Array;
+  heading: Uint8Array;
+  along?: Float32Array;
+  /** 1 where the accepted terrain leaves the lattice point clear; absent without a guard. */
+  clear?: Uint8Array;
+  terrain?: object;
+  hardTerrain?: object;
+};
+/** Growable static cell columns (struct of arrays): no object per cell until it is drawn. */
+class StaticCells {
+  n = 0;
+  col = new Int32Array(256);
+  row = new Int32Array(256);
+  hash = new Uint32Array(256);
+  kind = new Uint8Array(256);
+  heading = new Uint8Array(256);
+  s = new Float32Array(256);
+  dist = new Float32Array(256);
+  /** Coarse street cells: sample counts, then summed `along`, per classification. */
+  classes?: Float64Array;
+  masks?: Uint32Array;
+  agents: (VisibleAgent | undefined)[] = [];
+  cells: (ThrongCell | undefined)[] = [];
+  push(col: number, row: number, kind: number, heading: number, s: number, dist: number) {
+    if (this.n === this.col.length) {
+      const grow = <T extends Int32Array | Uint32Array | Uint8Array | Float32Array>(a: T): T => {
+        const b = new (a.constructor as new (n: number) => T)(a.length * 2);
+        b.set(a);
+        return b;
+      };
+      this.col = grow(this.col);
+      this.row = grow(this.row);
+      this.hash = grow(this.hash);
+      this.kind = grow(this.kind);
+      this.heading = grow(this.heading);
+      this.s = grow(this.s);
+      this.dist = grow(this.dist);
+      if (this.classes) {
+        const classes = new Float64Array(this.classes.length * 2);
+        classes.set(this.classes);
+        this.classes = classes;
+      }
+      if (this.masks) {
+        const masks = new Uint32Array(this.masks.length * 2);
+        masks.set(this.masks);
+        this.masks = masks;
+      }
+    }
+    const i = this.n++;
+    this.col[i] = col;
+    this.row[i] = row;
+    this.hash[i] = mix(col, row);
+    this.kind[i] = kind;
+    this.heading[i] = heading;
+    this.s[i] = s;
+    this.dist[i] = dist;
+    return i;
+  }
+}
+/** Static cells of one zoom, in absolute cells over a window wider than the view. */
+type ViewCache = {
+  key: number[];
+  version: number;
+  terrainVersion: number;
+  /** Absolute cell window: inclusive left/top, exclusive right/bottom. */
+  window: readonly [number, number, number, number];
+  fine: boolean;
+  cells: StaticCells;
+  pending: boolean;
+  ink?: ThrongInkScale;
+  /** Lattice coordinates of absolute cell positions. */
+  toI: (col: number, row: number) => number;
+  toJ: (col: number, row: number) => number;
+  /** Linear lattice → lng/lat about the window's centre (exact in longitude). */
+  lng0: number;
+  lngPerI: number;
+  lat0: number;
+  latPerJ: number;
+  j0: number;
+  dynamic?: { at: number[]; progress: number; quality: number; result: ThrongPayload };
+};
+type Field = {
+  event: ProcessionRoute;
+  ground: EventGround;
+  /** Zoom-zero world pixels of lattice corner (0, 0), and per lattice step. */
+  x0: number;
+  y0: number;
+  unit: number;
+  width: number;
+  height: number;
+  cw: number;
+  ch: number;
+  chunks: (FieldChunk | null | undefined)[];
+  cursor: number;
+  /** Bumped by any preparation; `terrainVersion` only by rechecks of prepared chunks. */
+  version: number;
+  terrainVersion: number;
+  /** The previous call's projection key; a zoom in progress skips the pan margin. */
+  lastKey?: number[];
+  raster: CrowdMaskRaster;
+  seated?: CrowdMaskRaster;
+  area?: CrowdMaskRaster;
+  toLattice: (lng: number, lat: number) => [number, number];
+  /** Lattice coordinates a Mass faces and fills from. */
+  facing?: Point;
+  views: ViewCache[];
+};
+const fields = new WeakMap<ProcessionRoute, Field>();
+const now = () => globalThis.performance?.now() ?? Date.now();
+function fieldFor(event: ProcessionRoute): Field {
+  let field = fields.get(event);
+  if (field) return field;
+  const ground = groundForRoute(event),
+    standing = eventGroundBounds(ground),
+    seated = ground.seated && eventGroundBounds(ground.seated);
+  // Seated grounds may extend beyond the standing ones.
+  const bounds = seated?.every(Number.isFinite)
+    ? [
+        Math.min(standing[0], seated[0]),
+        Math.min(standing[1], seated[1]),
+        Math.max(standing[2], seated[2]),
+        Math.max(standing[3], seated[3]),
+      ]
+    : standing;
+  const empty = !bounds.every(Number.isFinite);
+  const lat0 = empty ? 0 : (bounds[1] + bounds[3]) / 2;
+  const unit =
+    (THRONG_FIELD_PITCH_M * TILE_SIZE) / (MERCATOR_METERS * Math.cos((lat0 * Math.PI) / 180));
+  const [west, north] = empty ? [0, 0] : project(bounds[0], bounds[3], 0),
+    [east, south] = empty ? [0, 0] : project(bounds[2], bounds[1], 0);
+  const x0 = west - unit,
+    y0 = north - unit;
+  const width = empty ? 0 : Math.ceil((east - west) / unit) + 2,
+    height = empty ? 0 : Math.ceil((south - north) / unit) + 2;
+  const fromLattice = (i: number, j: number) => unproject(x0 + i * unit, y0 + j * unit, 0);
+  const raster = (g: EventGround) => new CrowdMaskRaster(g, fromLattice, 0, 0, 1);
+  const toLattice = (lng: number, lat: number): [number, number] => {
+    const [x, y] = project(lng, lat, 0);
+    return [(x - x0) / unit, (y - y0) / unit];
+  };
+  const areaGround =
+    (event.kind === 'procession' || event.kind === 'parade') && event.crowd_grounds?.length
+      ? {
+          regions: event.crowd_grounds,
+          blocked: ground.blocked,
+          water: ground.water,
+          bridges: ground.bridges,
+        }
+      : undefined;
+  const cw = Math.ceil(width / CHUNK),
+    ch = Math.ceil(height / CHUNK);
+  field = {
+    event,
+    ground,
+    x0,
+    y0,
+    unit,
+    width,
+    height,
+    cw,
+    ch,
+    chunks: new Array<FieldChunk | null | undefined>(cw * ch),
+    cursor: 0,
+    version: 0,
+    terrainVersion: 0,
+    raster: raster(ground),
+    seated: ground.seated?.regions.length ? raster(ground.seated) : undefined,
+    area: areaGround && raster(areaGround),
+    toLattice,
+    facing:
+      event.kind === 'mass'
+        ? toLattice(...(event.site.altar?.at ?? event.site.location))
+        : undefined,
+    views: [],
+  };
+  fields.set(event, field);
+  return field;
+}
+const headingByte = (x: number, y: number) =>
+  Math.round((Math.atan2(y, x) / (2 * Math.PI)) * 256) & 255;
+function buildChunk(field: Field, index: number) {
+  const { event } = field;
+  const cx = index % field.cw,
+    cy = Math.floor(index / field.cw);
+  const street = event.kind === 'procession' || event.kind === 'parade';
+  const route = event.kind === 'mass' ? undefined : routeIndex(event);
+  const layout = street ? formationLayout(event) : undefined;
+  const blockWidth = layout
+    ? (((layout.blocks[0]?.columns ?? layout.columns) - 1) * PROCESSION_GEOMETRY.columnPitch) / 2 +
+      PROCESSION_GEOMETRY.person.width / 2
+    : 0;
+  const facing =
+    event.kind === 'mass'
+      ? localMetricProjection(event.site.altar?.at ?? event.site.location)
+      : undefined;
+  let chunk: FieldChunk | undefined;
+  const point: Point = [0, 0];
+  for (let r = 0; r < CHUNK; r++) {
+    const j = cy * CHUNK + r;
+    if (j >= field.height) break;
+    for (let c = 0; c < CHUNK; c++) {
+      const i = cx * CHUNK + c;
+      if (i >= field.width) break;
+      const seated = !!field.seated?.has(i, j);
+      if (!seated && !field.raster.has(i, j)) continue;
+      chunk ??= {
+        kind: new Uint8Array(CHUNK_POINTS),
+        blocks: new Uint8Array((CHUNK / BLOCK) ** 2),
+        heading: new Uint8Array(CHUNK_POINTS),
+        along: street ? new Float32Array(CHUNK_POINTS) : undefined,
+      };
+      const k = r * CHUNK + c;
+      field.raster.point(i, j, 0, point);
+      let bits = seated ? SEATED : STANDING;
+      if (facing) {
+        const to = facing.to(point);
+        chunk.heading[k] = headingByte(-to[0], -to[1]);
+      } else {
+        const near = nearest(route!, point);
+        if (street) {
+          bits |= classify(event, near, !!field.area?.has(i, j), blockWidth) << FLAG_SHIFT;
+          chunk.along![k] = near.s;
+          const h = route!.line.at(near.s);
+          chunk.heading[k] = headingByte(h.hx, h.hy);
+        } else chunk.heading[k] = headingByte(near.target[0], near.target[1]);
+      }
+      chunk.kind[k] = bits;
+      chunk.blocks[Math.floor(r / BLOCK) * (CHUNK / BLOCK) + Math.floor(c / BLOCK)] = 1;
+    }
+  }
+  field.chunks[index] = chunk ?? null;
+}
+const standingProbe: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 },
+  seatedProbe: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0, eventRole: 'seated' };
+function checkTerrain(field: Field, index: number, guard: Guard, terrain: object, hard: object) {
+  const chunk = field.chunks[index];
+  if (!chunk) return;
+  const cx = index % field.cw,
+    cy = Math.floor(index / field.cw);
+  const clear = chunk.clear ?? new Uint8Array(CHUNK_POINTS);
+  standingProbe.eventGround = seatedProbe.eventGround = field.event.id;
+  for (let k = 0; k < CHUNK_POINTS; k++) {
+    const kind = chunk.kind[k]!;
+    if (!kind) continue;
+    clear[k] = guard(
+      kind & SEATED ? seatedProbe : standingProbe,
+      cx * CHUNK + (k % CHUNK),
+      cy * CHUNK + Math.floor(k / CHUNK),
+    )
+      ? 1
+      : 0;
+  }
+  chunk.clear = clear;
+  chunk.terrain = terrain;
+  chunk.hardTerrain = hard;
+}
+/**
+ * Classify unprepared visible chunks nearest the view centre first, recheck stale terrain,
+ * then continue with the rest of the event. Returns whether visible work remains.
+ */
+function prepare(
+  field: Field,
+  guard: Guard | undefined,
+  rect: readonly [number, number, number, number],
+  budgetMs: number,
+) {
+  const deadline = budgetMs === Infinity ? Infinity : now() + budgetMs;
+  const terrain = guard && (guard.terrainKey ?? guard),
+    hard = guard && (guard.hardTerrainKey ?? guard);
+  const stale = (chunk: FieldChunk) =>
+    !!guard && (chunk.terrain !== terrain || chunk.hardTerrain !== hard);
+  const [x0, y0, x1, y1] = rect;
+  const mx = (x0 + x1) / 2,
+    my = (y0 + y1) / 2;
+  const visible: number[] = [];
+  for (let cy = y0; cy <= y1; cy++)
+    for (let cx = x0; cx <= x1; cx++) {
+      const index = cy * field.cw + cx,
+        chunk = field.chunks[index];
+      if (chunk === undefined || (chunk && stale(chunk))) visible.push(index);
+    }
+  visible.sort((a, b) => {
+    const da = ((a % field.cw) - mx) ** 2 + (Math.floor(a / field.cw) - my) ** 2,
+      db = ((b % field.cw) - mx) ** 2 + (Math.floor(b / field.cw) - my) ** 2;
+    return da - db;
+  });
+  let worked = false,
+    pending = false;
+  const unit = (index: number) => {
+    if (field.chunks[index] === undefined) buildChunk(field, index);
+    else field.terrainVersion++;
+    if (guard) checkTerrain(field, index, guard, terrain!, hard!);
+    field.version++;
+    worked = true;
+  };
+  for (const index of visible) {
+    if (worked && now() > deadline) {
+      pending = true;
+      break;
+    }
+    unit(index);
+  }
+  while (!pending && field.cursor < field.chunks.length && now() <= deadline) {
+    const index = field.cursor++;
+    if (field.chunks[index] === undefined) unit(index);
+  }
+  return pending;
+}
+
+const sampled = { chunk: undefined as FieldChunk | undefined, k: 0 };
+/** Field kind at lattice coordinates, 0 outside the ground or where terrain blocks it. */
+function sample(field: Field, fi: number, fj: number) {
+  const i = Math.floor(fi),
+    j = Math.floor(fj);
+  if (i < 0 || j < 0 || i >= field.width || j >= field.height) return 0;
+  const chunk = field.chunks[Math.floor(j / CHUNK) * field.cw + Math.floor(i / CHUNK)];
+  if (!chunk) return 0;
+  const k = (j % CHUNK) * CHUNK + (i % CHUNK);
+  const kind = chunk.kind[k]!;
+  if (!kind || (chunk.clear && !chunk.clear[k])) return 0;
+  sampled.chunk = chunk;
+  sampled.k = k;
+  return kind;
+}
+/** Whether any field block in this lattice rectangle has ground. */
+function occupied(field: Field, i0: number, j0: number, i1: number, j1: number) {
+  const bi0 = Math.max(0, Math.floor(i0 / BLOCK)),
+    bi1 = Math.min(Math.ceil(field.width / BLOCK) - 1, Math.floor(i1 / BLOCK)),
+    bj0 = Math.max(0, Math.floor(j0 / BLOCK)),
+    bj1 = Math.min(Math.ceil(field.height / BLOCK) - 1, Math.floor(j1 / BLOCK));
+  const per = CHUNK / BLOCK;
+  for (let bj = bj0; bj <= bj1; bj++)
+    for (let bi = bi0; bi <= bi1; bi++) {
+      const chunk = field.chunks[Math.floor(bj / per) * field.cw + Math.floor(bi / per)];
+      if (chunk && chunk.blocks[(bj % per) * per + (bi % per)]) return true;
+    }
+  return false;
+}
+const sameClass = (a: number, b: number) => (a & (STANDING | SEATED)) === (b & (STANDING | SEATED));
+let visitEpoch = 0;
+let visits = new Uint32Array(0);
+const bucketCounts = new Uint32Array(256);
+const bucketOffsets = new Uint32Array(256);
+const sortedCells: ThrongCell[] = [];
+const weights = new Float64Array(16);
+/** A detailed cell is admitted only where its corners share its centre's ground class. */
+const FINE_CORNERS = [
+  [0.05, 0.05],
+  [0.95, 0.05],
+  [0.05, 0.95],
+  [0.95, 0.95],
+] as const;
+/** Static windows extend this share of the view beyond each edge, so pans only rebase. */
+const WINDOW_MARGIN = 0.25;
+
+/**
+ * Project the prepared field onto absolute cells of one zoom: positions, ground classes,
+ * masks. `affine` maps lattice coordinates to absolute cells: col = e + a·i + b·j.
+ */
+function staticView(
+  field: Field,
+  fine: boolean,
+  key: number[],
+  affine: readonly number[],
+  window: readonly [number, number, number, number],
+): ViewCache {
+  const [a, b, c, d, e, f] = affine as [number, number, number, number, number, number];
+  const det = a * d - b * c;
+  // Lattice steps per cell step, along a row (col + 1) and down a column (row + 1).
+  const iCol = d / det,
+    jCol = -c / det,
+    iRow = -b / det,
+    jRow = a / det;
+  const toI = (col: number, row: number) => (d * (col - e) - b * (row - f)) / det,
+    toJ = (col: number, row: number) => (-c * (col - e) + a * (row - f)) / det;
+  // Cells per metre east, quantized to a quarter octave: ink and stride are shared by
+  // every nearby zoom.
+  const scale = 2 ** (Math.round(Math.log2(Math.abs(a) / THRONG_FIELD_PITCH_M) * 4) / 4);
+  // Cell aspect is fixed per cell size; round away projection noise.
+  const aspect = Math.round((d / a) * 1000) / 1000;
+  const ink: ThrongInkScale = { x: scale, y: scale * aspect, key: `${scale}/${aspect}` };
+  const fit = figureFit('adult', scale * 0.6);
+  const stride = !fine
+    ? 1
+    : fit === 'big'
+      ? 2
+      : fit === 'stamp'
+        ? Math.max(3, Math.ceil(scale * 0.7))
+        : 1;
+  const [w0, h0, w1, h1] = window;
+  const ci = toI((w0 + w1) / 2, (h0 + h1) / 2),
+    cj = toJ((w0 + w1) / 2, (h0 + h1) / 2);
+  const [lng0, lat0] = unproject(field.x0 + ci * field.unit, field.y0 + cj * field.unit, 0),
+    [lng1, lat1] = unproject(field.x0 + (ci + 1) * field.unit, field.y0 + (cj + 1) * field.unit, 0);
+  const cells = new StaticCells();
+  const street = field.event.kind === 'procession' || field.event.kind === 'parade';
+  if (!fine) {
+    cells.masks = new Uint32Array(cells.col.length * THRONG_MASK_WORDS);
+    if (street) cells.classes = new Float64Array(cells.col.length * 16);
+  }
+  const view: ViewCache = {
+    key,
+    version: field.version,
+    terrainVersion: field.terrainVersion,
+    window,
+    fine,
+    cells,
+    pending: false,
+    ink: fine ? ink : undefined,
+    toI,
+    toJ,
+    lng0: lng0 - ci * (lng1 - lng0),
+    lngPerI: lng1 - lng0,
+    lat0,
+    latPerJ: lat1 - lat0,
+    j0: cj,
+  };
+  const cols = w1 - w0,
+    rows = h1 - h0;
+  const corners = [
+    [toI(w0, h0), toJ(w0, h0)],
+    [toI(w1, h0), toJ(w1, h0)],
+    [toI(w0, h1), toJ(w0, h1)],
+    [toI(w1, h1), toJ(w1, h1)],
+  ];
+  const cx0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[0]!)) / CHUNK)),
+    cx1 = Math.min(field.cw - 1, Math.floor(Math.max(...corners.map((p) => p[0]!)) / CHUNK)),
+    cy0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p[1]!)) / CHUNK)),
+    cy1 = Math.min(field.ch - 1, Math.floor(Math.max(...corners.map((p) => p[1]!)) / CHUNK));
+  if (cx0 > cx1 || cy0 > cy1) return view;
+  if (visits.length < cols * rows) visits = new Uint32Array(cols * rows);
+  visitEpoch = (visitEpoch + 1) >>> 0;
+  if (!visitEpoch) {
+    visits.fill(0);
+    visitEpoch = 1;
+  }
+  const facing = field.facing;
+  const fx = facing?.[0] ?? 0,
+    fy = facing?.[1] ?? 0;
+  const anchor = (n: number) => ((n % stride) + stride) % stride === 0;
+  // Samples per axis: a power of two (whole mask subcells each), no finer than the field.
+  const samples = (meters: number) =>
+    2 **
+    Math.min(
+      Math.log2(COARSE_SAMPLES),
+      Math.max(1, Math.ceil(Math.log2(meters / COARSE_SPACING_M))),
+    );
+  const nx = samples(Math.hypot(iCol, jCol) * THRONG_FIELD_PITCH_M),
+    ny = samples(Math.hypot(iRow, jRow) * THRONG_FIELD_PITCH_M);
+  for (let cy = cy0; cy <= cy1; cy++)
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const chunk = field.chunks[cy * field.cw + cx];
+      if (chunk === undefined) view.pending = true;
+      if (!chunk) continue;
+      let minC = Infinity,
+        maxC = -Infinity,
+        minR = Infinity,
+        maxR = -Infinity;
+      for (let corner = 0; corner < 4; corner++) {
+        const i = (cx + (corner & 1)) * CHUNK,
+          j = (cy + (corner >> 1)) * CHUNK;
+        const col = e + a * i + b * j,
+          row = f + c * i + d * j;
+        minC = Math.min(minC, col);
+        maxC = Math.max(maxC, col);
+        minR = Math.min(minR, row);
+        maxR = Math.max(maxR, row);
+      }
+      const c0 = Math.max(w0, Math.floor(minC)),
+        c1 = Math.min(w1 - 1, Math.floor(maxC)),
+        rStart = Math.max(h0, Math.floor(minR)),
+        rEnd = Math.min(h1 - 1, Math.floor(maxR));
+      for (let row = rStart; row <= rEnd; row++) {
+        if (fine && !anchor(row)) continue;
+        // Lattice coordinates of this row's first cell corner; each cell adds (iCol, jCol).
+        let ri = toI(c0, row),
+          rj = toJ(c0, row);
+        for (let col = c0; col <= c1; col++, ri += iCol, rj += jCol) {
+          if (fine && !anchor(col)) continue;
+          const at = (row - h0) * cols + (col - w0);
+          if (visits[at] === visitEpoch) continue;
+          visits[at] = visitEpoch;
+          const mi = ri + (iCol + iRow) / 2,
+            mj = rj + (jCol + jRow) / 2;
+          const dist = facing ? Math.hypot(mi - fx, mj - fy) * THRONG_FIELD_PITCH_M : 0;
+          if (fine) {
+            const kind = sample(field, mi, mj);
+            if (!kind) continue;
+            const centre = sampled.chunk!,
+              k = sampled.k;
+            let whole = true;
+            for (let p = 0; p < 4 && whole; p++) {
+              const [u, v] = FINE_CORNERS[p]!;
+              const other = sample(field, ri + u * iCol + v * iRow, rj + u * jCol + v * jRow);
+              whole = !!other && sameClass(other, kind);
+            }
+            if (!whole) continue;
+            cells.push(col, row, kind, centre.heading[k]!, centre.along?.[k] ?? 0, dist);
+            continue;
+          }
+          if (
+            !occupied(
+              field,
+              Math.min(ri, ri + iCol, ri + iRow, ri + iCol + iRow),
+              Math.min(rj, rj + jCol, rj + jRow, rj + jCol + jRow),
+              Math.max(ri, ri + iCol, ri + iRow, ri + iCol + iRow),
+              Math.max(rj, rj + jCol, rj + jRow, rj + jCol + jRow),
+            )
+          )
+            continue;
+          let slot = -1,
+            closest = Infinity;
+          for (let sy = 0; sy < ny; sy++) {
+            const v = (sy + 0.5) / ny;
+            for (let sx = 0; sx < nx; sx++) {
+              const u = (sx + 0.5) / nx;
+              const found = sample(field, ri + u * iCol + v * iRow, rj + u * jCol + v * jRow);
+              if (!found) continue;
+              const distance = (u - 0.5) ** 2 + (v - 0.5) ** 2;
+              if (slot < 0) {
+                slot = cells.push(col, row, found, 0, 0, dist);
+                cells.masks!.fill(0, slot * THRONG_MASK_WORDS, (slot + 1) * THRONG_MASK_WORDS);
+                cells.classes?.fill(0, slot * 16, slot * 16 + 16);
+              }
+              if (distance < closest) {
+                closest = distance;
+                cells.kind[slot] = found;
+                cells.heading[slot] = sampled.chunk!.heading[sampled.k]!;
+              }
+              const masks = cells.masks!;
+              for (let y = sy * (16 / ny); y < (sy + 1) * (16 / ny); y++)
+                for (let x = sx * (16 / nx); x < (sx + 1) * (16 / nx); x++) {
+                  const bit = y * 16 + x;
+                  masks[slot * THRONG_MASK_WORDS + (bit >>> 5)]! |= (1 << (bit & 31)) >>> 0;
+                }
+              if (street) {
+                const flags = found >>> FLAG_SHIFT,
+                  classes = cells.classes!;
+                classes[slot * 16 + flags]!++;
+                classes[slot * 16 + flags + 8]! += sampled.chunk!.along![sampled.k]!;
+              }
+            }
+          }
+        }
+      }
+    }
+  return view;
+}
+
+/** One placement's lattice → view cell transform: [a, b, c, d, e, f], col = e + a·i + b·j. */
+function affineFor(field: Field, grid: GridPlacement): number[] {
+  const at = (i: number, j: number) =>
+    grid.toCell(...unproject(field.x0 + i * field.unit, field.y0 + j * field.unit, 0));
+  const span = Math.max(CHUNK, Math.min(field.width, field.height));
+  const o = at(0, 0),
+    x = at(span, 0),
+    y = at(0, span);
+  return [
+    (x[0] - o[0]) / span,
+    (y[0] - o[0]) / span,
+    (x[1] - o[1]) / span,
+    (y[1] - o[1]) / span,
+    o[0],
+    o[1],
+  ];
+}
+
+/** A new figure's ownerless agent, positioned by the view's linear lattice map. */
+function crowdAgent(
+  view: ViewCache,
+  cells: StaticCells,
+  index: number,
+  event: ProcessionRoute,
+  paint: number,
+  seated: boolean,
+): VisibleAgent {
+  const ci = view.toI(cells.col[index]! + 0.5, cells.row[index]! + 0.5),
+    cj = view.toJ(cells.col[index]! + 0.5, cells.row[index]! + 0.5);
+  const hash = cells.hash[index]!;
+  const lng = view.lng0 + ci * view.lngPerI,
+    lat = view.lat0 + (cj - view.j0) * view.latPerJ;
+  if (!view.fine)
+    return {
+      kind: 'person',
+      lng,
+      lat,
+      paint,
+      flap: hash & 1,
+      candle: (hash >>> 16) % 10 < 6,
+      eventGround: event.id,
+      prop: 'event',
+      glyph: String.fromCharCode(ProcessionGlyph.crowd0.charCodeAt(0) + (hash % 4)),
+    };
+  const angle = (cells.heading[index]! / 256) * 2 * Math.PI,
+    hx = Math.cos(angle),
+    hy = Math.sin(angle);
+  return {
+    kind: 'person',
+    lng,
+    lat,
+    paint,
+    flap: hash & 1,
+    candle: (hash >>> 16) % 10 < 6,
+    eventGround: event.id,
+    // One metre ahead and to the right, on the north-up lattice (rows run south).
+    ahead: [lng + hx * view.lngPerI, lat - hy * view.latPerJ],
+    side: [lng + hy * view.lngPerI, lat + hx * view.latPerJ],
+    ...(seated && {
+      eventRole: 'seated' as const,
+      people: [{ figure: 'seated' as const, paint, lateral: 0, back: 0, flap: 0 }],
+    }),
+  };
+}
+
+/**
+ * The crowd for this view: the prepared field projected on the grid, and its membership at
+ * `progress`. Changing zoom never reclassifies geography; it only projects again.
+ */
+export function throng(
   event: ProcessionRoute,
   progress: number,
   grid: GridPlacement,
@@ -371,55 +909,78 @@ function rasterThrong(
   rows: number,
   zoom: number,
   quality = 1,
-  allowsSubcell?: SubGuard,
-  budget?: { remaining: number },
-  chunk?: CrowdChunk,
+  guardFor?: ThrongGuardFactory,
+  budgetMs = THRONG_FIELD_BUDGET_MS,
 ): ThrongPayload {
   const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
-  const fromCell = grid.fromCell;
-  if (!fromCell || zoom < 15 || progress < 0 || progress >= 1 || quality <= 0) return result;
-  const ground = groundForRoute(event),
-    bounds = eventGroundBounds(ground),
-    corners = [grid.toCell(bounds[0], bounds[1]), grid.toCell(bounds[2], bounds[3])];
-  const origin = grid.grid,
-    centre = fromCell(cols / 2, rows / 2),
-    frame = localMetricProjection(centre),
-    east = frame.from([1, 0]),
-    cp = grid.toCell(...centre),
-    ep = grid.toCell(...east);
-  const fit = figureFit('adult', Math.hypot(ep[0] - cp[0], ep[1] - cp[1]) * 0.6);
-  const stride =
-    zoom < 17
-      ? 1
-      : fit === 'big'
-        ? 2
-        : fit === 'stamp'
-          ? Math.max(3, Math.ceil(Math.hypot(ep[0] - cp[0], ep[1] - cp[1]) * 0.7))
-          : 1;
-  const minC = Math.max(0, Math.floor(Math.min(...corners.map((q) => q[0]))) - stride),
-    maxC = Math.min(cols, Math.ceil(Math.max(...corners.map((q) => q[0]))) + stride);
-  const minR = Math.max(0, Math.floor(Math.min(...corners.map((q) => q[1]))) - stride),
-    maxR = Math.min(rows, Math.ceil(Math.max(...corners.map((q) => q[1]))) + stride);
-  const index = event.kind === 'mass' ? undefined : routeIndex(event),
-    layout =
-      event.kind === 'procession' || event.kind === 'parade' ? formationLayout(event) : undefined;
-  const head = layout?.head(progress) ?? 0;
-  const blockWidth = layout
-    ? (((layout.blocks[0]?.columns ?? layout.columns) - 1) * PROCESSION_GEOMETRY.columnPitch) / 2 +
-      PROCESSION_GEOMETRY.person.width / 2
-    : 0;
-  // Production placements expose a world scale, allowing detailed geometry to survive
-  // fresh accepted worker frames and integer-cell pans. Legacy forward placements remain direct.
+  if (zoom < 15 || progress < 0 || progress >= 1 || quality <= 0) return result;
+  const field = fieldFor(event);
+  if (!field.width) return result;
   const fine = zoom >= 17;
-  const cache =
-    !fine || grid.world ? cacheFor(ground, event, grid, allowsSubcell, fine) : undefined;
-  const coldLimit =
-    budget?.remaining ?? (fine ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS);
-  const areaGround = areaFor(event, ground);
-  const massFrame =
-    event.kind === 'mass'
-      ? localMetricProjection(event.site.altar?.at ?? event.site.location)
-      : undefined;
+  const { originCol, originRow } = grid.grid;
+  const affine = affineFor(field, grid);
+  // Absolute cells: integer pans keep the same transform and reuse the static window.
+  affine[4]! += originCol;
+  affine[5]! += originRow;
+  const [a, b, c, d, e, f] = affine as [number, number, number, number, number, number];
+  const det = a * d - b * c;
+  if (!(Math.abs(det) > 0)) return result;
+  const toI = (col: number, row: number) => (d * (col - e) - b * (row - f)) / det,
+    toJ = (col: number, row: number) => (-c * (col - e) + a * (row - f)) / det;
+  const left = originCol,
+    top = originRow,
+    right = originCol + cols,
+    bottom = originRow + rows;
+  // The view and its pan margin, for preparation priority.
+  const mc = Math.ceil(cols * WINDOW_MARGIN),
+    mr = Math.ceil(rows * WINDOW_MARGIN);
+  const is = [
+      toI(left - mc, top - mr),
+      toI(right + mc, top - mr),
+      toI(left - mc, bottom + mr),
+      toI(right + mc, bottom + mr),
+    ],
+    js = [
+      toJ(left - mc, top - mr),
+      toJ(right + mc, top - mr),
+      toJ(left - mc, bottom + mr),
+      toJ(right + mc, bottom + mr),
+    ];
+  const rect = [
+    Math.max(0, Math.floor(Math.min(...is) / CHUNK)),
+    Math.max(0, Math.floor(Math.min(...js) / CHUNK)),
+    Math.min(field.cw - 1, Math.floor(Math.max(...is) / CHUNK)),
+    Math.min(field.ch - 1, Math.floor(Math.max(...js) / CHUNK)),
+  ] as const;
+  const guard = guardFor?.(field.toLattice);
+  const preparing = prepare(field, guard, rect, budgetMs);
+  const key = [a, b, c, d, e, f, fine ? 1 : 0];
+  let view = field.views.find(
+    (v) =>
+      v.key.every((value, i) => value === key[i]) &&
+      v.window[0] <= left &&
+      v.window[1] <= top &&
+      v.window[2] >= right &&
+      v.window[3] >= bottom,
+  );
+  // Chunks prepared elsewhere cannot change a window that had none left to prepare.
+  if (
+    !view ||
+    view.terrainVersion !== field.terrainVersion ||
+    (view.pending && view.version !== field.version)
+  ) {
+    if (view) field.views.splice(field.views.indexOf(view), 1);
+    // While the scale keeps changing, a margin would be projected for nothing.
+    const settled = !!field.lastKey?.every((value, i) => value === key[i]);
+    const wc = settled ? mc : 0,
+      wr = settled ? mr : 0;
+    view = staticView(field, fine, key, affine, [left - wc, top - wr, right + wc, bottom + wr]);
+    field.views.push(view);
+    if (field.views.length > 2) field.views.shift();
+  }
+  field.lastKey = key;
+  const layout =
+    event.kind === 'procession' || event.kind === 'parade' ? formationLayout(event) : undefined;
   const massRamp =
     event.kind === 'mass'
       ? Math.min(
@@ -428,280 +989,112 @@ function rasterThrong(
           (1 - progress) / (1 - PROCESSION.mass.disperseStart),
         )
       : 1;
+  const head = layout?.head(progress) ?? 0;
   const progressKey = event.kind === 'mass' ? massRamp : event.kind === 'fluvial' ? 0 : head;
-  const held = chunk ? chunk.payload : cache?.payload;
+  const at = [originCol, originRow, cols, rows];
+  const held = view.dynamic;
   if (
     held &&
-    held.col === origin.originCol &&
-    held.row === origin.originRow &&
-    held.cols === cols &&
-    held.rows === rows &&
+    !preparing &&
     held.progress === progressKey &&
-    held.quality === quality
+    held.quality === quality &&
+    held.at.every((value, i) => value === at[i])
   )
-    return held.result;
-  let coldCells = 0;
-  for (
-    let row = minR + ((stride - ((minR + origin.originRow) % stride)) % stride);
-    row < maxR;
-    row += stride
-  )
-    for (
-      let col = minC + ((stride - ((minC + origin.originCol) % stride)) % stride);
-      col < maxC;
-      col += stride
-    ) {
-      const ac = col + origin.originCol,
-        ar = row + origin.originRow;
-      const cached = cache?.columns.get(ac)?.get(ar);
-      if (cached === null) continue;
-      // Empty stretches of a prepared scanline need no point projection, mask or
-      // figure classification. Do not start new scanlines after exhausting the budget.
-      if (
-        cache?.fine &&
-        cached === undefined &&
-        cache.raster.coversCached(ac, ar) === false &&
-        (!cache.seated || cache.seated.coversCached(ac, ar) === false)
-      ) {
-        let column = cache.columns.get(ac);
-        if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
-        column.set(ar, null);
-        cache.size++;
-        continue;
+    return { ...held.result };
+  const current = view;
+  result.ink = view.ink;
+  result.version = field.version;
+  result.pending = preparing || view.pending;
+  result.allows = fine
+    ? (agent, col, row) => {
+        const kind = sample(
+          field,
+          current.toI(col + originCol + 0.5, row + originRow + 0.5),
+          current.toJ(col + originCol + 0.5, row + originRow + 0.5),
+        );
+        return !!kind && !!(kind & (agent.eventRole === 'seated' ? SEATED : STANDING));
       }
-      if (cache && cached === undefined && coldCells >= coldLimit) {
-        result.pending = true;
-        continue;
-      }
-      let point = cached?.point ?? fromCell(col + 0.5, row + 0.5);
-      const hash = mix(col + origin.originCol, row + origin.originRow),
-        share = (hash & 0xffff) / 65536;
-      let density = 0,
-        paint = 3 + (hash % 8),
-        target = point,
-        role: VisibleAgent['eventRole'];
-      let mask: Uint32Array | undefined;
-      let near: ReturnType<typeof nearest> | undefined;
-      if (cache) {
-        let cell: StaticCell | null | undefined = cached;
-        if (cell === undefined && fine) {
-          coldCells++;
-          const seated = !!cache.seated?.mask(ac, ar);
-          cell = null;
-          if (seated || cache.raster.mask(ac, ar)) {
-            const at = index && nearest(index, point);
-            const heading =
-              at && (event.kind === 'procession' || event.kind === 'parade')
-                ? index.line.at(at.s)
-                : undefined;
-            const local = localMetricProjection(point),
-              to = local.to(
-                event.kind === 'mass' ? (event.site.altar?.at ?? event.site.location) : at!.target,
-              ),
-              d = Math.hypot(...to) || 1;
-            const hx = heading?.hx ?? to[0] / d,
-              hy = heading?.hy ?? to[1] / d;
-            cell = {
-              seated,
-              point,
-              count: 1,
-              along: EMPTY_ALONG,
-              flags: EMPTY_FLAGS,
-              s: at?.s ?? 0,
-              flag:
-                event.kind === 'procession' || event.kind === 'parade'
-                  ? classify(event, at!, !!cache.area?.mask(ac, ar), blockWidth)
-                  : 0,
-              ahead: local.from([hx, hy]),
-              side: local.from([hy, -hx]),
-              stamp: {},
-            };
-          }
-          let column = cache.columns.get(ac);
-          if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
-          column.set(ar, cell);
-          cache.size++;
-        }
-        if (cell === undefined) {
-          const intersects = cache.raster.covers(ac, ar) || cache.seated?.covers(ac, ar);
-          if (intersects) coldCells++;
-          const candidate: VisibleAgent = {
-            kind: 'person',
-            lng: point[0],
-            lat: point[1],
-            flap: 0,
-            eventGround: event.id,
-          };
-          const guard =
-            allowsSubcell &&
-            ((c: number, r: number) =>
-              allowsSubcell(
-                candidate,
-                c - origin.originCol * THRONG_MASK_SIDE,
-                r - origin.originRow * THRONG_MASK_SIDE,
-              ));
-          const raster = cache.raster;
-          let seatedMask: Uint32Array | undefined;
-          mask = intersects ? raster.mask(ac, ar, guard) : undefined;
-          if (intersects && cache.seated) {
-            candidate.eventRole = 'seated';
-            seatedMask = cache.seated.mask(ac, ar, guard);
-            if (seatedMask) {
-              if (!mask) mask = seatedMask.slice();
-              else for (let word = 0; word < mask.length; word++) mask[word]! |= seatedMask[word]!;
-            }
-          }
-          cell = null;
-          if (mask) {
-            const along = new Float64Array(THRONG_MASK_BITS),
-              flags = new Uint8Array(THRONG_MASK_BITS);
-            let count = 0,
-              closest = Infinity,
-              seated = false;
-            const representative: Point = [0, 0],
-              sample: Point = [0, 0];
-            for (let bit = 0; bit < THRONG_MASK_BITS; bit++)
-              if ((mask[bit >>> 5]! >>> (bit & 31)) & 1) {
-                raster.point(ac, ar, bit, sample);
-                const middle = (THRONG_MASK_SIDE - 1) / 2;
-                const distance =
-                  ((bit % THRONG_MASK_SIDE) - middle) ** 2 +
-                  (Math.floor(bit / THRONG_MASK_SIDE) - middle) ** 2;
-                if (distance < closest) {
-                  closest = distance;
-                  representative[0] = sample[0];
-                  representative[1] = sample[1];
-                  seated = !!seatedMask && !!((seatedMask[bit >>> 5]! >>> (bit & 31)) & 1);
-                }
-                if (event.kind === 'procession' || event.kind === 'parade') {
-                  const at = nearest(index!, sample, false),
-                    flag = classify(
-                      event,
-                      at,
-                      cache.area?.hasPoint(ac, ar, bit) ?? false,
-                      blockWidth,
-                    );
-                  along[count] = at.s;
-                  flags[count] = flag;
-                }
-                count++;
-              }
-            cell = { mask, seated, point: representative, along, flags, count };
-          }
-          let column = cache.columns.get(ac);
-          if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
-          column.set(ar, cell);
-          cache.size++;
-        }
-        if (!cell) continue;
-        point = cell.point;
-        mask = cell.mask;
-        if (cell.seated) role = 'seated';
-        if (event.kind === 'procession' || event.kind === 'parade') {
-          weights.fill(0);
-          let sum = 0;
-          for (let i = 0; i < cell.count; i++) {
-            const [d, p] = movingDensity(
-              event,
-              head - (cell.s ?? cell.along[i]!),
-              cell.flag ?? cell.flags[i]!,
-              layout,
-              paint,
-            );
-            sum += d;
-            weights[p]! += d;
-          }
-          density = sum / cell.count;
-          let best = 0;
-          for (let p = 0; p < weights.length; p++)
-            if (weights[p]! > best) {
-              best = weights[p]!;
-              paint = p;
-            }
-        }
-      }
-
-      if (event.kind === 'mass') {
-        target = event.site.altar?.at ?? event.site.location;
-        if (!cache) {
-          if (ground.seated && eventGroundAllows(ground.seated, [point])) role = 'seated';
-          if (!eventGroundAllows(role ? ground.seated! : ground, [point])) continue;
-        }
-        // Stable cells fill from the facing point and drain outside-in; disconnected areas survive.
-        const distance = Math.hypot(...massFrame!.to(point));
-        const outer = Math.max(1, event.site.radius_m);
-        if (massRamp < 1 && distance / outer > massRamp) continue;
-        density = PROCESSION.throng.mass;
-      } else if (event.kind === 'fluvial') {
-        density = PROCESSION.throng.bank;
-        if (!cache) {
-          near = nearest(index!, point);
-          target = near.target;
-        }
-      } else if (!cache) {
-        near = nearest(index!, point);
-        target = near.target;
-        [density, paint] = movingDensity(
+    : undefined;
+  const outer = event.kind === 'mass' ? Math.max(1, event.site.radius_m) : 1;
+  const cells = view.cells,
+    classes = cells.classes;
+  for (let index = 0; index < cells.n; index++) {
+    const col = cells.col[index]!,
+      row = cells.row[index]!;
+    if (col < left || col >= right || row < top || row >= bottom) continue;
+    const hash = cells.hash[index]!,
+      kind = cells.kind[index]!;
+    let density = 0,
+      paint = 3 + (hash % 8);
+    if (event.kind === 'mass') {
+      // Stable cells fill from the facing point and drain outside-in.
+      if (massRamp < 1 && cells.dist[index]! / outer > massRamp) continue;
+      density = PROCESSION.throng.mass;
+    } else if (event.kind === 'fluvial') density = PROCESSION.throng.bank;
+    else if (classes) {
+      weights.fill(0);
+      let sum = 0,
+        count = 0;
+      for (let flags = 0; flags < 8; flags++) {
+        const n = classes[index * 16 + flags]!;
+        if (!n) continue;
+        const [w, p] = movingDensity(
           event,
-          head - near.s,
-          classify(event, near, !!areaGround && eventGroundAllows(areaGround, [point]), blockWidth),
+          head - classes[index * 16 + flags + 8]! / n,
+          flags,
           layout,
           paint,
         );
+        sum += w * n;
+        count += n;
+        weights[p]! += w * n;
       }
-      if (share >= density) continue;
-      const staticCell = fine ? cache?.columns.get(ac)?.get(ar) : undefined;
-      const agent: VisibleAgent =
-        staticCell?.agent?.paint === paint
-          ? staticCell.agent
-          : {
-              kind: 'person',
-              lng: point[0],
-              lat: point[1],
-              paint,
-              flap: hash & 1,
-              candle: (hash >>> 16) % 10 < 6,
-              eventGround: event.id,
-              ...(role && {
-                eventRole: role,
-                people: [{ figure: 'seated', paint, lateral: 0, back: 0, flap: 0 }],
-              }),
-            };
-      if (staticCell) staticCell.agent = agent;
-      if (zoom < 17) {
-        const centre = fromCell(col + 0.5, row + 0.5);
-        agent.lng = centre[0];
-        agent.lat = centre[1];
-        agent.prop = 'event';
-        agent.glyph = String.fromCharCode(ProcessionGlyph.crowd0.charCodeAt(0) + (hash % 4));
-      } else if (cache) {
-        const cell = cache.columns.get(ac)!.get(ar)!;
-        agent.ahead = cell.ahead;
-        agent.side = cell.side;
-      } else {
-        if (!eventGroundAllows(role ? ground.seated! : ground, [point])) continue;
-        const local = localMetricProjection(point),
-          to = local.to(target),
-          d = Math.hypot(...to) || 1;
-        const heading =
-          near && (event.kind === 'procession' || event.kind === 'parade')
-            ? index!.line.at(near.s)
-            : { hx: to[0] / d, hy: to[1] / d };
-        agent.ahead = local.from([heading.hx, heading.hy]);
-        agent.side = local.from([heading.hy, -heading.hx]);
-      }
-      let candidate = staticCell?.cell;
-      if (
-        !candidate ||
-        candidate.col !== col ||
-        candidate.row !== row ||
-        candidate.agent !== agent
-      ) {
-        candidate = { col, row, agent, mask, hash, stamp: staticCell?.stamp };
-        if (staticCell) staticCell.cell = candidate;
-      }
-      result.cells.push(candidate);
+      density = sum / count;
+      let best = 0;
+      for (let p = 0; p < weights.length; p++)
+        if (weights[p]! > best) {
+          best = weights[p]!;
+          paint = p;
+        }
+    } else
+      [density, paint] = movingDensity(
+        event,
+        head - cells.s[index]!,
+        kind >>> FLAG_SHIFT,
+        layout,
+        paint,
+      );
+    if ((hash & 0xffff) / 65536 >= density) continue;
+    const seated = !!(kind & SEATED) && !(kind & STANDING);
+    let agent = cells.agents[index];
+    if (!agent) agent = cells.agents[index] = crowdAgent(view, cells, index, event, paint, seated);
+    else if (agent.paint !== paint) {
+      agent.paint = paint;
+      if (agent.people) agent.people = [{ ...agent.people[0]!, paint }];
     }
+    let throngCell = cells.cells[index];
+    if (!throngCell)
+      throngCell = cells.cells[index] = {
+        col: 0,
+        row: 0,
+        agent,
+        mask: cells.masks?.subarray(index * THRONG_MASK_WORDS, (index + 1) * THRONG_MASK_WORDS),
+        hash,
+      };
+    throngCell.col = col - originCol;
+    throngCell.row = row - originRow;
+    if (fine) {
+      const direction =
+        Math.round((cells.heading[index]! / 256) * THRONG_HEADINGS) % THRONG_HEADINGS;
+      throngCell.look =
+        (paint & 31) |
+        ((hash & 1) << 5) |
+        (Number(agent.candle) << 6) |
+        (Number(seated) << 7) |
+        (direction << 8);
+    }
+    result.cells.push(throngCell);
+  }
   // Stable linear buckets spread cap thinning across the viewport without a full sort.
   bucketCounts.fill(0);
   for (const cell of result.cells) bucketCounts[cell.hash >>> 24]!++;
@@ -713,193 +1106,6 @@ function rasterThrong(
   for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
   for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
   sortedCells.length = 0;
-  if (budget) budget.remaining -= coldCells;
-  if (cache && !result.pending) {
-    const payload = {
-      col: origin.originCol,
-      row: origin.originRow,
-      cols,
-      rows,
-      progress: progressKey,
-      quality,
-      result,
-    };
-    if (chunk) chunk.payload = payload;
-    else cache.payload = payload;
-  }
-  return result;
-}
-
-/** Assemble retained patches; moving the camera does not rasterize ready patches again. */
-export function throng(
-  event: ProcessionRoute,
-  progress: number,
-  grid: GridPlacement,
-  cols: number,
-  rows: number,
-  zoom: number,
-  quality = 1,
-  allowsSubcell?: SubGuard,
-): ThrongPayload {
-  if (!grid.world || !grid.fromCell || zoom < 15 || progress < 0 || progress >= 1 || quality <= 0)
-    return rasterThrong(event, progress, grid, cols, rows, zoom, quality, allowsSubcell);
-  const cache = cacheFor(groundForRoute(event), event, grid, allowsSubcell, zoom >= 17);
-  const { originCol, originRow } = grid.grid;
-  const progressKey =
-    event.kind === 'mass'
-      ? Math.min(
-          1,
-          progress / PROCESSION.mass.arrivalEnd,
-          (1 - progress) / (1 - PROCESSION.mass.disperseStart),
-        )
-      : event.kind === 'fluvial'
-        ? 0
-        : formationLayout(event).head(progress);
-  const held = cache.viewPayload;
-  if (
-    held &&
-    held.col === originCol &&
-    held.row === originRow &&
-    held.cols === cols &&
-    held.rows === rows &&
-    held.progress === progressKey &&
-    held.quality === quality
-  )
-    return held.result;
-  const bounds = eventGroundBounds(groundForRoute(event));
-  const a = grid.toCell(bounds[0], bounds[1]),
-    b = grid.toCell(bounds[2], bounds[3]);
-  const minC = Math.max(originCol, Math.floor(Math.min(a[0], b[0])) + originCol - 2),
-    maxC = Math.min(originCol + cols, Math.ceil(Math.max(a[0], b[0])) + originCol + 2),
-    minR = Math.max(originRow, Math.floor(Math.min(a[1], b[1])) + originRow - 2),
-    maxR = Math.min(originRow + rows, Math.ceil(Math.max(a[1], b[1])) + originRow + 2);
-  const visible: { key: string; col: number; row: number }[] = [];
-  for (
-    let row = Math.floor(minR / THRONG_CHUNK_ROWS) * THRONG_CHUNK_ROWS;
-    row < maxR;
-    row += THRONG_CHUNK_ROWS
-  )
-    for (
-      let col = Math.floor(minC / THRONG_CHUNK_COLS) * THRONG_CHUNK_COLS;
-      col < maxC;
-      col += THRONG_CHUNK_COLS
-    )
-      visible.push({ key: `${col}/${row}`, col, row });
-  const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
-  if (!visible.length) return result;
-  // Pin all visible patches before evicting anything. An LRU patch owns its geometry,
-  // membership and figure ink together; no sweep deletes the previous location on a pan.
-  for (const patch of visible) {
-    const saved = cache.chunks.get(patch.key) ?? { col: patch.col, row: patch.row };
-    cache.chunks.delete(patch.key);
-    cache.chunks.set(patch.key, saved);
-  }
-  const variants = caches.get(groundForRoute(event))!;
-  // Coarse masks retain 256 along-route samples per cell, so charge eight times
-  // the detailed patch weight. Zoom variants must not each accumulate a full trail.
-  const weight = (variant: Cache) => (variant.fine ? 1 : 8);
-  let retained = variants.reduce((n, variant) => n + variant.chunks.size * weight(variant), 0);
-  const capacity = Math.max(MAX_THRONG_CHUNKS, visible.length * weight(cache));
-  while (retained > capacity) {
-    const oldest = variants.find((variant) => variant !== cache && variant.chunks.size) ?? cache;
-    const [key, patch] = oldest.chunks.entries().next().value!;
-    oldest.chunks.delete(key);
-    oldest.viewPayload = undefined;
-    retained -= weight(oldest);
-    for (let col = patch.col; col < patch.col + THRONG_CHUNK_COLS; col++) {
-      const column = oldest.columns.get(col);
-      if (!column) continue;
-      for (let row = patch.row; row < patch.row + THRONG_CHUNK_ROWS; row++)
-        if (column.delete(row)) oldest.size--;
-      if (!column.size) oldest.columns.delete(col);
-    }
-  }
-  const budget = { remaining: zoom >= 17 ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS };
-  // Rotate preparation across locations instead of filling the top-left first. The
-  // single shared budget applies to the whole frame, never once per patch.
-  const start = cache.cursor % visible.length;
-  const quantum = Math.max(1, Math.floor(budget.remaining / Math.min(visible.length, 8)));
-  cache.cursor = start + Math.min(visible.length, 8);
-  const payloads: ThrongPayload[] = [];
-  for (let i = 0; i < visible.length; i++) {
-    const slot = (start + i) % visible.length;
-    const patch = visible[slot]!,
-      saved = cache.chunks.get(patch.key)!;
-    if (saved.payload?.progress === progressKey && saved.payload.quality === quality) {
-      payloads[slot] = saved.payload.result;
-      continue;
-    }
-    const dc = patch.col - originCol,
-      dr = patch.row - originRow;
-    const placement: GridPlacement = {
-      ...grid,
-      grid: { ...grid.grid, originCol: patch.col, originRow: patch.row },
-      fromCell: (c, r) => grid.fromCell!(c + dc, r + dr),
-      toCell: (lng, lat) => {
-        const p = grid.toCell(lng, lat);
-        return [p[0] - dc, p[1] - dr];
-      },
-      world: [grid.world[0], grid.world[1], patch.col, patch.row],
-    };
-    const patchBudget = { remaining: Math.min(budget.remaining, quantum) };
-    const allocated = patchBudget.remaining;
-    const payload = rasterThrong(
-      event,
-      progress,
-      placement,
-      THRONG_CHUNK_COLS,
-      THRONG_CHUNK_ROWS,
-      zoom,
-      quality,
-      allowsSubcell &&
-        Object.assign(
-          (agent: VisibleAgent, c: number, r: number) =>
-            allowsSubcell(agent, c + dc * THRONG_MASK_SIDE, r + dr * THRONG_MASK_SIDE),
-          {
-            terrainKey: allowsSubcell.terrainKey ?? allowsSubcell,
-            hardTerrainKey: allowsSubcell.hardTerrainKey ?? allowsSubcell,
-          },
-        ),
-      patchBudget,
-      saved,
-    );
-    budget.remaining -= allocated - patchBudget.remaining;
-    if (payload.pending) saved.payload = undefined;
-    result.pending ||= payload.pending;
-    payloads[slot] = payload;
-  }
-  for (let i = 0; i < visible.length; i++) {
-    const patch = visible[i]!,
-      payload = payloads[i]!;
-    const dc = patch.col - originCol,
-      dr = patch.row - originRow;
-    for (const cell of payload.cells) {
-      const col = cell.col + dc,
-        row = cell.row + dr;
-      if (col >= 0 && row >= 0 && col < cols && row < rows)
-        result.cells.push({ ...cell, col, row });
-    }
-  }
-  // Keep admission priority independent of patch preparation order.
-  bucketCounts.fill(0);
-  for (const cell of result.cells) bucketCounts[cell.hash >>> 24]!++;
-  let offset = 0;
-  for (let i = 0; i < bucketCounts.length; i++) {
-    bucketOffsets[i] = offset;
-    offset += bucketCounts[i]!;
-  }
-  for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
-  for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
-  sortedCells.length = 0;
-  if (!result.pending)
-    cache.viewPayload = {
-      col: originCol,
-      row: originRow,
-      cols,
-      rows,
-      progress: progressKey,
-      quality,
-      result,
-    };
+  view.dynamic = { at, progress: progressKey, quality, result: { ...result } };
   return result;
 }

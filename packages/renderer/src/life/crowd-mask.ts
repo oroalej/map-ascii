@@ -214,6 +214,20 @@ export class CrowdMaskRaster {
     out[1] = this.row(row * this.side + Math.floor(bit / this.side)).lat;
     return out;
   }
+  /** Whole-subcell permission (absolute subcell coordinates), without allocating a mask. */
+  has(subcol: number, subrow: number) {
+    const line = this.row(subrow);
+    const a = this.longitude + subcol * this.step,
+      b = a + this.step;
+    const west = Math.min(a, b),
+      east = Math.max(a, b);
+    return (
+      overlaps(line.cover, west, east) &&
+      insideCell(line.regions, west, east) &&
+      !overlaps(line.blocked, west, east) &&
+      (!overlaps(line.water, west, east) || insideCell(line.bridges, west, east))
+    );
+  }
   hasPoint(col: number, row: number, bit: number) {
     return contains(
       this.row(row * this.side + Math.floor(bit / this.side)).regions[1],

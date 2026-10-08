@@ -37,6 +37,10 @@ export const PROCESSION = {
     stream: 0.9,
     tail: 0.6,
     verge: 0.7,
+    /** Procession spectators far ahead, and those left once it has passed by `gather` m. */
+    waiting: 0.35,
+    passed: 0.15,
+    gather: 300,
     mass: 0.95,
     bank: 0.7,
     uniforms: [3, 4, 5, 6, 7, 8, 9, 10] as const,
