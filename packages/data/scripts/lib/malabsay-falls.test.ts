@@ -22,7 +22,11 @@ const landmark = Landmark.parse(readPack('landmarks', 'malabsay-falls'));
 const detail = SiteDetail.parse(readPack('details', 'malabsay-falls'));
 const cover = Landcover.parse(readPack('landcover', 'malabsay-falls'));
 const source = readFixture('malabsay-falls-parents.json') as AtlasFeature[];
-const content = { landmarks: [landmark], 'name-history': [] } as unknown as ContentBundle;
+const content = {
+  landmarks: [landmark],
+  dishes: [],
+  'name-history': [],
+} as unknown as ContentBundle;
 const joined = mergeContent(structuredClone(source), content);
 const land = landcoverFeatures(joined, [cover]);
 const result = mergeSiteDetails([...joined, ...land.features], [detail]);
