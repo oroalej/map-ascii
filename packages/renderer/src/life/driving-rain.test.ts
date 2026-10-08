@@ -30,6 +30,8 @@ it('eases to wet cruise and back within the existing acceleration and braking bo
 it('settles at a longer following gap when wet while preserving physical safety caps', () => {
   const gaps = [0, 1].map((rain) => {
     const life = driveRoad();
+    // Isolate following: a second directional lane permits a legitimate pass of the slow lead.
+    life.geo.widths[0] = 6;
     driveStreams(life).rushRng = () => 1;
     const follower = driveMover(life, 500),
       leader = driveMover(life, 700, 2);

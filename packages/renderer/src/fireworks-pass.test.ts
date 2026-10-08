@@ -107,6 +107,7 @@ describe('seasonal GPU fireworks', () => {
           clocks: false,
           seasonal: false,
           fireworks: true,
+          folklore: false,
           cancel: vi.fn(),
           pending: { key: 8, program: { ready: () => false, finish, cancel: vi.fn() } },
         };

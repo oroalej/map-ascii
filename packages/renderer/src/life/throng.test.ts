@@ -13,6 +13,7 @@ import { themes, mapGlyphs } from '../theme';
 import type { GridPlacement } from '../grid';
 import { TIERS } from '../quality';
 import { ProcessionGlyph } from './procession-glyphs';
+import { FOLKLORE_GLYPHS } from './folklore-glyphs';
 import { drawProcedural } from '../glyphs/atlas';
 const frame = localMetricProjection([0, 0]),
   q = (x: number, y: number) => frame.from([x, y]);
@@ -448,7 +449,9 @@ it('rasterizes every new crowd/altar glyph without changing legacy map positions
     ).toBe(true);
     expect(data.some((x) => x > 0)).toBe(true);
   }
-  expect(glyphs.indexOf(ProcessionGlyph.crowd0)).toBe(glyphs.indexOf(ProcessionGlyph.bugle) + 1);
+  expect(glyphs.indexOf(ProcessionGlyph.crowd0)).toBe(
+    glyphs.indexOf(ProcessionGlyph.bugle) + 1 + FOLKLORE_GLYPHS.length,
+  );
   expect(glyphs.indexOf(ProcessionGlyph.support)).toBe(glyphs.indexOf(ProcessionGlyph.crowd0) + 7);
 });
 

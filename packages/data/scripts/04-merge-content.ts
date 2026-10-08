@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import { SubdivisionAreas, type BBox } from '@atlas/shared';
+import { SubdivisionAreas } from '@atlas/shared';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
@@ -17,6 +17,7 @@ import { applyRoadExclusions } from './lib/streets';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 import { writeDetailLayouts } from './lib/detail-layout';
+import { Territory, inTerritory, removeVoid } from './lib/territory';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
@@ -73,24 +74,32 @@ export function addLabelAnchor(feature: AtlasFeature) {
   p.label_lat = Math.round(lat * 1e7) / 1e7;
 }
 
-/**
- * Problems with the city's tours against its data: steps that select or highlight a feature
- * that isn't there, or whose camera is outside the region (where the atlas can't go).
- */
+const cameraProblem = (where: string, lng: number, lat: number, territory: Territory) =>
+  inTerritory(lng, lat, territory)
+    ? []
+    : [
+        `${where}: camera ${lat}, ${lng} is outside the ${territory.territory ? 'territory' : 'region'}`,
+      ];
+
+/** Camera admission can fail before generating any curated display parts. */
+export function checkTourCameras(tours: ContentBundle['tours'], territory: Territory): string[] {
+  return tours.flatMap((tour) =>
+    tour.steps.flatMap((step, i) =>
+      cameraProblem(`${tour.id} step ${i + 1}`, step.camera.lng, step.camera.lat, territory),
+    ),
+  );
+}
+
+/** Check completed survivor identities; camera admission is checked before enrichment. */
 export function checkTours(
   features: readonly AtlasFeature[],
   tours: ContentBundle['tours'],
-  [west, south, east, north]: BBox,
 ): string[] {
   const ids = new Set(features.map((f) => f.properties.id));
   const problems: string[] = [];
   for (const tour of tours) {
     tour.steps.forEach((step, i) => {
       const where = `${tour.id} step ${i + 1}`;
-      const { lng, lat } = step.camera;
-      if (lng < west || lng > east || lat < south || lat > north) {
-        problems.push(`${where}: camera ${lat}, ${lng} is outside the region`);
-      }
       for (const id of [...(step.select ? [step.select] : []), ...(step.highlight ?? [])]) {
         if (!ids.has(id)) problems.push(`${where}: ${id} is not in the data`);
       }
@@ -110,6 +119,14 @@ export const step: Step = {
     }
     features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
+    const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const cameraProblems = checkTourCameras(content.tours, territory);
+    if (cameraProblems.length > 0)
+      throw new Error(`Tours don't match the data:\n  ${cameraProblems.join('\n  ')}`);
+    for (const site of city.life?.sites ?? []) {
+      if (site.position && !inTerritory(...site.position, territory))
+        throw new Error(`Life site ${site.id}: position is outside the territory`);
+    }
     const merged = applyLandcoverTreeOverrides(
       mergeTraffic(
         mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
@@ -119,10 +136,6 @@ export const step: Step = {
       ),
       content.landcover,
     );
-    const tourProblems = checkTours(merged, content.tours, regionBounds);
-    if (tourProblems.length > 0) {
-      throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
-    }
     // Plan-view landmark parts (belfries, domes, tiered bases) as their own small footprints.
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
@@ -142,6 +155,24 @@ export const step: Step = {
     }
     const roofs = enrichRoofs(cemeteries.features);
     finalizeDetailSelections(cemeteries.features);
+    const tourIds = new Set(
+      content.tours.flatMap((tour) =>
+        tour.steps.flatMap((step) => [
+          ...(step.select ? [step.select] : []),
+          ...(step.highlight ?? []),
+        ]),
+      ),
+    );
+    const tourProblems = content.tours.length
+      ? checkTours(
+          cemeteries.features.filter(
+            (f) => tourIds.has(f.properties.id) && removeVoid(f, territory) !== undefined,
+          ),
+          content.tours,
+        )
+      : [];
+    if (tourProblems.length > 0)
+      throw new Error(`Tours don't match the data:\n  ${tourProblems.join('\n  ')}`);
     console.log(`  roofs: ${JSON.stringify(roofs)}`);
     await writeFeatures(join(buildDir, files.merged), cemeteries.features);
     console.log(

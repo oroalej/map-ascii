@@ -167,6 +167,7 @@ describe('street event simulation', () => {
         kind: 'vehicle',
         vehicle: 'car',
         group: undefined,
+        lane: 0.5,
       };
       const lanes = life as unknown as {
         bendOn(mover: Mover, line: number, dir: 1 | -1, travelled: number): number;

@@ -6,6 +6,7 @@ import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
 import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
+import { folkloreConfig, folkloreTile, calendar, folkloreCenter } from './testing/folklore';
 import { emergencyConfig, emergencyFixture } from './testing/emergency';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
@@ -32,6 +33,7 @@ const flush = async () => {
   for (let i = 0; i < 6; i++) await Promise.resolve();
 };
 const result = (clock: number): FrameResult => ({
+  folklore: { sprites: [], haunts: [] },
   agents: [],
   puffs: new Float64Array(0),
   procession: undefined,
@@ -217,6 +219,100 @@ describe('pipelined Life host', () => {
     expect(host.latest()?.throngRun).toBeUndefined();
     host.dispose();
   });
+
+  it.each(['worker', 'inline', 'fallback'] as const)(
+    'invalidates only folklore across settings changes in the %s host',
+    async (mode) => {
+      const s = fixture(),
+        person: VisibleAgent = { kind: 'person', lng: 123, lat: 13, flap: 0 },
+        packet: FrameResult['folklore'] = {
+          sprites: [
+            {
+              id: 'ghost',
+              kind: 'ghost',
+              lng: 123,
+              lat: 13,
+              heading: 0,
+              pose: 'breath',
+              alpha: 0.5,
+              phase: 0,
+              wisp: 0,
+            },
+          ],
+          haunts: [{ id: 'ghost', lng: 123, lat: 13, radius: 8 }],
+        };
+      if (mode === 'fallback') mock.init.mockRejectedValueOnce(new Error('startup'));
+      if (mode !== 'worker') {
+        vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
+        vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue(packet);
+      }
+      const host = mode === 'inline' ? createInlineHost(new LifeWorld()) : createWorkerHost({}, []);
+      host.sync(s.tiles);
+      await flush();
+      mock.frame.mockResolvedValueOnce({ ...result(1), agents: [person], folklore: packet });
+      host.request(s.input);
+      await flush();
+      const previous = host.latest()!;
+      let resolve!: (reply: FrameResult) => void;
+      if (mode === 'worker') {
+        mock.frame.mockImplementationOnce(
+          () =>
+            new Promise((done) => {
+              resolve = done;
+            }),
+        );
+        host.request(s.input);
+      }
+      // Wind and fixed Time both clear observer output while the ordinary frame is usable.
+      host.invalidateFolklore();
+      host.invalidateFolklore();
+      expect(host.latest()?.agents).toBe(previous.agents);
+      expect(host.latest()?.puffs).toBe(previous.puffs);
+      expect(host.latest()?.cellGuard).toBe(previous.cellGuard);
+      expect(host.latest()?.folklore).toEqual({ sprites: [], haunts: [] });
+      if (mode === 'worker') {
+        resolve({ ...result(2), agents: [{ ...person, lng: 124 }], folklore: packet });
+        await flush();
+        expect(host.latest()?.agents[0]?.lng).toBe(124);
+        expect(host.latest()?.folklore).toEqual({ sprites: [], haunts: [] });
+      }
+      mock.frame.mockResolvedValueOnce({ ...result(3), agents: [person], folklore: packet });
+      host.request(s.input);
+      await flush();
+      expect(host.latest()?.folklore).toEqual(packet);
+      host.dispose();
+    },
+  );
+
+  it('keeps folklore configuration after worker startup falls back inline', async () => {
+    mock.init.mockRejectedValueOnce(new Error('startup'));
+    const t = folkloreTile(),
+      host = createWorkerHost(
+        {
+          cityLife: {
+            source: 'test',
+            seasons: [
+              { id: 'all-saints', title: { en: 'Undas' }, window: folkloreConfig.undasWindow },
+            ],
+            folklore: { ...folkloreConfig, sources: [{ title: 'test' }] },
+          },
+        },
+        [],
+      ),
+      s = fixture();
+    host.sync([{ key: t.key, tile: t.tile, life: t.geo }]);
+    await flush();
+    s.input.step.dt = 6;
+    s.input.step.weather = { rain: 0, minutes: 1320, folkloreDate: calendar() };
+    s.input.visible[2] = folkloreCenter;
+    host.request(s.input);
+    host.request(s.input);
+    expect(host.latest()?.folklore.sprites.length).toBeGreaterThan(0);
+    host.invalidateFrame();
+    expect(host.latest()?.folklore.haunts).toEqual([]);
+    host.dispose();
+  });
+
   it('rejects stale emergency drawables while retaining terrain after a late network command', async () => {
     const s = fixture(),
       { data } = emergencyFixture(),
@@ -256,11 +352,31 @@ describe('pipelined Life host', () => {
     host.sync(s.tiles);
     await flush();
     const marked = { kind: 'person' as const, lng: 123, lat: 13, flap: 0, mappedPersonMover: true };
-    const accepted = { ...result(1), agents: [marked] };
+    const accepted: FrameResult = {
+      ...result(1),
+      agents: [marked],
+      folklore: {
+        sprites: [
+          {
+            id: 'g',
+            kind: 'ghost',
+            lng: 123,
+            lat: 13,
+            heading: 0,
+            pose: 'breath',
+            alpha: 0.5,
+            phase: 0,
+            wisp: 0,
+          },
+        ],
+        haunts: [{ id: 'g', lng: 123, lat: 13, radius: 8 }],
+      },
+    };
     mock.frame.mockResolvedValueOnce(accepted);
     host.request(s.input);
     await flush();
     expect(host.latest()?.agents).toEqual([marked]);
+    expect(host.latest()?.folklore).toEqual(accepted.folklore);
     const saved = structuredClone(host.latest()?.agents);
     let resolve!: (reply: FrameResult) => void;
     mock.frame.mockImplementationOnce(
@@ -271,6 +387,7 @@ describe('pipelined Life host', () => {
     );
     host.request(s.input);
     host.invalidateFrame();
+    expect(host.latest()?.folklore.sprites).toEqual([]);
     resolve({ ...result(2), agents: [{ ...marked, lng: 124 }] });
     await flush();
     expect(host.latest()?.agents).toEqual([]);

@@ -265,6 +265,27 @@ const mount = async (instance: ReturnType<typeof renderer>) => {
     await Promise.resolve();
   });
 };
+it('shows folklore at z15 and drops visibility on Life off, events and renderer replacement', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 15 } });
+  await mount(instance);
+  const shown = () => labels().some((l) => l?.includes('Folklore (simulated)'));
+  expect(shown()).toBe(false);
+  act(() => instance.emit('folklorechange', true));
+  expect(shown()).toBe(true);
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(shown()).toBe(false);
+  act(() => useLifeStore.setState({ enabled: true }));
+  act(() => instance.emit('folklorechange', false));
+  expect(shown()).toBe(false);
+  act(() => instance.emit('folklorechange', true));
+  const next = renderer();
+  await mount(next);
+  expect(shown()).toBe(false);
+  act(() => instance.emit('folklorechange', true));
+  expect(shown()).toBe(false);
+});
 
 it('updates the mood legend when emoji is toggled without replacing the atlas', async () => {
   const instance = renderer();

@@ -1,6 +1,6 @@
 # Naga ambient dialogue
 
-The catalog contains 100 short, fictional scenes in 15 categories: 40 one-speaker utterances and 60 exchanges. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
+The catalog contains 104 short, fictional scenes in 15 categories: 42 one-speaker utterances and 62 exchanges. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
 
 New scripts are original compositions. [Jon Epstein's *Standard Bikol* (Peace Corps, 1967)](https://files.eric.ed.gov/fulltext/ED018772.pdf) supplies grammatical reference for actor/goal focus, pronouns, questions and demonstratives. [Malcolm Mintz's *Bikol Dictionary* (University of Hawaii Press, 1971)](https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary) supplies lexical reference. Existing catalog entries retain their original sources. A reference supports language forms; it does not attest each authored sentence.
 
@@ -53,3 +53,14 @@ At this stage, the catalog had 100 scenes and 199 turns with the same category a
 A further pass reviewed every exchange against identifiable local speech, Naga-authored writing, regional published Bikol and grammar references. It revised 20 exchanges (25 turns), including the remaining halat-family inconsistencies, deliberate-looking wording and shorter hungry/tired replies. The owner's Halaton correction and preference to avoid andam remain in force.
 
 [The local usage audit](dialogue-usage-review.md) records the evidence, its limits and a retain/revise decision for all 100 IDs. Actual local examples support several word families. None of those sources certifies our complete authored exchanges or establishes how frequently people use them. Independent review of the complete catalog by a Naga speaker remains pending. References are used as language evidence; no news claim or factual detail from those sources is incorporated into the simulation.
+
+## Heat and clearing scenes (2026-10-07)
+
+Four weather IDs bring the current inventory to 104 scenes (42 utterances and 62 exchanges), with weather increasing from eight to twelve; other categories retain their counts. Historical audit totals above describe their original inventories.
+
+- `weather-heat-rest` combines ABANG/INIT (intensifier and heat) with DIGDI/SANA/KITA (here, just, inclusive we) as a brief rest exchange.
+- `weather-heat-here` uses the MA- adjective of INIT, also attested as mainit in the LALO NA and MEDIO examples, with DIGDI.
+- `weather-clearing-leave` combines MAYO/NA/NIN/URAN (there is none, now, indefinite marker, rain) and SIGE NA (go ahead).
+- `weather-clearing-linger` combines DIGDI/PA/AKO (here, still, I) as an independent observation.
+
+Every word was checked against Mintz's 1971 dictionary, downloaded from its University of Hawaii Press Manifold page. Stress marks are omitted following the existing catalog convention; no new spellings are inferred. These are original fictional compositions, with English and Tagalog meanings rather than literal quotations. Native-speaker review remains pending. The proposed fierce-sun and renewed-rain warnings were omitted in favor of these short supported compositions. Heat is the shared dry/high-sun midday rule, not measured temperature; clearing lines belong only to current post-rain shelter countdowns.

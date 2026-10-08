@@ -16,8 +16,8 @@ Other sessions may have uncommitted edits in this checkout. Read the PR's code f
 
 1. Claude's review (the file path in the prompt).
 2. `AGENTS.md`: conventions, the "Verifying changes" table, and the Don'ts.
-3. The PR: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. In a full round, also `gh pr diff <N>`. In a delta round, read `git diff <since> <headRefOid>` instead, and the ledger named in the prompt.
-4. If `.plans/README.md` in the main checkout lists the PR's branch, read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
+3. The PR's intent: `gh pr view <N> --json title,body,files,commits` and `gh pr checks <N>`. **Do not read the whole diff.** Your job is to check Claude's cited claims, so read the cited `path:line` on the head commit (`git show <headRefOid>:<path>`) with its callers and tests; the full-diff audit made validation take 35–40 minutes on large PRs for one extra finding. In a delta round, read the ledger named in the prompt and `git log -p --first-parent --no-merges <since>..<headRefOid>` for the fix commits only.
+4. If the main checkout's `.plans/README.md` has a row for the PR's branch (search for it; don't read the whole index), read that task's `handoff.md` for the PR's intent, invariants, and out-of-scope list.
 
 ## Delta rounds
 
@@ -27,9 +27,9 @@ When the prompt says `Scope: delta since <sha>`, Claude reviewed only the fix co
 - For each ledger entry these commits claim to fix, check that the fix really resolves it. An entry that still holds goes under "Noticed" with its ledger ID, unless the ledger marks it `open`: it's already carried in the PR body.
 - For "Noticed", inspect the delta, the callers and tests of changed code, and the ledger's open entries. Don't re-audit untouched files, but read anything outside the delta that the evidence needs.
 
-## Validate every entry
+## Validate every blocker and should-fix entry
 
-Go through every Blocker, Should-fix, and Nit in Claude's review. For each one:
+Go through every Blocker and Should-fix in Claude's review. **Skip the nits:** the fixer never fixes them (they go into the PR body for the owner), so validating them is wasted work; write their count in one line under the table. For each blocker or should-fix entry:
 
 1. Read the cited `path:line` on the head commit, plus enough of the surrounding code and callers to judge it.
 2. Check the claim:
@@ -48,7 +48,7 @@ Go through every Blocker, Should-fix, and Nit in Claude's review. For each one:
    - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
    - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness. If it's unclear whether something is a should-fix or a nit, it's a nit. Only blockers and should-fix items start another round.
 
-Don't add findings of your own. If you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with an id `N<n>`, its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. Prove it the same way. The fixer fixes a noticed blocker or should-fix in this round like any valid entry, so give each one a fix step (`**N<n> <severity>**`). Noticed nits get no fix step.
+Don't add findings of your own, and don't audit code Claude didn't cite. If, while checking the cited code and its callers, you notice something serious that Claude missed, list it under "Noticed, not in Claude's review", with an id `N<n>`, its `path:line` and a severity (blocker / should-fix / nit), judged as strictly as Claude's entries. Prove it the same way. The fixer fixes a noticed blocker or should-fix in this round like any valid entry, so give each one a fix step (`**N<n> <severity>**`). Noticed nits get no fix step.
 
 ## Output
 
@@ -72,6 +72,6 @@ Your final message is saved as `validation.md` and drives the fixes. Use exactly
 - **N<n> <blocker | should-fix | nit>** <path:line — one line> — <evidence> (or "None")
 ```
 
-- Include every entry in the Validation table, invalid ones too.
-- Fix steps cover the valid and partly valid entries plus noticed blockers and should-fix items, ordered blockers, then should-fix, then nits. Merge entries that change the same code into one step.
+- Include every blocker and should-fix entry in the Validation table, invalid ones too; nits only as a count line below it.
+- Fix steps cover the valid and partly valid entries plus noticed blockers and should-fix items, ordered blockers, then should-fix. Merge entries that change the same code into one step.
 - If no entry is valid and nothing serious was noticed, write "No valid entries" under Fix steps.

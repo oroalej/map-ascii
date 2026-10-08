@@ -61,6 +61,7 @@ export class TileCache {
     fireworks = false,
     fireworksActive = false,
     memorials = false,
+    folklore = false,
   ) {
     this.meshes = this.createCache();
     this.source = new TileSource(
@@ -104,6 +105,7 @@ export class TileCache {
       fireworks,
       fireworksActive,
       memorials,
+      folklore,
     );
   }
 

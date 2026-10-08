@@ -1,7 +1,7 @@
 ---
 name: review-pr
 description: Review an ASCII Atlas pull request, branch, or diff for correctness, code quality, reuse, performance, test/CI cost, and AGENTS.md project rules. Reports verified, ranked findings with path:line and suggested fixes, then fixes the blockers and should-fix items (report only with --report-only). Use when asked to review a PR, a branch, or the current changes.
-argument-hint: '[PR number | branch] [--report-only] [--since <sha>] [--ledger <path>]'
+argument-hint: '[PR number | branch] [--report-only] [--since <sha>] [--delta <path>] [--ledger <path>]'
 allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bash(gh pr list:*), Bash(git diff:*), Bash(git log:*), Bash(git show:*), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(git merge-base:*), Bash(git rev-parse:*), Bash(git grep:*), Read, Grep, Glob, Agent
 ---
 
@@ -10,6 +10,7 @@ allowed-tools: Bash(gh pr view:*), Bash(gh pr diff:*), Bash(gh pr checks:*), Bas
 Target: `$ARGUMENTS` (a PR number, a branch name, or empty for the current branch, optionally followed by `--report-only`, `--since <sha>` and `--ledger <path>`).
 
 - `--since <sha>`: **delta mode**. An earlier round already reviewed the PR at `<sha>`; review only what changed since then (step 3).
+- `--delta <path>`: the patch to review in delta mode: the branch's own commits since `<sha>`, with any clean main synchronization left out. Read this file instead of running `git diff <sha> <head>`, which would include everything main merged in.
 - `--ledger <path>`: earlier rounds' findings, with stable IDs such as `r1.2`, and rejected claims. Read it before reviewing. Don't re-report a rejected claim unless its code changed.
 
 Steps 1–5 are review only: no edits, comments, commits or pushes. Step 6 then fixes the findings, unless `--report-only` was given. `$review-pr` passes `--report-only`, because its validator and fixer run separately and its baseline check expects this process to leave the checkout unchanged.
@@ -48,16 +49,16 @@ Save the full diff to the session scratchpad directory (or the OS temp dir), nev
 
 Work economically: every tool call re-reads the whole conversation so far. Batch independent reads into one message, and read line ranges around the changed hunks (`git diff -U20`, `sed -n`) rather than whole files. Some files run to thousands of lines.
 
-**Delta mode (`--since <sha>`):** review `git diff <sha> <head>` yourself, with no subagents. In step 2, read only what the delta needs: the PR title, the handoff's invariants and the touched docs.
+**Delta mode (`--since <sha>`):** review the `--delta` patch (or `git diff <sha> <head>` when none was given) yourself, with no subagents. In step 2, read only what the delta needs: the PR title, the handoff's invariants and the touched docs.
 - Check every fix against the ledger entry it addresses. An entry that is still unresolved gets reported again under its ledger ID (`r1.2 — still …`). Don't report an entry the ledger marks `open`: it's already carried in the PR body.
 - Find the callers and tests of every changed function, type or constant (`git grep`), and report regressions beyond the changed lines.
 - Read beyond the delta whenever the evidence needs it, but don't re-audit untouched code. Earlier rounds reviewed it.
 - The report keeps the step 5 shape. "Checked, no issues" names what the delta covered.
 
-**Full review:** this is the only pass over the whole PR. Later rounds review only the fixes, so a defect left out now ships or costs another round. Report every one you can prove. Count the changed lines and files (`git diff --shortstat`).
+**Full review:** this is the only pass over the whole PR. Round 2 reviews only the fixes, so a blocker or should-fix left out now ships or costs the one remaining round. Report every blocker and should-fix you can prove; keep nits to the ten that matter most, since `$review-pr` lists them in the PR body for the owner and never fixes them. Count the changed lines and files (`git diff --shortstat`).
 
-- **Small diff** (under ~300 changed lines and at most 8 files): review it yourself, going through all four checklist areas.
-- **Larger diff:** split the review by files, not by area. Use `n = min(6, max(2, ceil(changed lines / 1000)))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
+- **Up to ~1500 changed lines:** review it yourself, going through all four checklist areas. Read hunks with context, not whole files; subagents cost 86 % of a round's tokens and are not needed at this size.
+- **Larger diff:** split the review by files, not by area. Use `n = min(3, ceil(changed lines / 1500))` subagents. Group the changed files into `n` groups by package or directory, with roughly equal changed lines, and keep a file with its test. In one message, launch `n` `general-purpose` subagents in parallel, one per group.
 
   Give each one:
   - its file list, and a diff of only those files saved to the scratchpad (`git diff <base>...<head> -- <files>`), plus the head ref (so it can `git show <ref>:<path>`)
@@ -65,7 +66,7 @@ Work economically: every tool call re-reads the whole conversation so far. Batch
   - the instruction to read `.claude/skills/review-pr/checklist.md` and apply all four areas (A correctness, B performance and cost, C quality and reuse, D project rules, tests and docs) to its files. It may read callers and code outside its group to judge them.
   - the economy rules above: batch reads, and read hunks with context instead of whole files
   - the rules: read-only, no checkout, and no findings CI already catches (ESLint, typecheck, `no-hardcoding.test.ts`, `check:budgets`)
-  - the severity definitions below and the finding format; it returns every finding it can prove, with no count limit
+  - the severity definitions below and the finding format; it returns every blocker and should-fix it can prove, and at most five nits
 
   Finding format:
 
@@ -95,7 +96,7 @@ For each candidate finding, yours or a subagent's:
   - **blocker:** wrong behavior a user or CI would hit, with a concrete failing scenario. That covers a crash, wrong output, a failing or broken test, data loss, a broken `AGENTS.md` rule (attribution, a hardcoded city, Google imagery, a backend), or a budget breach.
   - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
   - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness.
-  - If it's unclear whether something is a should-fix or a nit, it's a nit. `$review-pr` runs another round only for blockers and should-fix items.
+  - If it's unclear whether something is a should-fix or a nit, it's a nit. `$review-pr` fixes and re-reviews only blockers and should-fix items; nits go to the PR body unfixed.
 
 ## 5. Report
 
@@ -117,7 +118,7 @@ Write the report in chat, in this shape:
 **Not checked:** e.g. physical-device FPS, browser visuals, the data pipeline run
 ```
 
-- Report every verified finding, with no count limit. Blockers come first, then should-fix, then nits, each section ordered by impact.
+- Report every verified blocker and should-fix, and at most ten nits. Blockers come first, then should-fix, then nits, each section ordered by impact.
 - Omit empty severity sections.
 - Use `path:line` so the references are clickable.
 - If CI is failing or pending, say so above the verdict.

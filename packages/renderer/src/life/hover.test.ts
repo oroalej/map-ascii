@@ -5,6 +5,40 @@ import { LifeHoverController } from './hover';
 import { lifeVisibleOnSurface } from './surface-visibility';
 import { CellBit } from './config';
 import type { ReadRect } from '../readback';
+import type { FolkloreSprite } from './folklore';
+
+it.each(['ghost', 'manananggal', 'lower-half'] as const)(
+  'describes %s with an empty ordinary raster and no physical inspection',
+  (kind) => {
+    const f = fixture();
+    const sprite: FolkloreSprite = {
+      id: 'folklore',
+      kind,
+      lng: 0,
+      lat: 0,
+      heading: 0,
+      pose: 'breath',
+      alpha: 0.5,
+      phase: 0,
+      wisp: 0,
+    };
+    f.frame.owners = new Uint32Array(0);
+    f.frame.agents = [];
+    f.frame.folklore = [{ sprite, x: 12.5, y: 12.5, w: 20, h: 20, glyph: 0 }];
+    f.hover.pointer([10, 10]);
+    f.hover.update(f.frame, 0);
+    expect(f.emit).toHaveBeenLastCalledWith({
+      label: kind === 'ghost' ? 'Ghost (folklore, simulated)' : 'Manananggal (folklore, simulated)',
+      point: [10, 10],
+    });
+    expect(f.requests).toEqual([]);
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.inspectItem).not.toHaveBeenCalled();
+    f.frame.labelsCover = () => true;
+    f.hover.update(f.frame, 1);
+    expect(f.emit).toHaveBeenLastCalledWith({ label: null, point: null });
+  },
+);
 
 function fixture() {
   const requests: {
@@ -191,6 +225,39 @@ it('renews stable identities at 125 ms while unrelated raster revisions and arra
   expect(inspectItem).toHaveBeenLastCalledWith(null);
   expect(requests).toHaveLength(3);
 });
+it('publishes a moving bird tooltip without either inspection callback, then inspects a person', () => {
+  const { hover, frame, finish, emit, inspect, inspectItem } = fixture();
+  frame.life[1] = classId('life_bird');
+  frame.life[2] = CellBit.bird;
+  frame.agents = [
+    {
+      kind: 'bird',
+      lng: 0,
+      lat: 0,
+      flap: 0,
+      inspectionId: 10,
+      bird: { species: 'pigeon', pose: 0 },
+    },
+  ];
+  hover.pointer([2, 3]);
+  hover.update(frame, 0);
+  finish();
+  hover.update(frame, 1);
+  expect(emit).toHaveBeenLastCalledWith({ label: 'Pigeon (simulated)', point: [2, 3] });
+  frame.agents = [{ ...frame.agents[0]!, lng: 1, flap: 1 }];
+  hover.update(frame, 16);
+  expect(inspect).not.toHaveBeenCalled();
+  expect(inspectItem).not.toHaveBeenCalled();
+  frame.life[1] = classId('life_person');
+  frame.life[2] = CellBit.person;
+  frame.agents = [{ kind: 'person', lng: 0, lat: 0, flap: 0, inspectionId: 11 }];
+  hover.update(frame, 32);
+  finish();
+  hover.update(frame, 33);
+  expect(inspect).toHaveBeenLastCalledWith(true);
+  expect(inspectItem).toHaveBeenLastCalledWith(frame.agents[0]);
+});
+
 it('checks surfaces, trees, grounds and birds using agent permissions only', () => {
   const person = classId('life_person'),
     bird = classId('life_bird'),

@@ -68,6 +68,7 @@ it('extracts drawable sites only when active, while finishing queued supplementa
       { z: 12, x: n, y: 2 },
       16,
       active,
+      false,
     );
   }
   send({ type: 'residential', key: 'residential/12/1/2', z: 12, x: 1, y: 2 });
@@ -77,6 +78,32 @@ it('extracts drawable sites only when active, while finishing queued supplementa
     expect.any(Array),
   );
 });
+
+it.each([false, true])(
+  'passes the folklore=%s pack capability into tile extraction',
+  async (folklore) => {
+    fixtures.fetch.mockResolvedValue({ data: new Uint8Array() });
+    const scope = {
+      postMessage: vi.fn(),
+      onmessage: null as ((event: MessageEvent<WorkerRequest>) => void) | null,
+    };
+    vi.stubGlobal('self', scope);
+    await import('./tiles.worker');
+    const send = (data: WorkerRequest) => scope.onmessage!({ data } as MessageEvent<WorkerRequest>);
+    send({ type: 'init', url: '/test.pmtiles', folklore });
+    await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(1));
+    send({ type: 'tile', key: '16/1/2', z: 16, x: 1, y: 2 });
+    await vi.waitFor(() => expect(fixtures.geometry).toHaveBeenCalledOnce());
+    expect(fixtures.geometry).toHaveBeenCalledWith(
+      {},
+      expect.anything(),
+      { z: 16, x: 1, y: 2 },
+      16,
+      false,
+      folklore,
+    );
+  },
+);
 
 it('identifies failed drawable and residential requests so their queue slots can be released', async () => {
   const scope = {

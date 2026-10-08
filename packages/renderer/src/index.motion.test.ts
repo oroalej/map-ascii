@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
 import type { ProcessionRun } from './life/simulate';
@@ -45,7 +45,16 @@ import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
+import type * as FolklorePassModule from './folklore-pass';
+import type { FolkloreQuad } from './folklore-pass';
+import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
+import { viewportFor } from './camera';
+
+const folkloreCapture = vi.hoisted(() => ({
+  quads: undefined as readonly FolkloreQuad[] | undefined,
+  packet: undefined as FolklorePacket | undefined,
+}));
 
 const vehicleBuffers = () => ({
   stampedVehicles: new Uint8Array(0),
@@ -75,6 +84,14 @@ vi.mock('./gpu-context', () => ({
   deleteLabelGlyphs: vi.fn(),
 }));
 vi.mock('./fireworks-pass', () => ({ fireworksPass: vi.fn(), deleteFireworks: vi.fn() }));
+vi.mock('./folklore-pass', async (load) => ({
+  ...(await load<typeof FolklorePassModule>()),
+  folklorePass: vi.fn<typeof FolklorePassModule.folklorePass>(
+    (_gl, _programs, _targets, _theme, _view, _grid, quads) => {
+      folkloreCapture.quads = quads;
+    },
+  ),
+}));
 vi.mock('./gpu', async (load) => ({
   ...(await load<typeof GpuModule>()),
   createCellTargets: (
@@ -94,7 +111,30 @@ vi.mock('./passes', async (load) => {
     cellPass: vi.fn(),
     crownPass: vi.fn(),
     selectPass: vi.fn(),
-    glyphPass: vi.fn(),
+    glyphPass: vi.fn<typeof PassesModule.glyphPass>(
+      (
+        _gl,
+        _programs,
+        _targets,
+        _themeRes,
+        _theme,
+        _view,
+        _grid,
+        _labelGrid,
+        _time,
+        _reduced,
+        _daylight,
+        _weather,
+        _lampShow,
+        _moon,
+        _sun,
+        _focus,
+        _lifeTime,
+        folklore,
+      ) => {
+        folkloreCapture.packet = folklore;
+      },
+    ),
     streetTextPass: vi.fn(),
     overlayPass: vi.fn(() => []),
     labelsInView: vi.fn(actual.labelsInView),
@@ -264,6 +304,7 @@ describe('live motion preference', () => {
         procession: { id: event.id, progress: 0.4, live: false },
         throngRun: { id: event.id, progress: 0.4, live: false },
         cellGuard: () => undefined,
+        folklore: { sprites: [], haunts: [] },
       });
       return host;
     });
@@ -284,6 +325,73 @@ describe('live motion preference', () => {
           (args) => args[6].length === 0 && args[14]?.event === event && args[14]?.progress === 0.4,
         ),
     ).toBe(true);
+  });
+  it('keeps ordinary agents when Wind or Time changes clear folklore', () => {
+    atlas.destroy();
+    const original = Hosts.createInlineHost,
+      hosts: {
+        host: Hosts.LifeHost;
+        frame: MockInstance<() => void>;
+        folklore: MockInstance<() => void>;
+      }[] = [],
+      person = { kind: 'person' as const, lng: 0, lat: 0, flap: 0 };
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = original(...args);
+      const frame = vi.spyOn(host, 'invalidateFrame');
+      const folklore = vi.spyOn(host, 'invalidateFolklore');
+      hosts.push({ host, frame, folklore });
+      return host;
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+    });
+    draw(100);
+    const { host, frame, folklore } = hosts[0]!;
+    expect(host.latest()?.agents).toEqual([person]);
+    atlas.setLife({ wind: 'storm' });
+    atlas.setLife({ time: 1320 });
+    expect(host.latest()?.agents).toEqual([person]);
+    expect(folklore).toHaveBeenCalledTimes(2);
+    expect(frame).not.toHaveBeenCalled();
+  });
+
+  it('draws a folklore-only packet and clears visibility and haunts on inactive lifecycle gates', () => {
+    vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([]);
+    vi.spyOn(LifeWorld.prototype, 'visibleFolklore').mockReturnValue({
+      sprites: [
+        {
+          id: 'g',
+          kind: 'ghost',
+          lng: 0,
+          lat: 0,
+          heading: 0,
+          pose: 'breath',
+          alpha: 0.5,
+          phase: 0,
+          wisp: 0,
+        },
+      ],
+      haunts: [{ id: 'g', lng: 0, lat: 0, radius: 8 }],
+    });
+    const changed = vi.fn();
+    atlas.on('folklorechange', changed);
+    draw(100);
+    expect(changed).toHaveBeenCalledWith(true);
+    expect(folkloreCapture.quads).toHaveLength(1);
+    atlas.setLife({ enabled: false });
+    expect(changed).toHaveBeenLastCalledWith(false);
+    draw(200);
+    expect(folkloreCapture.packet?.haunts ?? []).toEqual([]);
+    atlas.setLife({ enabled: true });
+    draw(300);
+    expect(changed).toHaveBeenLastCalledWith(true);
+    atlas.setReducedMotion(true);
+    expect(changed).toHaveBeenLastCalledWith(false);
   });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
@@ -339,6 +447,8 @@ describe('live motion preference', () => {
   };
   beforeEach(() => {
     vi.clearAllMocks();
+    folkloreCapture.quads = undefined;
+    folkloreCapture.packet = undefined;
     labelFixture.enabled = false;
     vi.mocked(overlayPass).mockReset().mockReturnValue([]);
     visibility.watched = true;
@@ -506,6 +616,10 @@ describe('live motion preference', () => {
       weekday: cityTime(date, zone).weekday,
       preview: true,
     });
+    expect(weather().folkloreDate).toEqual({
+      epochDay: cityTime(atCityMinutes(date, zone, 720), zone).day,
+      preview: 'preview',
+    });
     expect(weather().sunAltitude).toBe(
       solarPosition(atCityMinutes(date, zone, 720), 0, 0).altitude,
     );
@@ -559,6 +673,7 @@ describe('live motion preference', () => {
       false,
       false,
       true,
+      false,
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -669,6 +784,7 @@ describe('live motion preference', () => {
       true,
       false,
       false,
+      false,
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
@@ -709,6 +825,68 @@ describe('live motion preference', () => {
     draw(200);
   };
 
+  it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', () => {
+    const frames: FrameInput[] = [];
+    const createInline = Hosts.createInlineHost;
+    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+      const host = createInline(...args);
+      const request = host.request.bind(host);
+      host.request = (frame) => {
+        frames.push(frame);
+        return request(frame);
+      };
+      return host;
+    });
+    usePauseMode('item');
+    draw(100);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(150);
+    const frame = frames.at(-1)!;
+    expect(frame.step.pointer).toEqual(
+      viewportFor(frame.gust.camera, frame.gust.size).unproject([120, 90]),
+    );
+    draw(200);
+    expect(frames.at(-1)!.step.pointer).toBe(frame.step.pointer);
+    Object.defineProperty(canvas, 'clientWidth', { value: 500, configurable: true });
+    resized([], {} as ResizeObserver);
+    draw(250);
+    const resizedFrame = frames.at(-1)!;
+    expect(resizedFrame.step.pointer).not.toBe(frame.step.pointer);
+    expect(resizedFrame.step.pointer).toEqual(
+      viewportFor(resizedFrame.gust.camera, resizedFrame.gust.size).unproject([120, 90]),
+    );
+    expect(frame.step.pointer).toEqual(
+      viewportFor(frame.gust.camera, frame.gust.size).unproject([120, 90]),
+    );
+    // Press and leave both clear hover in attachInput; the renderer receives null.
+    input.intents!.hover(null);
+    draw(300);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(350);
+    input.intents!.pan(1, 0);
+    draw(400);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    input.intents!.hover([120, 90]);
+    draw(450);
+    const movedFrame = frames.at(-1)!;
+    expect(movedFrame.step.pointer).not.toBe(resizedFrame.step.pointer);
+    expect(movedFrame.step.pointer).toEqual(
+      viewportFor(movedFrame.gust.camera, movedFrame.gust.size).unproject([120, 90]),
+    );
+    atlas.flyTo({ lng: 0.01 }, { duration: 1000 });
+    draw(500);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    draw(1600);
+    input.intents!.hover([120, 90]);
+    atlas.setLife({ enabled: false });
+    draw(1650);
+    atlas.setLife({ enabled: true });
+    draw(1700);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+  });
+
   it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
     atlas.destroy();
     let generation = 1,
@@ -723,6 +901,7 @@ describe('live motion preference', () => {
       latest = {
         generation,
         puffs: new Float64Array(0),
+        folklore: { sprites: [], haunts: [] },
         signalClock: clock,
         procession: undefined,
         cellGuard: () => undefined,
@@ -735,6 +914,7 @@ describe('live motion preference', () => {
     });
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -886,6 +1066,7 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 1,
       cellGuard: () => undefined,
     };
@@ -893,6 +1074,7 @@ describe('live motion preference', () => {
     const request = vi.fn<(input: FrameInput) => boolean>(() => true);
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request,
@@ -917,6 +1099,7 @@ describe('live motion preference', () => {
     latest = {
       ...original,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 2,
       agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
       cellGuard: () => undefined,
@@ -945,11 +1128,13 @@ describe('live motion preference', () => {
       agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
       procession: undefined,
       puffs: new Float64Array(0),
+      folklore: { sprites: [], haunts: [] },
       signalClock: 0,
       cellGuard: () => undefined,
     };
     vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
       invalidateFrame() {},
+      invalidateFolklore() {},
       sync() {},
       clearTiles() {},
       request: () => true,

@@ -41,6 +41,47 @@ describe('glyph program variants', () => {
     vi.unstubAllGlobals();
   });
 
+  it('warms folklore only when eligible and deletes an unused prepared program once', () => {
+    const programs = createPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, false);
+    vi.advanceTimersByTime(200);
+    expect(programs.folkloreProgram).toBeUndefined();
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
+    vi.advanceTimersByTime(200);
+    expect(programs.folklore).toBeUndefined();
+    const prepared = programs.folkloreProgram!.program;
+    expect(prepared).toBeDefined();
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
+    expect(vi.getTimerCount()).toBe(0);
+    deletePrograms(context, programs);
+    expect(gl.deleteProgram.mock.calls.filter(([p]) => p === prepared)).toHaveLength(1);
+  });
+
+  it('cancels pending folklore links on ineligibility, context loss and disposal', () => {
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    const pending = { ready: () => false, finish: vi.fn(), cancel: vi.fn() };
+    vi.mocked(prepareProgram).mockReturnValue(pending);
+    const programs = createPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
+    vi.advanceTimersByTime(100);
+    expect(programs.glyphWarmup?.pending?.key).toBe(16);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, false);
+    expect(pending.cancel).toHaveBeenCalledOnce();
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
+    vi.advanceTimersByTime(100);
+    gl.isContextLost.mockReturnValue(true);
+    vi.advanceTimersByTime(100);
+    expect(pending.cancel).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+    gl.isContextLost.mockReturnValue(false);
+    prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
+    vi.advanceTimersByTime(100);
+    deletePrograms(context, programs);
+    expect(pending.cancel).toHaveBeenCalledTimes(3);
+    expect(pending.finish).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('waits for input to settle and warms one variant per idle turn without the extension', () => {
     const programs = createPrograms(context);
     let quiet = false;

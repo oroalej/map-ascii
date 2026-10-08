@@ -1,25 +1,35 @@
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
-import { mkdtemp, rm, appendFile, mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile, mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
 import {
   CityProcessions,
+  Procession,
   SiteDetail,
   OSM_ATTRIBUTION,
   type City,
   type CityArt,
   type LngLat,
 } from '@atlas/shared';
-import type { Polygon } from 'geojson';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { Feature, FeatureCollection, Polygon } from 'geojson';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
-import { checkTours, step as mergeContent } from './04-merge-content';
-import { buildMeta, writeMetadata, step as tileStep } from './05-tiles';
+import { checkTourCameras, checkTours, step as mergeContent } from './04-merge-content';
+import { buildMeta, writeMetadata, tileRecords, step as tileStep } from './05-tiles';
+import { step as searchStep } from './06-search-index';
 import { step as processionStep } from './07-processions';
-import { readFeatures, readJson } from './lib/io';
+import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
+import {
+  Territory,
+  bboxPolygon,
+  createTerritory,
+  geometryOutsideVoid,
+  inTerritory,
+} from './lib/territory';
+import { roofTileRecords } from './lib/roof-tiles';
 import { publishDetailLayouts, readDetailLayouts, writeDetailLayouts } from './lib/detail-layout';
 import { files, type StepContext } from './step';
 
@@ -177,6 +187,334 @@ describe('pipeline (02–04) on the fixture extract', () => {
       { title: 'Fixture festival account', url: 'https://example.test/festival' },
     ]);
     expect(await readFile(archive, 'utf8')).toBe('archive sentinel');
+  });
+  it('derives metadata years from territory survivors instead of excluded older features', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-metadata-territory-'));
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    try {
+      await copyFile(join(ctx.buildDir, files.geography), join(buildDir, files.geography));
+      await writeJson(
+        join(buildDir, files.territory),
+        createTerritory(
+          [-0.1, -0.1, 0.1, 0.1],
+          bboxPolygon([0, 0, 0.01, 0.01]),
+          [-0.005, -0.005, 0.005, 0.005],
+        ),
+      );
+      const records: AtlasFeature[] = [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.05, 0.005] },
+          properties: { id: 'void', class: 'monument', start_year: 1800 },
+          tippecanoe: { layer: 'poi', minzoom: 13, maxzoom: 16 },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [0.005, 0.005] },
+          properties: { id: 'survivor', class: 'monument', start_year: 1950 },
+          tippecanoe: { layer: 'poi', minzoom: 13, maxzoom: 16 },
+        },
+      ];
+      await writeFeatures(join(buildDir, files.merged), records);
+      expect((await writeMetadata(local, 2026)).yearRange).toEqual([1950, 2026]);
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
+  it('reports shortened routing before rejecting emitted procession geography', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-procession-warning-'));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const event = Procession.parse({
+      id: 'procession/short',
+      title: { en: 'Short' },
+      story: { en: 'Synthetic' },
+      status: 'draft',
+      kind: 'fluvial',
+      route: { to: 'osm:node/1', upstream_m: 200 },
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: 0,
+        start: '12:00',
+        duration_min: 60,
+        timezone: 'Etc/UTC',
+      },
+    });
+    try {
+      await writeFeatures(join(buildDir, files.merged), [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [0.001, 0],
+            ],
+          },
+          properties: { id: 'river', class: 'water_river' },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [0.001, 0] },
+          properties: { id: 'osm:node/1', class: 'poi' },
+        },
+      ]);
+      await writeJson(
+        join(buildDir, files.territory),
+        createTerritory(
+          [0, -0.0001, 0.001, 0.0001],
+          bboxPolygon([0.0005, -0.0001, 0.001, 0.0001]),
+          [0.0008, -0.0001, 0.001, 0.0001],
+        ),
+      );
+      await expect(
+        processionStep.run({
+          ...ctx,
+          buildDir,
+          outDir: join(buildDir, 'out'),
+          content: { ...content, processions: [event] },
+        }),
+      ).rejects.toThrow('emitted geography crosses the territory void');
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('warning:'));
+    } finally {
+      warning.mockRestore();
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
+  it('checks tour cameras before enrichment and selections after generated survivors', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-tour-territory-'));
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    const territory = createTerritory(
+      [-0.1, -0.1, 0.1, 0.1],
+      bboxPolygon([0, 0, 0.01, 0.01]),
+      [-0.005, -0.005, 0.005, 0.005],
+    );
+    const tour = (select: string, lng = 0.005): ContentBundle['tours'][number] => ({
+      id: 'tour/survivors',
+      title: { en: 'Survivors' },
+      status: 'draft',
+      steps: [
+        {
+          camera: { lng, lat: 0.005, zoom: 16 },
+          select,
+          duration_ms: 4000,
+          narration: { en: 'Fixture' },
+        },
+      ],
+    });
+    try {
+      await Promise.all(
+        [files.normalized, files.geography, files.subdivisions].map((file) =>
+          copyFile(join(ctx.buildDir, file), join(buildDir, file)),
+        ),
+      );
+      await writeJson(join(buildDir, files.territory), territory);
+      const normalized: AtlasFeature[] = [];
+      for await (const f of readFeatures(join(buildDir, files.normalized)))
+        normalized.push(f as AtlasFeature);
+      normalized.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-0.05, 0.005] },
+        properties: { id: 'removed', class: 'monument' },
+        tippecanoe: { layer: 'poi', minzoom: 17, maxzoom: 16 },
+      });
+      await writeFeatures(join(buildDir, files.normalized), normalized);
+      await expect(
+        mergeContent.run({
+          ...local,
+          content: {
+            ...content,
+            landmarks: [{ ...content.landmarks[0]!, osm_id: 'missing' }],
+            tours: [tour('missing', -0.05)],
+          },
+        }),
+      ).rejects.toThrow('outside the territory');
+      await mergeContent.run({
+        ...local,
+        content: { ...content, tours: [tour('plan:fixture-statue/1')] },
+      });
+      const ids: string[] = [];
+      for await (const f of readFeatures(join(buildDir, files.merged)))
+        ids.push((f as AtlasFeature).properties.id);
+      expect(ids).toContain('plan:fixture-statue/1');
+      await expect(
+        mergeContent.run({ ...local, content: { ...content, tours: [tour('removed')] } }),
+      ).rejects.toThrow('removed is not in the data');
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
+  it('keeps diagonal-cut streets searchable with and without repaired display labels', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-search-edge-'));
+    const boundary: Polygon = {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [2, 0],
+          [0, 2.0000008],
+          [0, 0],
+        ],
+      ],
+    };
+    const territory = createTerritory([0, 0, 2, 3], boundary, [0, 0, 0.1, 0.1]);
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    try {
+      await writeJson(join(buildDir, files.geography), { regionBounds: territory.regionBounds });
+      await writeJson(join(buildDir, files.territory), territory);
+      await writeJson(join(buildDir, files.subdivisions), []);
+      for (const repaired of [false, true]) {
+        const road: AtlasFeature = {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0.5, 1],
+              [0.5, 2.5],
+            ],
+          },
+          properties: {
+            id: 'osm:way/edge',
+            class: 'road_minor',
+            name: 'Edge Street',
+            ...(repaired && { label_lng: 0.5, label_lat: 2.5 }),
+          },
+          tippecanoe: { layer: 'roads', minzoom: 13, maxzoom: 16 },
+        };
+        expect(tileRecords([road], territory)).not.toHaveLength(0);
+        await writeFeatures(join(buildDir, files.merged), [road]);
+        await searchStep.run(local);
+        const search = await readJson<{ entries: { lng: number; lat: number; name: string }[] }>(
+          join(local.outDir, 'fixture.search-index.json'),
+        );
+        expect(search.entries).toHaveLength(1);
+        expect(search.entries[0]!.name).toBe('Edge Street');
+        expect(inTerritory(search.entries[0]!.lng, search.entries[0]!.lat, territory)).toBe(true);
+        expect(inTerritory(0.5, 1.500001, territory)).toBe(false);
+      }
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
+  it('publishes the opted-in territory only after full-source merging, with identical flagless behavior', async () => {
+    for (const enabled of [false, true]) {
+      const buildDir = await mkdtemp(join(tmpdir(), 'atlas-extent-'));
+      const local: StepContext = {
+        ...ctx,
+        content: { ...content, landmarks: [], plans: [], landcover: [], art: [] },
+        buildDir,
+        outDir: join(buildDir, 'out'),
+        city: {
+          ...city,
+          region: {
+            bbox: [-0.005, -0.005, 0.005, 0.005],
+            ...(enabled && { include_boundary: true as const }),
+          },
+        },
+      };
+      try {
+        await convert.run(local);
+        const converted = await readJson<FeatureCollection>(join(buildDir, files.osm));
+        const extra: Feature[] = [
+          {
+            type: 'Feature',
+            id: 'way/extension',
+            properties: { highway: 'residential', name: 'Extension' },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [-0.004, 0.004],
+                [-0.004, 0.008],
+                [0.008, 0.008],
+              ],
+            },
+          },
+          {
+            type: 'Feature',
+            id: 'way/roof-edge',
+            properties: { building: 'yes', height: '6' },
+            geometry: bboxPolygon([-0.002, 0.007, 0.002, 0.009]),
+          },
+          {
+            type: 'Feature',
+            id: 'node/void',
+            properties: { amenity: 'bench' },
+            geometry: { type: 'Point', coordinates: [-0.004, 0.008] },
+          },
+          {
+            type: 'Feature',
+            id: 'way/downtown',
+            properties: { highway: 'residential' },
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [-0.006, 0.002],
+                [-0.001, 0.002],
+              ],
+            },
+          },
+        ];
+        await writeJson(join(buildDir, files.osm), {
+          ...converted,
+          features: [...converted.features, ...extra],
+        });
+        await normalize.run(local);
+        if (enabled)
+          await expect(
+            mergeContent.run({
+              ...local,
+              city: {
+                ...local.city,
+                life: {
+                  source: 'Fixture source',
+                  sites: [
+                    {
+                      id: 'void',
+                      kind: 'shelter',
+                      position: [-0.004, 0.008],
+                      source: 'Fixture source',
+                    },
+                  ],
+                },
+              },
+            }),
+          ).rejects.toThrow('outside the territory');
+        await mergeContent.run(local);
+        await searchStep.run(local);
+        const t = Territory.parse(await readJson(join(buildDir, files.territory)));
+        const merged: AtlasFeature[] = [];
+        for await (const f of readFeatures(join(buildDir, files.merged)))
+          merged.push(f as AtlasFeature);
+        const tiled = tileRecords(merged, t);
+        const road = merged.find((f) => f.properties.id === 'osm:way/extension')!;
+        expect(road.geometry).toEqual(extra[0]!.geometry);
+        const downtown = merged.find((f) => f.properties.id === 'osm:way/downtown')!;
+        expect(tiled.find((f) => f.properties.id === downtown.properties.id)!.geometry).toBe(
+          downtown.geometry,
+        );
+        const search = await readJson<{ entries: { lng: number; lat: number; name: string }[] }>(
+          join(local.outDir, 'fixture.search-index.json'),
+        );
+        expect(search.entries.every((e) => inTerritory(e.lng, e.lat, t))).toBe(true);
+        if (enabled) {
+          expect(t.regionBounds).toEqual([-0.005, -0.005, 0.01, 0.01]);
+          expect(tiled.every((f) => geometryOutsideVoid(f.geometry, t))).toBe(true);
+          expect(tiled.some((f) => f.properties.id === 'osm:node/void')).toBe(false);
+          expect(merged.find((f) => f.properties.id === 'osm:way/roof-edge')!.geometry).toEqual(
+            extra[1]!.geometry,
+          );
+          expect(search.entries.some((e) => e.name === 'Extension')).toBe(true);
+        } else {
+          expect(t.territory).toBeNull();
+          expect(t.void).toBeNull();
+          expect(t.regionBounds).toEqual([-0.005, -0.005, 0.005, 0.005]);
+          expect(tiled).toEqual(merged.flatMap(roofTileRecords));
+        }
+      } finally {
+        await rm(buildDir, { recursive: true, force: true });
+      }
+    }
   });
   it('writes aliases using the canonical parent final surface class', async () => {
     const parent = features.find((f) => f.properties.id === 'osm:way/105')!;
@@ -385,8 +723,14 @@ describe('pipeline (02–04) on the fixture extract', () => {
         step({ lat: 5, lng: 0.005 }, { highlight: ['osm:way/104', 'osm:way/999999'] }),
       ],
     };
-    expect(checkTours(features, [tour], [-0.1, -0.1, 0.1, 0.1])).toEqual([
-      'tour/fixture step 2: camera 5, 0.005 is outside the region',
+    expect(
+      checkTourCameras([tour], {
+        regionBounds: [-0.1, -0.1, 0.1, 0.1],
+        territory: null,
+        void: null,
+      }),
+    ).toEqual(['tour/fixture step 2: camera 5, 0.005 is outside the region']);
+    expect(checkTours(features, [tour])).toEqual([
       'tour/fixture step 2: osm:way/999999 is not in the data',
     ]);
   });

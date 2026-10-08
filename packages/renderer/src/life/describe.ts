@@ -3,6 +3,7 @@ import type { BirdSpecies } from './birds';
 import type { PersonFigure } from './people';
 import type { VisibleAgent } from './simulate';
 import type { CraftType } from './vehicles';
+import type { FolkloreSprite } from './folklore';
 
 const crafts: Record<CraftType, string> = {
   car: 'Car',
@@ -89,4 +90,9 @@ export function agentAt(
     return null;
   const owner = owners[row * cols + col] ?? 0;
   return owner > 0 ? (agents[owner - 1] ?? null) : null;
+}
+export function describeFolklore(sprite: Pick<FolkloreSprite, 'kind'>) {
+  return sprite.kind === 'ghost'
+    ? 'Ghost (folklore, simulated)'
+    : 'Manananggal (folklore, simulated)';
 }

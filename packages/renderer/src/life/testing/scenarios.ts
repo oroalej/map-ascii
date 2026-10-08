@@ -273,6 +273,7 @@ export function makeScenario(
     environment(frame: number) {
       return {
         rain: kind === 'rain' && Math.floor(frame / 90) % 2 === 0 ? 1 : 0,
+        sunAltitude: 40,
         minutes: Math.floor(frame / 360) % 2 === 0 ? 720 : 180,
       };
     },

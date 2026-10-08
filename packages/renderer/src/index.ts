@@ -123,6 +123,9 @@ import { candleLamps } from './life/seasonal-candles';
 import { liveProgress, type LngLatBounds } from './life/procession';
 import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
 import { simulationSeasons } from './life/seasonal-simulation';
+import { runtimeFolklore } from './life/folklore-config';
+import { EMPTY_FOLKLORE, type FolklorePacket, type FolkloreCalendar } from './life/folklore';
+import { folkloreLayout, folklorePass, type FolkloreQuad } from './folklore-pass';
 import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
 import { configureLifeWorld } from './life/worker-api';
@@ -159,6 +162,9 @@ import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
 import { tileKey, type TileId } from './tiles';
+
+const EMPTY_OWNERS = new Uint32Array(0);
+const EMPTY_LIFE_CELLS = new Uint8Array(0);
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
@@ -287,6 +293,7 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  folklorechange: boolean;
   /** A visible simulated agent under the mouse, in canvas CSS pixels. */
   lifehover: LifeHover;
   /** Visible simulated speakers, anchored in CSS pixels from the canvas top left. */
@@ -498,6 +505,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     weekday: cityTime(now(), zone).weekday,
     preview: false,
   };
+  let folkloreDate: FolkloreCalendar = { epochDay: cityTime(now(), zone).day };
   let emojiSunAltitude: number | undefined;
   const resolveCurrentSeason = () => {
     const local = cityTime(now(), zone);
@@ -748,6 +756,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     options.cityLife?.seasons?.some((season) => !!season.fireworks) === true,
     !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
     options.cityLife?.seasons?.some((season) => !!(season.candles || season.visitors)) === true,
+    !!options.cityLife?.folklore,
   );
   const { source } = tileCache;
 
@@ -929,6 +938,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             processions,
             seasons: simulationSeasons(options.cityLife?.seasons),
             shopSchedule: options.cityLife?.schedules?.shops,
+            folklore: runtimeFolklore(options.cityLife),
             emergencyConfig: options.cityLife?.emergency,
             emergency: options.emergency,
           });
@@ -950,9 +960,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** Whether the life texture holds agents (so turning the layer off clears it once). */
   let lifeShown = false;
   let agentsDrawn = 0;
+  let folklorePacket: FolklorePacket = EMPTY_FOLKLORE;
+  let folkloreQuads: FolkloreQuad[] = [];
+  let folkloreShown = false;
+  const reportFolklore = (on: boolean) => {
+    if (on === folkloreShown) return;
+    folkloreShown = on;
+    emit('folklorechange', on);
+  };
+  const clearFolklore = () => {
+    folklorePacket = EMPTY_FOLKLORE;
+    folkloreQuads = [];
+    reportFolklore(false);
+  };
 
   const syncLife = (tiles: readonly TileId[]) => {
     if (!lifeActive()) {
+      clearFolklore();
       host.clearTiles();
       return;
     }
@@ -992,6 +1016,38 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return bounds.at;
   };
 
+  /** Keep a geographic mouse point while its input, camera and CSS size stay unchanged. */
+  let pointerProjection: {
+    point: readonly [number, number];
+    camera: CameraState;
+    width: number;
+    height: number;
+    at: readonly [number, number];
+  } | null = null;
+  const lifePointer = (size: { width: number; height: number }) => {
+    const point = lifeHover.pointerPoint;
+    if (!point) {
+      pointerProjection = null;
+      return undefined;
+    }
+    if (
+      pointerProjection?.point !== point ||
+      pointerProjection.camera !== camera ||
+      pointerProjection.width !== size.width ||
+      pointerProjection.height !== size.height
+    ) {
+      const at = viewportFor(camera, size).unproject([...point]);
+      pointerProjection = {
+        point,
+        camera,
+        width: size.width,
+        height: size.height,
+        at: [at[0]!, at[1]!],
+      };
+    }
+    return pointerProjection.at;
+  };
+
   /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
   let lifeAgents: VisibleAgent[] = [];
   const drawLife = (at: number, wind: WindNow) => {
@@ -1004,6 +1060,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Wind reactions and clearance use the CSS schedule, never a rounded drawing DPR.
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
+      const pointer = lifePointer(size);
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1027,11 +1084,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               minutes: cityMinutes,
               season: season?.id ?? null,
               date: emojiDate,
+              folkloreDate,
               sunAltitude: emojiSunAltitude,
               windPreset: prevailingWind(life.wind, options.climate, cityMonth).strength,
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
+            ...(pointer ? { pointer } : {}),
           },
           visible: [
             camera.zoom,
@@ -1047,9 +1106,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawnLife = lifeView();
       if (inspected && drawnLife?.generation !== inspected.generation) lifeHover.clear();
       agents = drawnLife?.agents ?? [];
+      folklorePacket = drawnLife?.folklore ?? EMPTY_FOLKLORE;
+      folkloreQuads = folkloreLayout(folklorePacket, view());
+      reportFolklore(folkloreQuads.length > 0);
       reportProcession();
-    } else if (!lifeShown) {
-      return;
+    } else {
+      clearFolklore();
+      if (!lifeShown) return;
     }
     // Nothing out, and the texture already empty: nothing to upload.
     const acceptedCrowd = lifeActive() ? drawnLife?.throngRun : undefined;
@@ -1433,6 +1496,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
+    clearFolklore();
     lifeHover.clear();
     season = next;
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
@@ -1492,6 +1556,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const nextMoon = moonlight(moment, camera.lng, camera.lat);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
+    folkloreDate = {
+      epochDay: local.day,
+      ...(life.season !== 'auto' && options.cityLife?.seasons?.some((s) => s.id === life.season)
+        ? { preview: life.season }
+        : {}),
+    };
     const automatic = resolveSeason(options.cityLife?.seasons, 'auto', real.year, real.day);
     emojiDate = {
       epochDay: real.day,
@@ -1637,6 +1707,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       clocks,
       seasonal,
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
+      !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
     );
   };
   const frame = (now: number) => {
@@ -1777,6 +1848,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         sun,
         focus,
         lifePause.time,
+        folklorePacket,
       );
       drawDirty = false;
       fireworksPass(
@@ -1794,6 +1866,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         daylight,
         fireworkSites,
       );
+      folklorePass(gl, programs, targets, themeRes, v, labelGrid, folkloreQuads);
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
@@ -1828,7 +1901,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const raster = lifeRaster(targets);
     if (lastDraw !== -Infinity) warmSeasonalPrograms(Boolean(raster?.candles));
     lifeHover.update(
-      lifeHover.hasPointer && lifeShown && lifeActive() && !flight && watch.watched() && raster
+      lifeHover.hasPointer &&
+        (lifeShown || folkloreQuads.length > 0) &&
+        lifeActive() &&
+        !flight &&
+        watch.watched()
         ? {
             targets,
             generation: drawnLife?.generation,
@@ -1840,10 +1917,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             dpr,
             geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
-            revision: raster.revision,
-            owners: raster.owners,
-            life: raster.life,
+            revision: raster?.revision ?? 0,
+            owners: raster?.owners ?? EMPTY_OWNERS,
+            life: raster?.life ?? EMPTY_LIFE_CELLS,
             agents: lifeAgents,
+            folklore: folkloreQuads,
             labelsCover: (point) =>
               labelsCoverPoint(targets!, point, dpr, {
                 shiftX: labelGrid.shiftX,
@@ -1868,6 +1946,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    clearFolklore();
+    host.invalidateFrame();
     names.clear();
     reportLabels([]);
     lifeHover.pointer(null);
@@ -2019,6 +2099,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emoji.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      clearFolklore();
+      host.invalidateFrame();
       lifeHover.pointer(null);
       lifePause.tick(performance.now(), lifeRunning());
       if (enabled) {
@@ -2063,6 +2145,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
+      clearFolklore();
+      host.invalidateFolklore();
       lifeHover.pointer(null);
       if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       life = { ...life, ...settings };
@@ -2090,6 +2174,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       drawDirty = true;
     },
     setProcessions(routes) {
+      clearFolklore();
       processions = routes;
       host.setProcessions(routes);
       lifeHover.clear();
@@ -2145,6 +2230,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       speech.clear();
       emoji.clear();
       host.dispose();
+      clearFolklore();
       destroyed = true;
       canvas.style.cursor = '';
       cancelAnimationFrame(raf);

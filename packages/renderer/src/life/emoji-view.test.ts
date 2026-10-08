@@ -97,6 +97,26 @@ const dog = (id: string, x: number, y = 30, pair?: string): VisibleAgent => ({
   emoji: { id, subject: 'dog', mood: 'happy', pair },
 });
 describe('production cue wrappers', () => {
+  it('confirms a bird fear bubble from its painted owner without person speaker metadata', () => {
+    const f = fixture([
+      {
+        kind: 'bird',
+        lng: 30,
+        lat: 30,
+        flap: 0,
+        emoji: { id: 'fear', subject: 'bird', mood: 'scared' },
+      },
+    ]);
+    const at = 30 * 80 + 30;
+    f.frame.life[at * 4 + 1] = classId('life_bird');
+    f.frame.life[at * 4 + 2] = CellBit.bird;
+    f.frame.speakers = undefined;
+    f.tick(0);
+    f.tick(16);
+    expect(f.emojiEvents.at(-1)).toEqual([
+      expect.objectContaining({ id: 'fear', subject: 'bird', mood: 'scared' }),
+    ]);
+  });
   it('includes lease wait in confirmation latency while GPU budgeting measures issued reads only', () => {
     const f = fixture([dog('mood', 30)]);
     const release = f.arbiter.acquire('speech', 0)!;

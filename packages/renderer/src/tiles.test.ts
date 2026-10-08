@@ -164,66 +164,73 @@ describe('RequestQueue', () => {
   });
 });
 
-it('sends pack capability and routes transferred coverage separately from drawable tiles', () => {
-  const post = vi.fn();
-  const workers: {
-    postMessage: typeof post;
-    onmessage?: (event: MessageEvent) => void;
-    terminate: () => void;
-  }[] = [];
-  vi.stubGlobal(
-    'Worker',
-    class {
-      postMessage = post;
-      terminate() {}
-      constructor() {
-        workers.push(this);
-      }
-    },
-  );
-  try {
-    const residential = vi.fn(),
-      tile = vi.fn();
-    const source = new TileSource(
-      '/test.pmtiles',
-      { header() {}, tile, residential, error() {} },
-      true,
+it.each([false, true])(
+  'sends folklore=%s and routes coverage separately from drawable tiles',
+  (folklore) => {
+    const post = vi.fn();
+    const workers: {
+      postMessage: typeof post;
+      onmessage?: (event: MessageEvent) => void;
+      terminate: () => void;
+    }[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class {
+        postMessage = post;
+        terminate() {}
+        constructor() {
+          workers.push(this);
+        }
+      },
     );
-    expect(post).toHaveBeenCalledWith({
-      type: 'init',
-      url: '/test.pmtiles',
-      fireworks: true,
-      fireworksActive: false,
-    });
-    source.setFireworksActive(true);
-    expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: true });
-    const count = post.mock.calls.length;
-    source.setFireworksActive(true);
-    expect(post).toHaveBeenCalledTimes(count);
-    source.setFireworksActive(false);
-    expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: false });
-    source.want([{ z: 12, x: 2, y: 3 }], 'fireworks');
-    expect(post).toHaveBeenLastCalledWith({
-      type: 'residential',
-      key: 'residential/12/2/3',
-      z: 12,
-      x: 2,
-      y: 3,
-    });
-    const sites = new Float64Array([1, 100, 200]);
-    workers[0]!.onmessage!({
-      data: {
+    try {
+      const residential = vi.fn(),
+        tile = vi.fn();
+      const source = new TileSource(
+        '/test.pmtiles',
+        { header() {}, tile, residential, error() {} },
+        true,
+        false,
+        false,
+        folklore,
+      );
+      expect(post).toHaveBeenCalledWith({
+        type: 'init',
+        url: '/test.pmtiles',
+        fireworks: true,
+        fireworksActive: false,
+        ...(folklore && { folklore }),
+      });
+      source.setFireworksActive(true);
+      expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: true });
+      const count = post.mock.calls.length;
+      source.setFireworksActive(true);
+      expect(post).toHaveBeenCalledTimes(count);
+      source.setFireworksActive(false);
+      expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: false });
+      source.want([{ z: 12, x: 2, y: 3 }], 'fireworks');
+      expect(post).toHaveBeenLastCalledWith({
         type: 'residential',
         key: 'residential/12/2/3',
-        sites,
-        newFeatures: [{ id: 'home', class: 'building' }],
-      },
-    } as MessageEvent);
-    expect(residential).toHaveBeenCalledWith('residential/12/2/3', sites);
-    expect(tile).not.toHaveBeenCalled();
-    expect(source.indexOf('home')).toBe(1);
-    source.destroy();
-  } finally {
-    vi.unstubAllGlobals();
-  }
-});
+        z: 12,
+        x: 2,
+        y: 3,
+      });
+      const sites = new Float64Array([1, 100, 200]);
+      workers[0]!.onmessage!({
+        data: {
+          type: 'residential',
+          key: 'residential/12/2/3',
+          sites,
+          newFeatures: [{ id: 'home', class: 'building' }],
+        },
+      } as MessageEvent);
+      expect(residential).toHaveBeenCalledWith('residential/12/2/3', sites);
+      expect(tile).not.toHaveBeenCalled();
+      expect(source.indexOf('home')).toBe(1);
+      source.destroy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

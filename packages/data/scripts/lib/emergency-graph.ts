@@ -101,6 +101,7 @@ function centroid(feature: AtlasFeature): EmergencyPoint | undefined {
 export function buildEmergencyGraph(
   features: readonly AtlasFeature[],
   config: EmergencyConfig,
+  acceptsShape?: (shape: EmergencyPoint[]) => boolean,
 ): EmergencyNetwork {
   const points: EmergencyPoint[] = [],
     ids = new Map<string, number>(),
@@ -218,17 +219,23 @@ export function buildEmergencyGraph(
   );
   const nodes = order.map((v) => points[v]!),
     full = chains.map((c) => c.vertices.map((v) => points[v]!));
-  const edges = chains.map((chain, i) => ({
-    from: index.get(chain.vertices[0]!)!,
-    to: index.get(chain.vertices.at(-1)!)!,
-    length: chain.length,
-    bearing: [
-      angle(full[i]![0]!, full[i]![1]!),
-      angle(full[i]!.at(-2)!, full[i]!.at(-1)!),
-    ] as EmergencyPoint,
-    oneway: chain.flow,
-    shape: simplify(full[i]!),
-  }));
+  const edges = chains.map((chain, i) => {
+    const simplified = simplify(full[i]!);
+    const shape = !acceptsShape || acceptsShape(simplified) ? simplified : full[i]!;
+    if (acceptsShape && !acceptsShape(shape))
+      throw new Error('emergency source chain leaves territory');
+    return {
+      from: index.get(chain.vertices[0]!)!,
+      to: index.get(chain.vertices.at(-1)!)!,
+      length: chain.length,
+      bearing: [
+        angle(full[i]![0]!, full[i]![1]!),
+        angle(full[i]!.at(-2)!, full[i]!.at(-1)!),
+      ] as EmergencyPoint,
+      oneway: chain.flow,
+      shape,
+    };
+  });
   const frame = localFrame(nodes[0]!),
     grid = new Map<
       string,

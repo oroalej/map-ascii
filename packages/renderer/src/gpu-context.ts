@@ -5,6 +5,11 @@
  * deleted as a unit, so a lost WebGL context can be rebuilt from scratch (index.ts).
  */
 import type * as twgl from 'twgl.js';
+import {
+  deleteFolklore,
+  type FolkloreResources,
+  type createHauntUniformScratch,
+} from './folklore-pass';
 import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
@@ -20,6 +25,7 @@ import { waterGlyphs } from './life/water';
 import type { ThemeUniforms } from './theme-uniforms';
 import { deleteFireworks, type FireworksResources } from './fireworks-pass';
 import { fireworksFragment, fireworksVertex } from './shaders/fireworks';
+import { folkloreFragment, folkloreVertex } from './shaders/folklore';
 
 /** The rotated street names' quads (labels.ts `rotatedLabelVertices`), rebuilt with placement. */
 export type StreetTextMesh = {
@@ -30,6 +36,9 @@ export type StreetTextMesh = {
 };
 
 export type Programs = {
+  folklore?: FolkloreResources;
+  folkloreProgram?: twgl.ProgramInfo;
+  folkloreUniforms?: ReturnType<typeof createHauntUniformScratch>;
   /** Lazy seasonal effect; recreated normally after context loss. */
   fireworks?: FireworksResources;
   /** An idle-linked program is consumed once when the effect creates its buffers. */
@@ -45,6 +54,7 @@ export type Programs = {
     clocks: boolean;
     seasonal: boolean;
     fireworks: boolean;
+    folklore: boolean;
     pending?: { key: number; program: PendingProgram };
     cancel(): void;
   };
@@ -120,34 +130,45 @@ export function prewarmGlyphPrograms(
   effectClocks = true,
   seasonal = false,
   fireworks = false,
+  folklore = false,
 ) {
   const variants = programs.glyphVariants;
   if (!variants || programs.glyphWarmupFailed) return;
-  const keys = (clocks: boolean, seasonal: boolean, fireworks: boolean) => [
+  const keys = (clocks: boolean, seasonal: boolean, fireworks: boolean, folklore: boolean) => [
+    ...(folklore ? [16] : []),
     ...(fireworks ? [8] : []),
     ...(seasonal ? (clocks ? [4, 5, 6, 7] : [4, 5]) : []),
     ...(clocks ? [1, 2, 3] : [1]),
   ];
   const has = (key: number) =>
-    key === 8 ? !!(programs.fireworks || programs.fireworksProgram) : variants.has(key);
+    key === 16
+      ? !!(programs.folklore || programs.folkloreProgram)
+      : key === 8
+        ? !!(programs.fireworks || programs.fireworksProgram)
+        : variants.has(key);
   if (programs.glyphWarmup) {
     const warmup = programs.glyphWarmup;
     warmup.clocks ||= effectClocks;
     warmup.seasonal = seasonal;
     warmup.fireworks = fireworks;
-    if (warmup.pending && !keys(warmup.clocks, seasonal, fireworks).includes(warmup.pending.key)) {
+    warmup.folklore = folklore;
+    if (
+      warmup.pending &&
+      !keys(warmup.clocks, seasonal, fireworks, folklore).includes(warmup.pending.key)
+    ) {
       warmup.pending.program.cancel();
       warmup.pending = undefined;
     }
     return;
   }
-  if (keys(effectClocks, seasonal, fireworks).every(has)) return;
+  if (keys(effectClocks, seasonal, fireworks, folklore).every(has)) return;
   let cancelled = false;
   let cancelTask: (() => void) | undefined;
   const warmup: NonNullable<Programs['glyphWarmup']> = {
     clocks: effectClocks,
     seasonal,
     fireworks,
+    folklore,
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
@@ -182,12 +203,15 @@ export function prewarmGlyphPrograms(
       if (pending) {
         if (pending.program.ready()) {
           const program = pending.program.finish();
-          if (pending.key === 8) programs.fireworksProgram = program;
+          if (pending.key === 16) programs.folkloreProgram = program;
+          else if (pending.key === 8) programs.fireworksProgram = program;
           else variants.set(pending.key, program);
           warmup.pending = undefined;
         }
       } else {
-        const key = keys(warmup.clocks, warmup.seasonal, warmup.fireworks).find((key) => !has(key));
+        const key = keys(warmup.clocks, warmup.seasonal, warmup.fireworks, warmup.folklore).find(
+          (key) => !has(key),
+        );
         if (key === undefined) {
           programs.glyphWarmup = undefined;
           return;
@@ -200,10 +224,16 @@ export function prewarmGlyphPrograms(
             key,
             program: prepareProgram(
               gl,
-              key === 8 ? fireworksVertex : fullscreenVertex,
-              key === 8 ? fireworksFragment : glyphFragmentFor({ focus, effectClocks, seasonal }),
+              key === 16 ? folkloreVertex : key === 8 ? fireworksVertex : fullscreenVertex,
+              key === 16
+                ? folkloreFragment
+                : key === 8
+                  ? fireworksFragment
+                  : glyphFragmentFor({ focus, effectClocks, seasonal }),
             ),
           };
+        else if (key === 16)
+          programs.folkloreProgram = createProgram(gl, folkloreVertex, folkloreFragment);
         else if (key === 8)
           programs.fireworksProgram = createProgram(gl, fireworksVertex, fireworksFragment);
         else glyphProgram(gl, programs, focus, effectClocks, seasonal);
@@ -220,9 +250,11 @@ export function prewarmGlyphPrograms(
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
+  if (p.folklore) deleteFolklore(gl, p.folklore);
   p.glyphWarmup?.cancel();
   if (p.fireworks) deleteFireworks(gl, p.fireworks);
   if (p.fireworksProgram) gl.deleteProgram(p.fireworksProgram.program);
+  if (p.folkloreProgram) gl.deleteProgram(p.folkloreProgram.program);
   gl.deleteProgram(p.labels.program);
   gl.deleteVertexArray(p.streetText.vao);
   gl.deleteBuffer(p.streetText.buffer);

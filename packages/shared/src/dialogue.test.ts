@@ -23,6 +23,43 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
+  it('accepts heat and clearing conditions and pins both catalog caps at 120', () => {
+    for (const weather of ['heat', 'clearing']) {
+      const exchanges = Array.from({ length: 120 }, (_, i) => ({
+        ...catalog.exchanges[0]!,
+        id: `weather-${i}`,
+        conditions: { weather },
+      }));
+      const full = schema.parse({ ...catalog, exchanges });
+      const runtime = runtimeDialogueCatalog(full)!;
+      expect(RuntimeDialogueCatalog.safeParse(runtime).success).toBe(true);
+      expect(
+        schema.safeParse({
+          ...catalog,
+          exchanges: [...exchanges, { ...exchanges[0], id: 'extra' }],
+        }).success,
+      ).toBe(false);
+      expect(
+        RuntimeDialogueCatalog.safeParse({
+          ...runtime,
+          exchanges: [...runtime.exchanges, { ...runtime.exchanges[0], id: 'extra' }],
+        }).success,
+      ).toBe(false);
+    }
+    expect(
+      schema.safeParse({
+        ...catalog,
+        exchanges: [{ ...catalog.exchanges[0], conditions: { weather: 'snow' } }],
+      }).success,
+    ).toBe(false);
+    const runtime = runtimeDialogueCatalog(schema.parse(catalog))!;
+    expect(
+      RuntimeDialogueCatalog.safeParse({
+        ...runtime,
+        exchanges: [{ ...runtime.exchanges[0], conditions: { weather: 'snow' } }],
+      }).success,
+    ).toBe(false);
+  });
   it('projects a source-free runtime schema without weakening pack validation', () => {
     const full = schema.parse({
       ...catalog,
