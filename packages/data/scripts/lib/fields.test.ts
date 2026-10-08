@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { Landcover, SimpleRing } from '@atlas/shared';
+import { Landcover, SimpleRing } from '@atlas/shared/schemas';
 import { union, difference, intersection, type Geom } from 'polyclip-ts';
 import { landcoverFeatures } from './landcover';
 import mask from '../__fixtures__/fields-exclusions.json';

@@ -1,12 +1,11 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { type SearchIndexFile, type CityLifeConfig } from '@atlas/shared';
 import {
   RuntimeCityLifeSchema,
   Procession as ProcessionSchema,
   CityProcessions,
-  type SearchIndexFile,
-  type CityLifeConfig,
-} from '@atlas/shared';
+} from '@atlas/shared/schemas';
 import { expect, type Locator, type Page } from '@playwright/test';
 
 /** Every registered city pack (ARCHITECTURE.md §9: the suite covers each one). */

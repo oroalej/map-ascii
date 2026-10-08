@@ -2,7 +2,6 @@
 import {
   UTILITY,
   DEFAULT_ROAD_WIDTH_M,
-  UtilityRecordSchema,
   utilityRandom,
   utilitySeed,
   utilitySpanId,
@@ -12,6 +11,7 @@ import {
   type UtilitySpan,
   type UtilityRecord,
 } from '@atlas/shared';
+import { UtilityRecordSchema } from '@atlas/shared/schemas';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { geometryOutsideVoid, inVoid, type Territory } from './territory';

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as MomentsModule from './moments';
 import { continuityMover, continuityTile, left, parent, right } from './testing/continuity';
-import { createInlineHost } from './host';
+import { createInlineHost } from './inline-host';
 import { LifePreparation } from './preparation';
 import { LifeWorld, TileLife } from './simulate';
 import type { SimulationSeason } from './seasonal-simulation';

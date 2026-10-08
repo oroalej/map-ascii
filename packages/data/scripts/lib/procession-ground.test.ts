@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CityProcessions, Procession, pointInPolygon } from '@atlas/shared';
+import { pointInPolygon } from '@atlas/shared';
+import { CityProcessions, Procession } from '@atlas/shared/schemas';
 import type { Feature, Geometry } from 'geojson';
 import { routeProcessions } from './procession';
 import { requiredFormationWidth } from './procession-ground';
