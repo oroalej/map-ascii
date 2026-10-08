@@ -8689,6 +8689,42 @@ export class LifeWorld {
       if (mover) return { life, mover };
     }
   }
+  private tapPerson(owner: object) {
+    for (const life of this.tiles.values()) {
+      const person =
+        life.movers.find((m) => m === owner && m.kind === 'person') ??
+        life.gatherers.find((g) => g === owner);
+      if (person) return { life, person };
+    }
+  }
+  private tapPeople(tap: LifeTap, reach: number, cap: number, mood: EmojiMood, duration = 2.5) {
+    const ref = this.tiles.values().next().value;
+    if (!ref) return;
+    const at = lngLatToTile(ref.tile, ...tap.at),
+      seen = new Set<object>();
+    const people = (this.tapSources?.latest() ?? [])
+      .flatMap((target, index) => {
+        if (
+          !target ||
+          target.agent.kind !== 'person' ||
+          target.agent.vehicle ||
+          target.agent.prop ||
+          target.agent.aboard ||
+          seen.has(target.owner)
+        )
+          return [];
+        seen.add(target.owner);
+        const p = lngLatToTile(ref.tile, target.agent.lng, target.agent.lat),
+          distance = Math.hypot(p.x - at.x, p.y - at.y) / ref.perMeter;
+        return distance <= reach ? [{ target, distance, index }] : [];
+      })
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+      .slice(0, cap);
+    for (const { target } of people) {
+      const person = this.tapPerson(target.owner);
+      person?.life.requestEmoji(target.owner, 'person', mood, this.emojiClock, duration);
+    }
+  }
   private tapAgent(target: TapTarget, minutes = 720, zoom = 19, rain = 0) {
     if (target.agent.vehicle === 'cart') {
       for (const life of this.tiles.values()) {
@@ -8792,7 +8828,11 @@ export class LifeWorld {
       taps?.length && this.tapSources
         ? taps.slice(0, 4).map((tap) =>
             resolveTap(tap, this.tapSources!, {
-              folklore: () => false,
+              folklore: (id, tap) => {
+                if (!this.folklore.tap(id, this.emojiClock)) return false;
+                this.tapPeople(tap, 10, 6, 'scared');
+                return true;
+              },
               agent: (target) => this.tapAgent(target, minutes, zoom, rain),
               signal: (tap) => this.tapSignal(tap),
               procession: () => false,
@@ -9577,7 +9617,7 @@ export class LifeWorld {
     prepared?: ReadonlyMap<string, TileLife>,
     bootstrap = false,
   ) {
-    if (!tiles.length) this.folklore.clear();
+    if (!tiles.length) this.folklore.clear(true);
     if (view) this.viewContext = view;
     const gradual = !!this.viewContext && this.bootstrapped && !bootstrap;
     const start = this.profiler?.time();
@@ -11449,7 +11489,7 @@ export class LifeWorld {
     this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
     this.pruneRetired();
     if (!this.tiles.size) {
-      this.folklore.clear();
+      this.folklore.clear(true);
       this.arrivals.clear();
       return;
     }

@@ -5,6 +5,63 @@ import { makeScenario, completeScenarioState } from './testing/scenarios';
 import { LifeWorld } from './simulate';
 import { continuityTile, continuityMover, left } from './testing/continuity';
 import { LifeLine } from './geometry';
+import { folkloreTile, folkloreConfig, folkloreCenter, calendar } from './testing/folklore';
+import { lngLatToTile } from '../raster/geometry';
+it('a ghost tap requests fear from at most six nearby visible people', () => {
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.enableTaps();
+  world.setFolklore(folkloreConfig);
+  const source = folkloreTile();
+  world.sync([{ key: source.key, tile: source.tile, life: source.geo }]);
+  for (let i = 0; i < 2; i++)
+    world.step(6, undefined, 19, undefined, undefined, {
+      minutes: 1320,
+      folkloreDate: calendar(),
+      rain: 0,
+    });
+  const ghost = world
+    .visibleFolklore(19, folkloreCenter)
+    .sprites.find((s) => s.id.includes('/hospital/'))!;
+  const life = world.resident(source.key)!;
+  const at = lngLatToTile(source.tile, ghost.lng, ghost.lat);
+  const people = Array.from({ length: 8 }, (_, i) => {
+    const person = continuityMover(life, at.x + i * life.perMeter * 0.5, 'person');
+    person.y = at.y;
+    person.group = [
+      { figure: 'adult', shirt: 0, umbrella: 1, canopy: 0, lateral: 0, back: 0, step: 0 },
+    ];
+    return person;
+  });
+  life.movers.splice(0, life.movers.length, ...people);
+  world.visible(19, 1, folkloreCenter);
+  const request = vi.spyOn(life, 'requestEmoji');
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { minutes: 1320, folkloreDate: calendar(), rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    [
+      {
+        id: 1,
+        generation: 1,
+        frame: world.tapSources!.frame,
+        at: [ghost.lng, ghost.lat],
+        pointer: 'touch',
+        cellMeters: 1,
+        folklore: ghost.id,
+      },
+    ],
+  );
+  expect(world.tapReceipts![0]!.action).toBe('folklore');
+  expect(request).toHaveBeenCalledTimes(6);
+  expect(request.mock.calls.every((args) => args[2] === 'scared')).toBe(true);
+});
 
 function vehicleWorld(kind: 'vehicle' | 'train' | 'dog' | 'cat' = 'vehicle') {
   const world = new LifeWorld(undefined, undefined, undefined, false);

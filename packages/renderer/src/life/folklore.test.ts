@@ -65,6 +65,52 @@ describe('folklore calendar', () => {
   });
 });
 describe('ghost observer', () => {
+  it('wisps a tapped ghost from its captured pose and retains banishment through empty/changing tiles', () => {
+    const tile = folkloreTile(),
+      observer = new FolkloreObserver();
+    observer.setConfig(folkloreConfig);
+    for (const clock of [0, 6])
+      observer.step([tile], { minutes: 1320, calendar: calendar(), clock, dt: 0 });
+    const ghost = observer.packet(19, folkloreCenter).sprites.find((s) => s.kind === 'ghost')!;
+    expect(observer.tap(ghost.id, 6)).toBe(true);
+    observer.step([{ ...tile, geo: { ...tile.geo } }], {
+      minutes: 1320,
+      calendar: calendar(),
+      clock: 6.4,
+      dt: 0.4,
+    });
+    const wisp = observer.packet(19, folkloreCenter).sprites.find((s) => s.id === ghost.id)!;
+    expect(wisp).toMatchObject({ lng: ghost.lng, lat: ghost.lat, pose: 'wisp' });
+    expect(wisp.wisp).toBeCloseTo(0.5);
+    observer.step([], { minutes: 1320, calendar: calendar(), clock: 7, dt: 0.6 });
+    observer.step([tile], { minutes: 1320, calendar: calendar(), clock: 8, dt: 1 });
+    expect(observer.packet(19, folkloreCenter).sprites.some((s) => s.id === ghost.id)).toBe(false);
+    for (const clock of [9, 15])
+      observer.step([tile], { minutes: 1320, calendar: calendar(7, 2), clock, dt: 1 });
+    expect(observer.packet(19, folkloreCenter).sprites.some((s) => s.kind === 'ghost')).toBe(true);
+  });
+  it('returns a tapped manananggal continuously and suppresses selection until the next night', () => {
+    const tile = folkloreTile(),
+      observer = new FolkloreObserver();
+    observer.setConfig(folkloreConfig);
+    for (const clock of [0, 6])
+      observer.step([tile], { minutes: 1320, calendar: calendar(11), clock, dt: 0 });
+    const creature = observer.manananggal!;
+    expect(observer.tap(creature.id, 6)).toBe(true);
+    observer.step([tile], { minutes: 1320, calendar: calendar(11), clock: 6, dt: 0 });
+    expect(observer.manananggal).toEqual(creature);
+    observer.step([], { minutes: 1320, calendar: calendar(11), clock: 7, dt: 1 });
+    observer.step([{ ...tile, geo: { ...tile.geo } }], {
+      minutes: 1320,
+      calendar: calendar(11),
+      clock: 8.1,
+      dt: 1.1,
+    });
+    expect(observer.manananggal).toBeUndefined();
+    for (const clock of [9, 15])
+      observer.step([tile], { minutes: 1320, calendar: calendar(11, 2), clock, dt: 1 });
+    expect(observer.manananggal).toBeDefined();
+  });
   it('releases previous-night sources during daytime pans and rebuilds current sites next night', () => {
     const t = folkloreTile(),
       observer = new FolkloreObserver(),
