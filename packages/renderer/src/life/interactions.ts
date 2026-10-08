@@ -569,6 +569,10 @@ export class LocalScenes {
     if (isWalker(m.kind) && !this.canIdle(m)) visit.returnPending = true;
     else this.returning(m, visit);
   }
+  wake(m: Mover) {
+    const visit = this.visits.get(m);
+    if (visit?.site.kind === 'rest') this.requestReturn(m, visit);
+  }
 
   /** Whether it is raining hard enough to shelter (hysteresis: `INTERACTIONS.rainOn`/`rainOff`). */
   get raining(): boolean {

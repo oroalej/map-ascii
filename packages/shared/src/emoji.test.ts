@@ -19,7 +19,8 @@ it('resolves every mood to an allowed single-code-point system emoji', () => {
   expect(emojiGlyph('dog', 'scared')).toBe('❗');
   expect(EMOJI_MOODS.filter((mood) => mood === 'crying')).toHaveLength(1);
   expect(new Set(EMOJI_MOODS).size).toBe(EMOJI_MOODS.length);
-  expect(EMOJI_MOODS).toHaveLength(57);
+  expect(EMOJI_MOODS).toHaveLength(58);
+  expect(emojiGlyph('dog', 'bark')).toBe('💢');
   expect(emojiGlyph('person', 'candle')).toBe('🕯️');
   expect(emojiGlyph('person', 'melting')).toBe('😵');
   expect(emojiGlyph('person', 'moved')).toBe('😢');

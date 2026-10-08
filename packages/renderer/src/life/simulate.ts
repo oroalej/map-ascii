@@ -917,6 +917,13 @@ function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
 export class TileLife {
   tapRequests?: TapReactions;
   private tapDash?: WeakMap<Mover, number>;
+  private tapWake?: WeakMap<Mover, number>;
+  wake(m: Mover, clock: number) {
+    m.pause = 0;
+    m.lying = m.grooming = false;
+    this.scenes.wake(m);
+    (this.tapWake ??= new WeakMap()).set(m, clock + 2);
+  }
   requestEmoji(
     owner: object,
     subject: EmojiSubject,
@@ -6569,7 +6576,11 @@ export class TileLife {
         continue;
       }
       if (m.kind === 'dog') {
-        const speed = this.dogSpeed(m, dt, this.canIdle(m));
+        const speed = this.dogSpeed(
+          m,
+          dt,
+          this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock),
+        );
         if (speed === undefined) {
           m.waiting = 0;
           continue;
@@ -6577,7 +6588,7 @@ export class TileLife {
         speeds[i] = speed;
       }
       if (m.kind === 'cat') {
-        const idle = this.canIdle(m);
+        const idle = this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock);
         if (!idle) {
           m.pause = 0;
           m.grooming = false;
@@ -8628,6 +8639,7 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private barkUntil?: WeakMap<Mover, number>;
   tapSources?: TapSources;
   tapReceipts?: readonly TapReceipt[];
   enableTaps() {
@@ -8672,6 +8684,36 @@ export class LifeWorld {
     const owned = this.tapOwner(target.owner);
     if (!owned) return;
     const { life, mover } = owned;
+    if (mover.kind === 'dog' || mover.kind === 'cat') {
+      if (mover.lying || mover.pause > 0) {
+        life.wake(mover, this.clock);
+        life.requestEmoji(mover, mover.kind, 'yawn', this.emojiClock);
+      } else if (mover.kind === 'dog' && !((this.barkUntil?.get(mover) ?? 0) > this.emojiClock)) {
+        const dogs = life.movers
+          .map((m, index) => ({ m, index, distance: Math.hypot(m.x - mover.x, m.y - mover.y) }))
+          .filter(
+            ({ m, distance }) =>
+              m.kind === 'dog' &&
+              distance <= 40 * life.perMeter &&
+              !((this.barkUntil?.get(m) ?? 0) > this.emojiClock),
+          )
+          .sort(
+            (a, b) =>
+              Number(b.m === mover) - Number(a.m === mover) ||
+              a.distance - b.distance ||
+              a.m.rank - b.m.rank ||
+              a.index - b.index,
+          )
+          .slice(0, 6);
+        this.barkUntil ??= new WeakMap();
+        dogs.forEach(({ m }, index) => {
+          const delay = index === 0 ? 0 : 0.4 + ((index - 1) * 0.8) / Math.max(1, dogs.length - 2);
+          this.barkUntil!.set(m, this.emojiClock + delay + 2.5);
+          life.requestEmoji(m, 'dog', 'bark', this.emojiClock, 2.5, delay);
+        });
+      }
+      return;
+    }
     if (mover.kind !== 'vehicle' && !mover.train) return;
     life.requestEmoji(mover, 'driver', 'honk', this.emojiClock);
     const at = mover.train
@@ -9406,6 +9448,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.barkUntil = undefined;
     this.tapSources?.clear();
     this.tapReceipts = undefined;
     this.folklore.clear();

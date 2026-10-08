@@ -6,10 +6,13 @@ import { LifeWorld } from './simulate';
 import { continuityTile, continuityMover, left } from './testing/continuity';
 import { LifeLine } from './geometry';
 
-function vehicleWorld(kind: 'vehicle' | 'train' = 'vehicle') {
+function vehicleWorld(kind: 'vehicle' | 'train' | 'dog' | 'cat' = 'vehicle') {
   const world = new LifeWorld(undefined, undefined, undefined, false);
   world.enableTaps();
-  const entry = continuityTile(left, kind === 'train' ? LifeLine.rail : LifeLine.roadMajor);
+  const entry = continuityTile(
+    left,
+    kind === 'train' ? LifeLine.rail : kind === 'vehicle' ? LifeLine.roadMajor : LifeLine.path,
+  );
   world.sync([entry]);
   const life = world.resident(entry.key)!;
   life.stalls.length = 0;
@@ -65,6 +68,44 @@ it('resolves a coach to its consist, but renders the requested horn only on the 
   expect(cues).toHaveLength(1);
   expect(cues[0]!.vehicle).toBe('locomotive');
   expect(cues[0]!.emoji?.mood).toBe('honk');
+});
+it.each(['dog', 'cat'] as const)(
+  'wakes a sleeping %s through the normal guarded movement path',
+  (kind) => {
+    const f = vehicleWorld(kind);
+    f.vehicle.pause = 20;
+    f.vehicle.lying = kind === 'dog';
+    f.vehicle.grooming = kind === 'cat';
+    const agents = f.world.visible(19, 1, [0, 0]);
+    const agent = agents.findIndex((a) => a.kind === kind);
+    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+      { ...f.tap, frame: f.world.tapSources!.frame, agent },
+    ]);
+    expect(f.vehicle.pause).toBe(0);
+    expect(f.vehicle.lying || f.vehicle.grooming).toBe(false);
+    expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('yawn');
+  },
+);
+it('answers a bark nearest-first with deterministic delays, six dogs maximum and no restart', () => {
+  const f = vehicleWorld();
+  f.life.movers.length = 0;
+  const dogs = Array.from({ length: 8 }, (_, i) =>
+    continuityMover(f.life, 1800 + i * 2 * f.life.perMeter, 'dog'),
+  );
+  f.life.movers.push(...dogs);
+  const agents = f.world.visible(19, 1, [0, 0]);
+  const spy = vi.spyOn(f.life, 'requestEmoji');
+  const tap = {
+    ...f.tap,
+    frame: f.world.tapSources!.frame,
+    agent: agents.findIndex((a) => a.kind === 'dog'),
+  };
+  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+    tap,
+    { ...tap, id: 12 },
+  ]);
+  expect(spy.mock.calls.map(([owner]) => owner)).toEqual(dogs.slice(0, 6));
+  spy.mock.calls.forEach((args, i) => expect(args[5]).toBeCloseTo([0, 0.4, 0.6, 0.8, 1, 1.2][i]!));
 });
 it.each([false, true])('consumes a closed/rainy cart without a visit or wave (rain=%s)', (rain) => {
   const f = vehicleWorld();
