@@ -1,5 +1,7 @@
 import type { ContentBundle } from '@atlas/content';
-import { Landmark, SiteDetail, Landcover, parseDetailSelection } from '@atlas/shared';
+import { parseDetailSelection } from '@atlas/shared';
+// Keep schema constructors compatible with main's type-only runtime barrel.
+import { Landmark, SiteDetail, Landcover } from '../../../shared/src/schemas';
 import { describe, expect, it } from 'vitest';
 import type { Polygon } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';

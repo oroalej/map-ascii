@@ -1,6 +1,8 @@
 import bbox from '@turf/bbox';
 import inside from '@turf/boolean-point-in-polygon';
-import { Landcover, SiteDetail, type BBox, type LngLat } from '@atlas/shared';
+import type { BBox, LngLat } from '@atlas/shared';
+// Keep schema constructors compatible with main's type-only runtime barrel.
+import { Landcover, SiteDetail } from '../../../shared/src/schemas';
 import type { Polygon, MultiPolygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
