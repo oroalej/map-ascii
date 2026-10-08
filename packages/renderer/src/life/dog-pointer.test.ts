@@ -2,7 +2,8 @@ import { expect, it } from 'vitest';
 import { addPet, petPointer } from './testing/pet-pointer';
 import { continuityTile, right, continuityMover } from './testing/continuity';
 import { LifeLine } from './geometry';
-import { tileToLngLat } from '../raster/geometry';
+import { metersPerUnit, tileToLngLat } from '../raster/geometry';
+import { left } from './testing/continuity';
 
 it('selects the nearest two dogs across a seam, with stable rank ties', () => {
   const f = petPointer('dog'),
@@ -59,3 +60,28 @@ it('cannot leave its walking line for a disconnected target and preserves pointe
     expect(a.pet.line).toBe(0);
   }
 });
+
+it.each(['off-path', 'dead-end'] as const)(
+  'waits without heading reversals at a fixed unreachable %s target and releases normally',
+  (target) => {
+    const end = target === 'dead-end' ? 2000 + 4 / metersPerUnit(left) : 4196;
+    const f = petPointer('dog', true, end),
+      pointer = f.at(target === 'dead-end' ? 8 : 3, target === 'dead-end' ? 0 : 6);
+    for (let i = 0; i < 50; i++) f.step(pointer);
+    const x = f.pet.x,
+      heading = [f.pet.hx, f.pet.hy];
+    for (let i = 0; i < 30; i++) {
+      f.step(pointer);
+      expect(f.pet.x).toBe(x);
+      expect([f.pet.hx, f.pet.hy]).toEqual(heading);
+      expect(f.life.roadTerrain.access.allows(f.life.groundBodies(f.pet))).toBe(true);
+    }
+    expect(f.life.emoji.cue(f.pet)?.mood).not.toBe('happy');
+    expect(f.pet.pointerDog).toBe('follow');
+    f.stream.dogRng = () => 0.9;
+    f.step();
+    expect(f.pet.pointerDog).toBeUndefined();
+    expect(f.pet.momentFacing).toBeUndefined();
+    expect(f.pet.x).not.toBe(x);
+  },
+);

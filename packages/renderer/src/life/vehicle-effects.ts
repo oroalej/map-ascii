@@ -128,7 +128,7 @@ export class VehicleEffectTracker {
       dt,
       wind,
       this.tile.perMeter,
-      metricGust(gust, this.tile.tile, this.tile.perMeter),
+      gust ? metricGust(gust, this.tile.tile, this.tile.perMeter) : undefined,
     );
     if (this.minimum > MAX_MOTOR_LENGTH) {
       if (this.enabled) this.pause(clock - dt);
@@ -343,7 +343,7 @@ export class VehicleEffectTracker {
                     dt,
                     owner.perMeter,
                     wind,
-                    metricGust(gust, owner.tile, owner.perMeter),
+                    gust ? metricGust(gust, owner.tile, owner.perMeter) : undefined,
                   ),
                 );
               }

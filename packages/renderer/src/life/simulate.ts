@@ -1311,6 +1311,7 @@ export class TileLife {
     m.v = preview.v;
     m.roadShift = preview.roadShift;
     m.roadSteering = preview.roadSteering;
+    if (preview.boatShift !== undefined) m.boatShift = preview.boatShift;
     if (
       m.chosenLane !== undefined ||
       m.lat !== undefined ||
@@ -6614,7 +6615,7 @@ export class TileLife {
       if (m.kind === 'dog') {
         const speed =
           m.pointerDog && this.tilePointer
-            ? this.followPointer(m, this.tilePointer, fitsGround)
+            ? this.followPointer(m, this.tilePointer, fitsGround, dt)
             : this.dogSpeed(m, dt, this.canIdle(m));
         if (speed === undefined) {
           m.waiting = 0;
@@ -7926,18 +7927,43 @@ export class TileLife {
    * A street dog (config.ts `DOG`): it stops to sniff, now and then lies down a long while,
    * turns back, and trots in short bursts.
    */
-  private followPointer(m: Mover, pointer: FlockPointer, guard: GroundGuard): number | undefined {
+  private followPointer(
+    m: Mover,
+    pointer: FlockPointer,
+    guard: GroundGuard,
+    dt: number,
+  ): number | undefined {
     const pose = this.pose(m),
       dx = pointer.x - pose.x,
       dy = pointer.y - pose.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance <= POINTER.sit * pointer.cellMeters * this.perMeter && this.canIdle(m)) {
+    const distance = Math.hypot(dx, dy),
+      speed = Math.max(m.speed, DOG.trot.speed * this.perMeter),
+      tolerance = Math.max(0.5 * this.perMeter, speed * dt),
+      along = dx * m.hx + dy * m.hy,
+      to = m.from + m.dir;
+    const atEnd =
+      this.segment(m.from, to) - m.d <= tolerance &&
+      (to === this.first(m.line) || to === this.last(m.line));
+    const blockedEnd =
+      atEnd &&
+      !this.exitOptions(m, to).some((code) => {
+        const exit = this.directedExit(code, to),
+          next = exit.vertex + exit.dir,
+          c = this.geo.coords;
+        return (
+          (pointer.x - c[to * 2]!) * (c[next * 2]! - c[exit.vertex * 2]!) +
+            (pointer.y - c[to * 2 + 1]!) * (c[next * 2 + 1]! - c[exit.vertex * 2 + 1]!) >
+          0
+        );
+      });
+    const arrived = distance <= POINTER.sit * pointer.cellMeters * this.perMeter;
+    if ((arrived || Math.abs(along) <= tolerance || blockedEnd) && this.canIdle(m)) {
       const before = snapshotMover(m);
       if (distance > 1e-9) m.momentFacing = { hx: dx / distance, hy: dy / distance };
       if (guard(m, before)) {
-        if (m.pointerDog !== 'sit') this.pointerEvents.push({ owner: m, mood: 'happy' });
-        m.pointerDog = 'sit';
-        m.pause = 1;
+        if (arrived && m.pointerDog !== 'sit') this.pointerEvents.push({ owner: m, mood: 'happy' });
+        m.pointerDog = arrived ? 'sit' : 'follow';
+        m.pause = arrived ? 1 : 0;
         m.lying = false;
         m.waiting = 0;
         return;
@@ -7956,7 +7982,7 @@ export class TileLife {
         return;
       }
     }
-    return Math.max(m.speed, DOG.trot.speed * this.perMeter);
+    return speed;
   }
 
   private pointerExit(m: Mover, options: readonly number[], vertex: number) {
@@ -9864,6 +9890,9 @@ export class LifeWorld {
           (preview) =>
             gained(preview) &&
             (kind !== 'person' || walkingTransfer(target, c.life, c.m, preview)) &&
+            (kind !== 'boat' ||
+              c.m.boatShift === undefined ||
+              this.boatTransfer(target, preview, c.m, c.life)) &&
             ((kind !== 'vehicle' && kind !== 'person') ||
               guard(
                 target,
@@ -11747,7 +11776,7 @@ export class LifeWorld {
           preview &&
           target &&
           (m.kind === 'boat'
-            ? this.boatRoom(target, preview, m, intents)
+            ? this.boatTransfer(target, preview, m, source, seam.preview, intents)
             : guard.clearSeam(target, preview, m, reject) &&
               guard(target, preview, seam.preview, undefined, false, m, reject, source));
         if (safe && target && preview) {
@@ -11842,7 +11871,7 @@ export class LifeWorld {
             inTile(preview) &&
             this.owns(target, preview) &&
             (m.kind === 'boat'
-              ? this.boatRoom(target, preview, m, [])
+              ? this.boatTransfer(target, preview, m, source)
               : guard(target, preview, m, undefined, false, m, reject, source)),
         )
       ) {
@@ -11954,9 +11983,36 @@ export class LifeWorld {
         }
   }
 
-  /** Connected running routes share an arrival clock, including duplicated buffered lines. */
+  private boatTransfer(
+    target: TileLife,
+    preview: Mover,
+    identity: Mover,
+    source: TileLife,
+    before = identity,
+    reserved: readonly { source: TileLife; target: TileLife; m: Mover }[] = [],
+  ) {
+    if (preview.boatShift === undefined) return this.boatRoom(target, preview, identity, reserved);
+    const frame = frameBetween(source.tile, target.tile),
+      pose = source.pose(before);
+    const start = {
+      ...preview,
+      x: frame.x + pose.x * frame.scale,
+      y: frame.y + pose.y * frame.scale,
+      hx: pose.hx,
+      hy: pose.hy,
+      boatShift: undefined,
+    };
+    return this.boatSweep(target, preview, start, identity, reserved);
+  }
+
   /** Cursor detours require proven complete water coverage at every swept pose. */
-  private boatSweep(life: TileLife, mover: Mover, before = mover) {
+  private boatSweep(
+    life: TileLife,
+    mover: Mover,
+    before = mover,
+    identity = mover,
+    reserved: readonly { source: TileLife; target: TileLife; m: Mover }[] = [],
+  ) {
     const terrain = this.groundTerrain;
     if (!terrain || !terrain.water.polygons.length) return false;
     const o = terrain.origins.get(life)!;
@@ -11989,10 +12045,8 @@ export class LifeWorld {
       }));
       if (
         terrain.blocked.hits(bodies) ||
-        bodies.some(
-          (body) => !terrain.water.polygons.some((polygon) => bodyInside(body, polygon)),
-        ) ||
-        !this.boatRoom(life, sample, mover, [])
+        !terrain.water.contains(bodies) ||
+        !this.boatRoom(life, sample, identity, reserved)
       )
         return false;
     }

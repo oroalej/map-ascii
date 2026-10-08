@@ -3,9 +3,10 @@ import { LifeLine } from '../geometry';
 import { LifeWorld, type Mover } from '../simulate';
 import { continuityTile, continuityMover, left } from './continuity';
 
-export function petPointer(kind: 'cat' | 'dog', observer = true) {
+export function petPointer(kind: 'cat' | 'dog', observer = true, end = 4196) {
   const entry = continuityTile(left, LifeLine.path),
     world = new LifeWorld(undefined, undefined, undefined, true, observer);
+  entry.life.coords[2] = end;
   world.sync([entry]);
   const life = world.resident(entry.key)!;
   life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;

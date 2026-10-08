@@ -2479,6 +2479,41 @@ describe('label focus in the renderer frame', () => {
     draw(752);
     expect(crownPass).toHaveBeenCalledOnce();
   });
+
+  it('paces idle hover gusts and ripples at the ordinary animation cadence', () => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    draw(1000);
+    vi.mocked(selectPass).mockClear();
+    vi.mocked(crownPass).mockClear();
+    for (let i = 1; i <= 30; i++) {
+      input.intents!.hover([100 + i * 3, 100]);
+      draw(1000 + i);
+    }
+    expect(selectPass).not.toHaveBeenCalled();
+    expect(crownPass).not.toHaveBeenCalled();
+    draw(1034);
+    expect(selectPass).toHaveBeenCalledOnce();
+    expect(crownPass).toHaveBeenCalledOnce();
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples!.length).toBeGreaterThan(0);
+    draw(1040);
+    expect(selectPass).toHaveBeenCalledOnce();
+    draw(1068);
+    expect(selectPass).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['low-zoom', 'low-quality'] as const)('does not admit cursor rings at %s', (mode) => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    if (mode === 'low-zoom') atlas.setCamera({ zoom: 17 });
+    else atlas.setQuality('low');
+    draw(1000);
+    input.intents!.hover([100, 100]);
+    draw(1050);
+    input.intents!.hover([150, 100]);
+    draw(1100);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
+  });
   it('shifts subcell pans without placement and restores selection after context recreation', () => {
     const reports = vi.fn<(labels: LabelInView[]) => void>();
     atlas.on('labelschange', reports);

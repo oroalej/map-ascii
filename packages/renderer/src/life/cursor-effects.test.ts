@@ -42,3 +42,15 @@ it('seeds movement, averages CSS velocity, keeps rest on duplicates and rebases 
   e.clear();
   expect(e.rest(750)).toBeUndefined();
 });
+
+it('omits and clears disabled rings while retaining cursor wind and rest sampling', () => {
+  const effects = new CursorEffects(),
+    cell = { w: 5, h: 9 };
+  effects.move([0, 0], [123, 13], 0, cell);
+  expect(effects.active(0)).toBe(true);
+  effects.move([50, 0], [123, 13], 120, cell, false);
+  expect(effects.active(120)).toBe(false);
+  expect(effects.gust(120, 1)!.strength).toBeGreaterThan(0);
+  effects.move([50, 0], [123, 13], 220, cell, false);
+  expect(effects.rest(220)).toBe(0.1);
+});

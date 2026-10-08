@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LifeWorld } from './simulate';
-import { continuityMover, left } from './testing/continuity';
+import { LifeWorld, TileLife } from './simulate';
+import { continuityMover, left, parent, right } from './testing/continuity';
+import type { TileId } from '../tiles';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { bodyInside } from './occupancy';
 
@@ -107,3 +108,87 @@ it('preserves pointer-free boat properties and refuses a neighboring craft', () 
   a.step();
   expect(a.boat.boatShift).toBe(before);
 });
+
+function transferTile(tile: TileId, hazard?: 'bank' | 'hole' | 'obstacle', seam = false) {
+  const b = new LifeBuilder(),
+    pm = 1 / metersPerUnit(tile),
+    y = 1000 * 2 ** (tile.z - parent.z);
+  b.line(
+    [
+      { x: -100, y },
+      { x: 4196, y },
+    ],
+    LifeLine.river,
+    20,
+    77,
+  );
+  const ring = (x0: number, x1: number, center: number, half: number) => [
+    { x: x0, y: center - half * pm },
+    { x: x1, y: center - half * pm },
+    { x: x1, y: center + half * pm },
+    { x: x0, y: center + half * pm },
+    { x: x0, y: center - half * pm },
+  ];
+  const x = seam ? 0 : 2000;
+  b.area(
+    'blocked',
+    [
+      ring(-100, seam && !hazard ? 4096 : 4196, y, hazard === 'bank' ? 1.8 : 15),
+      ...(hazard === 'hole' ? [ring(x - 4 * pm, x + 4 * pm, y + 3 * pm, 1)] : []),
+    ],
+    true,
+  );
+  if (hazard === 'obstacle') b.area('blocked', [ring(x - 4 * pm, x + 4 * pm, y + 3 * pm, 1)]);
+  return { key: `${tile.z}/${tile.x}/${tile.y}`, tile, life: b.finish() };
+}
+function empty(life: TileLife) {
+  life.movers.length = life.parked.length = life.gatherers.length = life.stalls.length = 0;
+  life.flocks.length = life.scenes.sites.length = 0;
+}
+it.each(['bank', 'hole', 'obstacle'] as const)(
+  'rejects a shifted zoom adoption into a %s while the unshifted transfer remains legal',
+  (hazard) => {
+    for (const shifted of [false, true]) {
+      const world = new LifeWorld(),
+        sourceEntry = transferTile(parent),
+        targetEntry = transferTile(left, hazard);
+      world.sync([sourceEntry]);
+      const source = world.resident(sourceEntry.key)!,
+        target = new TileLife(left, targetEntry.life, 1),
+        boat = continuityMover(source, 1000, 'boat');
+      empty(source);
+      empty(target);
+      target.movers.push(continuityMover(target, 2500, 'boat'));
+      if (shifted) boat.boatShift = 3;
+      source.movers.push(boat);
+      world.sync([targetEntry], undefined, undefined, new Map([[targetEntry.key, target]]));
+      expect(target.movers.includes(boat)).toBe(!shifted);
+      if (shifted) expect(source.movers).toContain(boat);
+    }
+  },
+);
+it.each(['bank', 'hole', 'obstacle'] as const)(
+  'does not hand an active detour across a seam into a %s',
+  (hazard) => {
+    const world = new LifeWorld(),
+      sourceEntry = transferTile(left, undefined, true),
+      targetEntry = transferTile(right, hazard, true);
+    world.sync([sourceEntry, targetEntry]);
+    const source = world.resident(sourceEntry.key)!,
+      target = world.resident(targetEntry.key)!,
+      boat = continuityMover(source, 4080, 'boat');
+    empty(source);
+    empty(target);
+    Object.assign(boat, { boatShift: 3, speed: 3 * source.perMeter, v: source.perMeter });
+    source.movers.push(boat);
+    const pointer = tileToLngLat(left, {
+      x: boat.x + source.perMeter,
+      y: boat.y - source.perMeter,
+    });
+    for (let i = 0; i < 60; i++)
+      world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, pointer);
+    expect(target.movers).not.toContain(boat);
+    expect(source.movers).toContain(boat);
+    expect(boat.boatShift).toBeGreaterThan(0);
+  },
+);

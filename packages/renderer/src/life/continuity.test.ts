@@ -18,7 +18,7 @@ import { withoutDecorations } from '../../scripts/decorations';
 const entry = continuityTile(parent);
 it('rebases an active boat shift during zoom adoption without adding pointer-free properties', () => {
   const a = continuityTile(parent, LifeLine.river),
-    b = continuityTile(left, LifeLine.river);
+    b = continuityTile(left, LifeLine.river, 77, 1 / metersPerUnit(left));
   const source = new TileLife(parent, a.life, 1),
     target = new TileLife(left, b.life, 1);
   const boat = continuityMover(source, 1000, 'boat');
@@ -30,7 +30,16 @@ it('rebases an active boat shift during zoom adoption without adding pointer-fre
     next = tileToLngLat(left, target.pose(projected));
   expect(next[0]).toBeCloseTo(old[0], 9);
   expect(next[1]).toBeCloseTo(old[1], 9);
-  expect(projected.boatShift).toBeCloseTo(1.5);
+  expect(projected.boatShift).toBeCloseTo(0.5, 3);
+  source.movers.push(boat);
+  expect(
+    target.adoptFrom(boat, source, {}, (preview) => {
+      expect(target.pose(preview)).toEqual(target.pose(projected));
+      return true;
+    }),
+  ).toBe(true);
+  expect(boat.boatShift).toBe(projected.boatShift);
+  expect(target.pose(boat)).toEqual(target.pose(projected));
 });
 function fixture(kind: LifeLine = LifeLine.roadMajor) {
   const source = continuityTile(parent, kind);

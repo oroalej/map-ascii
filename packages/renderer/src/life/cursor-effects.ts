@@ -33,6 +33,7 @@ export class CursorEffects {
     at: readonly [number, number],
     now: number,
     cell: { w: number; h: number },
+    ripples = true,
   ) {
     this.anchor = at;
     const scale = `${cell.w}/${cell.h}`;
@@ -58,6 +59,11 @@ export class CursorEffects {
       this.strength = Math.min(CURSOR_WIND.max, (speed / CURSOR_WIND.full) * CURSOR_WIND.max);
       this.sample = { point: [...point], time: now, scale };
       this.moved = now;
+    }
+    if (!ripples) {
+      this.rings.length = 0;
+      this.last = undefined;
+      return;
     }
     if (
       !this.last ||
