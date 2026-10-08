@@ -141,7 +141,7 @@ describe('eastern school grounds from the owner references', () => {
         expect(
           pack.sources.some(
             (s) =>
-              s.url.includes('google.com/maps') &&
+              s.url?.includes('google.com/maps') &&
               s.note?.includes('owner-supplied') &&
               s.note.includes('2026-10-08'),
           ),

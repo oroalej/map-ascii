@@ -109,7 +109,33 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 Emergency vehicles (2026-10-07): illustrative OSM-derived episodes, without live dispatch data. The pack permits one ambulance, two police cars and one fire truck. Police patrols are a regular presence: safe offscreen admissions are scheduled every 5–15 simulated seconds while a patrol slot is available, with lights off between calls. Ambulance and fire responses remain occasional. Their intervals and dwell/call durations are simulation settings. Hospital destinations use `building_hospital`, and station destinations use retained `amenity=police` / `amenity=fire_station` tags. The two mapped Guard Houses are excluded from police dispatch origins: [way 222404483](https://www.openstreetmap.org/way/222404483) and [way 222405532](https://www.openstreetmap.org/way/222405532). The generated graph retains legal road directions and snapped roadside terminals; building samples represent decorative incident destinations.
 
-As of 2026-10-04, the city pack contains 70 landmark records, 67 landcover packs and 64 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
+As of 2026-10-08, the city pack contains 71 landmark records, 86 landcover packs and 81 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
+
+Eastern school grounds (draft, 2026-10-08): sixteen owner-supplied Google Maps satellite images guide seventeen separate detail and landcover packs, including both San Isidro campuses in their shared image and the Naga City Sports Complex. The implementer inspected each local image directly; capture dates are unknown, reference images remain ignored and no bitmap ships. Source-relative estimates add the following crowns, lawns, paved approaches/courtyards and supplemental courts. Areas are rounded to the nearest square metre; mapped courts are retained separately.
+
+| Campus | Added trees | Lawn m² | Paving m² | Added courts |
+| --- | ---: | ---: | ---: | ---: |
+| Villa Grande Homes ES | 9 | 1,421 | 478 | 0 |
+| Concepcion Grande ES | 4 | 0 | 383 | 0 |
+| San Rafael ES SPED Center | 2 | 0 | 301 | 0 |
+| Villa Corazon ES | 1 | 0 | 157 | 0 |
+| Pacol ES | 5 | 215 | 518 | 0 |
+| Ateneo JHS, Bonoan/Pacol campus | 20 | 4,908 | 3,663 | 1 |
+| Naga City Sports Complex | 11 | 2,418 | 6,080 | 0 |
+| Leon Q. Mercado HS | 10 | 0 | 551 | 0 |
+| Teodora Moscoso ES | 2 | 0 | 95 | 0 |
+| Del Rosario ES | 2 | 0 | 891 | 0 |
+| Del Rosario HS | 1 | 0 | 176 | 0 |
+| Cararayan NHS | 7 | 0 | 1,425 | 0 |
+| Don Manuel I. Abella Central School | 5 | 29 | 710 | 0 |
+| San Isidro NHS | 3 | 56 | 223 | 0 |
+| San Isidro ES | 5 | 714 | 1,005 | 0 |
+| Carolina ES | 6 | 0 | 633 | 0 |
+| Carolina NHS | 6 | 168 | 766 | 0 |
+
+Complete mapped roofs, water, pitches and full road/path widths govern placement; adjoining campuses and the eastern farmland stay separate. Bare yards receive no inferred lawns. Paving has matching walking routes, with complete frontage-to-building approaches at fourteen sites. Pacol ES, the Sports Complex and San Isidro NHS retain only supported interior links: a complete source-clear approach could not be established from the supplied views. Six image fits remain outside the 5 m independent-check limit: Concepcion Grande (31.60 m), Pacol (11.40 m), Sports Complex (9.35 m), shared San Isidro (8.34 m), Carolina ES (15.05 m) and Carolina NHS (10.74 m). Their packs disclose this uncertainty and retain conservative mapped-obstacle constraints. Positions, dimensions, crowns and surfaces remain undated estimates, without surveyed boundaries, species, construction dates or exact inventories. The Sports Complex uses its existing soccer-pitch anchor; fetching the stadium identity as a separate label remains a pipeline follow-up.
+
+Six campuses are explicitly omitted, with their original parents unchanged. American School of English, Math, and Science and Naga View Adventist College have no supplied view establishing grounds around their point anchors (both Adventist school/college points remain). Grand View ES, Morada-Ramos ES and Panicuason ES have no supplied outdoor reference. The Carolina ES view does not establish the separate Don Bosco Training Center of Naga layout. The owner's instruction to proceed permits these omissions; no unsupported landscape is added.
 
 St. John Hospital and STI College correction (2026-10-04): the owner's new close-up references supersede their earlier schematic outdoor layouts. Remove St. John's added grounds, three trees, grass/planting/shrubs and two walking/paving routes. Remove STI's broad estimated grounds envelope, ten trees, all supplemental grass/planting and six paving strips. Both retain their curated landmark identities, complete mapped roofs, source access geometry and hospital/school classification. The Hospital legend category remains. No new geometry is inferred from these references and no raster ships. This supersedes the earlier landscaping descriptions for these two sites; the other school and hospital layouts remain.
 
