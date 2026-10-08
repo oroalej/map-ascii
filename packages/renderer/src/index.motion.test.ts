@@ -47,6 +47,7 @@ import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
+import { fireworksPass } from './fireworks-pass';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
 import type * as FolklorePassModule from './folklore-pass';
@@ -639,6 +640,54 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+  it('captures night-season fireworks and consumes a chosen launch receipt once', async () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 21 },
+      year: 2026,
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'new-year',
+            title: { en: 'New Year' },
+            window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          },
+        ],
+      },
+      life: { time: 1320, season: 'new-year' },
+    });
+    await vi.dynamicImportSettled();
+    const capture = vi
+      .spyOn(TapCapture, 'captureTap')
+      .mockImplementation((_point, tap, _frame, _reads, _attachment, _current, done) => done(tap));
+    vi.mocked(lifeRaster).mockReturnValue({
+      owners: new Uint32Array(0),
+      life: new Uint8Array(0),
+      revision: 1,
+    } as NonNullable<ReturnType<typeof lifeRaster>>);
+    draw(100);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBe(true);
+    draw(140);
+    const requests = vi.mocked(fireworksPass).mock.calls.at(-1)![13];
+    expect(requests).toHaveLength(1);
+    expect(requests![0]!.at[0]).toBeCloseTo(0, 10);
+    expect(requests![0]!.at[1]).toBeCloseTo(0, 10);
+    draw(180);
+    expect(vi.mocked(fireworksPass).mock.calls.at(-1)![13]).toBeUndefined();
+    atlas.setLife({ time: 720 });
+    draw(220);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBeUndefined();
+    atlas.setLife({ time: 1320, season: 'unknown' });
+    draw(260);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBeUndefined();
   });
   it('clamps an initial zoom below the default floor before and after drawing', async () => {
     atlas.destroy();

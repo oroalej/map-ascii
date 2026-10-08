@@ -136,7 +136,12 @@ import type { LifeTile, ProcessionRun, VisibleAgent } from './life/simulate';
 import { EMPTY_FOLKLORE, type FolklorePacket, type FolkloreCalendar } from './life/folklore';
 import { folkloreLayout, folklorePass, type FolkloreQuad } from './folklore-pass';
 import { fireworksPass } from './fireworks-pass';
-import { FIREWORKS } from './fireworks-layout';
+import {
+  FIREWORKS,
+  clearRequestedFireworks,
+  fireworkTapEligible,
+  type FireworkRequest,
+} from './fireworks-layout';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
 import { LifePause, LivePauseOffset } from './life/pause';
@@ -953,15 +958,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const taps = new TapQueue();
   let carnivalBoosts: CarnivalBoosts | undefined;
   let candleFlare: CandleFlare | undefined;
+  let requestedFireworks: FireworkRequest[] | undefined;
   let tapPointer = { revision: 0, left: false };
   let feedTrackingUntil = 0;
   let tapEpoch = 0;
   const clearTaps = () => {
     tapEpoch++;
     taps.clear();
+    requestedFireworks = undefined;
     if (!lifeActive() || lost) {
       carnivalBoosts = undefined;
       candleFlare = undefined;
+      if (programs?.fireworks) clearRequestedFireworks(programs.fireworks.display);
       feedTrackingUntil = 0;
     }
   };
@@ -1134,6 +1142,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
       drawnLife = lifeView();
       for (const { tap, action } of taps.consume(drawnLife?.tapReceipts, drawnLife?.generation)) {
+        if (action === 'firework') {
+          const requests = (requestedFireworks ??= []);
+          if (requests.length < 4)
+            requests.push({
+              id: tap.id,
+              at: tap.at,
+              zoom: camera.zoom,
+              time: (now - start) / 1000,
+            });
+        }
         if (action === 'candle' && tap.candle)
           candleFlare = new CandleFlare(
             { at: tap.candle.at, seed: tap.candle.seed ?? 0 },
@@ -1549,6 +1567,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     clearTaps();
     carnivalBoosts = undefined;
     candleFlare = undefined;
+    if (programs?.fireworks) clearRequestedFireworks(programs.fireworks.display);
     clearFolklore();
     lifeHover.clear();
     season = next;
@@ -1950,7 +1969,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         wind,
         daylight,
         fireworkSites,
+        requestedFireworks,
       );
+      requestedFireworks = undefined;
       folklorePass(
         gl,
         programs,
@@ -2188,6 +2209,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           ...(signal && { signal }),
           ...(carnival && { carnival }),
           ...(candle && { candle }),
+          ...(fireworkTapEligible(season?.fireworks, emojiSunAltitude ?? 90) && { firework: true }),
         },
         {
           targets: target,
