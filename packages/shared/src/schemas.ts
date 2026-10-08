@@ -10,7 +10,13 @@ import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitive
 export { OsmId } from './schema-primitives';
 import { isDetailSelection, type DetailSelection } from './detail-selection';
 import { SignalPosition } from './signal-layout';
-import { WIND_STRENGTHS, type ClimateConfig } from './climate';
+import {
+  WIND_STRENGTHS,
+  CROP_STAGES,
+  cropDate,
+  type CropCalendar,
+  type ClimateConfig,
+} from './climate';
 import {
   FOLKLORE_SITE_KINDS,
   RHYTHM_KINDS,
@@ -296,8 +302,8 @@ export const CuratedTreeOverride = z
 /** A curated line of trees, drawn a crown every crown's width (`Landcover`). */
 export const CuratedTreeRow = z.strictObject({ line: z.array(LngLat).min(2), ...treeShape });
 
-/** A curated ground cover; woods use the atlas `trees` class. */
-export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs', 'planting']);
+/** A curated ground cover; woods use `trees`, and farmland uses the existing crop class. */
+export const LandCover = z.enum(['grass', 'parking', 'woods', 'shrubs', 'planting', 'farmland']);
 export type LandCover = z.infer<typeof LandCover>;
 
 /**
@@ -1185,7 +1191,41 @@ const PrevailingWindSchema = z.strictObject({
   strength: z.enum(WIND_STRENGTHS),
 });
 
-/** A city's winds by season (climate.ts); the renderer's wind follows the current month. */
+export const CropCalendarSchema = z
+  .strictObject({
+    calendar: z
+      .array(
+        z.strictObject({
+          from: z
+            .string()
+            .refine((from) => cropDate(from) !== undefined, 'expected canonical real MM-DD'),
+          stage: z.enum(CROP_STAGES),
+        }),
+      )
+      .min(2),
+    source: z.string().min(1),
+    notes: z.string().optional(),
+  })
+  .superRefine(({ calendar }, ctx) => {
+    const seen = new Set<string>();
+    calendar.forEach(({ from }, i) => {
+      if (seen.has(from))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['calendar', i, 'from'],
+          message: 'duplicate stage start',
+        });
+      seen.add(from);
+    });
+    if (!calendar.some(({ from }) => from !== '02-29'))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['calendar'],
+        message: 'needs an annually occurring stage start',
+      });
+  }) satisfies z.ZodType<CropCalendar>;
+
+/** A city's seasonal wind and optional crop calendar (climate.ts). */
 export const Climate = z
   .strictObject({
     wind: z.array(
@@ -1196,6 +1236,7 @@ export const Climate = z
     ),
     default: PrevailingWindSchema,
     source: z.string().min(1),
+    crops: z.strictObject({ rice: CropCalendarSchema.optional() }).optional(),
   })
   .superRefine((climate, ctx) => {
     const seen = new Set<number>();

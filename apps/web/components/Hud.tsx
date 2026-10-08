@@ -137,10 +137,12 @@ function LegendControls({
   subdivisionLabel,
   sidewalksDerived,
   hidden,
+  climate,
 }: {
   subdivisionLabel: string;
   sidewalksDerived: boolean;
   hidden: boolean;
+  climate?: ClimateConfig | undefined;
 }) {
   // The legend changes only at band edges; round so it isn't rebuilt every frame of a zoom.
   const rounded = useAtlasStore((s) => round(s.camera?.zoom ?? 0, 0.05));
@@ -181,8 +183,21 @@ function LegendControls({
         season,
         emoji,
         folklore,
+        riceCalendar: Boolean(climate?.crops?.rice),
       }),
-    [theme, rounded, onScreen, life, lights, sidewalksDerived, fixtures, season, emoji, folklore],
+    [
+      theme,
+      rounded,
+      onScreen,
+      life,
+      lights,
+      sidewalksDerived,
+      fixtures,
+      season,
+      emoji,
+      folklore,
+      climate,
+    ],
   );
   // Replacements start clean; cleanup touches only the instance it belongs to.
   useEffect(() => {
@@ -546,6 +561,7 @@ export function Hud({
           subdivisionLabel={subdivisionLabel}
           sidewalksDerived={sidewalksDerived}
           hidden={factsVisible}
+          climate={climate}
         />
       </div>
       <div

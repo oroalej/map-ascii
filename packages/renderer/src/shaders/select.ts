@@ -69,6 +69,8 @@ uniform int u_count[${MAX_CLASSES}];
 uniform int u_connect[${MAX_CLASSES}];
 uniform ivec2 u_origin;           // world cell of texel (0, 0)
 uniform float u_time;             // seconds; 0 with reduced motion
+uniform int u_cropStage;
+uniform float u_cropProgress;
 uniform float u_wind;             // wind over grass: 1, or 0 with reduced motion
 uniform float u_zoom;
 uniform bool u_shadows;
@@ -533,9 +535,17 @@ void main() {
   } else if (kind == ${kindCodes.crop}) {
     // Fields in the wind (glyphs/select.ts cropVariant); ripe patches are straw.
     vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
-    v = min(cropVariant(w, front.x), u_count[cls] - 1);
-    g_tone = cropTone(w);
-    g_wind = windLevel(front.x, front.y);
+    if (u_cropStage >= 0) {
+      int tone;
+      v = min(cropCell(w, front.x, u_cropStage, u_cropProgress, u_time, tone), u_count[cls] - 1);
+      g_tone = tone;
+      g_wind = u_cropStage == CROP_GROWING || u_cropStage == CROP_RIPE || u_cropStage == CROP_TRANSPLANTED
+        ? windLevel(front.x, front.y) : 0;
+    } else {
+      v = min(cropVariant(w, front.x), u_count[cls] - 1);
+      g_tone = cropTone(w);
+      g_wind = windLevel(front.x, front.y);
+    }
   } else if (kind == ${kindCodes.canopy}) {
     // Woods in the wind (glyphs/select.ts canopyCell): crowns creep downwind and flutter; their
     // sunny side is lit and the far side shaded.
