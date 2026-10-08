@@ -81,6 +81,12 @@ describe('food content', () => {
       Dish.safeParse({ ...dish, facts: facts.map((fact) => ({ ...fact, source: 1 })) }).success,
     ).toBe(false);
   });
+  it('uses city-agnostic local and regional origins', () => {
+    for (const origin of ['local', 'regional', 'contested', 'elsewhere', 'unknown'])
+      expect(Dish.safeParse({ ...dish, origin }).success).toBe(true);
+    for (const origin of ['naga', 'bicol'])
+      expect(Dish.safeParse({ ...dish, origin }).success).toBe(false);
+  });
   it.each(['signatures', 'pasalubong'])('validates %s text and source indices', (field) => {
     expect(Landmark.safeParse({ ...food, [field]: [{ name: 'Soup', source: 0 }] }).success).toBe(
       true,

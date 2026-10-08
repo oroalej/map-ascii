@@ -39,6 +39,7 @@ const dish: Dish = {
   sources: [{ title: 'Dish research', url: 'https://example.org/dish' }],
   facts: [0, 1, 2].map((index) => ({ text: { en: `Dish fact ${index}` }, source: 0 })),
 };
+let testDishes: Dish[];
 let root: Root,
   container: HTMLDivElement,
   canvas: HTMLCanvasElement,
@@ -78,10 +79,10 @@ function App() {
         city="test"
         subdivisionLabel="district"
         landmarks={testLandmarks}
-        dishes={[dish]}
+        dishes={testDishes}
         art={[]}
       />
-      <DishFacts dishes={[dish]} />
+      <DishFacts dishes={testDishes} />
       <TourPlayer />
     </>
   );
@@ -159,6 +160,20 @@ it.each([false, true])(
     expect(useUiStore.getState().factsVisible).toBe(false);
   },
 );
+it.each(['local', 'regional'] as const)(
+  'shows generic %s origin in food and dish facts',
+  (origin) => {
+    testDishes = [{ ...dish, origin }];
+    testLandmarks = [{ ...landmark, type: 'food', known_for: [dish.id] }];
+    clickSelection();
+    render();
+    flush();
+    const label = origin === 'local' ? 'Local' : 'Regional';
+    expect(dialog()!.textContent).toContain(`Origin: ${label}`);
+    act(() => selectPlace(dish.id, { origin: 'keyboard' }));
+    expect(dialog()!.textContent).toContain(`Origin: ${label}`);
+  },
+);
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   frames = new Map();
@@ -173,6 +188,7 @@ beforeEach(() => {
     other,
     { ...landmark, id: 'landmark/c', osm_id: 'osm:node/3', facts: undefined },
   ];
+  testDishes = [dish];
   footer = undefined;
   viewport = Object.assign(new EventTarget(), {
     width: 800,

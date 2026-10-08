@@ -4,16 +4,17 @@ import { selectPlace } from '@/state/selection';
 import { Citation, FactList, SourceList } from './SourcedFacts';
 import styles from './LandmarkDetails.module.css';
 
-const origins = new Map<Dish['origin'], string>([
-  ['bicol', 'Bicol'],
-  ['contested', 'Contested'],
-  ['elsewhere', 'Elsewhere'],
-  ['unknown', 'Unknown'],
-]);
+const origins: Record<Dish['origin'], string> = {
+  local: 'Local',
+  regional: 'Regional',
+  contested: 'Contested',
+  elsewhere: 'Elsewhere',
+  unknown: 'Unknown',
+};
 export function DishDetails({ dish, prefix }: { dish: Dish; prefix: string }) {
   return (
     <>
-      <p className={styles.meta}>Origin: {origins.get(dish.origin) ?? 'Local'}</p>
+      <p className={styles.meta}>Origin: {origins[dish.origin]}</p>
       <p>{dish.description.en}</p>
       <FactList facts={dish.facts} sources={dish.sources} prefix={prefix} />
       <SourceList sources={dish.sources} prefix={prefix} />

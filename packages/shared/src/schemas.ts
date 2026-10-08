@@ -734,7 +734,7 @@ export function contentSchemas(languages?: readonly string[]) {
     .object({
       id: DishId,
       name: text,
-      origin: z.enum(['naga', 'bicol', 'contested', 'elsewhere', 'unknown']),
+      origin: z.enum(['local', 'regional', 'contested', 'elsewhere', 'unknown']),
       description: text,
       facts: z.array(LandmarkFact).min(3).max(5),
       sources: Sources,
