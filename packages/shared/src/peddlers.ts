@@ -17,7 +17,7 @@ export type PeddlerConfig = {
   label: string;
   prop: PeddlerProp;
   hours: PeddlerHours | PeddlerHours[];
-  lines: ('path' | 'plaza')[];
+  lines: ('street' | 'path' | 'plaza')[];
   perTile: 1 | 2;
   share?: number;
   call?: 'voice' | 'bell';

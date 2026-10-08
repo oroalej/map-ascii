@@ -301,7 +301,7 @@ Verification backlog: verify actual Mass schedules and church selection, cemeter
 
 ## Street peddlers
 
-Seven illustrative walking trades use the city-local clock. Exact hours and shares below are authored settings, not a Naga trade survey. Generic Philippine trade sources support recognizable goods, calls and broad morning/day/night patterns. [Naga livelihood research](https://philjournalsci.dost.gov.ph/publication/regular-issues/next-issue/116-vol-151-no-6a-december-2022-part-a/1733-street-vendors-livelihood-vulnerability-to-typhoons-in-naga-city-philippines) supports weather vulnerability, not the numeric shares.
+Seven illustrative walking trades use the city-local clock. Peddlers use street-edge corridors outside the carriageway. School, hospital, market and other establishment grounds, parks, plazas, parking areas and fields exclude their complete footprints; service roads and restricted-access drives are not eligible. These corridors are illustrative placement derived from street geometry, not mapped sidewalk claims. Exact hours and shares below are authored settings, not a Naga trade survey. Generic Philippine trade sources support recognizable goods, calls and broad morning/day/night patterns. [Naga livelihood research](https://philjournalsci.dost.gov.ph/publication/regular-issues/next-issue/116-vol-151-no-6a-december-2022-part-a/1733-street-vendors-livelihood-vulnerability-to-typhoons-in-naga-city-philippines) supports weather vulnerability, not the numeric shares.
 
 | Goods | Prop | Hours | Base / rain / heat / gust share |
 | --- | --- | --- | --- |
@@ -327,4 +327,4 @@ Trade sources:
 - kakanin: [Bicol DA assorted kakanin procurement](https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf).
 - takatak: [Takatak: Sa Kahon ng Paglimot, Sa Laylayan ng Pag-usad](https://newsroom-pacesetter.medium.com/takatak-sa-kahon-ng-paglimot-sa-laylayan-ng-pag-usad-b8207d62d1a8); [Naga Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/).
 
-For owner review in `pnpm dev`: `/naga?lat=13.618281&lng=123.190863&z=19` at 09:00 has decoded walking-route peddlers; `/naga?lat=13.619164&lng=123.192118&z=19` has a terminal-constrained takatak candidate. These coordinates were checked through the simulation, without screenshots or visual claims.
+For owner review in `pnpm dev`: `/naga?lat=13.618246&lng=123.191733&z=19` at 09:00 has a decoded street-side taho vendor; `/naga?lat=13.618320&lng=123.191145&z=19` has a terminal-constrained street-side takatak candidate. These coordinates were checked through the simulation, without screenshots or visual claims.

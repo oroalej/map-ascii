@@ -13,6 +13,7 @@ const example = {
 };
 describe('peddler city configuration', () => {
   it('accepts all generic props and adjacent windows including midnight', () => {
+    expect(Peddler.safeParse({ ...example, lines: ['street'] }).success).toBe(true);
     for (const prop of PEDDLER_PROPS)
       expect(Peddler.safeParse({ ...example, prop }).success).toBe(true);
     for (const hours of [

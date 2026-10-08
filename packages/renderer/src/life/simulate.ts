@@ -8587,6 +8587,25 @@ export class LifeWorld {
   private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
   private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
   private peddlerGeneration = 0;
+  private readonly peddlerGrounds = new WeakMap<GroundTerrain, PolygonIndex>();
+  private peddlerGroundIndex(terrain: GroundTerrain) {
+    const saved = this.peddlerGrounds.get(terrain);
+    if (saved) return saved;
+    const index = new PolygonIndex();
+    for (const [life, frame] of terrain.origins)
+      for (const area of life.geo.areas ?? [])
+        if (area.kind === 'peddler-exclusion')
+          index.add(
+            area.rings.map((ring) =>
+              ring.map((p) => ({
+                x: frame.x + (p.x / life.perMeter) * frame.scale,
+                y: frame.y + (p.y / life.perMeter) * frame.scale,
+              })),
+            ),
+          );
+    this.peddlerGrounds.set(terrain, index);
+    return index;
+  }
   private peddlerOrdinarySnapshot?: {
     ref: TileLife;
     sources: { life: TileLife; bodies: Body[] }[];
@@ -8692,6 +8711,7 @@ export class LifeWorld {
                 terrain.water,
                 terrain.seasonal,
                 terrain.roadAccess.roads,
+                this.peddlerGroundIndex(terrain),
               ].filter((index) => index.polygons.length);
               if (!indexes.length) return true;
               const frame = metricFrame(life, terrain.ref),

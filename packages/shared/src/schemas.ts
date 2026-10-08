@@ -1755,7 +1755,7 @@ export const Peddler = z.strictObject({
       }, 'overlapping hours'),
   ]),
   lines: z
-    .array(z.enum(['path', 'plaza']))
+    .array(z.enum(['street', 'path', 'plaza']))
     .min(1)
     .refine((v) => new Set(v).size === v.length, 'duplicate walking kind'),
   perTile: z.union([z.literal(1), z.literal(2)]),

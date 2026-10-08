@@ -799,6 +799,7 @@ export function buildTileGeometry(
   const crownSurface: number[] = [];
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
+  life.peddlerStreet();
   // Append new walking lines after the original lines to retain their stable indices/seeds.
   const walkingLines: { points: TilePoint[]; width: number; id: number }[] = [];
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
@@ -1284,6 +1285,15 @@ export function buildTileGeometry(
               ? LifeLine.canal
               : lifeLineFor[className];
         if (!isRegion && unitMeters && lifeLine !== undefined && lifeLine <= LifeLine.roadMinor) {
+          const access = feature.properties.access,
+            kind = String(feature.properties.kind ?? '');
+          if (
+            !/^highway=(service|motorway|trunk)/.test(kind) &&
+            !kind.endsWith('_link') &&
+            (access === undefined ||
+              ['yes', 'public', 'permissive', 'designated'].includes(String(access)))
+          )
+            life.peddlerStreet(hashString(featureId));
           for (const line of rings) {
             for (let i = 1; i < line.length; i++) {
               const ring = stripRing(
@@ -1401,6 +1411,13 @@ export function buildTileGeometry(
             if (site) compactRoofs.push(site);
           }
           if (!isRegion) {
+            // Compound grounds stay walkable for their own population, but never host peddlers.
+            if (
+              (isRoofBuilding(className) && height === 0) ||
+              ['parking', 'pitch', 'park', 'paving', 'farmland'].includes(className) ||
+              ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+            )
+              life.area('peddler-exclusion', polygon);
             if (className === 'parking') life.area('parking', polygon);
             // A curb ring encloses its island: vehicles keep off all of it, not just the curb.
             else if (walkableStep) life.area('vehicle-blocked', [polygon[0]!]);

@@ -8,7 +8,7 @@ import {
   type PeddlerHours,
   type PeddlerProp,
 } from '@atlas/shared';
-import { EXTENT, tileToLngLat, lngLatToTile } from '../raster/geometry';
+import { EXTENT, tileToLngLat, lngLatToTile, sidewalkLine } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { LifeLine, SITE_STRIDE, type LifeGeometry } from './geometry';
 import {
@@ -19,6 +19,7 @@ import {
   RUN,
   HEAT,
   SHELTER_DEPARTURE,
+  DEFAULT_ROAD_WIDTH_M,
 } from './config';
 import {
   PolygonIndex,
@@ -209,6 +210,7 @@ export class PeddlerPopulation {
   private readonly routes = new Map<PeddlerConfig, Route[]>();
   private ordinaryBodies: readonly Body[] = [];
   private readonly obstacles = new PolygonIndex();
+  private readonly streetIds?: Set<number>;
   readonly caller: PeddlerCaller;
   readonly emoji = new PeddlerEmojiObserver();
   constructor(
@@ -222,6 +224,12 @@ export class PeddlerPopulation {
   ) {
     this.caller = new PeddlerCaller(presentation.dialogue, presentation.periods);
     const { geo, perMeter } = context;
+    this.streetIds = geo.peddlerStreetIds && new Set(geo.peddlerStreetIds);
+    for (const area of geo.areas ?? [])
+      if (area.kind === 'peddler-exclusion')
+        this.obstacles.add(
+          area.rings.map((ring) => ring.map((p) => ({ x: p.x / perMeter, y: p.y / perMeter }))),
+        );
     for (let line = 0; line < geo.obstacleClosed.length; line++) {
       const points: Point[] = [];
       for (let v = geo.obstacleStarts[line]!; v < geo.obstacleStarts[line + 1]!; v++)
@@ -323,11 +331,35 @@ export class PeddlerPopulation {
       add(a, mid, line, site, exitA, false, depth + 1);
       add(mid, b, line, site, false, exitB, depth + 1);
     };
+    const candidates: { points: Point[]; line: number; width: number }[] = [];
     for (let line = 0; line < geo.kinds.length; line++) {
-      if (!config.lines.some((kind) => geo.kinds[line] === LifeLine[kind])) continue;
+      const points = Array.from({ length: geo.starts[line + 1]! - geo.starts[line]! }, (_, i) => {
+        const v = geo.starts[line]! + i;
+        return { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! };
+      });
       if (
-        geo.widths[line]! > 0 &&
-        geo.widths[line]! <
+        config.lines.includes('street') &&
+        geo.kinds[line]! <= LifeLine.roadMinor &&
+        (!this.streetIds || this.streetIds.has(geo.lineIds?.[line] ?? -1))
+      ) {
+        // Illustrative street-side corridors, with the whole cart/carrier outside the curb.
+        // These are peddler routes, not claims that an unmapped sidewalk exists.
+        const offset = ((geo.widths[line] || DEFAULT_ROAD_WIDTH_M) / 2 + radial + 0.3) * perMeter;
+        for (const side of [-1, 1])
+          candidates.push({
+            points: sidewalkLine(points, offset * side),
+            line: -(line * 2 + (side === -1 ? 1 : 2)),
+            width: 0,
+          });
+      } else if (
+        config.lines.some((kind) => kind !== 'street' && geo.kinds[line] === LifeLine[kind])
+      )
+        candidates.push({ points, line, width: geo.widths[line]! });
+    }
+    for (const { points, line, width } of candidates) {
+      if (
+        width > 0 &&
+        width <
           Math.max(
             1,
             isPeddlerCart(config.prop) ? VEHICLES[config.prop].width : FIGURE_SIZE_M[config.prop],
@@ -335,9 +367,9 @@ export class PeddlerPopulation {
             0.1
       )
         continue;
-      for (let v = geo.starts[line]!; v + 1 < geo.starts[line + 1]!; v++) {
-        const a = { x: geo.coords[v * 2]! / perMeter, y: geo.coords[v * 2 + 1]! / perMeter },
-          b = { x: geo.coords[v * 2 + 2]! / perMeter, y: geo.coords[v * 2 + 3]! / perMeter };
+      for (let v = 0; v + 1 < points.length; v++) {
+        const a = { x: points[v]!.x / perMeter, y: points[v]!.y / perMeter },
+          b = { x: points[v + 1]!.x / perMeter, y: points[v + 1]!.y / perMeter };
         for (const site of sites) {
           const clip = clipSegment(
             a,
@@ -353,8 +385,8 @@ export class PeddlerPopulation {
               clip[1],
               line,
               site,
-              v === geo.starts[line] || Math.hypot(clip[0].x - a.x, clip[0].y - a.y) > 1e-6,
-              v + 2 === geo.starts[line + 1] || Math.hypot(clip[1].x - b.x, clip[1].y - b.y) > 1e-6,
+              v === 0 || Math.hypot(clip[0].x - a.x, clip[0].y - a.y) > 1e-6,
+              v + 2 === points.length || Math.hypot(clip[1].x - b.x, clip[1].y - b.y) > 1e-6,
             );
         }
       }

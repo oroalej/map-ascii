@@ -17,7 +17,7 @@ for (let i = 0; i < 8; i++)
       { x: 1500, y: 1400 + i * 12 * perMeter },
       { x: 1500 + 150 * perMeter, y: 1400 + i * 12 * perMeter },
     ],
-    LifeLine.path,
+    LifeLine.roadMinor,
     6,
   );
 export const peddlerPerfGeometry = b.finish();

@@ -4,7 +4,8 @@ import { dialogueChoices, SCENE_PROFILES } from '@atlas/shared';
 import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
-import { peddlerFixture, peddlerConfig, peddlerWeather } from './testing/peddlers';
+import { peddlerFixture, peddlerConfig, peddlerWeather, peddlerPM } from './testing/peddlers';
+import { LifeBuilder, LifeLine } from './geometry';
 import { PeddlerCaller } from './peddler-calls';
 import { assignEventCues, eventCheers } from './event-cues';
 import type { VisibleAgent } from './simulate';
@@ -30,10 +31,19 @@ const cheers = entries.filter(({ entry }) => entry.kind === 'cheer');
 it.each(['heat', 'clearing', 'hover'] as const)(
   'excludes sales-only dialogue for the actual buyer in %s',
   (mode) => {
+    const street = new LifeBuilder();
+    street.line(
+      [
+        { x: 1000, y: 1500 },
+        { x: 1000 + 100 * peddlerPM, y: 1500 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
     const pack = packs.find(({ city }) => city.slug === 'naga')!,
       buyer = pack.city.life!.peddlers!.find(({ id }) => id === 'bote-dyaryo')!,
       catalog = dialogueChoices(pack.dialogue!),
-      { population } = peddlerFixture([{ ...buyer, share: 1 }]);
+      { population } = peddlerFixture([{ ...buyer, share: 1 }], street.finish());
     population.step(0, { ...peddlerWeather, minutes: 540 }, 0);
     const owner = population.owners[0]!,
       caller = new PeddlerCaller(catalog, pack.dialogue!.periods),
