@@ -4,6 +4,7 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { PEDDLER_PROPS, peddlerHourParts } from './peddlers';
 import { isEmergencyData, type EmergencyData } from './emergency-network';
 import type { EmergencyConfig } from './rhythm';
 import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitives';
@@ -1651,8 +1652,59 @@ export const EmergencyConfigSchema = z
 /** The runtime codec validates the bounded packed graph, including every cross-reference. */
 export const CityEmergency = z.custom<EmergencyData>(isEmergencyData, 'invalid emergency network');
 
+const PeddlerHours = z
+  .strictObject({
+    from: z.number().min(0).lt(24),
+    to: z.number().min(0).max(24),
+  })
+  .refine((h) => h.from !== h.to, 'empty hours');
+export const Peddler = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  label: z.string().trim().min(1),
+  prop: z.enum(PEDDLER_PROPS),
+  hours: z.union([
+    PeddlerHours,
+    z
+      .array(PeddlerHours)
+      .min(1)
+      .max(2)
+      .refine((windows) => {
+        const parts = windows
+          .flatMap(peddlerHourParts)
+          .filter(([a, b]) => a < b)
+          .sort((a, b) => a[0] - b[0]);
+        return parts.every((p, i) => i === 0 || p[0] >= parts[i - 1]![1]);
+      }, 'overlapping hours'),
+  ]),
+  lines: z
+    .array(z.enum(['path', 'plaza']))
+    .min(1)
+    .refine((v) => new Set(v).size === v.length, 'duplicate walking kind'),
+  perTile: z.union([z.literal(1), z.literal(2)]),
+  share: z.number().min(0).max(1).optional(),
+  call: z.enum(['voice', 'bell']).optional(),
+  weather: z
+    .strictObject({
+      rain: z.number().min(0).max(1).optional(),
+      heat: z.number().min(0).max(1).optional(),
+      wind: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+  near: z
+    .strictObject({ kind: z.enum(['stop', 'terminal']), reach: z.number().positive().max(200) })
+    .optional(),
+  lamp: z.boolean().optional(),
+  emoji: z.strictObject({ heat: z.literal('cool').optional() }).optional(),
+  source: Sources,
+});
+
 export const CityLife = z
   .strictObject({
+    peddlers: z
+      .array(Peddler)
+      .max(8)
+      .refine((v) => new Set(v.map((p) => p.id)).size === v.length, 'duplicate peddler id')
+      .optional(),
     folklore: Folklore.optional(),
     emergency: EmergencyConfigSchema.optional(),
     seasons: z

@@ -277,6 +277,7 @@ export function createWorkerHost(
       profiling: !!profiler,
       seasons,
       shopSchedule: options.cityLife?.schedules?.shops,
+      peddlers: options.cityLife?.peddlers,
       folklore: runtimeFolklore(options.cityLife),
       itemInspection: options.itemInspection,
       emojiObserver: options.emojiObserver,

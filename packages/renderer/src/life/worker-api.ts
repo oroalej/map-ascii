@@ -8,6 +8,7 @@ import type {
   ProcessionRoute,
   ShopSchedule,
   TrafficMix,
+  PeddlerConfig,
 } from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';
 import { FrameProfiler, type ProfileSample } from '../profile';
@@ -57,6 +58,7 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  peddlers?: readonly PeddlerConfig[];
   folklore?: RuntimeFolklore;
   emergencyConfig?: EmergencyConfig;
   emergency?: EmergencyData;
@@ -77,12 +79,19 @@ export function configureLifeWorld(
   world: LifeWorld,
   options: Pick<
     LifeInit,
-    'processions' | 'seasons' | 'shopSchedule' | 'folklore' | 'emergencyConfig' | 'emergency'
+    | 'processions'
+    | 'seasons'
+    | 'shopSchedule'
+    | 'folklore'
+    | 'emergencyConfig'
+    | 'emergency'
+    | 'peddlers'
   >,
 ) {
   world.setProcessions(options.processions);
   world.setSeasons(options.seasons ?? []);
   world.setShopSchedule(options.shopSchedule);
+  world.setPeddlers(options.peddlers);
   world.setFolklore(options.folklore);
   world.configureEmergency(options.emergencyConfig, options.emergency);
 }

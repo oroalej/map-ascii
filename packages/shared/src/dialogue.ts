@@ -101,7 +101,7 @@ export function dialogueCatalog(languages?: readonly string[]) {
             .strict(),
         )
         .min(1)
-        .max(120),
+        .max(140),
     })
     .strict()
     .superRefine((catalog, ctx) => {
@@ -220,7 +220,7 @@ export const RuntimeDialogueCatalog = z
     exchanges: z
       .array(DialogueCatalog.shape.exchanges.element.omit({ sources: true }))
       .min(1)
-      .max(120),
+      .max(140),
   })
   .strict();
 export type RuntimeDialogueCatalog = z.infer<typeof RuntimeDialogueCatalog>;

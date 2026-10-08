@@ -14,6 +14,7 @@ import {
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
 import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
+import type { PeddlerConfig } from '@atlas/shared';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -8573,6 +8574,10 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private peddlerConfig: readonly PeddlerConfig[] = [];
+  setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    this.peddlerConfig = config ?? [];
+  }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
     this.folklore.setConfig(config);
