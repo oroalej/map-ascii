@@ -3,222 +3,222 @@
   "title": "San Isidro Elementary School grounds",
   "trees": [
     {
-      "at": [123.26854829132, 13.63270682476],
+      "at": [123.26854454381, 13.63270600436],
+      "crown_m": 11.1,
+      "height_m": 13.3
+    },
+    {
+      "at": [123.26862699904, 13.63276633787],
       "crown_m": 11.0,
       "height_m": 13.2
     },
     {
-      "at": [123.26862858374, 13.63276615907],
-      "crown_m": 11.0,
-      "height_m": 13.2
+      "at": [123.26871991024, 13.63277789349],
+      "crown_m": 11.1,
+      "height_m": 13.3
     },
     {
-      "at": [123.26872311249, 13.63277924162],
-      "crown_m": 11.0,
-      "height_m": 13.2
+      "at": [123.26880554432, 13.63277611643],
+      "crown_m": 13.6,
+      "height_m": 16.3
     },
     {
-      "at": [123.2688123757, 13.63278032274],
+      "at": [123.26881793753, 13.63266310425],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26878254523, 13.63255000879],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26870199757, 13.63246427648],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.2686466314, 13.63235521762],
+      "crown_m": 11.7,
+      "height_m": 14.0
+    },
+    {
+      "at": [123.268582892, 13.63227891147],
+      "crown_m": 11.7,
+      "height_m": 14.0
+    },
+    {
+      "at": [123.26851408944, 13.63218837484],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.26847151391, 13.63212823264],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.2683931138, 13.63206933241],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.26830858951, 13.63202758221],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.26834852849, 13.6319242793],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.26844750751, 13.63194946676],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.26855200319, 13.63202974266],
+      "crown_m": 13.8,
+      "height_m": 16.6
+    },
+    {
+      "at": [123.268632379, 13.63207172213],
+      "crown_m": 12.8,
+      "height_m": 15.4
+    },
+    {
+      "at": [123.26875250265, 13.6321550605],
+      "crown_m": 12.8,
+      "height_m": 15.4
+    },
+    {
+      "at": [123.26884930146, 13.632239797],
+      "crown_m": 12.8,
+      "height_m": 15.4
+    },
+    {
+      "at": [123.2689243669, 13.63230072151],
+      "crown_m": 11.1,
+      "height_m": 13.3
+    },
+    {
+      "at": [123.26902468595, 13.63237880581],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26916084189, 13.63254338251],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26916893129, 13.63269431198],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26907377748, 13.63279986942],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26896099523, 13.63273931598],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26912563168, 13.6328556083],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26914923333, 13.63293163921],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26916875026, 13.63303575676],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.2688195766, 13.63266123675],
+      "at": [123.26907442741, 13.63305977076],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26873374105, 13.63253958],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26867760632, 13.63247217],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26864598105, 13.632374315],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26858241053, 13.63229305],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26851240888, 13.63221001669],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26848813746, 13.63216141786],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26843215734, 13.63212223499],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26836706976, 13.63210109672],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26842460498, 13.63199170633],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26850598275, 13.63199346052],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26857896446, 13.6320489749],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26865053037, 13.63208092777],
-      "crown_m": 12.4,
-      "height_m": 14.9
-    },
-    {
-      "at": [123.26877084842, 13.63216192],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26885337474, 13.63224132],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.2688850191, 13.63229299373],
-      "crown_m": 10.3,
-      "height_m": 12.4
-    },
-    {
-      "at": [123.26897963694, 13.63236567977],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26908637684, 13.63248141],
-      "crown_m": 12.5,
-      "height_m": 15.0
-    },
-    {
-      "at": [123.26919889028, 13.6327253158],
+      "at": [123.2689720947, 13.63312640673],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26909467577, 13.63282132333],
+      "at": [123.26907006957, 13.6332070406],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26898219584, 13.63275983064],
+      "at": [123.26915656822, 13.63328485833],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26912959978, 13.63291829303],
+      "at": [123.26928078866, 13.63325531911],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26916450227, 13.63294861971],
+      "at": [123.26938234761, 13.63320692848],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26917862745, 13.6330482712],
+      "at": [123.26933124323, 13.63312750673],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26908015193, 13.63306741672],
+      "at": [123.26935864632, 13.63301547405],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26897129867, 13.63312755512],
+      "at": [123.26936001527, 13.63289966014],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26944447701, 13.63285195463],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26952992681, 13.632851486],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26959357759, 13.63290075023],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26941033313, 13.63266009036],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26933215635, 13.63260841623],
+      "crown_m": 13.6,
+      "height_m": 16.3
+    },
+    {
+      "at": [123.26929350278, 13.63338791429],
       "crown_m": 13.4,
       "height_m": 16.1
     },
     {
-      "at": [123.26906834424, 13.63321008337],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26915369327, 13.63328937501],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26928327903, 13.63326618493],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26939042823, 13.6332237113],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26934166392, 13.63314442062],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26937549031, 13.63303694933],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26938335124, 13.63292651075],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26947312049, 13.63288471089],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.2695610975, 13.63288754497],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26962368027, 13.63293649568],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26944938813, 13.63270226376],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.2693719978, 13.63265048089],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26928980779, 13.63339536748],
-      "crown_m": 13.4,
-      "height_m": 16.1
-    },
-    {
-      "at": [123.26937045289, 13.63334682508],
+      "at": [123.26936911955, 13.63333444389],
       "crown_m": 13.4,
       "height_m": 16.1
     }
@@ -226,163 +226,161 @@
   "areas": [
     {
       "ring": [
-        [123.26876631652, 13.6328085072],
-        [123.26871263736, 13.63272830385],
-        [123.26861661144, 13.63267896342],
-        [123.26849249124, 13.63273313361],
-        [123.26860528505, 13.63285161529],
-        [123.26871278064, 13.63291213663],
-        [123.26876631652, 13.6328085072]
+        [123.26853154048, 13.63271536634],
+        [123.26849011661, 13.63273340148],
+        [123.26860390349, 13.63285177103],
+        [123.26871215127, 13.63291220776],
+        [123.26876127013, 13.63281692282],
+        [123.26876448599, 13.63280785065],
+        [123.26870432528, 13.63272362351],
+        [123.26860696015, 13.63267388393],
+        [123.26853154048, 13.63271536634]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26851252876, 13.63234134691],
-        [123.26858382411, 13.63229112185],
-        [123.26855543003, 13.63227337537],
-        [123.26851252876, 13.63234134691]
+        [123.2685038598, 13.63232675564],
+        [123.26858428393, 13.63227731097],
+        [123.2685848592, 13.63222188451],
+        [123.2685038598, 13.63232675564]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26851252876, 13.63234134691],
-        [123.26857366211, 13.63238550298],
-        [123.26858382411, 13.63229112185],
-        [123.26851252876, 13.63234134691]
+        [123.2685038598, 13.63232675564],
+        [123.268626168, 13.63238120898],
+        [123.26858428217, 13.63227736836],
+        [123.2685038598, 13.63232675564]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26857366211, 13.63238550298],
-        [123.26867053511, 13.63234983269],
-        [123.26858382411, 13.63229112185],
-        [123.26857366211, 13.63238550298]
+        [123.26863574673, 13.63238626636],
+        [123.2686447068, 13.63237671191],
+        [123.268626168, 13.63238120898],
+        [123.26863574673, 13.63238626636]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26857366211, 13.63238550298],
-        [123.26863318724, 13.63240970698],
-        [123.26867053511, 13.63234983269],
-        [123.26857366211, 13.63238550298]
+        [123.26870860531, 13.63232875741],
+        [123.26867103966, 13.63233625624],
+        [123.2686447068, 13.63237671191],
+        [123.26870860531, 13.63232875741]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26863318724, 13.63240970698],
-        [123.268708321, 13.63233716654],
-        [123.26867058712, 13.63234981606],
-        [123.26863318724, 13.63240970698]
+        [123.26870860531, 13.63232875741],
+        [123.26869101827, 13.63231425936],
+        [123.26867103966, 13.63233625624],
+        [123.26870860531, 13.63232875741]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.268708321, 13.63233716654],
-        [123.26869075331, 13.63232229423],
-        [123.26867058712, 13.63234981606],
-        [123.268708321, 13.63233716654]
+        [123.26870860531, 13.63232875741],
+        [123.2686932845, 13.63228029363],
+        [123.26869102003, 13.63231420197],
+        [123.26870860531, 13.63232875741]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.268708321, 13.63233716654],
-        [123.26869319642, 13.63228286056],
-        [123.26869073589, 13.63232224315],
-        [123.268708321, 13.63233716654]
+        [123.2686932845, 13.63228029363],
+        [123.2686821688, 13.63230819017],
+        [123.26869102003, 13.63231420197],
+        [123.2686932845, 13.63228029363]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26869319642, 13.63228286056],
-        [123.26860402489, 13.63226353231],
-        [123.26869073589, 13.63232224315],
-        [123.26869319642, 13.63228286056]
+        [123.2686932845, 13.63228029363],
+        [123.2686043171, 13.63225531294],
+        [123.2686821688, 13.63230819017],
+        [123.2686932845, 13.63228029363]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26869319642, 13.63228286056],
-        [123.26858942324, 13.63222945615],
-        [123.26860402489, 13.63226353231],
-        [123.26869319642, 13.63228286056]
+        [123.2686932845, 13.63228029363],
+        [123.2685848592, 13.63222188451],
+        [123.2686043171, 13.63225531294],
+        [123.2686932845, 13.63228029363]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26858942324, 13.63222945615],
-        [123.26855543003, 13.63227337537],
-        [123.26860397288, 13.63226354894],
-        [123.26858942324, 13.63222945615]
+        [123.2685848592, 13.63222188451],
+        [123.26858428393, 13.63227731097],
+        [123.26860425598, 13.63225532004],
+        [123.2685848592, 13.63222188451]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26855543003, 13.63227337537],
-        [123.26858381288, 13.63229105894],
-        [123.26860397288, 13.63226354894],
-        [123.26855543003, 13.63227337537]
+        [123.26858428217, 13.63227736836],
+        [123.268626168, 13.63238120898],
+        [123.26867098509, 13.63233625739],
+        [123.26858428217, 13.63227736836]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26853767766, 13.63227452824],
-        [123.26857207702, 13.63222992155],
-        [123.26856761471, 13.63222780497],
-        [123.26853767766, 13.63227452824]
+        [123.268626168, 13.63238120898],
+        [123.2686447068, 13.63237671191],
+        [123.26867098509, 13.63233625739],
+        [123.268626168, 13.63238120898]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.26899261195, 13.63262281879],
-        [123.2689341948, 13.63262587905],
-        [123.26891566478, 13.6326511337],
-        [123.26895208772, 13.63267804944],
-        [123.26899261195, 13.63262281879]
+        [123.26888986881, 13.63262707168],
+        [123.26892681755, 13.63265408083],
+        [123.26898261537, 13.63256090929],
+        [123.26894566662, 13.63253390014],
+        [123.26888986881, 13.63262707168]
       ],
       "cover": "planting"
     },
     {
       "ring": [
-        [123.26883699157, 13.63257277621],
-        [123.26889091556, 13.63255904196],
-        [123.26891597526, 13.63252484591],
-        [123.26888666164, 13.63250499727],
-        [123.26883699157, 13.63257277621]
+        [123.26887551087, 13.63253408966],
+        [123.2689085718, 13.63250675924],
+        [123.26888482083, 13.63246206376],
+        [123.26887092152, 13.63245584246],
+        [123.26886444467, 13.63245458357],
+        [123.26883295955, 13.63244416652],
+        [123.26881691288, 13.63244750654],
+        [123.26876838192, 13.63245912835],
+        [123.26881183685, 13.63252038882],
+        [123.26882794278, 13.63252681785],
+        [123.2688666381, 13.63253787232],
+        [123.2688731885, 13.63253854192],
+        [123.26887551087, 13.63253408966]
       ],
       "cover": "planting"
     },
     {
       "ring": [
-        [123.26885720729, 13.63248502094],
-        [123.26884370474, 13.6324465157],
-        [123.26880274458, 13.63243346772],
-        [123.26874173821, 13.63245677361],
-        [123.26876848002, 13.63250718154],
-        [123.26881672273, 13.6325192856],
-        [123.26885720729, 13.63248502094]
-      ],
-      "cover": "planting"
-    },
-    {
-      "ring": [
-        [123.26860402164, 13.63226363727],
-        [123.26858391526, 13.63229107409],
-        [123.26867053836, 13.63234972773],
-        [123.26869064474, 13.63232229091],
-        [123.26860402164, 13.63226363727]
+        [123.26860429798, 13.63225540954],
+        [123.26858438748, 13.6322773327],
+        [123.26867100422, 13.63233616079],
+        [123.26869091471, 13.63231423763],
+        [123.26860429798, 13.63225540954]
       ],
       "cover": "planting"
     }
@@ -398,7 +396,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6327770,123.2689804,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. ES broad north/east, west interior and southern road-frontage canopy with separate courtyard crowns and palm-like radial crowns (generic trees unless kind is unmistakable), two visible green openings and classroom-side low green strips. Open paths wind between crowns and roofs. One shared image does not merge NHS/ES grounds or identities; no dense grove converted to woods. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Image roof sections matched separately to complete source roof corners; excluded opposite corners on distinct roofs provide independent checks. Mapped older roof sizes differ from imagery; sections are used independently rather than smoothing incompatible dimensions across the yard. Checks establish local roof-section accuracy, not a surveyed campus-wide transformation. Visible greenery is authored relative to its nearest matched section. Independent excluded check errors: 1.42 m, 0.18 m, 0.81 m, 0.47 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. ES broad north/east, west interior and southern road-frontage canopy with separate courtyard crowns and palm-like radial crowns (generic trees unless kind is unmistakable), two visible green openings and classroom-side low green strips. Open paths wind between crowns and roofs. One shared image does not merge NHS/ES grounds or identities; no dense grove converted to woods. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/881093803 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 2.14 m, 1.17 m, 8.29 m, 8.23 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

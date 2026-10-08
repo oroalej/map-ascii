@@ -3,152 +3,182 @@
   "title": "Carolina National High School grounds",
   "trees": [
     {
-      "at": [123.29083446784, 13.66183241026],
+      "at": [123.29086334181, 13.66184878091],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29099448601, 13.66181421626],
+      "at": [123.29101434582, 13.66182785676],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29101182871, 13.66182090558],
+      "at": [123.29104719888, 13.66174650134],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29135139457, 13.66174463555],
+      "at": [123.29120478721, 13.66181627948],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.29126070748, 13.66171606666],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.29139240559, 13.661677282],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29148879793, 13.66163410061],
+      "at": [123.29147197924, 13.66164210704],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.2911346568, 13.66158932178],
+      "at": [123.29113385948, 13.66163773779],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.2911129299, 13.66149405253],
+      "at": [123.29113339413, 13.66149104233],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29139236501, 13.66155185951],
+      "at": [123.29132724708, 13.66150075315],
       "crown_m": 11.0,
       "height_m": 13.2
     },
     {
-      "at": [123.29144921794, 13.6614778458],
+      "at": [123.29135874514, 13.66143638949],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29109256158, 13.66139015013],
+      "at": [123.2911051467, 13.66141164423],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29100210186, 13.66122657309],
+      "at": [123.29106791546, 13.66139123222],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29087127383, 13.66113989232],
+      "at": [123.29092143753, 13.66136015782],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29077161227, 13.66124708787],
+      "at": [123.29083506991, 13.66139625404],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29075441696, 13.66137729006],
+      "at": [123.29071974479, 13.66138901932],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.2907043384, 13.66148107297],
+      "at": [123.2907038785, 13.66147828664],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29072185052, 13.66158717103],
+      "at": [123.29072080561, 13.66158084035],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29067615147, 13.66131030112],
+      "at": [123.29073758186, 13.6616824801],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29120579224, 13.66127001585],
+      "at": [123.29069501476, 13.66126668347],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.29080266241, 13.66124171226],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.29094155611, 13.66125360474],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29133722023, 13.66129458539],
+      "at": [123.29104967289, 13.66123086106],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.29116893462, 13.66130438448],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29146267252, 13.66129451069],
+      "at": [123.29126401092, 13.66130783246],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29158285078, 13.66129907551],
+      "at": [123.29135042091, 13.66129258158],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.2916987009, 13.66132218136],
+      "at": [123.29144099825, 13.66127806574],
       "crown_m": 10.0,
       "height_m": 12.0
     },
     {
-      "at": [123.29167171616, 13.6611814293],
+      "at": [123.29153481291, 13.66127784648],
+      "crown_m": 10.0,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.2914813721, 13.66117925708],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29165799356, 13.6610156284],
+      "at": [123.29164018985, 13.66118595938],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29172816167, 13.66097700035],
+      "at": [123.29172751355, 13.66113624896],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29176210379, 13.66109946485],
+      "at": [123.29177341664, 13.66124762812],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29186752494, 13.66130238214],
+      "at": [123.2918615897, 13.6613225102],
       "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.29195161216, 13.66163417962],
+      "at": [123.29201746669, 13.66166292348],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29187692863, 13.66168650544],
+      "at": [123.29191626116, 13.66169863554],
       "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.29183480167, 13.66171270035],
+      "at": [123.29185846551, 13.66171140706],
       "crown_m": 8.0,
       "height_m": 9.6
     }
@@ -156,71 +186,62 @@
   "areas": [
     {
       "ring": [
-        [123.29126354344, 13.66143772291],
-        [123.29126400337, 13.6614377179],
-        [123.29126423709, 13.66143774908],
-        [123.29126467648, 13.66143787358],
-        [123.29126508664, 13.66143808064],
-        [123.29126544733, 13.66143836149],
-        [123.29126560762, 13.66143852968],
-        [123.29126586594, 13.66143889682],
-        [123.29126604776, 13.66143930974],
-        [123.29126614346, 13.66143975138],
-        [123.29126692998, 13.66144675136],
-        [123.29129905369, 13.6614257904],
-        [123.2913578734, 13.66140963904],
-        [123.29141632708, 13.66138232464],
-        [123.29137909289, 13.6613479838],
-        [123.29118645419, 13.6613393872],
-        [123.2911853309, 13.6614341752],
-        [123.29122887402, 13.66144141115],
-        [123.29126354344, 13.66143772291]
+        [123.29132734031, 13.66136635651],
+        [123.29129884569, 13.66134430691],
+        [123.29126043847, 13.66134926489],
+        [123.29116432172, 13.66136082196],
+        [123.29117569153, 13.66143488387],
+        [123.29123146464, 13.66143538431],
+        [123.2912519847, 13.66141443818],
+        [123.29129032202, 13.66139469944],
+        [123.29132734031, 13.66136635651]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.29105240954, 13.66130677894],
-        [123.29105257002, 13.66130718233],
-        [123.29105262185, 13.66130740372],
-        [123.29110424268, 13.66159298066],
-        [123.29114951692, 13.66159538129],
-        [123.2911127637, 13.66144380819],
-        [123.2911027205, 13.66144090685],
-        [123.29110268992, 13.6614408783],
-        [123.29107101191, 13.66131150956],
-        [123.29105240954, 13.66130677894]
+        [123.29116008205, 13.66159381946],
+        [123.29113845059, 13.66147994833],
+        [123.29112938265, 13.66145472839],
+        [123.29112766478, 13.66145107015],
+        [123.2910772349, 13.66144356815],
+        [123.29109526423, 13.66154331007],
+        [123.29110492286, 13.66158386575],
+        [123.29116008205, 13.66159381946]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.29151044824, 13.66161415913],
-        [123.29151574488, 13.66163809809],
-        [123.29154706522, 13.66163156086],
-        [123.29154176858, 13.6616076219],
-        [123.29151044824, 13.66161415913]
+        [123.29149872836, 13.66164619546],
+        [123.29152384149, 13.66164260021],
+        [123.29150633603, 13.66162449257],
+        [123.2914812229, 13.66162808783],
+        [123.29149872836, 13.66164619546]
       ],
       "cover": "planting"
     },
     {
       "ring": [
-        [123.29118873848, 13.66169703655],
-        [123.29119563507, 13.66172547863],
-        [123.29122819517, 13.66172083733],
-        [123.29122303618, 13.66169956124],
-        [123.29118873848, 13.66169703655]
+        [123.29124981099, 13.66171328563],
+        [123.29122884632, 13.66170146978],
+        [123.29122372501, 13.66169339669],
+        [123.29119769421, 13.66169387824],
+        [123.29119170324, 13.66169372972],
+        [123.29122532433, 13.66171267843],
+        [123.29124981099, 13.66171328563]
       ],
       "cover": "planting"
     },
     {
       "ring": [
-        [123.29098316458, 13.66145664728],
-        [123.29094767243, 13.66141215873],
-        [123.29093334362, 13.66143592455],
-        [123.29099597003, 13.66161128353],
-        [123.29101105703, 13.66161095401],
-        [123.29098316458, 13.66145664728]
+        [123.29101223507, 13.66162595373],
+        [123.2910123893, 13.66162594903],
+        [123.29101384017, 13.66162635088],
+        [123.29099648148, 13.66153031911],
+        [123.29097412829, 13.66151068745],
+        [123.29096231389, 13.66152492747],
+        [123.29101223507, 13.66162595373]
       ],
       "cover": "planting"
     }
@@ -236,7 +257,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6613951,123.2914070,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied carolina-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Compact interior grove between west/north classrooms, large central crowns, almost continuous south belt and scattered east/north edge crowns; narrow green islands between exposed paths retained. Bare tan courtyard patches are not lawn. Local roof matches correct global shearing across the site. No low hedge distinguishable from tree crowns. Image roof sections matched separately to complete source roof corners; excluded opposite corners on distinct roofs provide independent checks. Mapped older roof sizes differ from imagery; sections are used independently rather than smoothing incompatible dimensions across the yard. Checks establish local roof-section accuracy, not a surveyed campus-wide transformation. Visible greenery is authored relative to its nearest matched section. Independent excluded check errors: 0.22 m, 0.02 m, 3.18 m, 1.60 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied carolina-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Compact interior grove between west/north classrooms, large central crowns, almost continuous south belt and scattered east/north edge crowns; narrow green islands between exposed paths retained. Bare tan courtyard patches are not lawn. Local roof matches correct global shearing across the site. No low hedge distinguishable from tree crowns. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/566543127 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 15.71 m, 2.90 m, 3.39 m, 15.35 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

@@ -116,26 +116,26 @@ Eastern school grounds (draft, owner correction 2026-10-08): all sixteen supplie
 | Campus | Crowns | Lawn m² | Planting m² | Shrubs m² | Parking m² | Paving m² | Courts |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Villa Grande Homes ES | 42 | 1,321 | 170 | 0 | 0 | 455 | 0 |
-| Concepcion Grande ES | 12 | 0 | 0 | 0 | 0 | 390 | 0 |
+| Concepcion Grande ES | 12 | 0 | 0 | 0 | 0 | 418 | 0 |
 | San Rafael ES SPED Center | 11 | 0 | 19 | 0 | 0 | 281 | 0 |
 | Villa Corazon ES | 6 | 0 | 26 | 0 | 0 | 130 | 0 |
-| Pacol ES | 30 | 184 | 130 | 0 | 0 | 638 | 0 |
+| Pacol ES | 31 | 246 | 231 | 0 | 0 | 806 | 0 |
 | Ateneo JHS, Bonoan/Pacol campus | 101 | 1,492 | 1,020 | 86 | 1,596 | 4,152 | 1 |
-| Naga City Sports Complex | 55 | 3,150 | 0 | 0 | 0 | 6,879 | 0 |
+| Naga City Sports Complex | 57 | 0 | 0 | 0 | 0 | 5,543 | 0 |
 | Leon Q. Mercado HS | 35 | 0 | 684 | 0 | 0 | 549 | 0 |
 | Teodora Moscoso ES | 2 | 0 | 9 | 0 | 0 | 95 | 0 |
 | Del Rosario ES | 19 | 0 | 41 | 0 | 0 | 807 | 0 |
 | Del Rosario HS | 11 | 0 | 21 | 0 | 0 | 154 | 0 |
 | Cararayan NHS | 35 | 0 | 132 | 0 | 0 | 1,453 | 0 |
 | Don Manuel I. Abella Central School | 43 | 24 | 146 | 0 | 0 | 606 | 0 |
-| San Isidro NHS | 15 | 97 | 32 | 0 | 0 | 878 | 0 |
-| San Isidro ES | 44 | 618 | 175 | 0 | 0 | 776 | 0 |
-| Carolina ES | 30 | 106 | 72 | 0 | 0 | 778 | 0 |
-| Carolina NHS | 30 | 316 | 87 | 0 | 0 | 918 | 0 |
+| San Isidro NHS | 15 | 120 | 40 | 0 | 0 | 976 | 0 |
+| San Isidro ES | 44 | 602 | 195 | 0 | 0 | 939 | 0 |
+| Carolina ES | 30 | 132 | 62 | 0 | 0 | 764 | 0 |
+| Carolina NHS | 36 | 207 | 35 | 0 | 0 | 577 | 0 |
 
-Totals: 521 crowns, 7,308 m² of green ground, 2,767 m² of planting, 86 m² of distinguishable low shrub strips, 1,596 m² of supplemental parking, 19,939 m² of exposed paving, 40 walking links and one supplemental Ateneo court. Bare Pacol, Leon, Carolina and Ateneo yard/field patches remain exposed rather than becoming lawns. Ateneo courtyard and frontage planting is retained as islands/holes in broad paving. Sports perimeter greenery is mature canopy; no separate formal hedge/bed can be distinguished. At Concepcion, the small green clump between roofs is a crown, while the western green pocket beside the restaurant falls outside the mapped school parcel; no shadow is turned into a hedge.
+Totals: 530 crowns, 4,143 m² of green ground, 2,833 m² of planting, 86 m² of distinguishable low shrub strips, 1,596 m² of supplemental parking, 18,707 m² of exposed paving, 38 walking links and one supplemental Ateneo court. Bare Pacol, Leon, Carolina and Ateneo yard/field patches remain exposed rather than becoming lawns. Ateneo courtyard and frontage planting is retained as islands/holes in broad paving. Sports perimeter greenery is mature canopy; no separate formal hedge/bed can be distinguished. At Concepcion, the small green clump between roofs is a crown, while the western green pocket beside the restaurant falls outside the mapped school parcel; no shadow is turned into a hedge.
 
-Complete mapped roofs, pitches, water and full-width roads/paths remain unchanged. Trunks may fit within their observed crown footprint by at most seven metres; crowns can overhang buildings and roads. Major belt widths are estimated from visible image crown widths against local roof scale (roughly 45–100 pixels in these references), rather than retaining the first pass's small generic diameters. Circular crowns approximate the visible irregular/elliptical clumps. Small visible beds may fit beside their local roof by at most three metres. Local roof sections replace the six unreliable whole-image fits, with excluded corners on distinct roofs checked independently (maximum 3.18 m across these six images). The other ten affine registrations retain their independent checks (all ≤5 m). These are local visual matches, not surveyed campus-wide accuracy; source roofs differ in size and date. All seventeen frontage-to-classroom/pitch approaches now pass the two-metre endpoint checks, including the previously incomplete Pacol, Sports and San Isidro NHS approaches. Adjacent schools and eastern farmland stay separate.
+Complete mapped roofs, pitches, water and full-width roads/paths remain unchanged. Trunks may fit within their observed crown footprint by at most seven metres; crowns can overhang buildings and roads. Major belt widths are estimated from visible image crown widths against the continuous mapped image scale (roughly 45–100 pixels in these references). Circular crowns approximate irregular/elliptical clumps. Small visible beds may fit beside their local roof by at most three metres. Six images now use continuous shared-vertex triangle mappings: each image trace remains one connected polygon before legitimate mapped-obstacle clipping, with no jumps at roof-cell boundaries. Same-roof checks only measure roof agreement and are recorded separately. Entire withheld roofs provide genuinely excluded checks of the final mapping; all six exceed the five-metre gate, so that gate remains unmet. Their maximum errors are concepcion-grande-elementary-school: 6.97 m, pacol-elementary-school: 6.05 m, naga-city-sports-complex: 6.45 m, san-isidro-schools: 8.29 m, carolina-elementary-school: 13.38 m, carolina-national-high-school: 15.71 m. The other ten affine registrations retain distributed independent checks (all ≤5 m). These are draft image-to-source estimates, not surveyed campus-wide accuracy; source roof sizes/positions differ from imagery. All seventeen source-clear frontage-to-classroom/pitch approaches pass the two-metre endpoint checks. Adjacent schools and eastern farmland stay separate.
 
 Specific limits: northern/off-campus canopy in Ateneo and Concepcion, upper greenery beyond the Del Rosario HS parcel, riverside/farmland crowns outside the Sports envelope and individual crowns with no source-clear trunk inside their observed footprint are omitted; precise image pixels, source conflicts and nearest clear-trunk distances are retained in task references. Ground hidden under opaque crowns is not invented. The images do not identify tiny courtyard objects well enough for new seating, lamps or species claims. Positions, sizes and counts remain undated estimates. The Sports Complex uses its existing soccer-pitch anchor; fetching the stadium identity as a separate label remains a pipeline follow-up.
 

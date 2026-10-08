@@ -3,337 +3,292 @@
   "title": "Naga City Sports Complex grounds",
   "trees": [
     {
-      "at": [123.23545219289, 13.64714322489],
+      "at": [123.23552244915, 13.64721304081],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23557281072, 13.64721407669],
+      "at": [123.23560077395, 13.64727464517],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23571563075, 13.64733443303],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23583004091, 13.64737668646],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23596060376, 13.64743320156],
+      "crown_m": 19.0,
+      "height_m": 22.8
+    },
+    {
+      "at": [123.23606355748, 13.64752588387],
+      "crown_m": 21.5,
+      "height_m": 25.8
+    },
+    {
+      "at": [123.23617625064, 13.64753759771],
+      "crown_m": 21.5,
+      "height_m": 25.8
+    },
+    {
+      "at": [123.23632316131, 13.64750847548],
+      "crown_m": 25.9,
+      "height_m": 31.1
+    },
+    {
+      "at": [123.23642962798, 13.64750706393],
+      "crown_m": 21.6,
+      "height_m": 25.9
+    },
+    {
+      "at": [123.23654755867, 13.64758482483],
+      "crown_m": 21.6,
+      "height_m": 25.9
+    },
+    {
+      "at": [123.2366424684, 13.6475928342],
+      "crown_m": 21.6,
+      "height_m": 25.9
+    },
+    {
+      "at": [123.2367027984, 13.64775198048],
+      "crown_m": 17.3,
+      "height_m": 20.8
+    },
+    {
+      "at": [123.23681469496, 13.64777953302],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.23688896785, 13.64766015296],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.23701519026, 13.64762080531],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.2370744683, 13.64751342129],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.23709696046, 13.64736417333],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.23713104198, 13.64723466861],
+      "crown_m": 17.3,
+      "height_m": 20.8
+    },
+    {
+      "at": [123.23718473984, 13.64708858671],
+      "crown_m": 17.3,
+      "height_m": 20.8
+    },
+    {
+      "at": [123.23720312716, 13.64693804999],
+      "crown_m": 14.1,
+      "height_m": 16.9
+    },
+    {
+      "at": [123.23723618729, 13.64678264665],
+      "crown_m": 17.3,
+      "height_m": 20.8
+    },
+    {
+      "at": [123.23722758994, 13.64660309909],
+      "crown_m": 18.0,
+      "height_m": 21.6
+    },
+    {
+      "at": [123.23717659659, 13.64643726997],
+      "crown_m": 17.5,
+      "height_m": 21.0
+    },
+    {
+      "at": [123.23715813651, 13.6462635572],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.2356576988, 13.64727841059],
+      "at": [123.23709922047, 13.6460969716],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23577006648, 13.64735151784],
+      "at": [123.23697359467, 13.64600664046],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23589244284, 13.64740569407],
+      "at": [123.2368298005, 13.64594740551],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23603041728, 13.647447558],
+      "at": [123.23667324369, 13.64590020685],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23614709571, 13.64754297154],
+      "at": [123.23650206547, 13.64587672589],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23625481617, 13.64755375391],
+      "at": [123.2363039368, 13.64589479524],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23637831896, 13.64753171189],
-      "crown_m": 21.8,
-      "height_m": 26.2
+      "at": [123.23617255731, 13.6459470816],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23647710361, 13.64752534605],
-      "crown_m": 21.8,
-      "height_m": 26.2
+      "at": [123.23606639904, 13.64601812717],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23659543169, 13.64760857604],
-      "crown_m": 21.8,
-      "height_m": 26.2
+      "at": [123.23601569075, 13.64614064019],
+      "crown_m": 14.4,
+      "height_m": 17.3
     },
     {
-      "at": [123.23668614622, 13.64761733822],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23660798602, 13.64769645125],
-      "crown_m": 16.7,
-      "height_m": 20.0
-    },
-    {
-      "at": [123.2367108787, 13.64771370072],
-      "crown_m": 13.5,
-      "height_m": 16.2
-    },
-    {
-      "at": [123.23676306952, 13.6475939126],
-      "crown_m": 13.5,
-      "height_m": 16.2
-    },
-    {
-      "at": [123.23686764207, 13.64752082659],
-      "crown_m": 13.5,
-      "height_m": 16.2
-    },
-    {
-      "at": [123.23708946443, 13.64753360495],
+      "at": [123.23585602226, 13.6461990749],
       "crown_m": 14.2,
       "height_m": 17.0
     },
     {
-      "at": [123.23709845731, 13.64737442984],
+      "at": [123.23578287546, 13.64633743756],
       "crown_m": 14.2,
       "height_m": 17.0
     },
     {
-      "at": [123.23712007983, 13.64723634452],
+      "at": [123.23575552051, 13.64646830922],
+      "crown_m": 14.2,
+      "height_m": 17.0
+    },
+    {
+      "at": [123.23574034015, 13.64662049145],
+      "crown_m": 14.2,
+      "height_m": 17.0
+    },
+    {
+      "at": [123.23563776393, 13.64656939441],
+      "crown_m": 21.8,
+      "height_m": 26.2
+    },
+    {
+      "at": [123.23556716933, 13.64668457781],
+      "crown_m": 21.8,
+      "height_m": 26.2
+    },
+    {
+      "at": [123.23553069806, 13.64682455621],
+      "crown_m": 21.8,
+      "height_m": 26.2
+    },
+    {
+      "at": [123.23546192464, 13.64695976114],
+      "crown_m": 21.8,
+      "height_m": 26.2
+    },
+    {
+      "at": [123.23557148608, 13.64703210924],
+      "crown_m": 21.8,
+      "height_m": 26.2
+    },
+    {
+      "at": [123.23566861009, 13.64704196058],
       "crown_m": 17.4,
       "height_m": 20.9
     },
     {
-      "at": [123.23715894313, 13.64708061861],
-      "crown_m": 17.4,
-      "height_m": 20.9
+      "at": [123.23685458992, 13.64813029351],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23756729887, 13.64683468547],
-      "crown_m": 17.7,
-      "height_m": 21.2
+      "at": [123.23706763869, 13.64815980287],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23758717929, 13.64665056689],
+      "at": [123.23592395991, 13.64793464563],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23593858024, 13.6477804697],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23595284061, 13.64767653168],
+      "crown_m": 22.1,
+      "height_m": 26.5
+    },
+    {
+      "at": [123.23760443534, 13.64636669329],
+      "crown_m": 17.5,
+      "height_m": 21.0
+    },
+    {
+      "at": [123.23754790412, 13.64623198756],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23757772941, 13.64645070835],
+      "at": [123.23746324599, 13.64608657636],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23753755256, 13.64627762294],
+      "at": [123.23731815101, 13.6460099524],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23749303577, 13.64608152688],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23741281298, 13.64589967223],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23721557982, 13.64581846034],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23701535026, 13.64577516339],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23679930757, 13.64574786071],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23656627308, 13.64575027029],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23630167364, 13.64580496089],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23613080173, 13.64588736895],
+      "at": [123.23716933851, 13.64595669123],
       "crown_m": 21.8,
       "height_m": 26.2
     },
     {
-      "at": [123.23606052498, 13.64601643962],
-      "crown_m": 17.6,
-      "height_m": 21.1
+      "at": [123.23701536898, 13.64585275645],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23601543146, 13.64614069589],
-      "crown_m": 14.3,
-      "height_m": 17.2
+      "at": [123.23682921386, 13.64579344761],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.23585557905, 13.64620151197],
-      "crown_m": 14.3,
-      "height_m": 17.2
+      "at": [123.23668131479, 13.64577066159],
+      "crown_m": 17.5,
+      "height_m": 21.0
     },
     {
-      "at": [123.2357806575, 13.64634963327],
-      "crown_m": 14.3,
-      "height_m": 17.2
-    },
-    {
-      "at": [123.23575269395, 13.64648385134],
-      "crown_m": 14.3,
-      "height_m": 17.2
-    },
-    {
-      "at": [123.23574066907, 13.64662717957],
-      "crown_m": 14.3,
-      "height_m": 17.2
-    },
-    {
-      "at": [123.23563199552, 13.6466011126],
-      "crown_m": 22.0,
-      "height_m": 26.4
-    },
-    {
-      "at": [123.23555967531, 13.64672578443],
-      "crown_m": 22.0,
-      "height_m": 26.4
-    },
-    {
-      "at": [123.23552964174, 13.64687430411],
-      "crown_m": 22.0,
-      "height_m": 26.4
-    },
-    {
-      "at": [123.23545193009, 13.64701471716],
-      "crown_m": 22.0,
-      "height_m": 26.4
-    },
-    {
-      "at": [123.23564613843, 13.6470214807],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23574740804, 13.647032911],
-      "crown_m": 17.4,
-      "height_m": 20.9
-    },
-    {
-      "at": [123.23679682358, 13.64805600955],
-      "crown_m": 16.7,
-      "height_m": 20.0
-    },
-    {
-      "at": [123.23699197287, 13.64808633246],
-      "crown_m": 16.7,
-      "height_m": 20.0
-    },
-    {
-      "at": [123.23594135298, 13.64796190314],
-      "crown_m": 20.8,
-      "height_m": 25.0
-    },
-    {
-      "at": [123.23592401241, 13.64782264661],
-      "crown_m": 20.8,
-      "height_m": 25.0
-    },
-    {
-      "at": [123.23603642145, 13.64769844232],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23765169922, 13.64576245114],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23747335934, 13.64572761014],
-      "crown_m": 27.3,
-      "height_m": 32.8
-    },
-    {
-      "at": [123.23725437334, 13.64563478368],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23699712515, 13.6455986636],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23679549895, 13.64559787977],
-      "crown_m": 21.8,
-      "height_m": 26.2
-    },
-    {
-      "at": [123.23657435135, 13.64564046157],
-      "crown_m": 21.8,
-      "height_m": 26.2
+      "at": [123.23651416336, 13.64576448092],
+      "crown_m": 17.5,
+      "height_m": 21.0
     }
   ],
-  "areas": [
-    {
-      "ring": [
-        [123.23782617927, 13.64631615667],
-        [123.2379166145, 13.64635057618],
-        [123.23797547485, 13.64631684626],
-        [123.23782617927, 13.64631615667]
-      ],
-      "cover": "grass"
-    },
-    {
-      "ring": [
-        [123.23755867629, 13.64638943353],
-        [123.23753447877, 13.64686010176],
-        [123.23750934121, 13.64695195685],
-        [123.23779813293, 13.64694965071],
-        [123.23778094476, 13.64668978883],
-        [123.2377653925, 13.64638772088],
-        [123.23755867629, 13.64638943353]
-      ],
-      "cover": "grass"
-    },
-    {
-      "ring": [
-        [123.237296539, 13.64740361033],
-        [123.23732267337, 13.64712350799],
-        [123.23732108834, 13.64705145612],
-        [123.23712071851, 13.64702051247],
-        [123.23703697114, 13.64736296832],
-        [123.23714707473, 13.64753280913],
-        [123.237296539, 13.64740361033]
-      ],
-      "cover": "grass"
-    },
-    {
-      "ring": [
-        [123.23562614707, 13.64671854012],
-        [123.23562459754, 13.64656277036],
-        [123.23555658722, 13.64664226891],
-        [123.23553288582, 13.64671499138],
-        [123.23552823537, 13.64693400582],
-        [123.23558247804, 13.64686409593],
-        [123.23562614707, 13.64671854012]
-      ],
-      "cover": "grass"
-    },
-    {
-      "ring": [
-        [123.23546849909, 13.64691254777],
-        [123.23544340738, 13.64698953609],
-        [123.23546685487, 13.64698998262],
-        [123.23546849909, 13.64691254777]
-      ],
-      "cover": "grass"
-    }
-  ],
+  "areas": [],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -350,7 +305,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6466754,123.2368358,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied naga-city-sports-complex.png on 2026-10-08; capture date unknown. URL locates the site. Extensive perimeter crown belt around oval, west stand-side canopy, north court/pool-side crowns and southeast edge grove; green verges are bounded separately from track, court aprons and tan infield. No distinguishable low hedge or formal bed can be separated from the large contiguous crowns; none inferred. Mapped additional north court remains even where absent from this older image. Canopy outside the sports envelope or in river/farmland is recorded, not added to another territory. Crown-width observations: Large north/west/south clumps about 90-110 px; eastern oval-edge crowns about 60-85 px; pool/court gaps smaller. Image roof sections matched separately to complete source roof corners; excluded opposite corners on distinct roofs provide independent checks. Mapped older roof sizes differ from imagery; sections are used independently rather than smoothing incompatible dimensions across the yard. Checks establish local roof-section accuracy, not a surveyed campus-wide transformation. Visible greenery is authored relative to its nearest matched section. Independent excluded check errors: 0.00 m, 0.21 m, 0.01 m, 0.33 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied naga-city-sports-complex.png on 2026-10-08; capture date unknown. URL locates the site. Extensive perimeter crown belt around oval, west stand-side canopy, north court/pool-side crowns and southeast edge grove; green verges are bounded separately from track, court aprons and tan infield. No distinguishable low hedge or formal bed can be separated from the large contiguous crowns; none inferred. Mapped additional north court remains even where absent from this older image. Canopy outside the sports envelope or in river/farmland is recorded, not added to another territory. Crown-width observations: Large north/west/south clumps about 90-110 px; eastern oval-edge crowns about 60-85 px; pool/court gaps smaller. Direct re-inspection during B1 repair: the eastern/southern green bands are opaque mature canopy, not exposed lawn. Those observed bands retain individual crowns and exclude supplemental ground surfaces; the southeast open field beyond the grounds/farmland remains unchanged. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/231215350 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 4.13 m, 6.45 m, 4.60 m, 6.08 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

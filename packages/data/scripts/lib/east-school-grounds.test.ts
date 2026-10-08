@@ -273,8 +273,48 @@ describe('eastern school grounds from the owner references', () => {
             'bare yard painted as lawn',
           ).toBe(false);
       }
+      for (const at of reference.opaqueCanopyGroundChecks) {
+        for (const patch of cover.areas)
+          expect(
+            inside(at, { type: 'Polygon', coordinates: [patch.ring] }),
+            'opaque canopy treated as an observed ground surface',
+          ).toBe(false);
+        for (const hardscape of paving)
+          expect(
+            inside(at, {
+              type: 'Polygon',
+              coordinates: [hardscape.ring, ...(hardscape.holes ?? [])],
+            }),
+            'opaque canopy paved over',
+          ).toBe(false);
+      }
     });
   }
+
+  it('keeps independently identified clear surface connections across former registration seams', () => {
+    for (const reference of imageCoverage.sites) {
+      const index = sites.findIndex(([slug]) => slug === reference.slug);
+      const audit = geometryAudit(areaFor(details[index]!, source));
+      for (const connection of reference.surfaceConnections) {
+        const polygons: Polygon[] =
+          connection.cover === 'paving'
+            ? details[index]!.structures.filter((p) => p.material === 'paving').map((p) => ({
+                type: 'Polygon',
+                coordinates: [p.ring, ...(p.holes ?? [])],
+              }))
+            : covers[index]!.areas.filter((p) => p.cover === connection.cover).map((p) => ({
+                type: 'Polygon',
+                coordinates: [p.ring],
+              }));
+        const merged = audit.union(polygons);
+        const components = polygonComponents(merged);
+        expect(
+          components.some((component) => connection.points.every((at) => inside(at, component))),
+          `${reference.slug}: ${connection.name}`,
+        ).toBe(true);
+      }
+    }
+  });
 
   it('keeps adjoining campuses and the Ateneo/sports complex grounds separate', () => {
     for (const [a, b] of [
