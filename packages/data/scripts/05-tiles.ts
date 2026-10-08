@@ -58,11 +58,35 @@ export function buildMeta(
   });
 }
 
+/** Metadata-only generation shares exactly the normal tile step's inputs and credits. */
+export async function writeMetadata(
+  ctx: Parameters<Step['run']>[0],
+  now = new Date().getFullYear(),
+) {
+  const { city, content, buildDir, outDir } = ctx;
+  const merged = join(buildDir, files.merged);
+  const geography = await readJson<Geography>(join(buildDir, files.geography));
+  const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+  const features: AtlasFeature[] = [];
+  for await (const feature of readFeatures(merged)) features.push(feature as AtlasFeature);
+  const years = yearRange(tileRecords(features, territory), now);
+  const meta = buildMeta(city, geography, years, [
+    ...landcoverCredits(content.landcover),
+    ...cemeteryCredits(content.cemeteries),
+    ...detailCredits(content.details),
+    ...planCredits(content.plans),
+  ]);
+
+  await mkdir(outDir, { recursive: true });
+  await writeJson(join(outDir, `${city.slug}.meta.json`), meta);
+  return meta;
+}
+
 // Build <city>.pmtiles with tippecanoe and write the city's metadata and detail fingerprints.
 export const step: Step = {
   name: '05-tiles',
   async run(ctx) {
-    const { city, content, buildDir, outDir } = ctx;
+    const { city, buildDir, outDir } = ctx;
     const layouts = await readDetailLayouts(ctx);
     const merged = join(buildDir, files.merged);
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
@@ -70,13 +94,6 @@ export const step: Step = {
     const features: AtlasFeature[] = [];
     for await (const feature of readFeatures(merged)) features.push(feature as AtlasFeature);
     const records = tileRecords(features, territory);
-    const years = yearRange(records, new Date().getFullYear());
-    const meta = buildMeta(city, geography, years, [
-      ...landcoverCredits(content.landcover),
-      ...cemeteryCredits(content.cemeteries),
-      ...detailCredits(content.details),
-      ...planCredits(content.plans),
-    ]);
 
     const pmtiles = join(buildDir, `${city.slug}.pmtiles`);
     const seasonal = city.life?.seasons?.some(
@@ -126,7 +143,7 @@ export const step: Step = {
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
-    await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+    await writeMetadata(ctx);
     await publishDetailLayouts(ctx, layouts);
     // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
     const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));

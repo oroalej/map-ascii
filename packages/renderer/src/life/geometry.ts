@@ -12,7 +12,7 @@ import type {
   SeasonalCarnivalRecord,
   SeasonalRecord,
 } from '@atlas/shared';
-import { parseSeasonalRecord } from '@atlas/shared';
+import { parseSeasonalTileRecord } from '@atlas/shared';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
@@ -31,10 +31,8 @@ export function seasonalRecords(payload: SeasonalPayload | undefined): readonly 
   try {
     const value: unknown = JSON.parse(new TextDecoder().decode(payload));
     const values: unknown[] = Array.isArray(value) ? value : [];
-    for (const raw of values) {
-      const record = typeof raw === 'string' ? parseSeasonalRecord(raw) : undefined;
-      if (record) records.push(record);
-    }
+    // Bunting runs decode into their rows here; everything downstream sees rows.
+    for (const raw of values) records.push(...parseSeasonalTileRecord(raw));
   } catch {
     /* A malformed envelope cannot invalidate ordinary map geometry. */
   }
@@ -339,6 +337,7 @@ export type LifeArea = {
     'parking' | 'blocked' | 'vehicle-blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
   rings: TilePoint[][];
   water?: boolean;
+  seating?: boolean;
 };
 
 export const PLACE_STRIDE = 5;
@@ -810,10 +809,12 @@ export class LifeBuilder {
     rings: readonly (readonly TilePoint[])[],
     water = false,
     crossingStripes?: readonly (readonly TilePoint[])[],
+    seating = false,
   ) {
     this.areas.push({
       kind,
       water,
+      ...(seating && { seating }),
       rings: rings.map((r) => r.map((p) => ({ ...p }))),
       ...(crossingStripes && {
         crossingStripes: crossingStripes.map((r) => r.map((p) => ({ ...p }))),

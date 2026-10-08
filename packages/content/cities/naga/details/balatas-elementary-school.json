@@ -398,7 +398,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied school grounds reference; © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied school grounds reference; © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap: mapped school grounds",
@@ -407,7 +407,7 @@
     },
     {
       "title": "Owner-supplied school grounds reference",
-      "note": "Inspected owner reference 2026-10-03. Preserve the open central courtyard; restrained edge planting, grass, a paved apron, paths and schematic parking fit seven complete saved OSM classroom roofs and full adjacent road/path widths. Undated draft estimates; no surveyed boundary, species, court markings, construction date, roof reconstruction or vehicle inventory inferred. Reference bitmap remains ignored evidence."
+      "note": "Inspected owner reference 2026-10-03. Preserve the open central courtyard; restrained edge planting, grass, a paved apron, paths and schematic parking fit seven complete saved OSM classroom roofs and full adjacent road/path widths. Undated estimates; no surveyed boundary, species, court markings, construction date, roof reconstruction or vehicle inventory inferred. Reference bitmap remains ignored evidence."
     }
   ]
 }

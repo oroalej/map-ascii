@@ -1,3 +1,7 @@
+import type { Ripple } from './life/cursor-effects';
+import { cursorUniforms, type CursorWind } from './life/cursor-wind';
+import { throng, type ThrongFieldPool, type ThrongGuardFactory } from './life/throng';
+import type { ProcessionRoute } from '@atlas/shared';
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
 import type { cropTint } from './glyphs/select';
@@ -41,6 +45,7 @@ import {
   drawCrowns,
   drawGround,
   uploadLife,
+  uploadCrowdMask,
   uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
@@ -71,7 +76,7 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
-import { EffectClocks, ORDINARY_CLOCK } from './life/effect-clocks';
+import { EffectClocks, ORDINARY_CLOCK, heldClock } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
   packBeams,
@@ -348,6 +353,7 @@ export function crownPass(
   tiles: readonly TileDraw[],
   time: number,
   wind: WindNow,
+  cursor?: CursorWind,
 ) {
   const { cols, rows, base, subBase, sub } = targets;
   const program = programs.cell;
@@ -370,6 +376,7 @@ export function crownPass(
     u_crownOverDepth: crownOverDepth,
     u_wind: wind.strength,
     u_windDir: wind.dir,
+    ...cursorUniforms(cursor),
     u_grid: [cols, rows],
   });
   // Only the tiles with crowns are drawn, and their matrices are worked out once for both grids.
@@ -491,6 +498,7 @@ export function selectPass(
   shadows = true,
   awnings = true,
   crop: CropPass | null = null,
+  cursor?: CursorWind,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -514,6 +522,7 @@ export function selectPass(
     u_time: time,
     u_wind: wind.strength,
     u_windDir: wind.dir,
+    ...cursorUniforms(cursor),
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
     u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
@@ -562,6 +571,9 @@ type Texels = {
   candles?: boolean;
   held?: { frame: object; inputs: readonly unknown[]; drawn: number };
   life: Uint8Array;
+  crowdMask?: Uint32Array;
+  crowdCells?: number[];
+  crowdPending?: boolean;
   owners: Uint32Array;
   revision: number;
   light: Uint8Array;
@@ -639,6 +651,14 @@ export function lifePass(
   heldFrame?: object,
   speakers?: LifeGrid['speakers'],
   puffs?: Float64Array,
+  crowd?: {
+    event: ProcessionRoute;
+    progress: number;
+    quality: number;
+    clock?: number;
+    guardFor?: ThrongGuardFactory;
+    pool?: ThrongFieldPool;
+  },
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -657,20 +677,44 @@ export function lifePass(
         sun,
         focus,
         speakers,
+        crowd?.event,
+        crowd?.progress,
+        crowd?.quality,
       ]
     : undefined;
   if (
     heldFrame &&
+    !buffers.crowdPending &&
     buffers.held?.frame === heldFrame &&
     inputs!.every((value, i) => value === buffers.held!.inputs[i])
   )
     return buffers.held.drawn;
   buffers.held = undefined;
   const lifeTexels = buffers.life;
+  const crowdPayload = crowd
+    ? throng(
+        crowd.event,
+        crowd.progress,
+        placement,
+        cols,
+        rows,
+        view.camera.zoom,
+        crowd.quality,
+        crowd.guardFor,
+        undefined,
+        crowd.pool,
+      )
+    : undefined;
+  buffers.crowdPending = crowdPayload?.pending;
+  if (crowdPayload?.cells.length) {
+    buffers.crowdMask ??= new Uint32Array(cols * rows * 8);
+    buffers.crowdCells ??= [];
+  }
+
   if (buffers.stampedVehicles.length < agents.length)
     buffers.stampedVehicles = new Uint8Array(agents.length);
   const packStart = profiler?.time();
-  buffers.candles = buffers.clockCandidates = false;
+  buffers.candles = buffers.clockCandidates = !!crowdPayload?.cells.some((c) => c.agent.candle);
   for (const agent of agents) {
     if (!agent.candle) continue;
     buffers.candles = true;
@@ -701,9 +745,21 @@ export function lifePass(
     // Birds' shadows (like the map's, glyphs/select.ts inShadow).
     sun,
     themeRes.map.lifeGlyphs,
-    { owners: buffers.owners, focus, clockCells: buffers.clockCells },
+    {
+      owners: buffers.owners,
+      focus,
+      clockCells: buffers.clockCells,
+      throng: crowdPayload,
+      throngMask: buffers.crowdMask,
+      throngCells: buffers.crowdCells,
+    },
     puffs,
   );
+  buffers.crowdPending = !!(crowdPayload?.pending || crowdPayload?.stampPending);
+  // Birds may overwrite crowd texels; their real owner clears the crowd permission mask.
+  if (buffers.crowdMask)
+    for (const i of buffers.crowdCells ?? [])
+      if (buffers.owners[i]) buffers.crowdMask.fill(0, i * 8, i * 8 + 8);
   buffers.stampedAgents = agents;
   buffers.revision++;
   if (buffers.clocks) {
@@ -712,10 +768,21 @@ export function lifePass(
       const agent = agents[buffers.owners[cell]! - 1];
       if (agent?.candle) buffers.clocks.set(0, cell, agent.effectClock ?? ORDINARY_CLOCK);
     }
+    for (const cell of buffers.crowdCells ?? [])
+      if (!buffers.owners[cell] && lifeTexels[cell * 4 + 3]! & 128)
+        buffers.clocks.set(0, cell, heldClock(crowd?.clock ?? 0));
     buffers.clocks.finish(0);
   }
   if (packStart !== undefined) profiler!.add('pack', profiler!.time() - packStart);
   const uploadStart = profiler?.time();
+  let crowdFirst = rows,
+    crowdEnd = 0;
+  for (const cell of buffers.crowdCells ?? []) {
+    const row = Math.floor(cell / cols);
+    crowdFirst = Math.min(crowdFirst, row);
+    crowdEnd = Math.max(crowdEnd, row + 1);
+  }
+  uploadCrowdMask(gl, targets, crowdEnd ? buffers.crowdMask : undefined, [crowdFirst, crowdEnd]);
   uploadLife(gl, targets, lifeTexels);
   if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
@@ -782,6 +849,8 @@ export function effectClockPass(gl: GL, targets: CellTargets) {
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
 export type Weather = {
+  ripples?: readonly Ripple[];
+  cursorWind?: CursorWind;
   rain: number;
   wind: WindNow | null;
   fish?: boolean;
@@ -1009,6 +1078,8 @@ export function glyphPass(
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,
+    u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
+    u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
     u_lifeTime: lifeTime,
     ...hauntUniforms(
@@ -1024,6 +1095,7 @@ export function glyphPass(
     u_shimmer: !reducedMotion,
     u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
     u_buntingWindDir: weather.wind?.dir ?? [0, 0],
+    ...cursorUniforms(reducedMotion ? undefined : weather.cursorWind),
     u_focus: focused,
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
@@ -1032,6 +1104,8 @@ export function glyphPass(
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
     u_life: targets.lifeTex,
+    u_crowdMask: targets.crowdMaskTex,
+    u_hasCrowdMask: !!targets.crowdMaskActive,
     u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
     u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,

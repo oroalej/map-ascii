@@ -222,6 +222,7 @@ export class MomentHost {
           owner.group?.length !== 1 ||
           this.scenes.busy(owner) ||
           tile.scenes.visits.has(owner) ||
+          tile.scenes.cursorHolding(owner) ||
           (env?.levels && owner.rank >= env.levels.person)
         )
           return false;

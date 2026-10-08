@@ -19,6 +19,11 @@ import {
 import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
+
+/** Matches the strength used by raster geometry's reserved crown sweep. */
+export const CROWN_WIND_MAX =
+  Math.max(...Object.values(WIND_PRESETS)) * (1 + WIND_VARIATION.breathe);
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
@@ -64,11 +69,13 @@ void main() {
   // Branches swing in the wind (glyphs/select.ts swayOffset): each vertex by the gust where it
   // is and its reach from the trunk (a_ridge, tile units), so the tips swing most and the lobes
   // move out of step, and spring back in the wake behind a gust.
-  if (crown && u_wind > 0.0) {
+  if (crown && (u_wind > 0.0 || u_cursorWind.z > 0.0)) {
     vec2 cell = (clip.xy * 0.5 + 0.5) * u_grid;
     vec2 front = u_wind * treeFront(u_origin + ivec2(floor(cell)), u_time);
+    vec2 dir;
+    front.x = min(combineWind(front.x, u_windDir, cell, dir), ${float(CROWN_WIND_MAX)});
     float cellsPerUnit = length(u_matrix[0].xy * u_grid * 0.5);
-    vec2 sway = swayOffset(a_ridge * cellsPerUnit, front.x, front.y, u_time, float(gl_VertexID % 13));
+    vec2 sway = swayOffset(a_ridge * cellsPerUnit, front.x, front.y, u_time, float(gl_VertexID % 13), dir);
     clip.xy += sway / u_grid * 2.0;
   }
   // Taller features win within a tier (a_meta.y is height in meters, 0–255).

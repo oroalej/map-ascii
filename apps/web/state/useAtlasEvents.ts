@@ -20,9 +20,12 @@ export function useAtlasEvents() {
   const atlas = useAtlasInstance((s) => s.atlas);
 
   useEffect(() => {
-    useUiStore.setState({ lifeHover: null, hover: null });
+    useUiStore.setState({ lifeHover: null, hover: null, ready: false });
     if (!atlas) return;
     const mapSelection = (id: string | null) => (id?.startsWith('dish/') ? null : id);
+    const offReady = atlas.on('ready', () => useUiStore.setState({ ready: true }));
+    const offLost = atlas.on('contextlost', () => useUiStore.setState({ ready: false }));
+    useUiStore.setState({ ready: atlas.getStats().readyMs !== null });
     atlas.setSelected(mapSelection(useAtlasStore.getState().selectedId));
     const offHover = atlas.on('hover', ({ feature, point }) => {
       const hover =
@@ -48,6 +51,9 @@ export function useAtlasEvents() {
       atlas.setHighlighted([]);
     });
     return () => {
+      offReady();
+      offLost();
+      useUiStore.setState({ ready: false });
       offHover();
       offLifeHover();
       offClick();

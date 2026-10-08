@@ -51,6 +51,7 @@ import { SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
+import { cursorWindGlsl } from '../life/cursor-wind';
 import { festivePulseGlsl } from '../life/seasonal-installations';
 import { carnivalMotionGlsl } from '../life/carnival-motion';
 import { hauntLampGlsl } from '../life/folklore-lighting';
@@ -72,6 +73,7 @@ export function glyphFragmentFor({ focus = true, effectClocks = true, seasonal =
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+precision highp usampler2D;
 
 uniform sampler2D u_glyphs;
 uniform sampler2D u_atlas;
@@ -88,6 +90,8 @@ uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
+uniform vec3 u_ripples[4];
+uniform int u_rippleCount;
 uniform float u_lifeTime;
 uniform vec3 u_haunts[8];
 uniform int u_hauntCount;
@@ -104,9 +108,12 @@ uniform vec3 u_accent;
 uniform bool u_shimmer;
 uniform float u_buntingWind;
 uniform vec2 u_buntingWindDir;
+${cursorWindGlsl}
 ${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
+uniform highp usampler2D u_crowdMask;
+uniform bool u_hasCrowdMask;
 uniform sampler2D u_effectClocks;
 ${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectClocks = false;'}
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
@@ -766,7 +773,15 @@ void main() {
     back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
   }
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
-  if (lifeAllowed(life, cls, cell, subAt)) {
+  bool crowdCell=false,crowdInk=false;
+  if(u_hasCrowdMask) {
+    uvec4 a=texelFetch(u_crowdMask,ivec2(cell.x*2,cell.y),0),b=texelFetch(u_crowdMask,ivec2(cell.x*2+1,cell.y),0);
+    crowdCell=any(notEqual(a,uvec4(0u)))||any(notEqual(b,uvec4(0u)));
+    ivec2 sampleAt=clamp(ivec2(vec2(inCell)/u_cell*16.0),ivec2(0),ivec2(15));
+    int bit=sampleAt.y*16+sampleAt.x,word=bit>>5;
+    uint value=word<4?a[word]:b[word-4];crowdInk=(value&(1u<<uint(bit&31)))!=0u;
+  }
+  if (crowdCell ? crowdInk : lifeAllowed(life, cls, cell, subAt)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;

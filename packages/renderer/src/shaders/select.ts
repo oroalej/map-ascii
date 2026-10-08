@@ -528,21 +528,25 @@ void main() {
     // Wind (glyphs/select.ts grassCell): tufts at rest, tinted by patch; blades lean and lighten
     // by wind level in a gust and lift again in its wake.
     vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
+    vec2 dir;
+    front.x = combineWind(front.x, u_windDir, vec2(w - u_origin), dir);
     int tone;
-    v = min(kind == ${kindCodes.planting} ? plantingVariant(w, front.x, tone) : grassVariant(w, front.x, tone), u_count[cls] - 1);
+    v = min(kind == ${kindCodes.planting} ? plantingVariant(w, front.x, dir, tone) : grassVariant(w, front.x, dir, tone), u_count[cls] - 1);
     g_tone = tone;
     g_wind = windLevel(front.x, front.y);
   } else if (kind == ${kindCodes.crop}) {
     // Fields in the wind (glyphs/select.ts cropVariant); ripe patches are straw.
     vec2 front = u_wind > 0.0 ? u_wind * windFront(w, u_time) : vec2(0.0);
+    vec2 dir;
+    front.x = combineWind(front.x, u_windDir, vec2(w - u_origin), dir);
     if (u_cropStage >= 0) {
       int tone;
-      v = min(cropCell(w, front.x, u_cropStage, u_cropProgress, u_time, tone), u_count[cls] - 1);
+      v = min(cropCell(w, front.x, dir, u_cropStage, u_cropProgress, u_time, tone), u_count[cls] - 1);
       g_tone = tone;
       g_wind = u_cropStage == CROP_GROWING || u_cropStage == CROP_RIPE || u_cropStage == CROP_TRANSPLANTED
         ? windLevel(front.x, front.y) : 0;
     } else {
-      v = min(cropVariant(w, front.x), u_count[cls] - 1);
+      v = min(cropVariant(w, front.x, dir), u_count[cls] - 1);
       g_tone = cropTone(w);
       g_wind = windLevel(front.x, front.y);
     }
@@ -550,12 +554,16 @@ void main() {
     // Woods in the wind (glyphs/select.ts canopyCell): crowns creep downwind and flutter; their
     // sunny side is lit and the far side shaded.
     float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
+    vec2 dir;
+    gust = combineWind(gust, u_windDir, vec2(w - u_origin), dir);
     int tone;
-    v = min(canopyVariant(w, variant, gust, u_time, sunDir(), tone), u_count[cls] - 1);
+    v = min(canopyVariant(w, variant, gust, u_time, sunDir(), dir, tone), u_count[cls] - 1);
     g_tone = tone;
   } else if (kind == ${kindCodes.foliage}) {
     // Crown lighting is applied across its rounded surface in the glyph pass.
     float gust = u_wind > 0.0 ? u_wind * treeGust(w, u_time) : 0.0;
+    vec2 dir;
+    gust = combineWind(gust, u_windDir, vec2(w - u_origin), dir);
     bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
       || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
     v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);

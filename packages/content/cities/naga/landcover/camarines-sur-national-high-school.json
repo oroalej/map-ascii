@@ -292,7 +292,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Camarines Sur National High School — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Camarines Sur National High School — Owner-supplied overhead reference (Google Maps), date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: original site and surrounding features",
@@ -301,7 +301,7 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. "
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. "
     }
   ]
 }

@@ -1,6 +1,7 @@
 'use client';
-import type { Dish, Landmark, LandmarkArt } from '@atlas/shared';
-import { useId, useMemo } from 'react';
+import type { Dish, Landmark, CityArt } from '@atlas/shared';
+import { useId, useMemo, useEffect, useState } from 'react';
+import { loadArt } from '@/lib/content';
 import { clickableLandmark } from '@/lib/landmark';
 import { useSmallScreen } from '@/lib/screen';
 import { useAtlasStore } from '@/state/store';
@@ -20,8 +21,24 @@ export function LandmarkFacts({
   subdivisionLabel: string;
   landmarks: readonly Landmark[];
   dishes?: readonly Dish[];
-  art: readonly LandmarkArt[];
+  art?: readonly CityArt['pieces'][number][];
 }) {
+  const [drawings, setDrawings] = useState<{ city: string; pieces: CityArt['pieces'] } | null>(
+    null,
+  );
+  useEffect(() => {
+    if (art) return;
+    let cancelled = false;
+    void loadArt(city)
+      .then((pieces) => {
+        if (!cancelled) setDrawings({ city, pieces });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [city, art]);
+  const pieces = art ?? (drawings?.city === city ? drawings.pieces : []);
   const id = useAtlasStore((s) => s.selectedId),
     touring = useAtlasStore((s) => s.tour !== null);
   const selection = useUiStore((s) => s.selection),
@@ -51,7 +68,7 @@ export function LandmarkFacts({
   const body = {
     landmark,
     dishes,
-    drawing: art.find((a) => a.osm_id === id),
+    drawing: pieces.find((a) => a.osm_id === id),
     subdivisionLabel,
     details,
     headingId,

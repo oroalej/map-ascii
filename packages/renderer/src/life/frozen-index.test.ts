@@ -5,7 +5,7 @@ import { snapshotOf } from './terrain-snapshot';
 import { LifeWorld } from './simulate';
 
 describe('transferred polygon indexes', () => {
-  it('cooperatively prepares all four serialization caches before activation replies', () => {
+  it('cooperatively prepares all five serialization caches before activation replies', () => {
     const complete = <T>(steps: Generator<void, T, void>) => {
       let next = steps.next();
       while (!next.done) next = steps.next();
@@ -17,7 +17,7 @@ describe('transferred polygon indexes', () => {
     complete(world.prepareActivation(entries, ready));
     world.sync(entries, undefined, undefined, ready);
     const terrain = world.cellTerrain()!;
-    for (const name of ['blocked', 'roads', 'forbidden', 'trees'] as const)
+    for (const name of ['blocked', 'hardBlocked', 'roads', 'forbidden', 'trees'] as const)
       expect(terrain[name].toFlatSteps().next().done).toBe(true);
   });
   it('rebuilds detached cached serialization buffers and invalidates them on added geometry', () => {
@@ -41,7 +41,9 @@ describe('transferred polygon indexes', () => {
   it('matches mutable terrain for seeded bodies, bin edges, degenerate and distant bodies', () => {
     const terrain = makeScenario('crossroads', 4).world.cellTerrain()!;
     const { snapshot, transferables } = snapshotOf(terrain);
+    expect(snapshot.hardBlocked).toBe(snapshot.blocked);
     expect(transferables).toHaveLength(28);
+    expect(new Set(transferables).size).toBe(transferables.length);
     const received = structuredClone(snapshot, { transfer: transferables });
     expect(transferables.every((buffer) => buffer.byteLength === 0)).toBe(true);
     let seed = 12345;
@@ -58,7 +60,7 @@ describe('transferred polygon indexes', () => {
       };
     });
     bodies.push({ x: 100000, y: -100000, hx: 1, hy: 0, length: 1, width: 1 });
-    for (const name of ['blocked', 'roads', 'forbidden', 'trees'] as const) {
+    for (const name of ['blocked', 'hardBlocked', 'roads', 'forbidden', 'trees'] as const) {
       const frozen = new FrozenPolygonIndex(received[name]);
       for (const body of bodies) expect(frozen.hits([body])).toBe(terrain[name].hits([body]));
       // Multiple bodies must reset the per-body deduplication state.

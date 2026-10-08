@@ -6,13 +6,14 @@
 import {
   LEGACY_LOCAL_METERS_PER_DEGREE,
   resolveProcessionSchedules,
+  PROCESSION_DEFAULTS,
   localMetricProjection,
   pointInPolygon,
   type Procession,
   type ProcessionRoute,
 } from '@atlas/shared';
 import type { Feature, Geometry, Position } from 'geojson';
-import { routeStreet, bakeMassSite } from './procession-ground';
+import { routeStreet, bakeMassSite, bakeFluvialCrowd } from './procession-ground';
 
 type RiverFeature = Feature<Geometry, { id?: string; class?: string; name?: string }>;
 
@@ -141,6 +142,56 @@ export class RiverGraph {
     return path.reverse();
   }
 
+  /**
+   * The river path `meters` on from a snapped point, carrying on away from `previous` (the
+   * route's point before it). At a junction it keeps to the river of the same name, then the
+   * straightest way on. Shorter where the rivers end.
+   */
+  onward(from: { segment: number; at: Point }, previous: Point, meters: number): Point[] {
+    const path: Point[] = [from.at];
+    let left = meters;
+    let here = from.at;
+    let heading: Point = [from.at[0] - previous[0], from.at[1] - previous[1]];
+    let segment = this.segments[from.segment]!;
+    const ahead = (v: number) => {
+      const p = this.points[v]!;
+      return (p[0] - here[0]) * heading[0] + (p[1] - here[1]) * heading[1];
+    };
+    let next = ahead(segment.b) >= ahead(segment.a) ? segment.b : segment.a;
+    for (let guard = 0; guard < 100_000 && left > 0; guard++) {
+      const to = this.points[next]!;
+      const step = distance(here, to);
+      if (step >= left) {
+        const t = left / step;
+        path.push([here[0] + (to[0] - here[0]) * t, here[1] + (to[1] - here[1]) * t]);
+        break;
+      }
+      left -= step;
+      if (step > 0) heading = [to[0] - here[0], to[1] - here[1]];
+      path.push(to);
+      here = to;
+      const name = segment.name;
+      const options = [...(this.outOf.get(next) ?? []), ...(this.into.get(next) ?? [])]
+        .map((i) => this.segments[i]!)
+        .filter((o) => o !== segment);
+      if (options.length === 0) break;
+      const far = (o: Segment) => (o.a === next ? o.b : o.a);
+      const straight = (o: Segment) => {
+        const p = this.points[far(o)]!;
+        const d = Math.hypot(p[0] - here[0], p[1] - here[1]) || 1;
+        return ((p[0] - here[0]) * heading[0] + (p[1] - here[1]) * heading[1]) / d;
+      };
+      options.sort(
+        (x, y) =>
+          Number(y.name === name && name !== '') - Number(x.name === name && name !== '') ||
+          straight(y) - straight(x),
+      );
+      segment = options[0]!;
+      next = far(segment);
+    }
+    return path;
+  }
+
   /** The shortest river path between two snapped points, either way along the rivers. */
   between(
     start: { segment: number; at: Point },
@@ -256,6 +307,22 @@ export const ROUTE_STEP_M = 10;
 const BANK_STEP_M = 0.5;
 const BANK_MAX_M = 60;
 
+/**
+ * Banks for the riverside crowd: a sample that found no bank within `BANK_MAX_M` (where the
+ * route turns into the shore at a landing, its cross-section runs along the river) takes its
+ * nearest measured neighbour's, so the crowd never spreads 60 m inland there.
+ */
+export function crowdBanks(banks: readonly [number, number][]): [number, number][] {
+  const open = (b: [number, number]) => b[0] >= BANK_MAX_M || b[1] >= BANK_MAX_M;
+  const known = banks.flatMap((b, i) => (open(b) ? [] : [i]));
+  if (!known.length) return [...banks];
+  return banks.map((b, i) => {
+    if (!open(b)) return b;
+    const nearest = known.reduce((best, k) => (Math.abs(k - i) < Math.abs(best - i) ? k : best));
+    return banks[nearest]!;
+  });
+}
+
 /** `path` with extra points so that none are more than `step` apart. */
 export function resample(path: readonly Point[], step: number): Point[] {
   const out: Point[] = [path[0]!];
@@ -346,7 +413,13 @@ export function routeProcessions(
       ...('follows' in p.schedule && { follows: p.schedule.follows }),
     };
     if (p.kind === 'mass') {
-      routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p) });
+      const follows = 'follows' in p.schedule ? p.schedule.follows : undefined;
+      const preceding = follows ? processions.find((event) => event.id === follows) : undefined;
+      const images =
+        preceding?.kind === 'procession'
+          ? (preceding.formation?.images ?? PROCESSION_DEFAULTS.procession.images)
+          : 0;
+      routes.push({ ...metadata, kind: p.kind, site: bakeMassSite(features, p, images) });
       continue;
     }
     if (p.kind !== 'fluvial') {
@@ -382,27 +455,64 @@ export function routeProcessions(
       return s;
     };
     const end = snap(toLngLat, p.route.to);
+    const start = p.route.from ? snap(find(p.route.from), p.route.from) : undefined;
     let path: Point[] | undefined;
-    if (p.route.from) {
-      path = graph.between(snap(find(p.route.from), p.route.from), end);
+    if (start) {
+      path = graph.between(start, end);
       if (!path) throw new Error(`${p.id}: no river joins ${p.route.from} and ${p.route.to}`);
     } else {
       path = graph.upstream(end, p.route.upstream_m!);
     }
-    let length = 0;
-    for (let i = 1; i < path.length; i++) length += distance(path[i - 1]!, path[i]!);
-    path = resample(path, ROUTE_STEP_M);
-    const banks = measureBanks(path, waterNear(waterAreas, graph.project.to, path));
+    const span = (line: readonly Point[]) =>
+      line.reduce((sum, q, i) => (i ? sum + distance(line[i - 1]!, q) : 0), 0);
+    let length = span(path);
     if (p.route.upstream_m && length < p.route.upstream_m - 1) {
       warnings.push(
         `${p.id}: the river ends ${Math.round(length)} m upstream, short of ${p.route.upstream_m} m`,
       );
     }
+    // The pagoda sets off at `from`; the river behind it holds the boats following it.
+    let departure: number | undefined;
+    if (start && p.route.before_m && path.length > 1) {
+      const behind = graph.onward(start, path[1]!, p.route.before_m).reverse();
+      const back = span(behind);
+      if (back > 0) {
+        path = [...behind.slice(0, -1), ...path];
+        length += back;
+        departure = back;
+      }
+    }
+    // The pagoda stops at `to`; the river beyond it holds the boats ahead of it.
+    const landing = p.route.beyond_m ? length : undefined;
+    const ashore = resample(path, ROUTE_STEP_M).length;
+    if (p.route.beyond_m) {
+      const onward = graph.onward(end, path.at(-2) ?? path[0]!, p.route.beyond_m);
+      length += span(onward);
+      path = [...path, ...onward.slice(1)];
+    }
+    path = resample(path, ROUTE_STEP_M);
+    const banks = measureBanks(path, waterNear(waterAreas, graph.project.to, path));
     routes.push({
       ...metadata,
       kind: p.kind,
       route: path.map((m) => graph.project.from(m).map((v) => Math.round(v * 1e7) / 1e7) as Point),
       length_m: Math.round(length),
+      ...(departure !== undefined && { departure_m: Math.round(departure) }),
+      ...(landing !== undefined && { landing_m: Math.round(landing) }),
+      ...(banks && {
+        // Spectators line the river up to the landing.
+        crowd_ground: bakeFluvialCrowd(
+          features,
+          path.slice(0, ashore).map((m) => graph.project.from(m)),
+          crowdBanks(banks.slice(0, ashore)),
+          (p.crowd_focus ?? []).map((f) => ({
+            at: find(f.near),
+            radius_m: f.radius_m,
+            reach_m: f.reach_m,
+          })),
+          p.crowd_rings,
+        ),
+      }),
       ...(banks
         ? { banks: banks.map(([l, r]) => [Math.round(l * 2) / 2, Math.round(r * 2) / 2]) }
         : {}),

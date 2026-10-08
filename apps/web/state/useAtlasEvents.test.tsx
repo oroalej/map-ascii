@@ -10,6 +10,46 @@ import { initialAtlasState, useAtlasInstance, useAtlasStore } from './store';
 import { useUiStore } from './ui';
 import { useAtlasEvents } from './useAtlasEvents';
 
+it('initializes readiness from the subscribed atlas and resets it on loss, replacement and cleanup', () => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  const listeners = new Map<string, () => void>();
+  const off = vi.fn();
+  const atlas = {
+    getStats: () => ({ readyMs: 10 }),
+    setSelected: vi.fn(),
+    on: (event: string, handler: () => void) => {
+      listeners.set(event, handler);
+      return off;
+    },
+  } as unknown as Atlas;
+  function Listener() {
+    useAtlasEvents();
+    return null;
+  }
+  const root = createRoot(document.createElement('div'));
+  act(() => {
+    useAtlasInstance.setState({ atlas });
+    root.render(createElement(Listener));
+  });
+  expect(useUiStore.getState().ready).toBe(true);
+  act(() => listeners.get('contextlost')!());
+  expect(useUiStore.getState().ready).toBe(false);
+  expect(listeners.has('contextrestored')).toBe(false);
+  act(() => listeners.get('ready')!());
+  expect(useUiStore.getState().ready).toBe(true);
+  act(() =>
+    useAtlasInstance.setState({
+      atlas: { ...atlas, getStats: () => ({ readyMs: null }) } as Atlas,
+    }),
+  );
+  expect(useUiStore.getState().ready).toBe(false);
+  act(() => listeners.get('ready')!());
+  expect(useUiStore.getState().ready).toBe(true);
+  act(() => root.unmount());
+  expect(useUiStore.getState().ready).toBe(false);
+  expect(off).toHaveBeenCalled();
+});
+
 afterEach(() => {
   useAtlasInstance.setState({ atlas: null });
   useAtlasStore.setState(initialAtlasState());
@@ -26,6 +66,7 @@ it('a listed click pauses a same-ID tour hold and cancels motion without flying;
   const flyTo = vi.fn(),
     setCamera = vi.fn();
   const atlas = {
+    getStats: () => ({ readyMs: null }),
     getCamera: () => camera,
     setCamera,
     flyTo,
@@ -108,6 +149,7 @@ it('Escape clears selection and legend focus together, cancels flight, and respe
   const camera = { lng: 1, lat: 2, zoom: 18 };
   const setCamera = vi.fn();
   const atlas = {
+    getStats: () => ({ readyMs: null }),
     getCamera: () => camera,
     setCamera,
     setSelected: vi.fn(),

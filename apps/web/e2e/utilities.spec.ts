@@ -48,6 +48,24 @@ test('utility poles and overhead wires', async ({ page }) => {
       };
       // Unused samplers share a transparent texture on unit zero.
       texture('u_light', 5, 1, new Uint8Array(20));
+      const crowdMask = gl.createTexture();
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, crowdMask);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA32UI,
+        1,
+        1,
+        0,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_INT,
+        new Uint32Array(4),
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_crowdMask'), unit++);
+      gl.uniform1i(gl.getUniformLocation(program, 'u_hasCrowdMask'), 0);
       const glyphs = new Uint8Array(20),
         fixtures = new Uint8Array(20),
         labels = new Uint8Array(20),

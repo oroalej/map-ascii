@@ -2,6 +2,7 @@
 export type QualityChoice = 'auto' | 'high' | 'low';
 export type Knobs = {
   crowd: number;
+  throng: number;
   maxAgents: number;
   crownSway: boolean;
   groundWind: boolean;
@@ -14,6 +15,7 @@ export type Knobs = {
 };
 const high: Knobs = {
   crowd: 1,
+  throng: 1,
   maxAgents: 1200,
   crownSway: true,
   groundWind: true,
@@ -27,6 +29,7 @@ const high: Knobs = {
 const effects: Knobs = {
   ...high,
   crowd: 0.4,
+  throng: 0.5,
   maxAgents: 500,
   crownSway: false,
   groundWind: false,
@@ -38,7 +41,7 @@ const effects: Knobs = {
 };
 export const TIERS = [
   { name: 'high', knobs: high },
-  { name: 'crowd', knobs: { ...high, crowd: 0.6, maxAgents: 700 } },
+  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700 } },
   { name: 'effects', knobs: effects },
   { name: 'pixels', knobs: { ...effects, crowd: 0.3, maxDpr: 1.25 } },
 ] as const;

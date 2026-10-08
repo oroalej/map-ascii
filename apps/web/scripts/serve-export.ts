@@ -4,12 +4,17 @@ import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 
 /** Own a static server and verify it serves this checkout; never stop a foreign process. */
-export async function serveExport(root: string, port: number, city: string) {
+export async function serveExport(
+  root: string,
+  port: number,
+  city: string,
+  exportDirectory = resolve(root, 'apps/web/out'),
+) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid E2E_PORT');
   if (!/^[a-z0-9-]+$/.test(city)) throw new Error('Invalid city slug');
   const origin = `http://localhost:${port}`,
     url = `${origin}/${city}`;
-  const expected = await readFile(resolve(root, 'apps/web/out', `${city}.html`), 'utf8');
+  const expected = await readFile(resolve(exportDirectory, `${city}.html`), 'utf8');
   let occupied = false;
   try {
     await fetch(url, { signal: AbortSignal.timeout(1000) });
@@ -23,9 +28,14 @@ export async function serveExport(root: string, port: number, city: string) {
   const { bin } = require('serve/package.json') as { bin: string | Record<string, string> };
   const server = spawn(
     process.execPath,
-    [resolve(dirname(pkg), typeof bin === 'string' ? bin : bin.serve!), 'out', '-l', String(port)],
+    [
+      resolve(dirname(pkg), typeof bin === 'string' ? bin : bin.serve!),
+      exportDirectory,
+      '-l',
+      String(port),
+    ],
     {
-      cwd: resolve(root, 'apps/web'),
+      cwd: exportDirectory,
       windowsHide: true,
       stdio: 'ignore',
     },

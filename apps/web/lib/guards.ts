@@ -7,11 +7,17 @@ import {
   isEmergencyData,
   CAMERA_RANGES,
   PROCESSION_LIMITS,
+  processionActorCount,
   PROCESSION_VEHICLES,
   CLOCK_TIME_PATTERN,
   TIME_ZONE_PATTERN,
   OSM_ID_PATTERN,
   TODO_VERIFY,
+  artChars,
+  ART_CHARACTERS,
+  type Landmark,
+  type Tour,
+  type CityArt,
   type CameraState,
   type CityMeta,
   type CityProcessions,
@@ -28,6 +34,165 @@ const isNumbers = (v: unknown, length: number): v is number[] =>
   Array.isArray(v) && v.length === length && v.every(isNumber);
 const isLocalized = (v: unknown): v is Record<string, string> & { en: string } =>
   isRecord(v) && isText(v.en) && Object.values(v).every(isText);
+
+const sources = (v: unknown) =>
+  Array.isArray(v) &&
+  v.length > 0 &&
+  v.every(
+    (s) =>
+      isRecord(s) &&
+      isText(s.title) &&
+      (s.url === undefined || isText(s.url)) &&
+      (s.note === undefined || typeof s.note === 'string'),
+  );
+const optional = (v: unknown, check: (value: unknown) => boolean) => v === undefined || check(v);
+const osmId = (v: unknown) => isText(v) && OSM_ID_PATTERN.test(v);
+const selectableId = (v: unknown) => osmId(v) || (isText(v) && /^landmark\/[a-z0-9-]+$/.test(v));
+const year = (v: unknown) => isNumber(v) && Number.isInteger(v);
+
+/** Step 04 emits the validated landmark array, retaining sources and fact indices. */
+export function isCityLandmarks(v: unknown): v is Landmark[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (l) =>
+        isRecord(l) &&
+        isText(l.id) &&
+        l.id.startsWith('landmark/') &&
+        isLocalized(l.name) &&
+        isText(l.type) &&
+        ['exact', 'circa', 'unknown'].includes(String(l.certainty)) &&
+        sources(l.sources) &&
+        optional(l.osm_id, osmId) &&
+        (l.osm_id !== undefined ||
+          (isRecord(l.geometry) &&
+            isText(l.geometry.type) &&
+            Array.isArray(l.geometry.coordinates))) &&
+        optional(l.start_year, year) &&
+        optional(l.end_year, year) &&
+        optional(l.story, isLocalized) &&
+        optional(
+          l.photos,
+          (p) =>
+            Array.isArray(p) &&
+            p.every(
+              (x) =>
+                isRecord(x) &&
+                isText(x.src) &&
+                isText(x.credit) &&
+                isText(x.license) &&
+                optional(x.year, year) &&
+                optional(x.caption, (c) => typeof c === 'string'),
+            ),
+        ) &&
+        optional(
+          l.facts,
+          (f) =>
+            Array.isArray(f) &&
+            f.length >= 3 &&
+            f.length <= 5 &&
+            f.every(
+              (x) =>
+                isRecord(x) &&
+                isLocalized(x.text) &&
+                integer(x.source, 0, (l.sources as unknown[]).length - 1) &&
+                optional(x.year, year) &&
+                optional(x.certainty, (c) => ['exact', 'circa'].includes(String(c))),
+            ),
+        ),
+    )
+  );
+}
+
+export function isCityTours(v: unknown): v is Tour[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (t) =>
+        isRecord(t) &&
+        isText(t.id) &&
+        t.id.startsWith('tour/') &&
+        isLocalized(t.title) &&
+        optional(t.description, isLocalized) &&
+        ['draft', 'verified'].includes(String(t.status)) &&
+        Array.isArray(t.steps) &&
+        t.steps.length > 0 &&
+        t.steps.every(
+          (s) =>
+            isRecord(s) &&
+            isCamera(s.camera) &&
+            integer(s.duration_ms, 1, Number.MAX_SAFE_INTEGER) &&
+            optional(s.fly_ms, (n) => integer(n, 1, 15000)) &&
+            isLocalized(s.narration) &&
+            optional(s.year, year) &&
+            optional(s.select, selectableId) &&
+            optional(
+              s.highlight,
+              (h) => Array.isArray(h) && h.length <= 64 && h.every(selectableId),
+            ) &&
+            optional(s.audio, isText) &&
+            optional(s.sources, sources) &&
+            (t.status !== 'verified' ||
+              (sources(s.sources) &&
+                Object.values(s.narration).every((text) => !text.includes(TODO_VERIFY)))),
+        ),
+    )
+  );
+}
+
+/** Art uses the placed CityArt object, rather than editorial LandmarkArt records. */
+export function isCityArt(v: unknown): v is CityArt {
+  const roles = new Set(['stone', 'wall', 'roof', 'wood', 'gold', 'glass', 'foliage', 'accent']);
+  return (
+    isRecord(v) &&
+    Array.isArray(v.pieces) &&
+    v.pieces.every((p) => {
+      if (
+        !isRecord(p) ||
+        !isText(p.id) ||
+        !osmId(p.osm_id) ||
+        !isText(p.title) ||
+        !['draft', 'verified'].includes(String(p.status)) ||
+        !integer(p.priority, 0, 100) ||
+        !isNumbers(p.bbox, 4) ||
+        !point(p.anchor) ||
+        !isRecord(p.palette) ||
+        !Object.entries(p.palette).every(
+          ([key, role]) => artChars(key).length === 1 && roles.has(String(role)),
+        ) ||
+        !Array.isArray(p.variants) ||
+        !p.variants.length
+      )
+        return false;
+      const palette = p.palette;
+      return p.variants.every((variant) => {
+        if (
+          !isRecord(variant) ||
+          !Array.isArray(variant.rows) ||
+          !variant.rows.length ||
+          !variant.rows.every((row) => typeof row === 'string') ||
+          !Array.isArray(variant.colors) ||
+          variant.colors.length !== variant.rows.length ||
+          !variant.colors.every((row) => typeof row === 'string')
+        )
+          return false;
+        const width = artChars(variant.rows[0] as string).length;
+        return (
+          width > 0 &&
+          variant.rows.every(
+            (row) =>
+              artChars(row).length === width && artChars(row).every((c) => ART_CHARACTERS.has(c)),
+          ) &&
+          variant.colors.every(
+            (row) =>
+              artChars(row).length === width &&
+              artChars(row).every((key) => key === ' ' || Object.hasOwn(palette, key)),
+          )
+        );
+      });
+    })
+  );
+}
 
 function isCamera(v: unknown): v is CameraState {
   if (!isRecord(v)) return false;
@@ -79,13 +244,17 @@ function eventFormation(p: Record<string, unknown>): boolean {
       : p.kind === 'procession'
         ? PROCESSION_LIMITS.procession
         : PROCESSION_LIMITS.parade;
-  return Object.entries(p.formation).every(([k, v]) =>
+  const valid = Object.entries(p.formation).every(([k, v]) =>
     k === 'vehicles' && p.kind === 'parade'
       ? Array.isArray(v) &&
         v.length <= PROCESSION_LIMITS.vehicles &&
         v.every((x: unknown) => PROCESSION_VEHICLES.some((vehicle) => vehicle === x))
       : !!limits[k] && integer(v, ...limits[k]),
   );
+  if (!valid || (p.kind !== 'fluvial' && p.kind !== 'procession' && p.kind !== 'parade'))
+    return false;
+  // Every present field was checked against its numeric or vehicle limits above.
+  return processionActorCount(p.kind, p.formation) <= PROCESSION_LIMITS.actors;
 }
 export function isCityProcessions(v: unknown): v is CityProcessions {
   if (!isRecord(v) || !Array.isArray(v.processions)) return false;
@@ -162,7 +331,22 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
           'blocked',
           'approaches',
           'roads',
+          'closure_zone',
+          'seated_grounds',
+          'altar_ground',
+          'altar',
         ]) &&
+        ['closure_zone', 'seated_grounds', 'altar_ground'].every(
+          (k) => site[k] === undefined || rings(site[k]),
+        ) &&
+        (site.altar === undefined ||
+          (isRecord(site.altar) &&
+            only(site.altar, ['at', 'radius_m', 'images']) &&
+            point(site.altar.at) &&
+            isNumber(site.altar.radius_m) &&
+            site.altar.radius_m > 0 &&
+            site.altar.radius_m <= PROCESSION_LIMITS.altar.radius &&
+            integer(site.altar.images, ...PROCESSION_LIMITS.altar.images))) &&
         isText(site.id) &&
         OSM_ID_PATTERN.test(site.id) &&
         point(site.location) &&
@@ -190,7 +374,26 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
     if (!line(p.route) || !isNumber(p.length_m) || p.length_m <= 0) return false;
     if (p.kind === 'fluvial')
       return (
-        only(p, [...base, 'route', 'length_m', 'banks', 'formation']) &&
+        only(p, [
+          ...base,
+          'route',
+          'length_m',
+          'departure_m',
+          'landing_m',
+          'banks',
+          'formation',
+          'crowd_ground',
+        ]) &&
+        (p.departure_m === undefined || (isNumber(p.departure_m) && p.departure_m > 0)) &&
+        (p.landing_m === undefined || (isNumber(p.landing_m) && p.landing_m > 0)) &&
+        (p.crowd_ground === undefined ||
+          (isRecord(p.crowd_ground) &&
+            only(p.crowd_ground, ['grounds', 'blocked', 'water', 'bridges', 'closure_zone']) &&
+            rings(p.crowd_ground.grounds) &&
+            rings(p.crowd_ground.blocked) &&
+            rings(p.crowd_ground.water) &&
+            rings(p.crowd_ground.bridges) &&
+            (p.crowd_ground.closure_zone === undefined || rings(p.crowd_ground.closure_zone)))) &&
         (p.banks === undefined ||
           (Array.isArray(p.banks) &&
             p.banks.length === (p.route as unknown[]).length &&
@@ -206,7 +409,9 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
         'water',
         'bridges',
         'formation',
+        'crowd_grounds',
       ]) &&
+      (p.crowd_grounds === undefined || rings(p.crowd_grounds)) &&
       rings(p.blocked) &&
       (p.water === undefined || rings(p.water)) &&
       (p.bridges === undefined || rings(p.bridges)) &&
@@ -215,11 +420,22 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
       p.segments.every(
         (e) =>
           isRecord(e) &&
-          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m']) &&
+          only(e, ['id', 'width_m', 'sidewalk_m', 'sidewalks_m', 'clear_m', 'verge_m']) &&
           isText(e.id) &&
           OSM_ID_PATTERN.test(e.id) &&
           isNumber(e.width_m) &&
           e.width_m > 0 &&
+          (e.clear_m === undefined ||
+            (isNumber(e.clear_m) && e.clear_m > 0 && e.clear_m <= e.width_m)) &&
+          (e.verge_m === undefined ||
+            (isRecord(e.verge_m) &&
+              only(e.verge_m, ['left', 'right']) &&
+              isNumber(e.verge_m.left) &&
+              e.verge_m.left >= 0 &&
+              e.verge_m.left <= PROCESSION_LIMITS.verge &&
+              isNumber(e.verge_m.right) &&
+              e.verge_m.right >= 0 &&
+              e.verge_m.right <= PROCESSION_LIMITS.verge)) &&
           isNumber(e.sidewalk_m) &&
           e.sidewalk_m >= 0 &&
           (e.sidewalks_m === undefined ||

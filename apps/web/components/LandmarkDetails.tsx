@@ -1,5 +1,5 @@
 'use client';
-import type { Dish, Landmark, LandmarkArt } from '@atlas/shared';
+import type { Dish, Landmark, CityArt } from '@atlas/shared';
 import type { useSelectedDetails } from '@/state/useSelectedDetails';
 import { selectPlace } from '@/state/selection';
 import { ArtView } from './ArtView';
@@ -9,7 +9,7 @@ import styles from './LandmarkDetails.module.css';
 export type LandmarkDetailsProps = {
   landmark: Landmark;
   dishes?: readonly Dish[];
-  drawing: LandmarkArt | undefined;
+  drawing: CityArt['pieces'][number] | undefined;
   details: ReturnType<typeof useSelectedDetails>;
   subdivisionLabel: string;
   headingId: string;

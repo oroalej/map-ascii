@@ -253,6 +253,7 @@ beforeEach(() => {
     on,
     getFeature: vi.fn(() => undefined),
     flyTo: vi.fn(),
+    getStats: () => ({ readyMs: null }),
     getCamera: () => ({ lng: 1, lat: 2, zoom: 18 }),
     setCamera: vi.fn(),
     setSelected: vi.fn(),
