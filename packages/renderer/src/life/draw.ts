@@ -1791,7 +1791,8 @@ function stamp(
  * longer axis on the grid. A cell takes `─` or `│` where the line runs straight on to the next
  * cell, and `╱` or `╲` where it steps across a row and a column at once, so a slanted line reads
  * as a staircase rather than a band. Cells are painted in turn from its `paints`, and its tip
- * glyph goes in the last cell. A line shorter than a cell on screen isn't drawn. Returns
+ * glyph goes in the last cell. A line shorter than a cell on screen, or one that stays within a
+ * single cell, isn't drawn. Returns
  * whether any cell landed on the grid.
  */
 function drawLine(
@@ -1822,6 +1823,8 @@ function drawLine(
       if (!last || last[0] !== cell[0] || last[1] !== cell[1]) path.push(cell);
     }
   }
+  // A cell long, yet within one cell: no step to turn its glyph by.
+  if (path.length < 2) return false;
   const cls = classId(lifeClassFor.boat);
   const seen = new Set<number>();
   const marks: { at: number; glyph: number }[] = [];
