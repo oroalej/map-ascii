@@ -1,4 +1,5 @@
 import type { VisibleAgent } from './simulate';
+import type { EmojiRequest } from './emoji';
 
 export type TapAction =
   | 'folklore'
@@ -130,5 +131,26 @@ export class TapQueue {
   clear() {
     this.pending.length = 0;
     this.sent.clear();
+  }
+}
+
+/** Bounded presentation requests, including waves deferred until an utterance ends. */
+export class TapReactions {
+  private entries: { cue: EmojiRequest; at: number }[] = [];
+  add(cue: EmojiRequest, at: number) {
+    if (this.entries.length < 32) this.entries.push({ cue, at });
+  }
+  drain(clock: number, eligible: (owner: object) => boolean, speaking: (owner: object) => boolean) {
+    const ready: EmojiRequest[] = [];
+    this.entries = this.entries.filter(({ cue, at }) => {
+      if (clock > cue.expires || !eligible(cue.owner)) return false;
+      if (clock < at || speaking(cue.owner)) return true;
+      ready.push({ ...cue, eligible: true, speaking: false });
+      return false;
+    });
+    return ready;
+  }
+  clear() {
+    this.entries.length = 0;
   }
 }

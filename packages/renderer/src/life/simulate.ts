@@ -34,7 +34,15 @@ import {
 } from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
-import { TapSources, resolveTap, type LifeTap, type TapReceipt } from './tap';
+import {
+  TapSources,
+  TapReactions,
+  resolveTap,
+  type LifeTap,
+  type TapReceipt,
+  type TapTarget,
+} from './tap';
+import type { EmojiSubject, EmojiMood } from '@atlas/shared';
 import {
   EmojiObserver,
   EmojiMemory,
@@ -907,6 +915,35 @@ function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
 
 /** The agents of one tile. */
 export class TileLife {
+  tapRequests?: TapReactions;
+  private tapDash?: WeakMap<Mover, number>;
+  requestEmoji(
+    owner: object,
+    subject: EmojiSubject,
+    mood: EmojiMood,
+    clock: number,
+    duration = 2.5,
+    delay = 0,
+    lifetime = 5,
+  ) {
+    (this.tapRequests ??= new TapReactions()).add(
+      {
+        owner,
+        subject,
+        mood,
+        eligible: true,
+        speaking: false,
+        duration,
+        expires: clock + delay + lifetime,
+      },
+      clock + delay,
+    );
+  }
+  hurry(m: Mover, clock: number) {
+    if (m.kind !== 'person') return;
+    (this.tapDash ??= new WeakMap()).set(m, clock + 2);
+    m.pause = 0;
+  }
   emergencyRouter?: EmergencyRouter;
   /** Projection is local to this owner; geographic state survives seams and zoom changes. */
   private emergencyStops = new WeakMap<
@@ -6127,6 +6164,7 @@ export class TileLife {
   }
   /** Freeze pending/active cues, but never replay an undelivered physical event. */
   freezeEmoji() {
+    this.tapRequests?.clear();
     this.startled.length = 0;
     this.pointerInside = undefined;
     this.emoji.freeze();
@@ -6290,6 +6328,19 @@ export class TileLife {
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
         this.startled,
+        this.tapRequests?.drain(
+          emojiEnv.emojiTime?.clock ?? clock,
+          (owner) =>
+            this.emojiInputs.some((o) => o.owner === owner && o.eligible) ||
+            this.movers.some(
+              (m) =>
+                m === owner &&
+                !!m.train &&
+                (!near || near(m.x, m.y)) &&
+                (!pass?.owns || pass.owns(m)),
+            ),
+          (owner) => this.momentHost.speaking(owner),
+        ),
       );
       for (const flock of this.birdEmojiOwners) {
         const track = this.emoji.memory.get(flock);
@@ -6297,6 +6348,7 @@ export class TileLife {
       }
     } else {
       this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      this.tapRequests?.clear();
       this.clearBirdEmojiOwners();
     }
     this.startled.length = 0;
@@ -6556,7 +6608,9 @@ export class TileLife {
           continue;
         }
         const idle = this.canIdle(m);
-        const dash = this.scenes.dashPace(m);
+        const dash =
+          this.scenes.dashPace(m) ??
+          ((this.tapDash?.get(m) ?? 0) > clock ? runPace(m, RUN.speed, this.perMeter) : undefined);
         const dashing = dash !== undefined;
         if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
@@ -8578,6 +8632,68 @@ export class LifeWorld {
   tapReceipts?: readonly TapReceipt[];
   enableTaps() {
     this.tapSources ??= new TapSources();
+  }
+  private tapOwner(owner: object) {
+    for (const life of this.tiles.values()) {
+      const mover = life.movers.find((m) => m === owner);
+      if (mover) return { life, mover };
+    }
+  }
+  private tapAgent(target: TapTarget) {
+    const owned = this.tapOwner(target.owner);
+    if (!owned) return;
+    const { life, mover } = owned;
+    if (mover.kind !== 'vehicle' && !mover.train) return;
+    life.requestEmoji(mover, 'driver', 'honk', this.emojiClock);
+    const at = mover.train
+      ? life.pose(mover)
+      : lngLatToTile(life.tile, target.agent.lng, target.agent.lat);
+    const forward = mover.train
+      ? { x: at.x + mover.hx, y: at.y + mover.hy }
+      : lngLatToTile(life.tile, ...(target.agent.ahead ?? [target.agent.lng, target.agent.lat]));
+    const distance = Math.hypot(forward.x - at.x, forward.y - at.y) || 1;
+    const hx = (forward.x - at.x) / distance,
+      hy = (forward.y - at.y) / distance;
+    const seen = new Set<object>();
+    let count = 0;
+    for (const candidate of this.tapSources?.latest() ?? []) {
+      if (
+        !candidate ||
+        candidate.agent.kind !== 'person' ||
+        candidate.agent.vehicle ||
+        seen.has(candidate.owner)
+      )
+        continue;
+      seen.add(candidate.owner);
+      const p = lngLatToTile(life.tile, candidate.agent.lng, candidate.agent.lat);
+      const dx = p.x - at.x,
+        dy = p.y - at.y;
+      const ahead = (dx * hx + dy * hy) / life.perMeter;
+      const side = Math.abs(dx * hy - dy * hx) / life.perMeter;
+      if (ahead < 0 || ahead > 25 || side > (mover.train ? 8 : 3)) continue;
+      const person = this.tapOwner(candidate.owner);
+      if (!person || person.life.scenes.visits.has(person.mover)) continue;
+      person.life.hurry(person.mover, this.clock);
+      person.life.requestEmoji(person.mover, 'person', 'rushing', this.emojiClock);
+      if (++count >= 8) break;
+    }
+  }
+  private resolveTaps(taps: readonly LifeTap[] | undefined) {
+    this.tapReceipts =
+      taps?.length && this.tapSources
+        ? taps.slice(0, 4).map((tap) =>
+            resolveTap(tap, this.tapSources!, {
+              folklore: () => false,
+              agent: (target) => this.tapAgent(target),
+              signal: () => false,
+              procession: () => false,
+              carnival: () => {},
+              candle: () => {},
+              tree: () => false,
+              rice: () => false,
+            }),
+          )
+        : undefined;
   }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
@@ -11198,21 +11314,7 @@ export class LifeWorld {
     pointer?: readonly [number, number],
     taps?: readonly LifeTap[],
   ) {
-    this.tapReceipts =
-      taps?.length && this.tapSources
-        ? taps.slice(0, 4).map((tap) =>
-            resolveTap(tap, this.tapSources!, {
-              folklore: () => false,
-              agent: () => {},
-              signal: () => false,
-              procession: () => false,
-              carnival: () => {},
-              candle: () => {},
-              tree: () => false,
-              rice: () => false,
-            }),
-          )
-        : undefined;
+    this.tapReceipts = undefined;
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
@@ -11222,12 +11324,14 @@ export class LifeWorld {
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
+      this.resolveTaps(taps);
       this.sampleFolklore(weather, 0);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
+    this.resolveTaps(taps);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.folklore.clear();
@@ -12284,7 +12388,8 @@ export class LifeWorld {
         !agent.aboard &&
         !agent.parked &&
         !agent.prop &&
-        !agent.consist &&
+        (!agent.consist ||
+          (agent.vehicle === 'locomotive' && cue.subject === 'driver' && cue.mood === 'honk')) &&
         agent.vehicle !== 'carabao'
       )
         agent.emoji = cue;

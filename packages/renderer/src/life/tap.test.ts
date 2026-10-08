@@ -2,6 +2,70 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveTap, TapQueue, TapSources, type LifeTap, type TapHandlers } from './tap';
 import type { VisibleAgent } from './simulate';
 import { makeScenario, completeScenarioState } from './testing/scenarios';
+import { LifeWorld } from './simulate';
+import { continuityTile, continuityMover, left } from './testing/continuity';
+import { LifeLine } from './geometry';
+
+function vehicleWorld(kind: 'vehicle' | 'train' = 'vehicle') {
+  const world = new LifeWorld(undefined, undefined, undefined, false);
+  world.enableTaps();
+  const entry = continuityTile(left, kind === 'train' ? LifeLine.rail : LifeLine.roadMajor);
+  world.sync([entry]);
+  const life = world.resident(entry.key)!;
+  life.stalls.length = 0;
+  life.gatherers.length = 0;
+  life.flocks.length = 0;
+  const vehicle = continuityMover(life, 1800, kind);
+  if (vehicle.train) vehicle.train.trail = [1800 - 100 * life.perMeter, vehicle.y];
+  const person = continuityMover(life, 1800 + 10 * life.perMeter, 'person');
+  person.group = [
+    { figure: 'adult', shirt: 0, umbrella: 0.1, canopy: 0, lateral: 0, back: 0, step: 0 },
+  ];
+  person.speed = life.perMeter;
+  person.y += 2 * life.perMeter;
+  life.movers.splice(0, life.movers.length, vehicle, person);
+  world.setEmojiView([19, 1, [0, 0]]);
+  const agents = world.visible(19, 1, [0, 0]);
+  const index = agents.findIndex(
+    (a) => a.kind === kind && (!vehicle.train || a.vehicle === 'coach'),
+  );
+  const selected = agents[index]!;
+  const tap: LifeTap = {
+    id: 11,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at: [selected.lng, selected.lat],
+    pointer: 'touch',
+    cellMeters: 1,
+    agent: index,
+  };
+  return { world, life, vehicle, person, tap };
+}
+it.each(['car', 'jeepney'] as const)(
+  'honks a %s and requests a guarded two-second hurry without riders',
+  (craft) => {
+    const f = vehicleWorld();
+    f.vehicle.vehicle = craft;
+    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+      f.tap,
+    ]);
+    expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'agent' }]);
+    expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('honk');
+    expect(f.world.emojiMemory.cue(f.person)?.mood).toBe('rushing');
+    expect(f.person.pause).toBe(0);
+  },
+);
+it('resolves a coach to its consist, but renders the requested horn only on the locomotive', () => {
+  const f = vehicleWorld('train');
+  expect(f.world.visible(19, 1, [0, 0]).filter((a) => a.emoji)).toEqual([]);
+  f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+    f.tap,
+  ]);
+  const cues = f.world.visible(19, 1, [0, 0]).filter((a) => a.kind === 'train' && a.emoji);
+  expect(cues).toHaveLength(1);
+  expect(cues[0]!.vehicle).toBe('locomotive');
+  expect(cues[0]!.emoji?.mood).toBe('honk');
+});
 it('leaves tap-free physical state and visible records identical with frame targeting enabled', () => {
   const a = makeScenario('sparse', 1, true),
     b = makeScenario('sparse', 1, true);
