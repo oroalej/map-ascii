@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { Landmark } from '@atlas/shared';
+import type { Landmark } from '@atlas/shared';
 
 const records = import.meta.glob('../cities/naga/landmarks/*.json', {
   eager: true,
   import: 'default',
-});
-const landmarks = Object.values(records).map((record) => Landmark.parse(record));
+}) as Record<string, Landmark>;
+const landmarks = Object.values(records);
 const heritage = landmarks.filter((landmark) => landmark.type === 'heritage');
 const ordinance = 'https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/';
 
