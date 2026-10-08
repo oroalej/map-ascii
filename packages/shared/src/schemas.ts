@@ -724,6 +724,8 @@ const CrowdGround = z.strictObject({
   blocked: z.array(EventRing),
   water: z.array(EventRing),
   bridges: z.array(EventRing),
+  /** Car-free while the event plays: the owner-marked crowd ground on roads. */
+  closure_zone: z.array(EventRing).optional(),
 });
 export const ProcessionSite = z.strictObject({
   closure_zone: z.array(EventRing).optional(),
@@ -1004,6 +1006,8 @@ export function contentSchemas(languages?: readonly string[]) {
             message: 'give exactly one of from and upstream_m',
           }),
         formation: ProcessionFormation.optional(),
+        /** Owner-marked crowd ground beyond the river sides, closed to traffic. */
+        crowd_rings: z.array(EventRing).min(1).optional(),
         /** Where the riverside crowd reaches further inland, such as beside a bridge. */
         crowd_focus: z
           .array(

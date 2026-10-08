@@ -32,7 +32,13 @@ it('serializes compact ground geography while preserving fluvial geometry and ph
         [3.123456789, 4],
         [3, 4],
       ],
-      crowd_ground: { grounds: [ring], blocked: [ring], water: [ring], bridges: [ring] },
+      crowd_ground: {
+        grounds: [ring],
+        blocked: [ring],
+        water: [ring],
+        bridges: [ring],
+        closure_zone: [ring],
+      },
     },
     {
       ...common,
@@ -81,6 +87,7 @@ it('serializes compact ground geography while preserving fluvial geometry and ph
   expect(river.route).toEqual(line);
   expect(river.banks).toEqual(routes[0]!.kind === 'fluvial' ? routes[0]!.banks : undefined);
   expect(river.crowd_ground!.grounds[0]![0]).toEqual([123.123457, 13.123457]);
+  expect(river.crowd_ground!.closure_zone![0]![0]).toEqual([123.123457, 13.123457]);
   const street = bundle.processions[1]!,
     mass = bundle.processions[2]!;
   if (street.kind !== 'procession' || mass.kind !== 'mass') throw Error('Wrong event kind');

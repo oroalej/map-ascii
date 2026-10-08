@@ -194,6 +194,18 @@ describe('browser shape guards agree with the schemas', () => {
       { ...fluvial, crowd_ground: { grounds: rings, blocked: [], water: [], bridges: [] } },
       true,
     );
+    // A river event's owner-marked ground closes to traffic.
+    for (const [closure_zone, valid] of [
+      [rings, true],
+      [[[route[0], route[0]]], false],
+    ] as const)
+      agrees(
+        {
+          ...fluvial,
+          crowd_ground: { grounds: rings, blocked: [], water: [], bridges: [], closure_zone },
+        },
+        valid,
+      );
     agrees(
       {
         ...mass,

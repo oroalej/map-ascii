@@ -11,7 +11,7 @@ import { localFrame } from './geo';
 import { bakeCrowdAreas, compactLattice } from './crowd-ground';
 import { difference } from 'polyclip-ts';
 import { routeStreet, bakeMassSite, bakeFluvialCrowd } from './procession-ground';
-import { measureBanks } from './procession';
+import { crowdBanks, measureBanks } from './procession';
 type Point = [number, number];
 type F = Feature<Geometry, Record<string, unknown>>;
 const frame = localFrame([0, 0]);
@@ -200,6 +200,28 @@ it('puts fluvial spectators on the river sides and the bridges the boats pass un
   expect(focused(-50, 25)).toBe(true);
   expect(focused(-50, -25)).toBe(true);
   expect(focused(50, 25)).toBe(false);
+  // Owner-marked ground off the river joins the crowd and closes to traffic.
+  const landing = box(-90, 20, -70, 40);
+  const marked = bakeFluvialCrowd([...water, ...decks], route, banks, [], [landing]);
+  expect(marked.closure_zone).toEqual([landing]);
+  expect(marked.grounds.some((ring) => pointInPolygon(q(-80, 30), [ring]))).toBe(true);
+  expect(bakeFluvialCrowd([...water, ...decks], route, banks).closure_zone).toBeUndefined();
+});
+it('gives a landing sample whose banks were not found its nearest measured banks', () => {
+  expect(
+    crowdBanks([
+      [9, 11],
+      [9, 12],
+      [60, 60],
+      [8, 60],
+    ]),
+  ).toEqual([
+    [9, 11],
+    [9, 12],
+    [9, 12],
+    [9, 12],
+  ]);
+  expect(crowdBanks([[60, 60]])).toEqual([[60, 60]]);
 });
 it('losslessly compacts adjacent lattice rows while retaining holes and disconnected pieces', () => {
   const cells = new Map<string, Point>();

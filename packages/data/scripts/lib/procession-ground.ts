@@ -715,6 +715,7 @@ export function bakeFluvialCrowd(
   route: Point[],
   banks: [number, number][],
   focus: readonly FluvialFocus[] = [],
+  rings: readonly Point[][] = [],
 ) {
   const frame = localFrame(route[0]!);
   const foci = focus.map((f) => ({ ...f, xy: frame.toMeters(f.at) }));
@@ -791,7 +792,7 @@ export function bakeFluvialCrowd(
           );
         }),
     );
-  const pieces = [...strips, ...decks.map((r) => [r])];
+  const pieces = [...strips, ...decks.map((r) => [r]), ...rings.map((r) => [[...r]])];
   // Balanced union keeps source precision and avoids a sequential growing sweep.
   const groups = pieces.map(
     (p) =>
@@ -804,5 +805,11 @@ export function bakeFluvialCrowd(
   const envelope = balancedUnion(groups);
   const { blocked, water } = assembleExclusions(features, frame, bounds, pieces, true);
   for (const polygon of envelope) for (const hole of polygon.slice(1)) blocked.push(asPoints(hole));
-  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges: decks };
+  return {
+    grounds: envelope.map((p) => asPoints(p[0]!)),
+    blocked,
+    water,
+    bridges: decks,
+    ...(rings.length && { closure_zone: rings.map((r) => [...r]) }),
+  };
 }

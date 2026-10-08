@@ -1244,27 +1244,46 @@ describe('street event simulation', () => {
       ).toBe(true);
     },
   );
-  it.each(['procession', 'parade', 'mass'] as const)(
+  it.each(['procession', 'parade', 'mass', 'fluvial'] as const)(
     'clears moving and parked traffic across the full %s route for live and played events, then restores identities',
     (kind) => {
       for (const live of [true, false]) {
         const { w, life } = world();
-        const route: StreetRoute | MassRoute =
-          kind === 'mass'
-            ? { ...mass, site: { ...mass.site, closure_zone: groundForRoute(street).regions } }
-            : kind === 'parade'
-              ? {
-                  ...street,
-                  kind: 'parade',
-                  formation: {
-                    contingents: 2,
-                    ranks: 3,
-                    band: 8,
-                    color_guard: 4,
-                    vehicles: ['car'],
-                  },
-                }
-              : street;
+        // A river event closes only its owner-marked ground on land.
+        const river: FluvialRoute = {
+          id: 'river',
+          kind: 'fluvial',
+          title: { en: 'River' },
+          status: 'draft',
+          schedule: street.schedule,
+          route: street.route,
+          length_m: street.length_m,
+          crowd_ground: {
+            grounds: groundForRoute(street).regions,
+            blocked: [],
+            water: [],
+            bridges: [],
+            closure_zone: groundForRoute(street).regions,
+          },
+        };
+        const route: StreetRoute | MassRoute | FluvialRoute =
+          kind === 'fluvial'
+            ? river
+            : kind === 'mass'
+              ? { ...mass, site: { ...mass.site, closure_zone: groundForRoute(street).regions } }
+              : kind === 'parade'
+                ? {
+                    ...street,
+                    kind: 'parade',
+                    formation: {
+                      contingents: 2,
+                      ranks: 3,
+                      band: 8,
+                      color_guard: 4,
+                      vehicles: ['car'],
+                    },
+                  }
+                : street;
         w.setProcessions([route]);
         const car = (x: number, y = 2000): Mover => ({
           ...ordinaryPerson(x, y),

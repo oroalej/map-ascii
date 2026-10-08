@@ -37,13 +37,14 @@ function retainOrdinary(
   route?: ProcessionRoute,
 ): FrameView | undefined {
   if (!view) return;
-  const street = route && route.kind !== 'fluvial' ? route : undefined;
+  const rings = route ? trafficRings(route) : [];
   const projection =
-    street &&
-    localMetricProjection(street.kind === 'mass' ? street.site.location : street.route[0]!);
+    route &&
+    rings.length > 0 &&
+    localMetricProjection(route.kind === 'mass' ? route.site.location : route.route[0]!);
   const closure = projection && new PolygonIndex();
-  if (closure && street && projection)
-    for (const ring of trafficRings(street))
+  if (closure && projection)
+    for (const ring of rings)
       closure.add([
         ring.map((point) => {
           const [x, y] = projection.to(point);

@@ -213,11 +213,12 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
         only(p, [...base, 'route', 'length_m', 'banks', 'formation', 'crowd_ground']) &&
         (p.crowd_ground === undefined ||
           (isRecord(p.crowd_ground) &&
-            only(p.crowd_ground, ['grounds', 'blocked', 'water', 'bridges']) &&
+            only(p.crowd_ground, ['grounds', 'blocked', 'water', 'bridges', 'closure_zone']) &&
             rings(p.crowd_ground.grounds) &&
             rings(p.crowd_ground.blocked) &&
             rings(p.crowd_ground.water) &&
-            rings(p.crowd_ground.bridges))) &&
+            rings(p.crowd_ground.bridges) &&
+            (p.crowd_ground.closure_zone === undefined || rings(p.crowd_ground.closure_zone)))) &&
         (p.banks === undefined ||
           (Array.isArray(p.banks) &&
             p.banks.length === (p.route as unknown[]).length &&

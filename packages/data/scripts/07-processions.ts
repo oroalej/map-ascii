@@ -48,6 +48,9 @@ export function quantizeGroundRoutes(routes: readonly ProcessionRoute[]): Proces
             blocked: rings(route.crowd_ground.blocked),
             water: rings(route.crowd_ground.water),
             bridges: rings(route.crowd_ground.bridges),
+            ...(route.crowd_ground.closure_zone && {
+              closure_zone: rings(route.crowd_ground.closure_zone),
+            }),
           },
         }),
       };

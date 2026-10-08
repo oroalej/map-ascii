@@ -9207,9 +9207,9 @@ export class LifeWorld {
   private eventOwners = new Map<string, object>();
   private eventGrounds = groundsForRoutes([]);
   private trafficClosureCache?: {
-    scene: GroundProcessionScene;
+    scene: GroundProcessionScene | ProcessionScene;
     terrain: GroundTerrain;
-    index: PolygonIndex;
+    index: PolygonIndex | undefined;
   };
   private readonly reconciledActors = new WeakMap<
     TileLife,
@@ -10031,23 +10031,21 @@ export class LifeWorld {
       (this.live && this.live.progress >= 0 && this.live.progress < 1 ? this.live.id : undefined);
     const scene = id && this.scenes.get(id);
     const terrain = this.groundTerrain;
-    if (
-      !(scene instanceof GroundProcessionScene) ||
-      (scene.route.kind === 'mass' && !scene.route.site.closure_zone?.length) ||
-      !terrain?.ref
-    ) {
+    if (!scene || !terrain?.ref) {
       this.trafficClosureCache = undefined;
       return undefined;
     }
+    // Checked for every agent: rings are built once per scene and terrain, none included.
     if (this.trafficClosureCache?.scene === scene && this.trafficClosureCache.terrain === terrain)
       return this.trafficClosureCache.index;
-    const index = new PolygonIndex(),
+    const rings = trafficRings(scene.route),
       ref = terrain.ref;
+    const index = rings.length ? new PolygonIndex() : undefined;
     const metric = ([lng, lat]: [number, number]) => {
       const q = lngLatToTile(ref.tile, lng, lat);
       return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
     };
-    for (const ring of trafficRings(scene.route)) index.add([ring.map(metric)]);
+    for (const ring of rings) index!.add([ring.map(metric)]);
     this.trafficClosureCache = { scene, terrain, index };
     return index;
   }

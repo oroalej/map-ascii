@@ -257,6 +257,22 @@ export const ROUTE_STEP_M = 10;
 const BANK_STEP_M = 0.5;
 const BANK_MAX_M = 60;
 
+/**
+ * Banks for the riverside crowd: a sample that found no bank within `BANK_MAX_M` (where the
+ * route turns into the shore at a landing, its cross-section runs along the river) takes its
+ * nearest measured neighbour's, so the crowd never spreads 60 m inland there.
+ */
+export function crowdBanks(banks: readonly [number, number][]): [number, number][] {
+  const open = (b: [number, number]) => b[0] >= BANK_MAX_M || b[1] >= BANK_MAX_M;
+  const known = banks.flatMap((b, i) => (open(b) ? [] : [i]));
+  if (!known.length) return [...banks];
+  return banks.map((b, i) => {
+    if (!open(b)) return b;
+    const nearest = known.reduce((best, k) => (Math.abs(k - i) < Math.abs(best - i) ? k : best));
+    return banks[nearest]!;
+  });
+}
+
 /** `path` with extra points so that none are more than `step` apart. */
 export function resample(path: readonly Point[], step: number): Point[] {
   const out: Point[] = [path[0]!];
@@ -414,12 +430,13 @@ export function routeProcessions(
         crowd_ground: bakeFluvialCrowd(
           features,
           path.map((m) => graph.project.from(m)),
-          banks,
+          crowdBanks(banks),
           (p.crowd_focus ?? []).map((f) => ({
             at: find(f.near),
             radius_m: f.radius_m,
             reach_m: f.reach_m,
           })),
+          p.crowd_rings,
         ),
       }),
       ...(banks

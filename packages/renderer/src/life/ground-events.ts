@@ -121,9 +121,16 @@ export function groundsForRoutes(routes: readonly (StreetRoute | MassRoute | Flu
   for (const route of routes) grounds.set(route.id, groundForRoute(route));
   return grounds;
 }
-/** Traffic always closes the mapped carriageway or complete authored precinct. */
-export function trafficRings(route: StreetRoute | MassRoute): Point[][] {
-  return route.kind === 'mass' ? (route.site.closure_zone ?? []) : routeRings(route);
+/**
+ * Traffic always closes a street event's mapped carriageway or a Mass's authored precinct; a
+ * river event closes only its owner-marked crowd ground on land.
+ */
+export function trafficRings(route: StreetRoute | MassRoute | FluvialRoute): Point[][] {
+  return route.kind === 'mass'
+    ? (route.site.closure_zone ?? [])
+    : route.kind === 'fluvial'
+      ? (route.crowd_ground?.closure_zone ?? [])
+      : routeRings(route);
 }
 function index(rings: Point[][]): RingIndex {
   const saved = ringIndexes.get(rings);
