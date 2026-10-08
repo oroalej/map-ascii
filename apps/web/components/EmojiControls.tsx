@@ -11,15 +11,9 @@ import styles from './Hud.module.css';
 export function EmojiControls() {
   const enabled = useEmojiStore((s) => s.enabled);
   const life = useLifeStore((s) => s.enabled);
-  const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
+  const closeEnough = useAtlasStore((s) => (s.camera?.zoom ?? 0) >= EMOJI_ZOOM);
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
-  const explanation = reduced
-    ? 'Emoji pauses while reduced motion is on.'
-    : !life
-      ? 'Turn Life on to see emoji.'
-      : zoom < EMOJI_ZOOM
-        ? `Zoom to z${EMOJI_ZOOM} or closer to see emoji.`
-        : null;
+  if (!life || reduced || !closeEnough) return null;
   return (
     <>
       <div className={styles.row}>
@@ -33,7 +27,6 @@ export function EmojiControls() {
           Emoji (simulated)
         </button>
       </div>
-      {enabled && explanation && <p className={styles.line}>{explanation}</p>}
     </>
   );
 }

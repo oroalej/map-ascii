@@ -527,6 +527,7 @@ export function legendEntries(
     if (entry.id === 'life:vendors') life.push('vendors');
     if (entry.id === 'life:pets') life.push('pets');
     if (classes.length || life.length) entry.focus = { classes, life };
+    if (entry.id === 'info:folklore') entry.focus = { classes: [], life: [], folklore: true };
   }
   return entries;
 }

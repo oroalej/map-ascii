@@ -10,6 +10,7 @@ import { deletePrograms, type Programs, type ThemeResources } from './gpu-contex
 import { createProgram, type GL, type CellTargets } from './gpu';
 import { placeGrid, type View } from './grid';
 import type { FolklorePacket } from './life/folklore';
+import { normalizeFocus, focusPulse } from './focus';
 vi.mock('./gpu', () => ({ createProgram: vi.fn(() => ({ program: {}, uniformSetters: {} })) }));
 const packet: FolklorePacket = {
   sprites: [
@@ -138,11 +139,24 @@ it.each(['cached', 'pending', 'demand'] as const)(
     } as Programs;
     const theme = {
         map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
+        uniforms: { accent: [1, 0.8, 0.3] },
       } as unknown as ThemeResources,
       targets = {} as CellTargets,
       grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
-    const prepared = { program: {}, uniformSetters: {} } as ReturnType<typeof createProgram>,
+    const uniformSetters = {
+      u_accent: vi.fn(),
+      u_focusMode: vi.fn(),
+      u_pulse: vi.fn(),
+    };
+    const prepared: ReturnType<typeof createProgram> = {
+        program: {},
+        uniformSetters,
+        uniformLocations: {},
+        attribLocations: {},
+        attribSetters: {},
+      },
       finish = vi.fn(() => prepared);
+    vi.mocked(createProgram).mockReturnValue(prepared);
     if (preparation === 'cached') p.folkloreProgram = prepared;
     if (preparation === 'pending')
       p.glyphWarmup = {
@@ -164,6 +178,30 @@ it.each(['cached', 'pending', 'demand'] as const)(
     expect(p.folkloreProgram).toBeUndefined();
     expect(p.glyphWarmup?.pending).toBeUndefined();
     const data = r.data;
+    for (const [focus, mode] of [
+      [normalizeFocus({ classes: [], life: [], folklore: true }), 2],
+      [normalizeFocus({ classes: ['road_mid'], life: [] }), 1],
+      [normalizeFocus({ classes: [], life: ['people'] }), 1],
+      [normalizeFocus(null), 0],
+    ] as const) {
+      folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view), focus, 0.5);
+      expect(uniformSetters.u_accent).toHaveBeenLastCalledWith(theme.uniforms.accent);
+      expect(uniformSetters.u_focusMode).toHaveBeenLastCalledWith(mode);
+      expect(uniformSetters.u_pulse).toHaveBeenLastCalledWith(focusPulse(0.5, true));
+      folklorePass(
+        gl,
+        p,
+        targets,
+        theme,
+        view,
+        grid,
+        folkloreLayout(packet, view),
+        focus,
+        0.5,
+        true,
+      );
+      expect(uniformSetters.u_pulse).toHaveBeenLastCalledWith(1);
+    }
     folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
     expect(r.data).toBe(data);
     deletePrograms(gl, p);

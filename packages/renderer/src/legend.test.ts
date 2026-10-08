@@ -27,7 +27,10 @@ it.each(['dark', 'light'] as const)(
     expect(entries[index]).toMatchObject({
       glyphs: style.glyph,
       color: `#${style.color.toString(16).padStart(6, '0')}`,
+      focus: { classes: [], life: [], folklore: true },
     });
+    for (const entry of entries.filter((e) => e.id.startsWith('info:') && e.id !== 'info:folklore'))
+      expect(entry.focus).toBeUndefined();
   },
 );
 it('shows an informational emoji line next to pets only while its display is eligible', () => {

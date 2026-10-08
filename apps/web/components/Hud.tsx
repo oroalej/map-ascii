@@ -287,7 +287,7 @@ function LegendControls({
                     ? entry.icons.map((icon, i) => <PixelIcon key={i} icon={icon} />)
                     : entry.glyphs}
                 </span>
-                <span>{displayLabel(entry)}</span>
+                <span className={styles.legendLabel}>{displayLabel(entry)}</span>
               </>
             );
             return (

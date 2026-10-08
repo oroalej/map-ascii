@@ -320,6 +320,29 @@ it('shows folklore at z15 and drops visibility on Life off, events and renderer 
   expect(shown()).toBe(false);
 });
 
+it('toggles folklore focus and clears it when spirits disappear', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  act(() => instance.emit('folklorechange', true));
+  const button = [...legend().querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Folklore (simulated)'),
+  )!;
+  expect(button.getAttribute('aria-pressed')).toBe('false');
+  act(() => button.click());
+  expect(button.getAttribute('aria-pressed')).toBe('true');
+  expect(useUiStore.getState().legendFocus).toBe('info:folklore');
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: [], life: [], folklore: true });
+  act(() => button.click());
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  act(() => button.click());
+  act(() => instance.emit('folklorechange', false));
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+  expect(button.isConnected).toBe(false);
+});
+
 it('updates the mood legend when emoji is toggled without replacing the atlas', async () => {
   const instance = renderer();
   useLifeStore.setState({ enabled: true });

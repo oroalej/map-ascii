@@ -1894,7 +1894,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         daylight,
         fireworkSites,
       );
-      folklorePass(gl, programs, targets, themeRes, v, labelGrid, folkloreQuads);
+      folklorePass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        labelGrid,
+        folkloreQuads,
+        focus,
+        time,
+        reducedMotion,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;

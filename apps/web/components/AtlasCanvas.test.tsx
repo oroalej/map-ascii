@@ -6,6 +6,7 @@ import { useUiStore } from '@/state/ui';
 import { AtlasCanvas } from './AtlasCanvas';
 import { eventFixtures } from './procession-fixtures.test-utils';
 import { emergencyFixture } from './emergency-fixtures.test-utils';
+import { attachUrlSync } from '@/state/useUrlSync';
 
 const mock = vi.hoisted(() => ({ createAtlas: vi.fn() }));
 vi.mock('@atlas/renderer', () => ({ createAtlas: mock.createAtlas, DEFAULT_CELLS: { steps: [] } }));
@@ -13,9 +14,11 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   mock.createAtlas.mockReset();
+  vi.useRealTimers();
+  window.history.replaceState(null, '', '/');
 });
 
-it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
+it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
   'creates the map before optional geography arrives (%s) and installs it in place',
   async (mode) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
@@ -72,7 +75,7 @@ it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
       ),
     );
     const atlas = {
-      getCamera: () => meta.defaultCamera,
+      getCamera: () => ({ ...meta.defaultCamera, zoom: mode === 'zoom-floor' ? 15 : 14 }),
       on: () => () => {},
       setProcessions: vi.fn(),
       setEmergency: vi.fn(),
@@ -84,7 +87,13 @@ it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
     };
     mock.createAtlas.mockReturnValue(atlas);
     useAtlasInstance.setState({ atlas: null });
-    useAtlasStore.setState({ camera: null });
+    useAtlasStore.setState({ camera: null, selectedId: null, tour: null });
+    let detachUrlSync: (() => void) | undefined;
+    if (mode === 'zoom-floor') {
+      vi.useFakeTimers();
+      window.history.replaceState(null, '', '/fixture?z=10');
+      detachUrlSync = attachUrlSync();
+    }
     const container = document.createElement('div'),
       root = createRoot(container);
     document.body.append(container);
@@ -101,6 +110,14 @@ it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
         await Promise.resolve();
       });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
+      if (mode === 'zoom-floor') {
+        expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ initialCamera: { zoom: 10 } });
+        expect(useAtlasStore.getState().camera?.zoom).toBe(15);
+        act(() => {
+          vi.advanceTimersByTime(250);
+        });
+        expect(new URLSearchParams(window.location.search).get('z')).toBe('15');
+      }
       const requests = vi
         .mocked(fetch)
         .mock.calls.map(([url]) =>
@@ -130,11 +147,12 @@ it.each(['absent', 'zero', 'late', '404', 'malformed'] as const)(
           await emergency;
         });
         expect(atlas.setEmergency).toHaveBeenLastCalledWith(
-          mode === 'late' ? emergencyFixture : undefined,
+          mode === 'late' || mode === 'zoom-floor' ? emergencyFixture : undefined,
         );
         expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       }
     } finally {
+      detachUrlSync?.();
       act(() => root.unmount());
       container.remove();
     }
