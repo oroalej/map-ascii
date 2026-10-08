@@ -182,7 +182,72 @@ export type ControlledCrossingAnchor = {
   sides?: [CrossingSide, CrossingSide];
 };
 
+/** Observer-only mapped footprints; ordinary obstacle and place arrays stay unchanged. */
+export type LifeFootprint = { id: string; rings: TilePoint[][] };
+export type LifeRoof = LifeFootprint & { anchor: TilePoint };
+export type LifeField = LifeFootprint & { kind: 'farmland' | 'grass' };
+
+/** Coordinates transfer as buffers; feature metadata contains no per-vertex objects. */
+export type PackedFootprints<T> = {
+  items: T[];
+  coords: Float32Array;
+  ringStarts: Uint32Array;
+  polygonStarts: Uint32Array;
+};
+class FootprintBuilder<T> {
+  private items: T[] = [];
+  private coords: number[] = [];
+  private ringStarts: number[] = [];
+  private polygonStarts: number[] = [];
+  get length() {
+    return this.items.length;
+  }
+  add(item: T, rings: readonly (readonly TilePoint[])[]) {
+    this.items.push(item);
+    this.polygonStarts.push(this.ringStarts.length);
+    for (const ring of rings) {
+      this.ringStarts.push(this.coords.length / 2);
+      for (const p of ring) this.coords.push(p.x, p.y);
+    }
+  }
+  finish(): PackedFootprints<T> {
+    return {
+      items: this.items,
+      coords: Float32Array.from(this.coords),
+      ringStarts: Uint32Array.from([...this.ringStarts, this.coords.length / 2]),
+      polygonStarts: Uint32Array.from([...this.polygonStarts, this.ringStarts.length]),
+    };
+  }
+}
+export function packFootprints<T extends LifeFootprint>(
+  items: readonly T[],
+): PackedFootprints<Omit<T, 'rings'>> {
+  const builder = new FootprintBuilder<Omit<T, 'rings'>>();
+  for (const { rings, ...item } of items) builder.add(item, rings);
+  return builder.finish();
+}
+/** Called once per immutable tile by the folklore geometry cache. */
+export function unpackFootprints<T>(
+  packed: PackedFootprints<T> | undefined,
+): (T & { rings: TilePoint[][] })[] {
+  if (!packed) return [];
+  return packed.items.map((item, i) => {
+    const rings: TilePoint[][] = [];
+    for (let r = packed.polygonStarts[i]!; r < packed.polygonStarts[i + 1]!; r++) {
+      const ring: TilePoint[] = [];
+      for (let p = packed.ringStarts[r]!; p < packed.ringStarts[r + 1]!; p++)
+        ring.push({ x: packed.coords[p * 2]!, y: packed.coords[p * 2 + 1]! });
+      rings.push(ring);
+    }
+    return { ...item, rings };
+  });
+}
+
 export type LifeGeometry = {
+  hospitals?: { id: string; x: number; y: number; radius: number }[];
+  worshipIds?: [number, string][];
+  fields?: PackedFootprints<Omit<LifeField, 'rings'>>;
+  roofs?: PackedFootprints<Omit<LifeRoof, 'rings'>>;
   seasonalPayload?: SeasonalPayload;
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
   seasonalTrees?: readonly SeasonalDisplayRecord[];
@@ -348,6 +413,20 @@ export class LifeBuilder {
   private cemeteryAreas: { id: string; rings: TilePoint[][] }[] = [];
   private burialParents = new Set<string>();
   private placeLandmarks: [number, string][] = [];
+  private worshipIds: [number, string][] = [];
+  private hospitals: NonNullable<LifeGeometry['hospitals']> = [];
+  private fields = new FootprintBuilder<Omit<LifeField, 'rings'>>();
+  private roofs = new FootprintBuilder<Omit<LifeRoof, 'rings'>>();
+
+  hospital(id: string, p: TilePoint, radius: number) {
+    this.hospitals.push({ id, x: p.x, y: p.y, radius });
+  }
+  field(id: string, kind: LifeField['kind'], rings: readonly (readonly TilePoint[])[]) {
+    this.fields.add({ id, kind }, rings);
+  }
+  roof(id: string, rings: readonly (readonly TilePoint[])[], anchor: TilePoint) {
+    this.roofs.add({ id, anchor: { ...anchor } }, rings);
+  }
 
   grave(p: TilePoint, feature: string, seed: number, world = [Math.round(p.x), Math.round(p.y)]) {
     if (!inTile(p)) return;
@@ -801,10 +880,13 @@ export class LifeBuilder {
     building = false,
     bearing = NaN,
     landmarkId?: string,
+    featureId?: string,
   ) {
     if (this.places.length / PLACE_STRIDE >= MAX_TILE_PLACES) return;
     if (kind === 'worship' && landmarkId)
       this.placeLandmarks.push([this.places.length / PLACE_STRIDE, landmarkId]);
+    if (kind === 'worship' && featureId)
+      this.worshipIds.push([this.places.length / PLACE_STRIDE, featureId]);
     this.places.push(p.x, p.y, placeCode(kind), radius, building ? 1 : 0);
     this.seatBearings.push(bearing);
   }
@@ -865,11 +947,24 @@ export class LifeBuilder {
         })),
       }),
       ...(this.placeLandmarks.length && { placeLandmarks: this.placeLandmarks }),
+      ...(this.worshipIds.length && { worshipIds: this.worshipIds }),
+      ...(this.hospitals.length && { hospitals: this.hospitals }),
+      ...(this.fields.length && { fields: this.fields.finish() }),
+      ...(this.roofs.length && { roofs: this.roofs.finish() }),
     };
   }
 }
 
 export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
+  ...[g.fields, g.roofs].flatMap((p) =>
+    p
+      ? [
+          p.coords.buffer as ArrayBuffer,
+          p.ringStarts.buffer as ArrayBuffer,
+          p.polygonStarts.buffer as ArrayBuffer,
+        ]
+      : [],
+  ),
   ...(g.memorialSites ? [g.memorialSites.buffer as ArrayBuffer] : []),
   ...(g.graves ? [g.graves.buffer as ArrayBuffer] : []),
   ...(g.cemeteries ? [g.cemeteries.buffer as ArrayBuffer] : []),

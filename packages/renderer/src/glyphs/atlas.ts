@@ -19,6 +19,7 @@ import {
 import { STALL_GLYPH } from '../life/vehicles';
 import { CANDLE_GLYPHS, SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
+import { FOLKLORE_GLYPHS } from '../life/folklore-glyphs';
 
 export const DEFAULT_FONT =
   "ui-monospace, 'Cascadia Mono', 'SFMono-Regular', Menlo, Consolas, monospace";
@@ -423,7 +424,43 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
     (CANDLE_GLYPHS as readonly string[]).includes(glyph)
   )
     drawSeasonal(slot, glyph);
-  else if ((PROCESSION_GLYPHS as readonly string[]).includes(glyph)) {
+  else if (FOLKLORE_GLYPHS.includes(glyph)) {
+    const frame = FOLKLORE_GLYPHS.indexOf(glyph);
+    for (let y = 0; y < slot.h; y++)
+      for (let x = 0; x < slot.w; x++) {
+        let u = (x + 0.5) / slot.w - 0.5,
+          v = (y + 0.5) / slot.h - 0.5;
+        if (frame >= 6 && frame < 14) {
+          const angle = (Math.floor((frame - 6) / 2) * Math.PI) / 2,
+            c = Math.cos(angle),
+            s = Math.sin(angle);
+          [u, v] = [u * c - v * s, u * s + v * c];
+        }
+        let ink = false;
+        if (frame < 2)
+          ink =
+            (u * u) / 0.075 + (v + 0.15) ** 2 / 0.065 < 1 ||
+            (Math.abs(u) < 0.28 + frame * 0.02 && v > 0 && v < 0.35 - 0.06 * Math.cos(u * 35));
+        else if (frame < 6)
+          ink = Math.abs(u - Math.sin(v * 12 + frame) * 0.18) < 0.055 && Math.abs(v) < 0.4;
+        else if (frame === 15)
+          ink = (Math.abs(u + 0.13) < 0.08 || Math.abs(u - 0.13) < 0.08) && Math.abs(v) < 0.38;
+        else if (frame === 14)
+          ink =
+            (Math.abs(u) < 0.16 && Math.abs(v) < 0.35) ||
+            (Math.abs(u) < 0.35 && v > 0.1 && v < 0.2);
+        else {
+          const flap = frame % 2 ? 0.18 : -0.18;
+          ink =
+            (Math.abs(u) < 0.075 && Math.abs(v) < 0.3) ||
+            (Math.abs(u) < 0.46 &&
+              Math.abs(u) > 0.06 &&
+              v > flap - Math.abs(u) * 0.35 &&
+              v < flap + 0.17 + 0.035 * Math.cos(u * 40));
+        }
+        if (ink) fill(slot, x, y, x + 1, y + 1);
+      }
+  } else if ((PROCESSION_GLYPHS as readonly string[]).includes(glyph)) {
     const { w, h } = slot;
     if (glyph === ProcessionGlyph.andas) {
       fill(slot, w * 0.2, h * 0.55, w * 0.8, h * 0.8);

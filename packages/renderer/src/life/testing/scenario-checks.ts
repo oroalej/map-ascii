@@ -57,10 +57,10 @@ export function valid(world: LifeWorld) {
     assert.ok(retained.stopCooldown.size <= tile.movers.length);
   }
 }
-export function bounded(world: LifeWorld) {
+export function bounded(world: LifeWorld, perKind = 12) {
   // CI checks long lifecycles with a bounded population; CPU benchmarks retain full density.
   for (const tile of worldTiles(world).values()) {
-    if (tile.movers.length <= 48) continue;
+    if (tile.movers.length <= 12 + perKind * 3) continue;
     const near = (m: Mover) => Math.hypot(m.x - 1900, m.y - SCENE_CURB_Y);
     const targets = [
       { x: 1900, y: SCENE_CURB_Y },
@@ -79,7 +79,7 @@ export function bounded(world: LifeWorld) {
         tile.movers
           .filter((m) => m.kind === kind)
           .sort((a, b) => near(a) - near(b))
-          .slice(0, 12),
+          .slice(0, perKind),
       ),
     ];
     tile.movers.splice(0, tile.movers.length, ...keep);
@@ -90,7 +90,9 @@ export function bounded(world: LifeWorld) {
 /** Run a 4-tile scenario for 180 simulated seconds, checking invariants every two seconds. */
 export function soak(kind: 'junction' | 'transit' | 'rain', seed: number) {
   const s = makeScenario(kind, 4, false, seed);
-  bounded(s.world);
+  // Retain all actor kinds and the same scene-adjacent people throughout the full 180 s.
+  // Eight representatives per moving kind bound CPU cost without shortening the lifecycle.
+  bounded(s.world, 8);
   let visits = 0,
     services = 0;
   const states = new Set<string>();

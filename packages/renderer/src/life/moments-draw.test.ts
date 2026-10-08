@@ -17,6 +17,7 @@ import type { VisibleAgent } from './simulate';
 import { PROCESSION_GLYPHS } from './procession-glyphs';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './seasonal-glyphs';
 import { PEDESTRIAN_GLYPHS } from './pedestrian-glyphs';
+import { FOLKLORE_GLYPHS } from './folklore-glyphs';
 
 const glyphs = ['', ...mapGlyphs(themes.dark)];
 const index = (glyph: string) => glyphs.indexOf(glyph);
@@ -259,7 +260,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       14 +
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
-      PROCESSION_GLYPHS.length,
+      PROCESSION_GLYPHS.length +
+      FOLKLORE_GLYPHS.length,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
     385 +
@@ -268,7 +270,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       14 +
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
-      PROCESSION_GLYPHS.length,
+      PROCESSION_GLYPHS.length +
+      FOLKLORE_GLYPHS.length,
   );
   for (const theme of Object.values(themes)) {
     const glyphs = mapGlyphs(theme);

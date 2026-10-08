@@ -8,6 +8,20 @@ import { themes } from './theme';
 import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it.each(['dark', 'light'] as const)(
+  'places folklore with simulated rows using %s theme legend ink',
+  (name) => {
+    const entries = legendEntries(name, 19, ['path'], { life: true, emoji: true, folklore: true }),
+      index = entries.findIndex((e) => e.id === 'info:folklore'),
+      style = themes[name].folkloreLegend;
+    expect(index).toBeGreaterThan(0);
+    expect(entries[index - 1]!.id).toMatch(/^(life:|info:(emoji|fish))/);
+    expect(entries[index]).toMatchObject({
+      glyphs: style.glyph,
+      color: `#${style.color.toString(16).padStart(6, '0')}`,
+    });
+  },
+);
 it('shows an informational emoji line next to pets only while its display is eligible', () => {
   for (const theme of ['dark', 'light'] as const) {
     const entries = legendEntries(theme, 19, [], { life: true, emoji: true });
@@ -390,4 +404,13 @@ it('describes memorial candles with Life off and gates informational seasonal cr
   expect(
     legendEntries('dark', 19, [], { life: true }).some((e) => e.id.startsWith('info:season-')),
   ).toBe(false);
+});
+it('shows eligible folklore at neighborhood zoom only while Life and viewport visibility are active', () => {
+  for (const zoom of [15, 16, 17, 18])
+    for (const life of [false, true])
+      for (const folklore of [false, true]) {
+        expect(
+          legendEntries('dark', zoom, [], { life, folklore }).some((e) => e.id === 'info:folklore'),
+        ).toBe(life && folklore);
+      }
 });

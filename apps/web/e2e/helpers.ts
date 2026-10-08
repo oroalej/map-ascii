@@ -19,6 +19,7 @@ export const cities = readdirSync(citiesDir)
       name: { en: string };
       smoke_landmark: string;
       life?: CityLifeConfig;
+      timezone?: string;
     };
     const hasMeta = existsSync(new URL(`../public/tiles/${slug}.meta.json`, import.meta.url));
     // Use the configured smoke landmark instead of assuming the city's focus is pickable.
@@ -39,6 +40,23 @@ export const cities = readdirSync(citiesDir)
       throw new Error(`${slug}: no landmark search entry for "${city.smoke_landmark}"`);
     }
     const toursDir = new URL(`${slug}/tours/`, citiesDir);
+    const runtimeLife = city.life ? RuntimeCityLifeSchema.parse(city.life) : undefined;
+    const cemeteryDir = new URL(`${slug}/cemeteries/`, citiesDir);
+    const cemeteryIds = existsSync(cemeteryDir)
+      ? readdirSync(cemeteryDir)
+          .filter((f) => f.endsWith('.json'))
+          .sort()
+          .map(
+            (f) =>
+              (JSON.parse(readFileSync(new URL(f, cemeteryDir), 'utf8')) as { osm_id: string })
+                .osm_id,
+          )
+      : [];
+    const cemeteryAnchor = cemeteryIds.flatMap(
+      (id) => search?.entries.filter((e) => e.id === id) ?? [],
+    )[0];
+    if (runtimeLife?.folklore?.ghosts.sites.includes('cemetery') && hasMeta && !cemeteryAnchor)
+      throw new Error(`${slug}: folklore needs a mapped cemetery smoke anchor`);
     const eventDir = new URL(`${slug}/processions/`, citiesDir);
     const processions = existsSync(eventDir)
       ? readdirSync(eventDir)
@@ -62,6 +80,9 @@ export const cities = readdirSync(citiesDir)
       : [];
     return {
       slug,
+      folklore: !!runtimeLife?.folklore,
+      timezone: city.timezone,
+      cemeteryAnchor,
       name: city.name.en,
       smokeLandmark: city.smoke_landmark,
       smokePlace,
@@ -69,7 +90,7 @@ export const cities = readdirSync(citiesDir)
       tours,
       processions,
       generatedProcessions,
-      seasons: city.life ? (RuntimeCityLifeSchema.parse(city.life).seasons ?? []) : [],
+      seasons: runtimeLife?.seasons ?? [],
     };
   });
 

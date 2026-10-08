@@ -20,6 +20,8 @@ import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
+import type { RuntimeFolklore } from './folklore-config';
+import type { FolklorePacket } from './folklore';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -46,6 +48,7 @@ export type FrameInput = {
   visible: Parameters<LifeWorld['visible']>;
 };
 export type FrameResult = {
+  folklore: FolklorePacket;
   agents: VisibleAgent[];
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
@@ -54,6 +57,7 @@ export type FrameResult = {
   profile?: ProfileSample;
 };
 export type LifeInit = {
+  folklore?: RuntimeFolklore;
   emergencyConfig?: EmergencyConfig;
   emergency?: EmergencyData;
   seasons?: readonly SimulationSeason[];
@@ -73,12 +77,13 @@ export function configureLifeWorld(
   world: LifeWorld,
   options: Pick<
     LifeInit,
-    'processions' | 'seasons' | 'shopSchedule' | 'emergencyConfig' | 'emergency'
+    'processions' | 'seasons' | 'shopSchedule' | 'folklore' | 'emergencyConfig' | 'emergency'
   >,
 ) {
   world.setProcessions(options.processions);
   world.setSeasons(options.seasons ?? []);
   world.setShopSchedule(options.shopSchedule);
+  world.setFolklore(options.folklore);
   world.configureEmergency(options.emergencyConfig, options.emergency);
 }
 
@@ -116,6 +121,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
   const agents = world.visible(...input.visible);
   if (visibleStart !== undefined) profiler!.add('visible', profiler!.time() - visibleStart);
   return {
+    folklore: world.visibleFolklore(input.visible[0], input.visible[2]),
     agents,
     puffs: world.visiblePuffs,
     procession: world.procession(),
