@@ -1,15 +1,11 @@
 // @vitest-environment node
 import type { ReactElement } from 'react';
 import { loadCityPacks } from '@atlas/content';
-import {
-  dialogueChoices,
-  runtimeCityLife,
-  type RuntimeCityLife,
-  type RuntimeDialogueCatalog,
-} from '@atlas/shared';
+import { dialogueChoices, runtimeCityLife } from '@atlas/shared';
 import { describe, expect, it, vi } from 'vitest';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity } from '@/lib/cities';
+import { decodeInlineRuntime } from '@/lib/inline-runtime';
 import CityPage from './page';
 
 vi.mock('@/lib/city-meta', () => ({
@@ -19,7 +15,7 @@ vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
 type PageElement = ReactElement<{
-  children: ReactElement<{ dialogue?: RuntimeDialogueCatalog; cityLife?: RuntimeCityLife }>;
+  children: ReactElement<{ runtimeGzip: string }>;
 }>;
 
 const loadedPacks = await loadCityPacks();
@@ -32,7 +28,7 @@ describe('city page client boundary', () => {
       const page = (await CityPage({
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
-      const life = page.props.children.props.cityLife;
+      const life = decodeInlineRuntime(page.props.children.props.runtimeGzip).cityLife;
       expect(life).toEqual(pack.city.life ? runtimeCityLife(pack.city.life) : undefined);
       for (const season of life?.seasons ?? []) {
         expect(season).not.toHaveProperty('grounds');
@@ -54,7 +50,7 @@ describe('city page client boundary', () => {
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
       expect(page.props.children.type).toBe(CityAtlas);
-      const runtime = page.props.children.props.dialogue;
+      const runtime = decodeInlineRuntime(page.props.children.props.runtimeGzip).dialogue;
       if (!pack.dialogue) {
         expect(runtime).toBeUndefined();
         continue;
@@ -78,6 +74,6 @@ describe('city page client boundary', () => {
     const page = (await CityPage({
       params: Promise.resolve({ city: pack.city.slug }),
     })) as PageElement;
-    expect(page.props.children.props.dialogue).toBeUndefined();
+    expect(decodeInlineRuntime(page.props.children.props.runtimeGzip).dialogue).toBeUndefined();
   });
 });

@@ -2,23 +2,34 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import type { Atlas } from '@atlas/renderer';
+import type { RuntimeCityLife } from '@atlas/shared';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useAtlasStore, initialAtlasState, useAtlasInstance } from '@/state/store';
 import { useUiStore } from '@/state/ui';
 import { useTourStore } from '@/state/tour';
 import { useLifeStore } from '@/state/life';
 import fixture from '@/lib/__fixtures__/ui-payloads.json';
+import { encodeInlineRuntime } from '@/lib/inline-runtime-server';
 import { CityAtlas, type CityAtlasProps } from './CityAtlas';
+const consumers = vi.hoisted(() => ({ canvas: vi.fn(), hud: vi.fn() }));
 vi.mock('next/dynamic', () => ({
   default: (loader: () => unknown) => {
     const name = /m\.(\w+)/.exec(loader.toString())?.[1] ?? 'unknown';
-    return (props: { landmarks?: unknown[] }) =>
-      name === 'AtlasCanvas'
-        ? null
-        : createElement('span', { 'data-lazy': name, 'data-count': props.landmarks?.length });
+    return (props: { landmarks?: unknown[] }) => {
+      if (name === 'AtlasCanvas') {
+        consumers.canvas(props);
+        return null;
+      }
+      return createElement('span', { 'data-lazy': name, 'data-count': props.landmarks?.length });
+    };
   },
 }));
-vi.mock('./Hud', () => ({ Hud: () => null }));
+vi.mock('./Hud', () => ({
+  Hud: (props: unknown) => {
+    consumers.hud(props);
+    return null;
+  },
+}));
 vi.mock('./SearchBox', () => ({ SearchBox: () => null }));
 vi.mock('./PlacesInView', () => ({ PlacesInView: () => null }));
 vi.mock('./Attribution', () => ({ Attribution: () => null }));
@@ -30,6 +41,7 @@ const props: CityAtlasProps = {
   name: 'Fixture City',
   hasTours: true,
   subdivisionLabel: 'district',
+  runtimeGzip: encodeInlineRuntime({}),
   metaState: {
     status: 'ready',
     meta: {
@@ -49,6 +61,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
   useAtlasInstance.setState({ atlas: null });
   useUiStore.setState({ startup: null, selection: null, hover: null, lifeHover: null });
+});
+it('decodes inline Life before the canvas and server HUD consume it', () => {
+  const cityLife: RuntimeCityLife = {
+    source: 'https://example.com/history',
+    rhythm: { person: [[0, 0.5]] },
+  };
+  const runtimeGzip = encodeInlineRuntime({ cityLife });
+  renderToString(createElement(CityAtlas, { ...props, runtimeGzip }));
+  expect(consumers.canvas).toHaveBeenLastCalledWith(expect.objectContaining({ cityLife }));
+  expect(consumers.hud).toHaveBeenLastCalledWith(
+    expect.objectContaining({ dialogue: undefined, seasons: undefined }),
+  );
 });
 it('keeps Drawing and the Tours trigger in the server output before the canvas resolves', () => {
   const html = renderToString(createElement(CityAtlas, props));

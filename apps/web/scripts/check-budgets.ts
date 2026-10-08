@@ -2,7 +2,8 @@
  * `pnpm check:budgets`: check the static export against the size budgets in ARCHITECTURE.md §8,
  * after `pnpm build`. Initial JS is the gzipped scripts each city page loads (the tile worker
  * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted). The
- * asynchronous map renderer has its own gzipped budget, and each city's `<slug>.pmtiles`
+ * asynchronous map renderer's normal worker startup graph has its own gzipped budget;
+ * nested import factories (the inline-Life fallback) load only when invoked. Each `<slug>.pmtiles`
  * must stay under its cap. Each `<slug>.processions.json` has a 60 KiB gzip cap.
  * City HTML has a raw-size cap. Startup JSON counts automatic tile sidecars fetched before
  * the first tile frame: currently none (meta is inline; subdivisions, landmarks, processions

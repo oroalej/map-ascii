@@ -2,14 +2,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-/** Turbopack emits chunk paths both for static dependencies and async imports. */
+/** Eager references; a nested Turbopack import factory owns a separately deferred graph. */
 export function chunkReferences(source: string): string[] {
   // Worker URLs and their startup chunk arrays occur in the parent chunk. They do not
   // become canvas dependencies unless another ordinary reference also names them.
-  const mainSource = source.replace(
-    /["'](?:static\/)?chunks\/turbopack-worker-[\w.-]+\.js["']\s*,\s*\[[^\]]*\]/g,
-    '',
-  );
+  const mainSource = source
+    .replace(/["'](?:static\/)?chunks\/turbopack-worker-[\w.-]+\.js["']\s*,\s*\[[^\]]*\]/g, '')
+    // e.v(load => Promise.all([...].map(chunk => e.l(chunk)))) declares an async
+    // import factory; its chunks are requested only when that import is invoked.
+    // The canvas's own factory is counted in full by canvasEntries before this walk.
+    .replace(/\b[\w$]+\.v\(\s*[\w$]+\s*=>\s*Promise\.all\(\[[^\]]*\]/g, '');
   return [
     ...new Set(
       [...mainSource.matchAll(/(?:static\/)?chunks\/[\w.-]+\.js/g)].map(
@@ -37,7 +39,7 @@ export function canvasEntries(
   return [...entries];
 }
 
-/** Walk the canvas dependency set; worker bootstraps own a separate, excluded graph. */
+/** Walk normal canvas startup; workers and nested lazy imports own separate graphs. */
 export function canvasChunks(
   out: string,
   entries: readonly string[],

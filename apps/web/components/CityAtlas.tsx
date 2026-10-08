@@ -1,15 +1,11 @@
 'use client';
 
-import type {
-  RuntimeCityLife,
-  RuntimeDialogueCatalog,
-  ClimateConfig,
-  TrafficMix,
-} from '@atlas/shared';
+import type { ClimateConfig, TrafficMix } from '@atlas/shared';
 import { SPEECH_ZOOM, EMOJI_ZOOM } from '@atlas/shared';
 import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useUiStore } from '@/state/ui';
 import { hasFacts } from '@/lib/landmark';
+import { decodeInlineRuntime } from '@/lib/inline-runtime';
 import dynamic from 'next/dynamic';
 import type { MetaState } from '@/lib/city-meta';
 import { useLandmarks } from '@/state/useLandmarks';
@@ -68,9 +64,8 @@ export type CityAtlasProps = {
   climate?: ClimateConfig | undefined;
   /** The city's IANA time zone (the city pack's `timezone`). */
   timezone?: string | undefined;
-  /** The daily rhythm of simulated traffic (the city pack's `life`). */
-  cityLife?: RuntimeCityLife | undefined;
-  dialogue?: RuntimeDialogueCatalog | undefined;
+  /** Lossless gzip/base64 transport for the existing runtime Life and dialogue objects. */
+  runtimeGzip: string;
   /** Whether the city's street layer supplements mapped sidewalks. */
   sidewalksDerived?: boolean;
   utilitiesDerived?: boolean;
@@ -86,11 +81,11 @@ export function CityAtlas({
   traffic,
   climate,
   timezone,
-  cityLife,
-  dialogue,
+  runtimeGzip,
   sidewalksDerived = true,
   utilitiesDerived = false,
 }: CityAtlasProps) {
+  const { cityLife, dialogue } = useMemo(() => decodeInlineRuntime(runtimeGzip), [runtimeGzip]);
   const { landmarks, request, loaded } = useLandmarks(slug);
   const startup = useUiStore((s) => s.startup);
   const status =
