@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import {
   CLASS_ZOOM,
-  Frontage as FrontageSchema,
   type ShopAnchor,
   featureZoomBand,
   REGION_TILE_MAX_ZOOM,
@@ -12,6 +11,7 @@ import {
   type TileLayer,
   type ZoomBand,
 } from '@atlas/shared';
+import { Frontage as FrontageSchema } from '@atlas/shared/schemas';
 import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';

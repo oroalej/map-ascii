@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity, loadRegistry } from '@/lib/cities';
 import { tilesVersion } from '@/lib/tiles-version';
+import { readCityMeta } from '@/lib/city-meta';
+import { encodeInlineRuntime } from '@/lib/inline-runtime-server';
 
 /** Only registered cities have pages (static export: one page per city pack). */
 export const dynamicParams = false;
@@ -26,6 +28,7 @@ export default async function CityPage({ params }: Props) {
   return (
     <main>
       <CityAtlas
+        metaState={await readCityMeta(city.slug)}
         slug={city.slug}
         tilesVersion={await tilesVersion(pack)}
         name={city.name.en}
@@ -33,13 +36,13 @@ export default async function CityPage({ params }: Props) {
         traffic={city.traffic}
         climate={city.climate}
         timezone={city.timezone}
-        cityLife={city.life ? runtimeCityLife(city.life) : undefined}
-        dialogue={runtimeDialogueCatalog(pack.dialogue)}
+        runtimeGzip={encodeInlineRuntime({
+          cityLife: city.life ? runtimeCityLife(city.life) : undefined,
+          dialogue: runtimeDialogueCatalog(pack.dialogue),
+        })}
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
-        landmarks={content.landmarks}
-        art={content.art}
-        tours={content.tours}
+        hasTours={content.tours.length > 0}
       />
     </main>
   );

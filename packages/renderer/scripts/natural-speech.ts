@@ -123,7 +123,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const root = new URL('../../../', import.meta.url);
   const json = async (path: string): Promise<unknown> =>
     JSON.parse(await readFile(new URL(path, root), 'utf8'));
-  const { City, DialogueCatalog } = await import('@atlas/shared');
+  const { City, DialogueCatalog } = await import('@atlas/shared/schemas');
   const city = City.parse(await json(`packages/content/cities/${slug}/city.json`));
   const catalog = DialogueCatalog.parse(
     await json(`packages/content/cities/${slug}/dialogue.json`),

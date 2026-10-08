@@ -1,4 +1,4 @@
-import type { FeatureInfo, LegendEntryId, LifeHover, ProcessionRun } from '@atlas/renderer';
+import type { Atlas, FeatureInfo, LegendEntryId, LifeHover, ProcessionRun } from '@atlas/renderer';
 import type { CityMeta, ProcessionRoute } from '@atlas/shared';
 import { create } from 'zustand';
 
@@ -8,6 +8,12 @@ import { create } from 'zustand';
  */
 export type UiState = {
   ready: boolean;
+  /** Readiness belongs to one city and one live renderer, including context recovery. */
+  startup: {
+    city: string;
+    atlas: Atlas | null;
+    status: 'drawing' | 'ready' | 'missing' | 'invalid' | 'unsupported' | 'restoring' | 'error';
+  } | null;
   /** Pack landmark IDs with facts; these are distinct from selected OSM feature IDs. */
   clickable: ReadonlySet<string>;
   /** Monotonic operation counter, advanced even when the selected feature ID stays the same. */
@@ -37,6 +43,7 @@ export type UiState = {
 
 export const useUiStore = create<UiState>()(() => ({
   ready: false,
+  startup: null,
   clickable: new Set(),
   selectionSequence: 0,
   selection: null,

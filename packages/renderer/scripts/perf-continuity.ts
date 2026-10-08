@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { cpus } from 'node:os';
 import { resolve } from 'node:path';
 import * as Comlink from 'comlink';
-import { City } from '@atlas/shared';
+import { City } from '@atlas/shared/schemas';
 import { openArchive, decodeLifeTiles, realPanStrip } from './archive';
 import { currentSourceHash } from './snapshot';
 import { tileToLngLat } from '../src/raster/geometry';

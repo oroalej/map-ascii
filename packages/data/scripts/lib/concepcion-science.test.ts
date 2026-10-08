@@ -1,4 +1,5 @@
-import { Landcover, SiteDetail, type LngLat, type BBox } from '@atlas/shared';
+import { type LngLat, type BBox } from '@atlas/shared';
+import { Landcover, SiteDetail } from '@atlas/shared/schemas';
 import bbox from '@turf/bbox';
 import { describe, expect, it } from 'vitest';
 import type { LineString } from 'geojson';

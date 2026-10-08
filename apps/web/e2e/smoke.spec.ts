@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import type { AtlasProfile } from '@atlas/renderer';
-import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN, type TourFile } from './helpers';
+import { cities, drawnShare, mapShot, mapReady, MIN_DRAWN } from './helpers';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('atlas.quality', JSON.stringify('high')));
@@ -13,16 +13,6 @@ const query = (page: Page) => Object.fromEntries(new URL(page.url()).searchParam
 /** The Coordinates button once pressed: it shows "lat, lng". */
 const coordsButton = (page: Page) =>
   page.getByRole('button', { pressed: true, name: /^-?\d+\.\d+, -?\d+\.\d+$/ });
-
-/** Open the tours menu and start a tour. */
-async function startTour(page: Page, tour: TourFile) {
-  await page.getByRole('button', { name: /^Tours/ }).click();
-  await page
-    .getByRole('list', { name: 'Tours' })
-    .getByRole('button', { name: tour.title.en })
-    .click();
-  return page.getByRole('region', { name: 'Tour' });
-}
 
 test('/ opens the only city, keeping the view parameters', async ({ page }) => {
   test.skip(cities.length !== 1, 'with several cities, / is a city picker');
@@ -495,10 +485,19 @@ for (const city of cities) {
           await page.clock.install({ time: new Date('2026-01-01T00:00:00Z') });
           await page.goto(`/${city.slug}`);
           await mapReady(page);
+          // Let the lazy list finish loading while timers can still run.
+          await page.getByRole('button', { name: /^Tours/ }).click();
+          const start = page.getByRole('list', { name: 'Tours' }).getByRole('button', {
+            name: tour.title.en,
+          });
+          await expect(start).toBeVisible();
           // Installing a clock alone still lets wall time advance it. Pause before starting so
           // slow rendering cannot move to the next step between the two assertions below.
           await page.clock.pauseAt(new Date('2026-01-01T01:00:00Z'));
-          const card = await startTour(page, tour);
+          await start.click();
+          // Flush the lazy player's mount without letting real wall time advance playback.
+          await page.clock.fastForward(16);
+          const card = page.getByRole('region', { name: 'Tour' });
           for (let step = 1; step <= count; step++) {
             await expect(card.getByLabel(`Step ${step} of ${count}`)).toBeVisible();
             await expect(card).toContainText(tour.steps[step - 1]!.narration.en);

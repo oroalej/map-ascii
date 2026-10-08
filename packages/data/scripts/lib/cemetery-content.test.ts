@@ -4,7 +4,8 @@ import {
   readPack,
   mappedFootprints,
 } from './landmark-detail.geometry';
-import { Cemetery, DetailSelectionSchema, Landmark, Landcover, type LngLat } from '@atlas/shared';
+import { type LngLat } from '@atlas/shared';
+import { Cemetery, DetailSelectionSchema, Landmark, Landcover } from '@atlas/shared/schemas';
 import type { ContentBundle } from '@atlas/content';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';

@@ -127,16 +127,13 @@ import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { candleLamps } from './life/seasonal-candles';
 import { liveProgress, type LngLatBounds } from './life/procession';
-import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
-import { simulationSeasons } from './life/seasonal-simulation';
-import { runtimeFolklore } from './life/folklore-config';
+import type { LifeTile, ProcessionRun, VisibleAgent } from './life/simulate';
 import { EMPTY_FOLKLORE, type FolklorePacket, type FolkloreCalendar } from './life/folklore';
 import { folkloreLayout, folklorePass, type FolkloreQuad } from './folklore-pass';
 import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
-import { configureLifeWorld } from './life/worker-api';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
-import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
 import { deferredHost } from './life/deferred-host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
@@ -382,6 +379,8 @@ export type LabelInView = {
 /** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
 export type AtlasStats = {
   readyMs: number | null;
+  /** A glyph pass has completed using at least one actual tile mesh since context creation. */
+  hasDrawnTileFrame: boolean;
   quality: QualityState;
   /** Frames drawn in the last second (idle frames that draw nothing don't count). */
   fps: number;
@@ -960,18 +959,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     () =>
       options.lifeWorker !== false && typeof Worker !== 'undefined'
         ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
-        : (() => {
-            const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
-            configureLifeWorld(world, {
-              processions,
-              seasons: simulationSeasons(options.cityLife?.seasons),
-              shopSchedule: options.cityLife?.schedules?.shops,
-              folklore: runtimeFolklore(options.cityLife),
-              emergencyConfig: options.cityLife?.emergency,
-              emergency: options.emergency,
-            });
-            return createInlineHost(world, profiler);
-          })(),
+        : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler),
     () => life.enabled && !reducedMotion && !lost && !destroyed,
     { processions, emergency: options.emergency },
   );
@@ -2223,6 +2211,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getFeature: (featureId) => source.featureById(featureId),
     getStats: () => ({
       readyMs,
+      hasDrawnTileFrame: readyMs !== null,
       quality: quality.state,
       fps: drawTimes.length,
       frameMs,

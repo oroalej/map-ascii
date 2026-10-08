@@ -218,7 +218,7 @@ it('works without performance.mark and cannot emit after destruction', () => {
 
 it('starts active Life on the turn after readiness and replays already loaded tiles', () => {
   atlas.destroy();
-  const create = vi.spyOn(Hosts, 'createInlineHost');
+  const create = vi.spyOn(Hosts, 'createInlineHostLazy');
   atlas = createAtlas(canvas, {
     tilesUrl: '/fixture.pmtiles',
     bounds: [-1, -1, 1, 1],
@@ -242,7 +242,7 @@ it('starts active Life on the turn after readiness and replays already loaded ti
 });
 it('cancels scheduled Life construction when the context is lost or the atlas is destroyed', () => {
   atlas.destroy();
-  const create = vi.spyOn(Hosts, 'createInlineHost');
+  const create = vi.spyOn(Hosts, 'createInlineHostLazy');
   atlas = createAtlas(canvas, {
     tilesUrl: '/fixture.pmtiles',
     bounds: [-1, -1, 1, 1],

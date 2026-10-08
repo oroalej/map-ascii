@@ -9,6 +9,7 @@ vi.mock('@/lib/debug', () => ({ debugCaptureMs: () => 30_000 }));
 
 const stats: AtlasStats = {
   readyMs: 42,
+  hasDrawnTileFrame: true,
   quality: { choice: 'high', tier: 0, name: 'high' },
   fps: 60,
   frameMs: 1,

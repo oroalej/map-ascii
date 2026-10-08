@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { SiteDetail, Landcover, LandmarkPlan, Landmark } from '@atlas/shared';
+import { SiteDetail, Landcover, LandmarkPlan, Landmark } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeContent } from '../04-merge-content';
 import bbox from '@turf/bbox';
