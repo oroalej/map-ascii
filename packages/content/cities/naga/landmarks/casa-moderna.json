@@ -1,0 +1,63 @@
+{
+  "id": "landmark/casa-moderna",
+  "name": {
+    "en": "Casa Moderna"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The family bakery was formerly known as Moderna Bakery."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A family account in 2011 described it as more than sixty years old; its exact founding year is unconfirmed."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "That account describes the original tall brick pugon used for baking."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2009 visitor describes its pancit with lechon kawali."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Aileen Apolo: Pambonete (2011)",
+      "url": "https://aileenapolo.blogspot.com/2011/02/pambonete.html"
+    },
+    {
+      "title": "Mole on My Sole: Casa Moderna (2009)",
+      "url": "https://www.moleonmysole.com/2009/04/casa-moderna-bakeshop-naga-city.html"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/2502669541",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/2502669541",
+  "known_for": ["dish/pan-bonete", "dish/toasted-siopao"],
+  "signatures": [
+    {
+      "name": "Pancit with lechon kawali",
+      "source": 1
+    }
+  ],
+  "pasalubong": [
+    {
+      "name": "Boxes of pan bonete and markina",
+      "source": 0
+    }
+  ]
+}

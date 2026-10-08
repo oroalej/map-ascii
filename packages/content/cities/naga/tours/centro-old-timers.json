@@ -1,0 +1,253 @@
+{
+  "id": "tour/centro-old-timers",
+  "title": {
+    "en": "Centro old-timers"
+  },
+  "description": {
+    "en": "Chinese-Filipino classics, mami, bakeries and halo-halo around the old commercial streets."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": {
+        "lng": 123.1842225,
+        "lat": 13.6222399,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Start at New China Restaurant near Prieto and General Luna. Established in 1943, it remains a downtown stop for pancit, siopao and coffee."
+      },
+      "select": "landmark/new-china",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: New China Restaurant (2025)",
+          "url": "https://dateline-ibalon.com/2025/02/naga-city-360-arts-culture-and-heritage-in-28-days-28-ways-part-2-dennis-b-gonzaga/"
+        },
+        {
+          "title": "The Archipelago Press: Downtown Naga stroll (2026)",
+          "url": "https://thearchipelagopress.com/a-nostalgic-stroll-through-downtown-naga-city-the-heart-of-bicol/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/642992021",
+          "note": "Point copied from the mapped New China business node near Prieto and General Luna. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1853901,
+        "lat": 13.623112,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Naga Garden pairs mami with toasted siopao. GMC credits it and Romero’s with early Naga versions; Libmanan also claims the bun’s beginnings."
+      },
+      "select": "landmark/naga-garden",
+      "sources": [
+        {
+          "title": "Langyaw: Naga Garden mami (2015)",
+          "url": "https://langyaw.com/2015/06/03/mami-mami-mami-at-naga-garden-restaurant/"
+        },
+        {
+          "title": "GMC: Toasted siopao (2022)",
+          "url": "https://genmil.com.ph/toasted-siopao/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/642882303",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1861632,
+        "lat": 13.6250892,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Graceland’s Elias Angeles story began in a garage in 1976. Pastries remain part of its appeal; frozen pinangat, laing and Bicol express are take-home options."
+      },
+      "select": "osm:node/4848986525",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Graceland at 50 (2026)",
+          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+        },
+        {
+          "title": "Naga City Guide: Pasalubong (2025)",
+          "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/4848986525",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1849823,
+        "lat": 13.6245603,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Baker’s Plaza joined the group in 1993, specializing in cakes and croissants."
+      },
+      "select": "osm:node/6388208585",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Graceland at 50 (2026)",
+          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/6388208585",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.185317,
+        "lat": 13.624318,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Geewan’s Bicolano turo-turo lets diners point to pinangat, kinunot and other dishes. The Graceland group opened it in 1996."
+      },
+      "select": "landmark/geewan",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Graceland at 50 (2026)",
+          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+        },
+        {
+          "title": "Langyaw: Where to eat in Naga (2016)",
+          "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/748759046",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1854681,
+        "lat": 13.623865,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Casa Moderna is associated with warm pan bonete and pancit topped with lechon kawali. A family account recalls bringing home boxes of bonete and markina."
+      },
+      "select": "osm:node/2502669541",
+      "sources": [
+        {
+          "title": "Aileen Apolo: Pambonete (2011)",
+          "url": "https://aileenapolo.blogspot.com/2011/02/pambonete.html"
+        },
+        {
+          "title": "Mole on My Sole: Casa Moderna (2009)",
+          "url": "https://www.moleonmysole.com/2009/04/casa-moderna-bakeshop-naga-city.html"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/2502669541",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1855013,
+        "lat": 13.6238706,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Quality Bakery, also listed as Ruivivar's Quality Cafe, is remembered for chiffon and marble cakes. A 2014 visit paired tablea tsokolate with pan Legaspi, cheese and butter. This camera uses an approximate directory location."
+      },
+      "select": "landmark/quality-bakery",
+      "sources": [
+        {
+          "title": "Naga City Deck: Tsokolate and pan Legaspi at Quality Bakery (2014)",
+          "url": "https://www.nagacitydeck.com/2014/06/happy-finds-in-naga-tsokolate-at.html",
+          "note": "Firsthand visit published June 22, 2014; menu items are documented at that time and availability may change."
+        },
+        {
+          "title": "Restaurant Guru: Quality Bakery (Ruivivar's Quality Cafe)",
+          "url": "https://restaurantguru.com/Quality-Cafe-Naga-2",
+          "note": "Directory name, address and published business coordinates checked on 2026-10-08. Point is an approximate business location; its precise footprint and entrance are unconfirmed."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1857624,
+        "lat": 13.6241238,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Crown Park Restaurant, on Crown Hotel's ground floor, serves dim sum and hung ma: braised pork paired with hung ma bread."
+      },
+      "sources": [
+        {
+          "title": "Langyaw: Where to eat in Naga (2016)",
+          "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+        },
+        {
+          "title": "Langyaw: Hung ma in Naga (2011)",
+          "url": "https://langyaw.com/2011/05/02/delicious-hung-ma-rice-in-naga-city/"
+        },
+        {
+          "title": "Crown Park Restaurant: Elias Angeles menu on Foodpanda",
+          "url": "https://www.foodpanda.ph/restaurant/dz2f/crown-park-restaurant-elias-angeles",
+          "note": "Menu checked on 2026-10-08; items may change."
+        },
+        {
+          "title": "OpenStreetMap: restaurant location",
+          "url": "https://www.openstreetmap.org/node/4946223021",
+          "note": "Dedicated restaurant POI within Crown Hotel; no hotel ownership or construction date inferred."
+        }
+      ],
+      "select": "osm:node/4946223021"
+    },
+    {
+      "camera": {
+        "lng": 123.1863005,
+        "lat": 13.6253791,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Finish with Ice Blink’s halo-halo on Elias Angeles. Uma’s guide calls it an old local institution; its precise founding date is unconfirmed."
+      },
+      "select": "landmark/ice-blink",
+      "sources": [
+        {
+          "title": "Uma: Halo-halo in Naga (2024)",
+          "url": "https://umahotel.ph/fantastic-food-and-where-to-find-them-best-place-to-eat-halo-halo-near-uma/"
+        },
+        {
+          "title": "Marxtermind: Bicol food trip (2011)",
+          "url": "https://www.marxtermind.com/something-local-my-bicol-food-trip/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/11987328389",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    }
+  ]
+}

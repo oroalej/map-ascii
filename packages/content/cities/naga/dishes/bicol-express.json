@@ -1,0 +1,36 @@
+{
+  "id": "dish/bicol-express",
+  "name": {
+    "en": "Bicol express"
+  },
+  "origin": "contested",
+  "description": {
+    "en": "Pork and chilies in coconut milk, with a debated naming history."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "The dish combines pork, chilies and coconut milk."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The familiar name is associated with Cely Kalaw’s Malate restaurant in the 1970s."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Competing accounts connect the recipe to Bicol’s older gulay na lada tradition; its history is debated."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikipedia: Bicol express",
+      "url": "https://en.wikipedia.org/wiki/Bicol_express"
+    }
+  ]
+}

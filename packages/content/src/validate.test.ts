@@ -14,6 +14,27 @@ vi.mock('node:fs/promises', async (load) => {
 });
 
 describe('loadCityPacks', () => {
+  it('reports an unknown city-local dish at the referring landmark file', async () => {
+    const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+    vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      const text = await original(...args);
+      if (
+        typeof args[0] !== 'string' ||
+        !args[0].replaceAll('\\', '/').endsWith('/landmarks/naga-garden.json')
+      )
+        return text;
+      return JSON.stringify({ ...JSON.parse(String(text)), known_for: ['dish/not-in-this-city'] });
+    });
+    try {
+      const { errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+      expect(errors).toContainEqual({
+        file: 'cities/naga/landmarks/naga-garden.json',
+        message: 'known_for.0: no dish "dish/not-in-this-city" in this city',
+      });
+    } finally {
+      vi.mocked(fs.readFile).mockImplementation(original);
+    }
+  });
   it('reports an invalid predecessor without a cascading missing-reference error', async () => {
     const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
     vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {

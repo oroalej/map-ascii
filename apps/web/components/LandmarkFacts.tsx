@@ -1,5 +1,5 @@
 'use client';
-import type { Landmark, CityArt } from '@atlas/shared';
+import type { Dish, Landmark, CityArt } from '@atlas/shared';
 import { useId, useMemo, useEffect, useState } from 'react';
 import { loadArt } from '@/lib/content';
 import { clickableLandmark } from '@/lib/landmark';
@@ -14,11 +14,13 @@ export function LandmarkFacts({
   city,
   subdivisionLabel,
   landmarks,
+  dishes = [],
   art,
 }: {
   city: string;
   subdivisionLabel: string;
   landmarks: readonly Landmark[];
+  dishes?: readonly Dish[];
   art?: readonly CityArt['pieces'][number][];
 }) {
   const [drawings, setDrawings] = useState<{ city: string; pieces: CityArt['pieces'] } | null>(
@@ -65,6 +67,7 @@ export function LandmarkFacts({
     return null;
   const body = {
     landmark,
+    dishes,
     drawing: pieces.find((a) => a.osm_id === id),
     subdivisionLabel,
     details,

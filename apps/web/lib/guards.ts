@@ -47,6 +47,7 @@ const sources = (v: unknown) =>
   );
 const optional = (v: unknown, check: (value: unknown) => boolean) => v === undefined || check(v);
 const osmId = (v: unknown) => isText(v) && OSM_ID_PATTERN.test(v);
+const selectableId = (v: unknown) => osmId(v) || (isText(v) && /^landmark\/[a-z0-9-]+$/.test(v));
 const year = (v: unknown) => isNumber(v) && Number.isInteger(v);
 
 /** Step 04 emits the validated landmark array, retaining sources and fact indices. */
@@ -124,8 +125,11 @@ export function isCityTours(v: unknown): v is Tour[] {
             optional(s.fly_ms, (n) => integer(n, 1, 15000)) &&
             isLocalized(s.narration) &&
             optional(s.year, year) &&
-            optional(s.select, osmId) &&
-            optional(s.highlight, (h) => Array.isArray(h) && h.length <= 64 && h.every(osmId)) &&
+            optional(s.select, selectableId) &&
+            optional(
+              s.highlight,
+              (h) => Array.isArray(h) && h.length <= 64 && h.every(selectableId),
+            ) &&
             optional(s.audio, isText) &&
             optional(s.sources, sources) &&
             (t.status !== 'verified' ||
@@ -467,16 +471,42 @@ export function isSearchIndexFile(v: unknown): v is SearchIndexFile {
     v.version === 1 &&
     isRecord(v.index) &&
     Array.isArray(v.entries) &&
-    v.entries.every(
-      (e) =>
-        isRecord(e) &&
-        isText(e.id) &&
-        isText(e.name) &&
-        isText(e.type) &&
-        Array.isArray(e.altNames) &&
+    v.entries.every((e) => {
+      if (
+        !isRecord(e) ||
+        !isText(e.id) ||
+        !isText(e.name) ||
+        !Array.isArray(e.altNames) ||
+        !e.altNames.every(isText)
+      )
+        return false;
+      if (e.type === 'dish')
+        return /^dish\/[a-z0-9-]+$/.test(e.id) && only(e, ['id', 'name', 'altNames', 'type']);
+      return (
+        [
+          'food',
+          'landmark',
+          'subdivision',
+          'street',
+          'school',
+          'worship',
+          'market',
+          'station',
+          'monument',
+          'place',
+        ].includes(String(e.type)) &&
         isNumber(e.lat) &&
+        Math.abs(e.lat) <= 90 &&
         isNumber(e.lng) &&
-        isNumber(e.zoomHint),
-    )
+        Math.abs(e.lng) <= 180 &&
+        isNumber(e.zoomHint) &&
+        e.zoomHint >= 0 &&
+        e.zoomHint <= 22 &&
+        (e.subdivision === undefined || isText(e.subdivision)) &&
+        (e.approximate === undefined || typeof e.approximate === 'boolean') &&
+        (e.bbox === undefined || isNumbers(e.bbox, 4)) &&
+        (e.featureIds === undefined || (Array.isArray(e.featureIds) && e.featureIds.every(isText)))
+      );
+    })
   );
 }

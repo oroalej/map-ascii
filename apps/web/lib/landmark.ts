@@ -4,4 +4,4 @@ import type { Landmark } from '@atlas/shared';
 export const hasFacts = (landmark: Landmark) => landmark.facts !== undefined;
 
 export const clickableLandmark = (id: string | null, landmarks: readonly Landmark[]) =>
-  landmarks.find((landmark) => landmark.osm_id === id && hasFacts(landmark));
+  landmarks.find((landmark) => (landmark.osm_id ?? landmark.id) === id && hasFacts(landmark));

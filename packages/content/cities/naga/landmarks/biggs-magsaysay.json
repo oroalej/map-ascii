@@ -1,0 +1,51 @@
+{
+  "id": "landmark/biggs-magsaysay",
+  "name": {
+    "en": "Bigg’s — Magsaysay"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The brand began in Naga as a small take-out counter."
+      },
+      "source": 0,
+      "year": 1983
+    },
+    {
+      "text": {
+        "en": "Nie-Nie Buenaflor, Maricar Manjon and Nena Centenera founded the business."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "It adopted an American diner style with neon and nostalgic décor."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Biggs at 40 (2023)",
+      "url": "https://dateline-ibalon.com/2023/03/biggs-diner-bigg-at-40/"
+    },
+    {
+      "title": "Langyaw: Where to eat in Naga (2016)",
+      "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/way/1534490769",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:way/1534490769",
+  "signatures": [
+    {
+      "name": "Tower Burger and arroz caldo",
+      "source": 1
+    }
+  ]
+}

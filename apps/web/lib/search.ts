@@ -42,6 +42,8 @@ export function loadSearch(city: string): Promise<CitySearch> {
 /** Result groups, in the order the results list shows them (SPEC.md §5: grouped by type). */
 export const TYPE_ORDER: readonly SearchType[] = [
   'landmark',
+  'food',
+  'dish',
   'subdivision',
   'street',
   'worship',
@@ -53,6 +55,8 @@ export const TYPE_ORDER: readonly SearchType[] = [
 ];
 
 export const TYPE_LABELS: Readonly<Record<SearchType, string>> = {
+  food: 'Food places',
+  dish: 'Dishes',
   landmark: 'Landmarks',
   subdivision: 'Subdivisions',
   street: 'Streets',

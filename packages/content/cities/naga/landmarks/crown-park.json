@@ -1,0 +1,57 @@
+{
+  "id": "landmark/crown-park",
+  "name": { "en": "Crown Park Restaurant" },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The main restaurant occupies Crown Hotel's ground floor in the old city center, opposite the Quince Martires Monument."
+      },
+      "source": 0
+    },
+    {
+      "text": { "en": "Hung ma is braised pork, traditionally paired here with hung ma bread." },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Its Elias Angeles menu lists pork and beef siomai, spareribs dim sum and chicken feet."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Crown Park fried rice, pancit guisado and beef brisket with wonton also appear on its menu."
+      },
+      "source": 2
+    }
+  ],
+  "sources": [
+    {
+      "title": "Langyaw: Where to eat in Naga (2016)",
+      "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+    },
+    {
+      "title": "Langyaw: Hung ma in Naga (2011)",
+      "url": "https://langyaw.com/2011/05/02/delicious-hung-ma-rice-in-naga-city/"
+    },
+    {
+      "title": "Crown Park Restaurant: Elias Angeles menu on Foodpanda",
+      "url": "https://www.foodpanda.ph/restaurant/dz2f/crown-park-restaurant-elias-angeles",
+      "note": "Menu checked on 2026-10-08; items may change."
+    },
+    {
+      "title": "OpenStreetMap: restaurant location",
+      "url": "https://www.openstreetmap.org/node/4946223021",
+      "note": "Dedicated restaurant POI within Crown Hotel; no hotel ownership or construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/4946223021",
+  "signatures": [
+    { "name": "Hung ma", "source": 2 },
+    { "name": "Hung ma bread", "source": 2 },
+    { "name": "Pork and beef siomai", "source": 2 },
+    { "name": "Crown Park fried rice", "source": 2 }
+  ]
+}
