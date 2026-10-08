@@ -415,6 +415,11 @@ export function routeProcessions(
           features,
           path.map((m) => graph.project.from(m)),
           banks,
+          (p.crowd_focus ?? []).map((f) => ({
+            at: find(f.near),
+            radius_m: f.radius_m,
+            reach_m: f.reach_m,
+          })),
         ),
       }),
       ...(banks

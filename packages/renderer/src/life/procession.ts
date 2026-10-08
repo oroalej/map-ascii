@@ -42,7 +42,7 @@ export const PROCESSION = {
     passed: 0.15,
     gather: 300,
     mass: 0.95,
-    bank: 0.7,
+    bank: 0.9,
     uniforms: [3, 4, 5, 6, 7, 8, 9, 10] as const,
   },
   mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },

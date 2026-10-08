@@ -145,7 +145,7 @@ it('derives the Mass extent around the displaced altar and rejects unsupported e
     'baked crowd extent',
   );
 });
-it('keeps fluvial spectators on the river sides, off the water, decks and inland streets', () => {
+it('puts fluvial spectators on the river sides and the bridges the boats pass under', () => {
   const water = [
     feature('osm:way/1', 'water', box(-101, -5, -10, 5)),
     feature('osm:way/2', 'water', box(10, -5, 101, 5)),
@@ -158,30 +158,48 @@ it('keeps fluvial spectators on the river sides, off the water, decks and inland
   const banks = measureBanks(route.map(frame.toMeters), waterPolygons)!;
   expect(banks).toHaveLength(route.length);
   expect(banks[10]).toEqual(banks[9]);
-  const decks = [-60, 60].map((x, i): F => ({
+  const deck = (id: string, x: number, y0: number, y1: number, extra = {}): F => ({
     type: 'Feature',
-    properties: { id: `osm:way/${i + 3}`, class: 'road_minor', width: 4, bridge: 'yes' },
-    geometry: { type: 'LineString', coordinates: [q(x, -40), q(x, 40)] },
-  }));
-  const crowd = bakeFluvialCrowd([...water, ...decks], route, banks);
-  expect(crowd.bridges).toEqual([]);
-  const allows = (x: number, y: number) => {
-    const point = q(x, y);
-    return (
-      crowd.grounds.some((ring) => pointInPolygon(point, [ring])) &&
-      !crowd.blocked.some((ring) => pointInPolygon(point, [ring])) &&
-      !crowd.water.some((ring) => pointInPolygon(point, [ring]))
-    );
+    properties: { id, class: 'road_minor', width: 4, bridge: 'yes', ...extra },
+    geometry: { type: 'LineString', coordinates: [q(x, y0), q(x, y1)] },
+  });
+  const decks = [
+    deck('osm:way/3', -60, -40, 40),
+    deck('osm:way/4', 60, -40, 40),
+    // Beside the river, not over the boat route; and closed to people.
+    deck('osm:way/5', -30, 20, 40),
+    deck('osm:way/6', 30, -40, 40, { foot: 'no' }),
+  ];
+  const bake = (focus?: Parameters<typeof bakeFluvialCrowd>[3]) => {
+    const crowd = bakeFluvialCrowd([...water, ...decks], route, banks, focus);
+    return (x: number, y: number) => {
+      const point = q(x, y);
+      return (
+        crowd.grounds.some((ring) => pointInPolygon(point, [ring])) &&
+        !crowd.blocked.some((ring) => pointInPolygon(point, [ring])) &&
+        (!crowd.water.some((ring) => pointInPolygon(point, [ring])) ||
+          crowd.bridges.some((ring) => pointInPolygon(point, [ring])))
+      );
+    };
   };
+  const allows = bake();
   // Both banks, right at the water and up to 8 m inland.
   for (const y of [-6, 6, -12, 12]) expect(allows(-30, y)).toBe(true);
-  // Never on the water, a bridge deck or the streets further inland.
+  // The decks the boats pass under, over the water too.
+  expect(allows(-60, 0)).toBe(true);
+  expect(allows(60, -8)).toBe(true);
+  // Never the open water, other bridges or the streets further inland.
   expect(allows(-30, 0)).toBe(false);
-  expect(allows(0, 0)).toBe(false);
-  expect(allows(-60, 8)).toBe(false);
-  expect(allows(60, -8)).toBe(false);
+  expect(allows(30, 0)).toBe(false);
+  expect(allows(-30, 30)).toBe(false);
   expect(allows(-30, 16)).toBe(false);
   expect(allows(-30, -25)).toBe(false);
+  // Around a focus the crowd reaches further inland, elsewhere it does not.
+  const focused = bake([{ at: q(-60, 0), radius_m: 20, reach_m: 25 }]);
+  expect(allows(-50, 25)).toBe(false);
+  expect(focused(-50, 25)).toBe(true);
+  expect(focused(-50, -25)).toBe(true);
+  expect(focused(50, 25)).toBe(false);
 });
 it('losslessly compacts adjacent lattice rows while retaining holes and disconnected pieces', () => {
   const cells = new Map<string, Point>();

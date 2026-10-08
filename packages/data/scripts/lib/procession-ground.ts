@@ -65,6 +65,7 @@ function sidewalks(road: AtlasFeature, reversed = false) {
 const polygons = (g: Geometry): Position[][][] =>
   g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
 const asPoints = (ring: Position[]) => ring.map((p) => [p[0]!, p[1]!] as Point);
+const asPoint = (p: Position) => [p[0]!, p[1]!] as Point;
 const featureBoxes = new WeakMap<F, [number, number, number, number]>();
 function featureBox(f: F) {
   const saved = featureBoxes.get(f);
@@ -698,13 +699,25 @@ export function bakeMassSite(
 
 /** Spectators stand only along the river sides: from the water's edge to this far inland. */
 const RIVERSIDE_M = 8;
-/** Riverside bands are the only permissions; water and bridge decks stay clear. */
+const crosses = (a: Point, b: Point, c: Point, d: Point) => {
+  const side = (p: Point, q: Point, r: Point) =>
+    Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
+};
+/** Where the riverside crowd reaches further inland: within `radius_m` of `at`, `reach_m`. */
+export type FluvialFocus = { at: Point; radius_m: number; reach_m: number };
+/**
+ * Riverside bands and the decks of bridges over the route are the permissions; water never
+ * grants a bank. Near a focus, the band reaches further inland.
+ */
 export function bakeFluvialCrowd(
   features: readonly F[],
   route: Point[],
   banks: [number, number][],
+  focus: readonly FluvialFocus[] = [],
 ) {
   const frame = localFrame(route[0]!);
+  const foci = focus.map((f) => ({ ...f, xy: frame.toMeters(f.at) }));
   const strips: Point[][][] = [],
     river: Point[][][] = [];
   // Crowd permissions need fewer bank joins than the unchanged 10 m boat route.
@@ -725,12 +738,22 @@ export function bakeFluvialCrowd(
         poly.map(asPoints),
       ),
     );
+    const inland = Math.max(
+      RIVERSIDE_M,
+      ...foci
+        .filter(
+          (f) =>
+            Math.min(...[a, b].map((q) => Math.hypot(q[0] - f.xy[0], q[1] - f.xy[1]))) <=
+            f.radius_m,
+        )
+        .map((f) => f.reach_m),
+    );
     for (const side of [-1, 1]) {
       const index = side > 0 ? 0 : 1;
       // From inside the narrowest bank (mapped water is blocked) to inland of the widest.
       const reach = banks.slice(start, i + 1).map((p) => p[index]);
       const inner = Math.min(...reach) - 2,
-        outer = Math.max(...reach) + RIVERSIDE_M;
+        outer = Math.max(...reach) + inland;
       const offset = (side * (inner + outer)) / 2;
       const line = [a, b].map((q) =>
         frame.toLngLat([q[0] - ((b[1] - a[1]) / d) * offset, q[1] + ((b[0] - a[0]) / d) * offset]),
@@ -748,18 +771,27 @@ export function bakeFluvialCrowd(
     Math.max(...points.map((q) => q[1])) + 0.001,
   ];
   const relevant = [...strips, ...river];
+  // Spectators stand on the bridges the boats pass under, within the river and bank bands.
+  const passes = (line: Position[]) =>
+    line.some(
+      (q, j) =>
+        j > 0 &&
+        route.some((r, k) => k > 0 && crosses(asPoint(line[j - 1]!), asPoint(q), route[k - 1]!, r)),
+    );
   const decks = features
     .filter((f) => f.properties.bridge && f.properties.bridge !== 'no' && walkable(f.properties))
     .flatMap((f) =>
-      lines(f as AtlasFeature).flatMap((line) => {
-        const deck = seatingFootprint(asPoints(line), width(f as AtlasFeature))
-          .coordinates as Point[][][];
-        return relevant.flatMap((poly) =>
-          intersection(deck, poly).map((part) => asPoints(part[0]!)),
-        );
-      }),
+      lines(f as AtlasFeature)
+        .filter(passes)
+        .flatMap((line) => {
+          const deck = seatingFootprint(asPoints(line), width(f as AtlasFeature))
+            .coordinates as Point[][][];
+          return relevant.flatMap((poly) =>
+            intersection(deck, poly).map((part) => asPoints(part[0]!)),
+          );
+        }),
     );
-  const pieces = strips;
+  const pieces = [...strips, ...decks.map((r) => [r])];
   // Balanced union keeps source precision and avoids a sequential growing sweep.
   const groups = pieces.map(
     (p) =>
@@ -772,6 +804,5 @@ export function bakeFluvialCrowd(
   const envelope = balancedUnion(groups);
   const { blocked, water } = assembleExclusions(features, frame, bounds, pieces, true);
   for (const polygon of envelope) for (const hole of polygon.slice(1)) blocked.push(asPoints(hole));
-  blocked.push(...decks);
-  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges: [] };
+  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges: decks };
 }

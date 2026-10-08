@@ -1004,6 +1004,17 @@ export function contentSchemas(languages?: readonly string[]) {
             message: 'give exactly one of from and upstream_m',
           }),
         formation: ProcessionFormation.optional(),
+        /** Where the riverside crowd reaches further inland, such as beside a bridge. */
+        crowd_focus: z
+          .array(
+            z.strictObject({
+              near: OsmId,
+              radius_m: z.number().positive().max(500),
+              reach_m: z.number().positive().max(40),
+            }),
+          )
+          .min(1)
+          .optional(),
       }),
       z.strictObject({
         ...eventBase,
