@@ -12117,6 +12117,344 @@
       "type": "Polygon",
       "coordinates": [
         [
+          [123.2164975, 13.6466057],
+          [123.2165873, 13.6465463],
+          [123.2166156, 13.6465868],
+          [123.2165258, 13.6466462],
+          [123.2164975, 13.6466057]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416415",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2166615, 13.6463879],
+          [123.2167125, 13.6462748],
+          [123.2168036, 13.6463136],
+          [123.2167526, 13.6464267],
+          [123.2166615, 13.6463879]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416416",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2164295, 13.6464019],
+          [123.2164809, 13.6462851],
+          [123.2164675, 13.6462795],
+          [123.2164978, 13.6462106],
+          [123.2166412, 13.6462702],
+          [123.2165925, 13.6463808],
+          [123.2166526, 13.6464058],
+          [123.2166575, 13.6463947],
+          [123.2167478, 13.6464323],
+          [123.2167104, 13.6465173],
+          [123.2166233, 13.646481],
+          [123.2166193, 13.6464901],
+          [123.2165516, 13.6464619],
+          [123.216555, 13.6464541],
+          [123.2164295, 13.6464019]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416417",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2163138, 13.6462396],
+          [123.216346, 13.6461624],
+          [123.2164354, 13.6461976],
+          [123.2164032, 13.6462748],
+          [123.2163138, 13.6462396]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416418",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2161995, 13.6463029],
+          [123.2162719, 13.646228],
+          [123.2164636, 13.6463088],
+          [123.2164221, 13.6463993],
+          [123.2161995, 13.6463029]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416419",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2160375, 13.6464824],
+          [123.2160959, 13.6464009],
+          [123.2161496, 13.6464373],
+          [123.2160912, 13.6465188],
+          [123.2160375, 13.6464824]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416420",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.215984, 13.6464497],
+          [123.2160435, 13.6463659],
+          [123.2160875, 13.6463954],
+          [123.216028, 13.6464792],
+          [123.215984, 13.6464497]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416421",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2160017, 13.6467499],
+          [123.216147, 13.6465397],
+          [123.2161031, 13.646511],
+          [123.216155, 13.646436],
+          [123.2164295, 13.6466153],
+          [123.2163789, 13.6466884],
+          [123.2163364, 13.6466607],
+          [123.2161897, 13.6468727],
+          [123.2161514, 13.6468477],
+          [123.2161271, 13.6468828],
+          [123.2160995, 13.6468647],
+          [123.2160755, 13.6468993],
+          [123.2160163, 13.6468606],
+          [123.2160403, 13.646826],
+          [123.2160157, 13.64681],
+          [123.21604, 13.6467749],
+          [123.2160017, 13.6467499]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416422",
+      "class": "building_religious",
+      "name": "Mary Co-Redemptrix Church",
+      "kind": "amenity=place_of_worship",
+      "denomination": "roman_catholic",
+      "height": 15,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2158984, 13.6466489],
+          [123.2160178, 13.6464807],
+          [123.2161241, 13.646552],
+          [123.2160048, 13.6467202],
+          [123.2158984, 13.6466489]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416423",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2326793, 13.6494006],
+          [123.2328352, 13.6494267],
+          [123.2328255, 13.6494814],
+          [123.2326696, 13.6494554],
+          [123.2326793, 13.6494006]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203433142",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2326169, 13.6495005],
+          [123.2331692, 13.6495929],
+          [123.2331466, 13.6497204],
+          [123.2332185, 13.6497324],
+          [123.2331888, 13.6498997],
+          [123.2326867, 13.6498156],
+          [123.23271, 13.6496839],
+          [123.2326575, 13.6496751],
+          [123.2326637, 13.6496403],
+          [123.2325942, 13.6496286],
+          [123.2326169, 13.6495005]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203433143",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
           [123.2330701, 13.6510156],
           [123.2331364, 13.651033],
           [123.2330728, 13.6512625],
@@ -12535,12 +12873,45 @@
       "class": "building_school",
       "name": "Leon Q. Mercado High School",
       "kind": "amenity=school",
-      "old_name": "Camarines Sur National High School â€“ Pacol Annex",
+      "old_name": "Camarines Sur National High School – Pacol Annex",
       "operator": "Naga North District Naga City Schools Division, DepEd",
       "subdivision": "Pacol",
       "subdivision_approx": true,
       "start_year": 1999,
       "certainty": "exact"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2163308, 13.6461547],
+          [123.2167989, 13.6462914],
+          [123.2168981, 13.6464061],
+          [123.2161915, 13.646875],
+          [123.2156698, 13.6472037],
+          [123.2153861, 13.6470681],
+          [123.2157834, 13.646726],
+          [123.2159138, 13.64647],
+          [123.2160392, 13.6463517],
+          [123.2160974, 13.6463788],
+          [123.2163308, 13.6461547]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/871438572",
+      "class": "building_religious",
+      "kind": "landuse=religious",
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
     },
     "tippecanoe": {
       "layer": "buildings",
@@ -12576,6 +12947,38 @@
       "name": "Ateneo de Naga University Junior High School",
       "kind": "amenity=university",
       "subdivision": "Cararayan",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.2324463, 13.6502771],
+          [123.2326099, 13.6493857],
+          [123.2336694, 13.6495577],
+          [123.234458, 13.6490468],
+          [123.2346269, 13.6489973],
+          [123.2346055, 13.6491589],
+          [123.2344043, 13.6498157],
+          [123.2342166, 13.6505716],
+          [123.2324463, 13.6502771]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203433147",
+      "class": "building_religious",
+      "name": "Sisters of the Sacred Heart Formation Center",
+      "kind": "landuse=religious",
+      "subdivision": "Pacol",
       "subdivision_approx": true
     },
     "tippecanoe": {
@@ -17734,6 +18137,73 @@
     "geometry": {
       "type": "LineString",
       "coordinates": [
+        [123.2041407, 13.6415159],
+        [123.204305, 13.6421047],
+        [123.2044302, 13.6425391],
+        [123.2045064, 13.6428246],
+        [123.2045566, 13.6430169],
+        [123.2046348, 13.6432328],
+        [123.204701, 13.64333],
+        [123.2047322, 13.6433625],
+        [123.2049014, 13.6435146],
+        [123.2050646, 13.64364],
+        [123.205245, 13.6437562],
+        [123.2055536, 13.6439055],
+        [123.2057712, 13.644003],
+        [123.2059398, 13.6440711],
+        [123.2059996, 13.6440938],
+        [123.2060989, 13.6441261],
+        [123.2062228, 13.6441626],
+        [123.2064335, 13.6442284],
+        [123.2069305, 13.644375],
+        [123.2084186, 13.6448275],
+        [123.2086704, 13.6449091],
+        [123.2093562, 13.6451303],
+        [123.2098105, 13.6452852],
+        [123.2100402, 13.6453622],
+        [123.210378, 13.6454726],
+        [123.2107112, 13.6455846],
+        [123.2112872, 13.6457682],
+        [123.2120267, 13.646009],
+        [123.2128206, 13.6462722],
+        [123.2136092, 13.6465003],
+        [123.2138935, 13.6465889],
+        [123.214155, 13.6466671],
+        [123.2143722, 13.6467505],
+        [123.2146566, 13.6468691],
+        [123.2151029, 13.6470582],
+        [123.2153217, 13.6471532],
+        [123.2155551, 13.6472588],
+        [123.2158077, 13.6473805],
+        [123.2171886, 13.647999],
+        [123.2177478, 13.6482297],
+        [123.218273, 13.6484236],
+        [123.2189905, 13.6487954],
+        [123.2204445, 13.649479],
+        [123.2207298, 13.6496326]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23521327",
+      "class": "road_mid",
+      "highway": "secondary",
+      "name": "San Felipe-Pacol-Carolina-Panicuason Road",
+      "kind": "highway=secondary",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
         [123.2369591, 13.6451736],
         [123.2370525, 13.6452168],
         [123.2371601, 13.6452542],
@@ -18694,6 +19164,125 @@
     "geometry": {
       "type": "LineString",
       "coordinates": [
+        [123.2340879, 13.651645],
+        [123.234179, 13.6513744],
+        [123.2342274, 13.6511437],
+        [123.2342863, 13.6506772],
+        [123.2344106, 13.650048],
+        [123.2344792, 13.6497501],
+        [123.2345785, 13.6493944],
+        [123.2346176, 13.6493023],
+        [123.2346949, 13.649037],
+        [123.2348305, 13.648748],
+        [123.2348709, 13.6485836],
+        [123.2348925, 13.6484141],
+        [123.2348469, 13.6479704]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600134635",
+      "class": "road_mid",
+      "highway": "tertiary",
+      "name": "Pacol Road",
+      "kind": "highway=tertiary",
+      "width": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2346949, 13.649037],
+        [123.2346793, 13.6489334],
+        [123.2345907, 13.6487992],
+        [123.2344754, 13.6487132],
+        [123.2344258, 13.6486845],
+        [123.2343386, 13.6487106]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600134648",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2335782, 13.6495989],
+        [123.2335742, 13.649705],
+        [123.2336144, 13.64986],
+        [123.2336104, 13.6499356],
+        [123.2335836, 13.6500712],
+        [123.2335219, 13.6501754],
+        [123.2325938, 13.6500269]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600134654",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2344792, 13.6497501],
+        [123.2335782, 13.6495989],
+        [123.2332848, 13.64955],
+        [123.232905, 13.6494821]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600134657",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
         [123.2348551, 13.6446103],
         [123.234934, 13.6446621],
         [123.234987, 13.6447168],
@@ -18850,6 +19439,124 @@
     "geometry": {
       "type": "LineString",
       "coordinates": [
+        [123.2158077, 13.6473805],
+        [123.2155188, 13.6478166]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600153743",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2155907, 13.6472288],
+        [123.2156872, 13.6472085],
+        [123.2164094, 13.6467466],
+        [123.21686, 13.646456],
+        [123.2172435, 13.646198]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600153746",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2161117, 13.6460624],
+        [123.2157187, 13.6459477],
+        [123.2154653, 13.6458826],
+        [123.2153285, 13.64585],
+        [123.215248, 13.6458434],
+        [123.2151474, 13.645863],
+        [123.2151179, 13.6459008],
+        [123.2150772, 13.6459837],
+        [123.2149686, 13.6462032],
+        [123.2146566, 13.6468691]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600153753",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2155551, 13.6472588],
+        [123.2155907, 13.6472288],
+        [123.2156771, 13.6471558],
+        [123.2159614, 13.6469342],
+        [123.2159923, 13.6469029],
+        [123.2159923, 13.6468704],
+        [123.2159789, 13.6468156],
+        [123.2159507, 13.6467453],
+        [123.2159132, 13.6467205],
+        [123.2158676, 13.6467049],
+        [123.2158273, 13.6467193],
+        [123.2157858, 13.6467518],
+        [123.2153217, 13.6471532]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600153756",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
         [123.2329448, 13.651305],
         [123.2325589, 13.6520333],
         [123.2322885, 13.6524081],
@@ -18982,6 +19689,37 @@
     "tippecanoe": {
       "layer": "roads",
       "minzoom": 10,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2344592, 13.6500451],
+        [123.2345532, 13.6499395],
+        [123.2347544, 13.6497245],
+        [123.2348268, 13.649645],
+        [123.2348683, 13.6495942],
+        [123.2348536, 13.6495473],
+        [123.2348093, 13.6495069],
+        [123.234702, 13.6494612],
+        [123.234631, 13.6494195],
+        [123.2345785, 13.6493944]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/600496636",
+      "class": "path",
+      "highway": "track",
+      "kind": "highway=track",
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 15,
       "maxzoom": 16
     }
   },
@@ -19352,6 +20090,39 @@
     "geometry": {
       "type": "LineString",
       "coordinates": [
+        [123.2364089, 13.6508306],
+        [123.2362692, 13.6508092],
+        [123.2361236, 13.6507657],
+        [123.2358138, 13.6505735],
+        [123.2354215, 13.6503762],
+        [123.2350809, 13.6502008],
+        [123.2348951, 13.6500972],
+        [123.2347222, 13.6500581],
+        [123.2345787, 13.6500347],
+        [123.2344592, 13.6500451],
+        [123.2344106, 13.650048]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/904939049",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Pacol",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
         [123.2485382, 13.6524978],
         [123.2486214, 13.6521472],
         [123.2495705, 13.6522821]
@@ -19540,6 +20311,31 @@
     "tippecanoe": {
       "layer": "roads",
       "minzoom": 15,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2151029, 13.6470582],
+        [123.2153875, 13.6466567],
+        [123.2155699, 13.6464091]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/1203416409",
+      "class": "road_minor",
+      "highway": "service",
+      "kind": "highway=service",
+      "width": 6,
+      "subdivision": "San Felipe",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
       "maxzoom": 16
     }
   },

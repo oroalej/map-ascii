@@ -1,0 +1,133 @@
+{
+  "id": "detail/panicuason-elementary-school",
+  "osm_id": "osm:way/881087491",
+  "title": "Panicuason Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "unmapped-roof-1",
+      "ring": [
+        [123.31855653074, 13.66377892592],
+        [123.31872141795, 13.66377328511],
+        [123.3187197812, 13.66372811073],
+        [123.31855489399, 13.66373375154],
+        [123.31855653074, 13.66377892592]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.31914068822, 13.6636726506],
+        [123.31913936176, 13.66367146441],
+        [123.31913928643, 13.66366971226],
+        [123.31914773001, 13.66364737604],
+        [123.31917366001, 13.66357209194],
+        [123.31919771201, 13.66351485462],
+        [123.31919832651, 13.6635117728],
+        [123.31919768076, 13.66350869927],
+        [123.31919587373, 13.66350609983],
+        [123.3191931805, 13.66350437021],
+        [123.31919001112, 13.66350377373],
+        [123.31918684807, 13.6635044012],
+        [123.31918417292, 13.6635061571],
+        [123.31918239186, 13.66350877606],
+        [123.31915805526, 13.66356673419],
+        [123.31913167583, 13.66364316674],
+        [123.31913125242, 13.66364539509],
+        [123.31912866728, 13.66370575578],
+        [123.31911158282, 13.66375694948],
+        [123.31908664797, 13.66381606098],
+        [123.31908602922, 13.663819142],
+        [123.31908667072, 13.66382221636],
+        [123.31908847417, 13.66382481816],
+        [123.31909116501, 13.66382655128],
+        [123.31909166792, 13.66382669755],
+        [123.3191317339, 13.66370369619],
+        [123.31913281175, 13.66370256805],
+        [123.31913416155, 13.6637023235],
+        [123.31914523354, 13.66370568355],
+        [123.31914655829, 13.66367474272],
+        [123.31914068822, 13.6636726506]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.3183204843, 13.66355567896],
+        [123.31856747686, 13.66354722932],
+        [123.31856693513, 13.66353227761],
+        [123.31856492162, 13.66353203691],
+        [123.31856383491, 13.66353090608],
+        [123.31856354721, 13.66352384934],
+        [123.31853248567, 13.66352491196],
+        [123.31853226762, 13.66352840035],
+        [123.31853138833, 13.6635294183],
+        [123.3185300799, 13.66352979056],
+        [123.31841964484, 13.66352877226],
+        [123.31832040913, 13.66353216712],
+        [123.3183204843, 13.66355567896]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.31832645668, 13.66354418952],
+        [123.31854770531, 13.66353662059]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.3191373171, 13.66369716396],
+        [123.31913814038, 13.66367793556]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-2",
+      "line": [
+        [123.31913920873, 13.66365298318],
+        [123.31913951945, 13.66364572612],
+        [123.31916590015, 13.66356928988],
+        [123.31918641009, 13.66351854712]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.31832643626, 13.66353780357],
+        [123.31856126007, 13.66354159936]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881087491",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6636729,123.3189012,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied panicuason-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-08), registered by hand to OSM roofs (check 1.6 m). Dense canopy covers nearly the whole campus around the classroom roofs. The bare soil yard in front of the west classrooms and the small clearing beside the middle roof stay bare; the dark roof in the middle of the canopy is visible but unmapped and is drawn as a roof. The packed-earth walk along the front of the west classroom row reaches Panicuason Road at the west edge, and a pale dirt path runs down the west side of the two angled east buildings. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.57 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

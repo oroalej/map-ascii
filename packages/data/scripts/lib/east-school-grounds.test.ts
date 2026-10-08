@@ -49,6 +49,11 @@ const sites = [
   ['san-isidro-elementary-school', 'osm:relation/14210961'],
   ['carolina-elementary-school', 'osm:way/833125856'],
   ['carolina-national-high-school', 'osm:way/881084574'],
+  ['don-bosco-training-center-of-naga', 'osm:way/833125855'],
+  ['panicuason-elementary-school', 'osm:way/881087491'],
+  // Owner-added religious grounds on the same eastern corridor.
+  ['sisters-sacred-heart-formation-center', 'osm:way/1203433147'],
+  ['mary-coredemptrix-church', 'osm:way/871438572'],
 ] as const;
 const omissions = [
   {
@@ -67,19 +72,9 @@ const omissions = [
     reason: 'No supplied image; unsupported outdoor landscaping is omitted.',
   },
   {
-    slug: 'don-bosco-training-center-of-naga',
-    parents: ['osm:way/833125855'],
-    reason: 'The adjoining Carolina Elementary image does not establish this campus layout.',
-  },
-  {
     slug: 'naga-view-adventist-college',
     parents: ['osm:node/13048818362', 'osm:node/13048818363'],
     reason: 'No supplied image establishes a grounds ring around the two point anchors.',
-  },
-  {
-    slug: 'panicuason-elementary-school',
-    parents: ['osm:way/881087491'],
-    reason: 'No supplied image; unsupported outdoor detail is omitted.',
   },
 ];
 const source = readFixture('east-school-parents.json') as AtlasFeature[];
@@ -112,9 +107,10 @@ const boundaryDistance = (at: LngLat, area: Area) =>
   );
 
 describe('eastern school grounds from the owner references', () => {
-  it('covers 17 distinct parents and explicitly preserves the six unsupported sites', () => {
-    expect(sites.length + omissions.length).toBe(23);
-    expect(new Set(details.map((d) => d.osm_id)).size).toBe(17);
+  it('covers 21 distinct parents and explicitly preserves the four unsupported sites', () => {
+    // 23 eastern school sites plus the two owner-added religious grounds.
+    expect(sites.length + omissions.length).toBe(25);
+    expect(new Set(details.map((d) => d.osm_id)).size).toBe(21);
     for (const [i, [slug, parent]] of sites.entries()) {
       const detail = details[i]!;
       const cover = covers[i]!;
@@ -342,6 +338,8 @@ describe('eastern school grounds from the owner references', () => {
       ['cararayan-national-high-school', 'don-manuel-i-abella-central-school'],
       ['san-isidro-national-high-school', 'san-isidro-elementary-school'],
       ['ateneo-pacol', 'naga-city-sports-complex'],
+      ['naga-city-sports-complex', 'sisters-sacred-heart-formation-center'],
+      ['ateneo-pacol', 'sisters-sacred-heart-formation-center'],
     ]) {
       const first = areaFor(
         details.find((d) => d.id === `detail/${a}`)!,

@@ -1,0 +1,161 @@
+{
+  "id": "detail/sisters-sacred-heart-formation-center",
+  "osm_id": "osm:way/1203433147",
+  "title": "Sisters of the Sacred Heart Formation Center",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "unmapped-roof-1",
+      "ring": [
+        [123.23330641648, 13.65009527769],
+        [123.23338485345, 13.65011032982],
+        [123.23341466101, 13.65000822452],
+        [123.23333622404, 13.6499931724],
+        [123.23330641648, 13.65009527769]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "unmapped-roof-2",
+      "ring": [
+        [123.23320472405, 13.65006034611],
+        [123.23326134799, 13.6500712123],
+        [123.23327425307, 13.65000770876],
+        [123.23321762912, 13.64999684257],
+        [123.23320472405, 13.65006034611]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23325795902, 13.64962994554],
+        [123.23320679884, 13.64970993331],
+        [123.23320566855, 13.64971287401],
+        [123.2332057825, 13.64971600897],
+        [123.23320712235, 13.64971886293],
+        [123.23320948411, 13.64972100138],
+        [123.23321250824, 13.64972209878],
+        [123.23321573432, 13.64972198804],
+        [123.23321867123, 13.64972068603],
+        [123.23322087322, 13.64971838921],
+        [123.23326978031, 13.64964152289],
+        [123.2333547342, 13.64959139858],
+        [123.23354698205, 13.64962828629],
+        [123.23354716647, 13.64962339472],
+        [123.23332997153, 13.64958719556],
+        [123.23325795902, 13.64962994554]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.23321137016, 13.64978603699],
+        [123.23320805189, 13.6498047288],
+        [123.23324504786, 13.64983689748],
+        [123.23330320562, 13.64991311879],
+        [123.23334509116, 13.64999203546],
+        [123.23336210699, 13.64999530081],
+        [123.23336274793, 13.64999155933],
+        [123.23336185553, 13.64998854236],
+        [123.23331689836, 13.6499040669],
+        [123.2332578399, 13.64982666473],
+        [123.23321137016, 13.64978603699]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.23265422154, 13.64945696475],
+        [123.2328817449, 13.64950062669],
+        [123.23287737032, 13.64949367976],
+        [123.23287557551, 13.64948821491],
+        [123.23287491332, 13.64948252352],
+        [123.23287501548, 13.64947965577],
+        [123.23287608233, 13.64947401826],
+        [123.23287826255, 13.64946868741],
+        [123.23287974417, 13.64946620529],
+        [123.23288341733, 13.64946172586],
+        [123.23288792609, 13.6494580232],
+        [123.23289453971, 13.64945472108],
+        [123.23283466069, 13.64944323024],
+        [123.23282782259, 13.64948179117],
+        [123.23282704056, 13.64948313375],
+        [123.23282555972, 13.64948368991],
+        [123.23266919905, 13.64945765726],
+        [123.23266767633, 13.64945672386],
+        [123.23266724908, 13.64945523269],
+        [123.23267479262, 13.64941255141],
+        [123.23266368048, 13.64941041898],
+        [123.23265422154, 13.64945696475]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23335193886, 13.64998739775],
+        [123.23331025347, 13.64990885691],
+        [123.2332511925, 13.64983145145],
+        [123.23321530906, 13.64979819631]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.23323934126, 13.64967826021],
+        [123.23326378547, 13.64963565323],
+        [123.23333303938, 13.64959363115]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-3-1",
+      "line": [
+        [123.23283678816, 13.64946561659],
+        [123.23287042469, 13.64947207147]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23287681011, 13.64946027149],
+        [123.23283292978, 13.64948502257]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1203433147",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6498855,123.2335589,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied sisters-sacred-heart-formation-center.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-08), registered by hand to the mapped internal roads and building (checks 3.2/2.8 m). The two small orange-roofed buildings north of the lawn are visible but unmapped and are drawn as roofs. A lawn fills the curved forecourt east of the formation house, crossed by two curving footpaths, with a large crown cluster in its south-east corner. A dense garden canopy of palms and broadleaf trees lines the north of the property and the ground between the upper drive and the house. East of the drive, an orchard of young trees stands in rows on bare reddish soil (the soil stays bare); below it, a lawn garden with a small winding water course, a tree row along the lower drive, and palms along Pacol Road. The paved strip between the house and the lower drive is hardscape. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 3.21 m, 2.81 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}
