@@ -7,32 +7,53 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.268255959, 13.632287592],
-        [123.268217129, 13.632341654],
-        [123.268271207, 13.63237803],
-        [123.268310036, 13.632323968],
-        [123.268255959, 13.632287592]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-2",
-      "ring": [
-        [123.268529316, 13.632462891],
-        [123.268527937, 13.632462455],
-        [123.268526912, 13.632462337],
-        [123.268510674, 13.632451414],
-        [123.268358995, 13.632662592],
-        [123.268405347, 13.632693772],
-        [123.268555095, 13.632481294],
-        [123.268533018, 13.632466444],
-        [123.268532578, 13.632465603],
-        [123.268531682, 13.632464496],
-        [123.26853058, 13.632463581],
-        [123.268529316, 13.632462891]
+        [123.26820936579, 13.63231837445],
+        [123.268107863, 13.63247269551],
+        [123.26832657779, 13.63261900406],
+        [123.26832659328, 13.63261906042],
+        [123.26832640657, 13.63261935897],
+        [123.26837079149, 13.63264511649],
+        [123.26838416774, 13.63262375959],
+        [123.26836666826, 13.63261306628],
+        [123.26836665219, 13.63261300691],
+        [123.26843807168, 13.63251059294],
+        [123.26843812213, 13.63251057925],
+        [123.26844412955, 13.63251259863],
+        [123.26845594027, 13.6325615588],
+        [123.26850696895, 13.63249192591],
+        [123.26847030795, 13.63246710227],
+        [123.26844234381, 13.63250526166],
+        [123.26844227846, 13.63250527156],
+        [123.26843150854, 13.63246067097],
+        [123.26843218769, 13.63245599414],
+        [123.26843010752, 13.63245485363],
+        [123.26842932581, 13.63245162249],
+        [123.26842623333, 13.63242430805],
+        [123.26842596134, 13.63242301645],
+        [123.26842545085, 13.63242179723],
+        [123.26842471877, 13.63242068977],
+        [123.26842378999, 13.6324197317],
+        [123.26842269431, 13.63241895434],
+        [123.26842123891, 13.63241809738],
+        [123.26841019301, 13.6323723077],
+        [123.26839922597, 13.63236184811],
+        [123.26827780141, 13.63230281779],
+        [123.26827778006, 13.63230277403],
+        [123.26827840004, 13.63229804752],
+        [123.26827844104, 13.63229664197],
+        [123.26827819868, 13.63229525798],
+        [123.2682776824, 13.6322939468],
+        [123.26827691216, 13.63229275913],
+        [123.26827591613, 13.63229173922],
+        [123.2682473228, 13.6322677062],
+        [123.26824639282, 13.63226704078],
+        [123.26814806355, 13.63220762868],
+        [123.2681403848, 13.63221980773],
+        [123.26823814078, 13.63227887344],
+        [123.26826331694, 13.6323000406],
+        [123.26826317658, 13.63230115283],
+        [123.26826314517, 13.63230118982],
+        [123.26820936579, 13.63231837445]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -44,9 +65,41 @@
     {
       "id": "link-1-1",
       "line": [
-        [123.268526347, 13.632469474],
-        [123.268510573, 13.632491436],
-        [123.268408695, 13.632613337]
+        [123.26814932679, 13.63221680128],
+        [123.26824251429, 13.63227310664],
+        [123.26827111071, 13.63229714226],
+        [123.26826597143, 13.63233632268],
+        [123.26841892857, 13.63242508697],
+        [123.26842523929, 13.63248083274],
+        [123.26837411071, 13.63257020981]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.26815002705, 13.63221569061],
+        [123.26824170346, 13.63227417167],
+        [123.26824207182, 13.63227445761],
+        [123.26826724798, 13.63229562477],
+        [123.26826767354, 13.63229601959],
+        [123.26826805733, 13.63229645296],
+        [123.26826839566, 13.63229692073],
+        [123.2682686853, 13.63229741841],
+        [123.26826892345, 13.63229794124],
+        [123.26826910785, 13.6322984842],
+        [123.26826923673, 13.63229904209],
+        [123.26826930884, 13.63229960955],
+        [123.26826932349, 13.63230018114],
+        [123.26826928055, 13.63230075138],
+        [123.26826914019, 13.63230186361],
+        [123.26826904437, 13.63230240819],
+        [123.26826889602, 13.63230294153],
+        [123.26826869646, 13.63230345886],
+        [123.26826844748, 13.63230395554],
+        [123.26826815131, 13.63230442713],
+        [123.2682677792, 13.63230490639],
+        [123.26811605285, 13.63247108548]
       ],
       "width_m": 1.2
     }
@@ -62,7 +115,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.06 m, 8.34 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. One shared rotated reference; western high-school roof and elementary school's lower classroom chain checked independently. Separate parents and packs remain. The first lower-left elementary corner match used the wrong roof end. Added its visible northeast end as a distributed fit control and checked the neighboring lower roof and excluded NHS southeast corner. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. NHS northwest roof kept separate from ES; crown belt south of NHS roof and around its exposed forecourt, small green island and narrow entry links. Parent boundary cuts through shared canopy: trunks are allocated to their own site. No hedge distinguishable from mature crowns. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Image roof sections matched separately to complete source roof corners; excluded opposite corners on distinct roofs provide independent checks. Mapped older roof sizes differ from imagery; sections are used independently rather than smoothing incompatible dimensions across the yard. Checks establish local roof-section accuracy, not a surveyed campus-wide transformation. Visible greenery is authored relative to its nearest matched section. Independent excluded check errors: 1.42 m, 0.18 m, 0.81 m, 0.47 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

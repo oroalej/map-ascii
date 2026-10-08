@@ -20,6 +20,7 @@ import {
 import { isStandingBuilding, nearbyRoadFootprints } from './obstacles';
 import { mergeSiteDetails, seatingFootprint } from './site-detail';
 import fieldsMask from '../__fixtures__/fields-exclusions.json';
+import imageCoverage from '../__fixtures__/east-school-image-coverage.json';
 
 // Disk-read packs and the upstream field exclusion mask are targeted-test inputs.
 const detailModules = import.meta.glob('../../../content/cities/naga/details/*.json');
@@ -79,16 +80,6 @@ const omissions = [
     reason: 'No supplied image; unsupported outdoor detail is omitted.',
   },
 ];
-// Honest exceptions to the requested <=2 m frontage/building approach gate.
-// Measured after fitting and a source-clear route diagnosis; the PR carries these unmet gates.
-const unmetApproaches = new Map([
-  ['pacol-elementary-school', 'The supported paving stops about 17.54 m from frontage.'],
-  ['naga-city-sports-complex', 'The supported pitch approach stops about 13.75 m from frontage.'],
-  [
-    'san-isidro-national-high-school',
-    'The supported link stops 5.92 m from frontage and 9.81 m from a roof.',
-  ],
-]);
 const source = readFixture('east-school-parents.json') as AtlasFeature[];
 const details = sites.map(([slug]) => SiteDetail.parse(readPack('details', slug)));
 const covers = sites.map(([slug]) => Landcover.parse(readPack('landcover', slug)));
@@ -219,7 +210,7 @@ describe('eastern school grounds from the owner references', () => {
       }
     });
 
-    it(`${slug}: pairs supported paving with source-clear walking routes and records approach exceptions`, () => {
+    it(`${slug}: pairs supported paving with a complete source-clear frontage approach`, () => {
       const paving = detail.structures.filter((p) => p.material === 'paving' && p.ground_override);
       expect(paving.length).toBeGreaterThan(0);
       const surface = audit.union(
@@ -228,13 +219,7 @@ describe('eastern school grounds from the owner references', () => {
       const pavingAudit = geometryAudit(surface);
       for (const walk of detail.walks)
         expect(pavingAudit.contains(seatingFootprint(walk.line, walk.width_m)), walk.id).toBe(true);
-      if (unmetApproaches.has(slug)) {
-        expect(detail.sources.some((s) => s.note?.includes('approach gate remains unmet'))).toBe(
-          true,
-        );
-        expect(unmetApproaches.get(slug)!.length).toBeGreaterThan(30);
-        return;
-      }
+      expect(detail.walks.length).toBeGreaterThan(0);
       const approach = detail.walks.find((walk) => walk.id.startsWith('frontage-to-'));
       expect(approach).toBeDefined();
       const start = approach!.line[0]!;
@@ -248,11 +233,46 @@ describe('eastern school grounds from the owner references', () => {
       const targets = source.filter((f) =>
         slug === 'naga-city-sports-complex'
           ? f.properties.class === 'pitch'
-          : isStandingBuilding(f),
+          : isStandingBuilding(f) &&
+            inside(f.geometry.type === 'Polygon' ? f.geometry.coordinates[0]![0]! : [0, 0], area),
       );
       expect(
         Math.min(...targets.map((f) => edgeDistance(end, f.geometry as Area))),
       ).toBeLessThanOrEqual(2);
+    });
+
+    it(`${slug}: retains observed canopy groups and low planting without paving them over`, () => {
+      const reference = imageCoverage.sites.find((s) => s.slug === slug)!;
+      expect(reference).toBeDefined();
+      expect(cover.trees.length).toBeGreaterThanOrEqual(reference.minimumTrees);
+      for (const group of reference.canopyGroups) {
+        const mask = group.geometry as Area;
+        const crowns = cover.trees.filter(
+          (tree) => edgeDistance(tree.at, mask) <= tree.crown_m! / 2,
+        );
+        expect(crowns.length, group.name).toBeGreaterThanOrEqual(group.minimumCrowns);
+      }
+      const planted = cover.areas.filter((p) => p.cover === 'planting' || p.cover === 'shrubs');
+      if (reference.hasLowPlanting) expect(planted.length).toBeGreaterThan(0);
+      else expect(reference.lowPlantingOmission.length).toBeGreaterThan(40);
+      const paving = detail.structures.filter((p) => p.material === 'paving');
+      for (const plant of planted) {
+        const patch: Polygon = { type: 'Polygon', coordinates: [plant.ring] };
+        for (const hardscape of paving)
+          expect(
+            audit.overlaps(patch, {
+              type: 'Polygon',
+              coordinates: [hardscape.ring, ...(hardscape.holes ?? [])],
+            }),
+          ).toBe(false);
+      }
+      for (const at of reference.bareYardChecks) {
+        for (const patch of cover.areas.filter((p) => p.cover === 'grass'))
+          expect(
+            inside(at, { type: 'Polygon', coordinates: [patch.ring] }),
+            'bare yard painted as lawn',
+          ).toBe(false);
+      }
     });
   }
 

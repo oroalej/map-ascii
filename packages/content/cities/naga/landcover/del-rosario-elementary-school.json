@@ -3,17 +3,124 @@
   "title": "Del Rosario Elementary School grounds",
   "trees": [
     {
-      "at": [123.236405503, 13.617820805],
-      "crown_m": 4,
-      "height_m": 5
+      "at": [123.23649251862, 13.61822674012],
+      "crown_m": 6.0,
+      "height_m": 7.2
     },
     {
-      "at": [123.237140281, 13.617740873],
-      "crown_m": 4,
+      "at": [123.23653449615, 13.61811494111],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23691380052, 13.61809888235],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23688034222, 13.61812167878],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.2369783021, 13.61808873468],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23709300729, 13.61803385162],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23689736769, 13.61796123972],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23713409974, 13.6177683595],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23711846167, 13.61767114354],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23710134928, 13.61759283592],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23674310473, 13.61767312325],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23667800194, 13.61769100481],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23659927104, 13.61771262956],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.2365172926, 13.61773873083],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23643791307, 13.61776376562],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23637105503, 13.61781464452],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23631741729, 13.61804675954],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23634494533, 13.61812476136],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.2364883857, 13.61781168996],
+      "crown_m": 4.0,
       "height_m": 5
     }
   ],
-  "areas": [],
+  "areas": [
+    {
+      "ring": [
+        [123.23647764607, 13.61787187565],
+        [123.23645104675, 13.61788593133],
+        [123.23644850755, 13.61792495674],
+        [123.23650290322, 13.6179148825],
+        [123.23650316051, 13.6178779868],
+        [123.23647764607, 13.61787187565]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23645722773, 13.61781588893],
+        [123.23646851448, 13.61785195905],
+        [123.23649802569, 13.61784265178],
+        [123.23648673894, 13.61780658166],
+        [123.23645722773, 13.61781588893]
+      ],
+      "cover": "planting"
+    }
+  ],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -25,7 +132,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6179108,123.2367629,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied del-rosario-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.93 m, 4.17 m. Meets 5 m check limit. Red southern roof, pale western classroom and northern green classroom chain bound the central concrete courtyard. Corrected northern check from the long eastern block to the short adjacent green classroom. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied del-rosario-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Northwest/northern, west and south-frontage crowns, eastern classroom gaps, and small planted courtyard islands surrounding the open concrete. Roofed court is a standing roof, not a new pitch. No lawn or identifiable hedge is visible; shadows beneath the west belt are not green ground. Red southern roof, pale western classroom and northern green classroom chain bound the central concrete courtyard. Corrected northern check from the long eastern block to the short adjacent green classroom. Independent excluded check errors: 1.93 m, 4.17 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

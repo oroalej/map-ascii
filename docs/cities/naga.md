@@ -111,29 +111,33 @@ Emergency vehicles (2026-10-07): illustrative OSM-derived episodes, without live
 
 As of 2026-10-08, the city pack contains 71 landmark records, 86 landcover packs and 81 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
 
-Eastern school grounds (draft, 2026-10-08): sixteen owner-supplied Google Maps satellite images guide seventeen separate detail and landcover packs, including both San Isidro campuses in their shared image and the Naga City Sports Complex. The implementer inspected each local image directly; capture dates are unknown, reference images remain ignored and no bitmap ships. Source-relative estimates add the following crowns, lawns, paved approaches/courtyards and supplemental courts. Areas are rounded to the nearest square metre; mapped courts are retained separately.
+Eastern school grounds (draft, owner correction 2026-10-08): all sixteen supplied Google Maps satellite PNGs were inspected again to reauthor seventeen separate campuses/grounds, including both San Isidro schools. This correction supersedes the sparse first pass. Visible perimeter belts, interior crowns and irregular rows now determine canopy distribution; recognizable planted islands and green strips stay separate from exposed paths and courtyards. The compact San Rafael, Villa Corazon and Moscoso grounds retain narrow outdoor gaps. No woods are added within campuses. Capture dates are unknown; reference images remain ignored and no bitmap ships. Areas below are rounded; mapped courts and source records remain separate.
 
-| Campus | Added trees | Lawn m² | Paving m² | Added courts |
-| --- | ---: | ---: | ---: | ---: |
-| Villa Grande Homes ES | 9 | 1,421 | 478 | 0 |
-| Concepcion Grande ES | 4 | 0 | 383 | 0 |
-| San Rafael ES SPED Center | 2 | 0 | 301 | 0 |
-| Villa Corazon ES | 1 | 0 | 157 | 0 |
-| Pacol ES | 5 | 215 | 518 | 0 |
-| Ateneo JHS, Bonoan/Pacol campus | 20 | 4,908 | 3,663 | 1 |
-| Naga City Sports Complex | 11 | 2,418 | 6,080 | 0 |
-| Leon Q. Mercado HS | 10 | 0 | 551 | 0 |
-| Teodora Moscoso ES | 2 | 0 | 95 | 0 |
-| Del Rosario ES | 2 | 0 | 891 | 0 |
-| Del Rosario HS | 1 | 0 | 176 | 0 |
-| Cararayan NHS | 7 | 0 | 1,425 | 0 |
-| Don Manuel I. Abella Central School | 5 | 29 | 710 | 0 |
-| San Isidro NHS | 3 | 56 | 223 | 0 |
-| San Isidro ES | 5 | 714 | 1,005 | 0 |
-| Carolina ES | 6 | 0 | 633 | 0 |
-| Carolina NHS | 6 | 168 | 766 | 0 |
+| Campus | Crowns | Lawn m² | Planting m² | Shrubs m² | Parking m² | Paving m² | Courts |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Villa Grande Homes ES | 42 | 1,321 | 170 | 0 | 0 | 455 | 0 |
+| Concepcion Grande ES | 12 | 0 | 0 | 0 | 0 | 390 | 0 |
+| San Rafael ES SPED Center | 11 | 0 | 19 | 0 | 0 | 281 | 0 |
+| Villa Corazon ES | 6 | 0 | 26 | 0 | 0 | 130 | 0 |
+| Pacol ES | 30 | 184 | 130 | 0 | 0 | 638 | 0 |
+| Ateneo JHS, Bonoan/Pacol campus | 101 | 1,492 | 1,020 | 86 | 1,596 | 4,152 | 1 |
+| Naga City Sports Complex | 55 | 3,150 | 0 | 0 | 0 | 6,879 | 0 |
+| Leon Q. Mercado HS | 35 | 0 | 684 | 0 | 0 | 549 | 0 |
+| Teodora Moscoso ES | 2 | 0 | 9 | 0 | 0 | 95 | 0 |
+| Del Rosario ES | 19 | 0 | 41 | 0 | 0 | 807 | 0 |
+| Del Rosario HS | 11 | 0 | 21 | 0 | 0 | 154 | 0 |
+| Cararayan NHS | 35 | 0 | 132 | 0 | 0 | 1,453 | 0 |
+| Don Manuel I. Abella Central School | 43 | 24 | 146 | 0 | 0 | 606 | 0 |
+| San Isidro NHS | 15 | 97 | 32 | 0 | 0 | 878 | 0 |
+| San Isidro ES | 44 | 618 | 175 | 0 | 0 | 776 | 0 |
+| Carolina ES | 30 | 106 | 72 | 0 | 0 | 778 | 0 |
+| Carolina NHS | 30 | 316 | 87 | 0 | 0 | 918 | 0 |
 
-Complete mapped roofs, water, pitches and full road/path widths govern placement; adjoining campuses and the eastern farmland stay separate. Bare yards receive no inferred lawns. Paving has matching walking routes, with complete frontage-to-building approaches at fourteen sites. Pacol ES, the Sports Complex and San Isidro NHS retain only supported interior links: a complete source-clear approach could not be established from the supplied views. Six image fits remain outside the 5 m independent-check limit: Concepcion Grande (31.60 m), Pacol (11.40 m), Sports Complex (9.35 m), shared San Isidro (8.34 m), Carolina ES (15.05 m) and Carolina NHS (10.74 m). Their packs disclose this uncertainty and retain conservative mapped-obstacle constraints. Positions, dimensions, crowns and surfaces remain undated estimates, without surveyed boundaries, species, construction dates or exact inventories. The Sports Complex uses its existing soccer-pitch anchor; fetching the stadium identity as a separate label remains a pipeline follow-up.
+Totals: 521 crowns, 7,308 m² of green ground, 2,767 m² of planting, 86 m² of distinguishable low shrub strips, 1,596 m² of supplemental parking, 19,939 m² of exposed paving, 40 walking links and one supplemental Ateneo court. Bare Pacol, Leon, Carolina and Ateneo yard/field patches remain exposed rather than becoming lawns. Ateneo courtyard and frontage planting is retained as islands/holes in broad paving. Sports perimeter greenery is mature canopy; no separate formal hedge/bed can be distinguished. At Concepcion, the small green clump between roofs is a crown, while the western green pocket beside the restaurant falls outside the mapped school parcel; no shadow is turned into a hedge.
+
+Complete mapped roofs, pitches, water and full-width roads/paths remain unchanged. Trunks may fit within their observed crown footprint by at most seven metres; crowns can overhang buildings and roads. Major belt widths are estimated from visible image crown widths against local roof scale (roughly 45–100 pixels in these references), rather than retaining the first pass's small generic diameters. Circular crowns approximate the visible irregular/elliptical clumps. Small visible beds may fit beside their local roof by at most three metres. Local roof sections replace the six unreliable whole-image fits, with excluded corners on distinct roofs checked independently (maximum 3.18 m across these six images). The other ten affine registrations retain their independent checks (all ≤5 m). These are local visual matches, not surveyed campus-wide accuracy; source roofs differ in size and date. All seventeen frontage-to-classroom/pitch approaches now pass the two-metre endpoint checks, including the previously incomplete Pacol, Sports and San Isidro NHS approaches. Adjacent schools and eastern farmland stay separate.
+
+Specific limits: northern/off-campus canopy in Ateneo and Concepcion, upper greenery beyond the Del Rosario HS parcel, riverside/farmland crowns outside the Sports envelope and individual crowns with no source-clear trunk inside their observed footprint are omitted; precise image pixels, source conflicts and nearest clear-trunk distances are retained in task references. Ground hidden under opaque crowns is not invented. The images do not identify tiny courtyard objects well enough for new seating, lamps or species claims. Positions, sizes and counts remain undated estimates. The Sports Complex uses its existing soccer-pitch anchor; fetching the stadium identity as a separate label remains a pipeline follow-up.
 
 Six campuses are explicitly omitted, with their original parents unchanged. American School of English, Math, and Science and Naga View Adventist College have no supplied view establishing grounds around their point anchors (both Adventist school/college points remain). Grand View ES, Morada-Ramos ES and Panicuason ES have no supplied outdoor reference. The Carolina ES view does not establish the separate Don Bosco Training Center of Naga layout. The owner's instruction to proceed permits these omissions; no unsupported landscape is added.
 

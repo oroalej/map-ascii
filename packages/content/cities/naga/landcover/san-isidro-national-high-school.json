@@ -3,31 +3,146 @@
   "title": "San Isidro National High School grounds",
   "trees": [
     {
-      "at": [123.268437576, 13.632477413],
-      "crown_m": 6,
-      "height_m": 7.2
+      "at": [123.26797599643, 13.63251278737],
+      "crown_m": 12.7,
+      "height_m": 15.2
     },
     {
-      "at": [123.268376541, 13.632418817],
-      "crown_m": 6,
-      "height_m": 7.2
+      "at": [123.26809516071, 13.63258194095],
+      "crown_m": 12.7,
+      "height_m": 15.2
     },
     {
-      "at": [123.26846065, 13.632533025],
-      "crown_m": 5,
-      "height_m": 6.0
+      "at": [123.26820621071, 13.6326563063],
+      "crown_m": 12.7,
+      "height_m": 15.2
+    },
+    {
+      "at": [123.26835198929, 13.6325474516],
+      "crown_m": 10.4,
+      "height_m": 12.5
+    },
+    {
+      "at": [123.26834234286, 13.6324699287],
+      "crown_m": 12.7,
+      "height_m": 15.2
+    },
+    {
+      "at": [123.26829676429, 13.63238395445],
+      "crown_m": 12.7,
+      "height_m": 15.2
+    },
+    {
+      "at": [123.26830534643, 13.63227732729],
+      "crown_m": 12.7,
+      "height_m": 15.2
+    },
+    {
+      "at": [123.26838340879, 13.63241680036],
+      "crown_m": 12.4,
+      "height_m": 14.9
+    },
+    {
+      "at": [123.26847743789, 13.632451295],
+      "crown_m": 12.5,
+      "height_m": 15.0
+    },
+    {
+      "at": [123.268211025, 13.6321878682],
+      "crown_m": 12.7,
+      "height_m": 15.2
+    },
+    {
+      "at": [123.26830270047, 13.63220008573],
+      "crown_m": 12.4,
+      "height_m": 14.9
+    },
+    {
+      "at": [123.26838522755, 13.63225303597],
+      "crown_m": 12.4,
+      "height_m": 14.9
+    },
+    {
+      "at": [123.26848316882, 13.63232872526],
+      "crown_m": 12.4,
+      "height_m": 14.9
+    },
+    {
+      "at": [123.26850438947, 13.632519525],
+      "crown_m": 10.3,
+      "height_m": 12.4
+    },
+    {
+      "at": [123.26847297474, 13.632589395],
+      "crown_m": 10.3,
+      "height_m": 12.4
     }
   ],
   "areas": [
     {
       "ring": [
-        [123.268556762, 13.632593234],
-        [123.268529461, 13.632576806],
-        [123.268436128, 13.632666869],
-        [123.268469609, 13.632691007],
-        [123.268556762, 13.632593234]
+        [123.26843812558, 13.63251067536],
+        [123.26836675795, 13.63261301498],
+        [123.26842113733, 13.63264624426],
+        [123.26842115893, 13.63264628117],
+        [123.26842118858, 13.63264744752],
+        [123.26843404035, 13.63263945217],
+        [123.26843408646, 13.63263945008],
+        [123.2684645172, 13.63266764412],
+        [123.26847329491, 13.63266540847],
+        [123.26848487734, 13.63264933272],
+        [123.26849287128, 13.63264890837],
+        [123.26848492822, 13.63262106957],
+        [123.26845053964, 13.63260929021],
+        [123.26845009128, 13.63261001915],
+        [123.26845003145, 13.63261003651],
+        [123.26841419352, 13.63258358287],
+        [123.26841421556, 13.63258353805],
+        [123.26845537655, 13.63255961551],
+        [123.26844404668, 13.63251264768],
+        [123.26843812558, 13.63251067536]
       ],
       "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.26847068002, 13.63266919587],
+        [123.26844346375, 13.63270698521],
+        [123.26845047949, 13.63271239915],
+        [123.26848080246, 13.63267838117],
+        [123.26847068002, 13.63266919587]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.26847073355, 13.63266912154],
+        [123.26848086303, 13.63267831322],
+        [123.26850768553, 13.63264822226],
+        [123.26848492675, 13.63264941451],
+        [123.26847073355, 13.63266912154]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.26842197752, 13.63267847883],
+        [123.26846441213, 13.63266767088],
+        [123.26843405963, 13.63263954684],
+        [123.26842119125, 13.63264755252],
+        [123.26842197752, 13.63267847883]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.26841432172, 13.63258358102],
+        [123.26845003843, 13.63260992999],
+        [123.26846259081, 13.63258952213],
+        [123.2684553987, 13.63255970731],
+        [123.26841432172, 13.63258358102]
+      ],
+      "cover": "planting"
     }
   ],
   "status": "draft",
@@ -41,7 +156,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.06 m, 8.34 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. One shared rotated reference; western high-school roof and elementary school's lower classroom chain checked independently. Separate parents and packs remain. The first lower-left elementary corner match used the wrong roof end. Added its visible northeast end as a distributed fit control and checked the neighboring lower roof and excluded NHS southeast corner. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. NHS northwest roof kept separate from ES; crown belt south of NHS roof and around its exposed forecourt, small green island and narrow entry links. Parent boundary cuts through shared canopy: trunks are allocated to their own site. No hedge distinguishable from mature crowns. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Image roof sections matched separately to complete source roof corners; excluded opposite corners on distinct roofs provide independent checks. Mapped older roof sizes differ from imagery; sections are used independently rather than smoothing incompatible dimensions across the yard. Checks establish local roof-section accuracy, not a surveyed campus-wide transformation. Visible greenery is authored relative to its nearest matched section. Independent excluded check errors: 1.42 m, 0.18 m, 0.81 m, 0.47 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

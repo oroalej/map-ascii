@@ -7,11 +7,11 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.26809283, 13.663813207],
-        [123.268143003, 13.663819771],
-        [123.268154945, 13.663710127],
-        [123.268101569, 13.663703145],
-        [123.26809283, 13.663813207]
+        [123.26824527582, 13.66372616641],
+        [123.268268534, 13.66373047084],
+        [123.2682696866, 13.66371988815],
+        [123.26824629293, 13.66371682773],
+        [123.26824527582, 13.66372616641]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -21,11 +21,36 @@
     {
       "id": "approach-2",
       "ring": [
-        [123.268245225, 13.663726203],
-        [123.268268575, 13.663730524],
-        [123.268269737, 13.663719849],
-        [123.268246252, 13.663716777],
-        [123.268245225, 13.663726203]
+        [123.26822598256, 13.66391424988],
+        [123.26822602257, 13.66391429658],
+        [123.26822595682, 13.66391560456],
+        [123.26822616862, 13.6639169893],
+        [123.26822665437, 13.66391830728],
+        [123.2682273954, 13.66391950785],
+        [123.26822810906, 13.66392027253],
+        [123.26823521044, 13.66392213532],
+        [123.26823644136, 13.66392170697],
+        [123.2682376769, 13.66392098691],
+        [123.26823874413, 13.66392004647],
+        [123.26823960204, 13.66391892178],
+        [123.26824021766, 13.66391765607],
+        [123.26824058267, 13.66391620023],
+        [123.26824061155, 13.66391616895],
+        [123.26824820147, 13.66391715662],
+        [123.26826355925, 13.66377614719],
+        [123.26824691594, 13.66386122776],
+        [123.26824678462, 13.66386166069],
+        [123.26824657227, 13.66386205469],
+        [123.26824643333, 13.66386223997],
+        [123.26824610891, 13.66386255991],
+        [123.26824573046, 13.66386281007],
+        [123.26824551803, 13.66386290981],
+        [123.26824508114, 13.66386304242],
+        [123.26824484806, 13.66386307792],
+        [123.26824438584, 13.66386308117],
+        [123.26822639454, 13.66385976256],
+        [123.26822053774, 13.66391353757],
+        [123.26822598256, 13.66391424988]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -35,43 +60,11 @@
     {
       "id": "approach-3",
       "ring": [
-        [123.268225976, 13.663914294],
-        [123.26822591, 13.663915607],
-        [123.268226124, 13.663917],
-        [123.268226612, 13.663918327],
-        [123.268227358, 13.663919535],
-        [123.268228084, 13.663920312],
-        [123.268235212, 13.663922182],
-        [123.268236461, 13.663921748],
-        [123.268237705, 13.663921023],
-        [123.268238779, 13.663920077],
-        [123.268239642, 13.663918945],
-        [123.268240261, 13.663917671],
-        [123.268240613, 13.663916305],
-        [123.268240628, 13.663916211],
-        [123.268248242, 13.663917207],
-        [123.268257341, 13.66383367],
-        [123.268263723, 13.663775068],
-        [123.268246871, 13.663861219],
-        [123.268246817, 13.663861434],
-        [123.268246743, 13.663861642],
-        [123.268246647, 13.663861842],
-        [123.268246532, 13.663862032],
-        [123.268246399, 13.66386221],
-        [123.268246248, 13.663862375],
-        [123.268246081, 13.663862524],
-        [123.2682459, 13.663862657],
-        [123.268245706, 13.663862772],
-        [123.268245502, 13.663862868],
-        [123.268245289, 13.663862944],
-        [123.26824507, 13.663862999],
-        [123.268244845, 13.663863033],
-        [123.268244619, 13.663863046],
-        [123.268244392, 13.663863037],
-        [123.268244168, 13.663863006],
-        [123.268226354, 13.663859709],
-        [123.268220487, 13.663913576],
-        [123.268225976, 13.663914294]
+        [123.26809287922, 13.66381316804],
+        [123.26814296201, 13.66381972001],
+        [123.26815489386, 13.66371016614],
+        [123.26810161114, 13.66370319554],
+        [123.26809287922, 13.66381316804]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -83,16 +76,16 @@
     {
       "id": "link-1-1",
       "line": [
-        [123.268233297, 13.663915252],
-        [123.268240456, 13.663868263]
+        [123.26823329722, 13.66391525212],
+        [123.26824045097, 13.66386829865]
       ],
       "width_m": 1.2
     },
     {
       "id": "frontage-to-classroom",
       "line": [
-        [123.268234457, 13.663915936],
-        [123.268231643, 13.663866632]
+        [123.26823199125, 13.66391524284],
+        [123.26824746583, 13.66386842965]
       ],
       "width_m": 1.2
     }
@@ -108,7 +101,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6637505,123.2682093,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.77 m, 1.52 m. Meets 5 m check limit. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Two identifiable small crowns and a compact green pocket at the northwest corner of the courtyard. Narrow central/east exposed concrete links retained. Southern adjacent roofs are not outdoor court/lawn; no distinguishable low hedge in this tight crop. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Independent excluded check errors: 0.77 m, 1.52 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

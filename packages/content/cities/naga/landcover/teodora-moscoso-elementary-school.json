@@ -3,17 +3,28 @@
   "title": "Teodora Moscoso Elementary School grounds",
   "trees": [
     {
-      "at": [123.268101931, 13.66385888],
-      "crown_m": 4,
+      "at": [123.26810318185, 13.66384739327],
+      "crown_m": 4.0,
       "height_m": 5
     },
     {
-      "at": [123.268239798, 13.663885389],
-      "crown_m": 3,
+      "at": [123.26824349933, 13.6638911684],
+      "crown_m": 3.0,
       "height_m": 5
     }
   ],
-  "areas": [],
+  "areas": [
+    {
+      "ring": [
+        [123.26812338985, 13.66382041999],
+        [123.26810353336, 13.66381465857],
+        [123.26809138776, 13.66384686661],
+        [123.2681146638, 13.66385096642],
+        [123.26812338985, 13.66382041999]
+      ],
+      "cover": "planting"
+    }
+  ],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -25,7 +36,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6637505,123.2682093,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.77 m, 1.52 m. Meets 5 m check limit. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Two identifiable small crowns and a compact green pocket at the northwest corner of the courtyard. Narrow central/east exposed concrete links retained. Southern adjacent roofs are not outdoor court/lawn; no distinguishable low hedge in this tight crop. Small central roof, west roof and long east roof; only narrow paving and a few visible canopy positions are supported. Independent excluded check errors: 0.77 m, 1.52 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

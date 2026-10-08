@@ -3,12 +3,83 @@
   "title": "Del Rosario High School grounds",
   "trees": [
     {
-      "at": [123.239083308, 13.618434542],
-      "crown_m": 6,
+      "at": [123.23886910485, 13.61862820472],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23885098971, 13.61858229774],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23882689639, 13.61854310343],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23908084706, 13.61845115689],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23914737646, 13.61843893799],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23919641823, 13.61840913571],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23949537805, 13.61850095022],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23939038069, 13.61853697875],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23917646899, 13.61861894724],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23912778521, 13.61863696034],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23906677052, 13.61865824427],
+      "crown_m": 6.0,
       "height_m": 7.2
     }
   ],
-  "areas": [],
+  "areas": [
+    {
+      "ring": [
+        [123.23938341058, 13.61853603299],
+        [123.23938462779, 13.61854207223],
+        [123.23943453018, 13.61852360824],
+        [123.239433125, 13.61851377208],
+        [123.23938341058, 13.61853603299]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23907608991, 13.61860456665],
+        [123.2390831287, 13.61862370536],
+        [123.23914494998, 13.61860228137],
+        [123.23913791118, 13.61858314266],
+        [123.23907608991, 13.61860456665]
+      ],
+      "cover": "planting"
+    }
+  ],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -20,7 +91,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 2.64 m, 3.26 m. Meets 5 m check limit. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Northern green patch bordered by broad crowns, south/west/east canopy chains and courtyard-side plants; exposed north-of-classroom apron links remain open. The northern greenery stops at the separate elementary parent and crop boundary; no surveyed extent or hedge inferred. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Independent excluded check errors: 2.64 m, 3.26 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

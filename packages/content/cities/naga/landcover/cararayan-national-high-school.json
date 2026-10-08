@@ -3,42 +3,214 @@
   "title": "Cararayan National High School grounds",
   "trees": [
     {
-      "at": [123.238011673, 13.629836171],
-      "crown_m": 9,
+      "at": [123.23773146193, 13.62992756321],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23771432674, 13.6298555844],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23769714788, 13.62978215145],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23768695562, 13.62971497912],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23777504456, 13.63003541519],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23793055418, 13.63001982328],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23800211801, 13.63000916178],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23804142604, 13.6299485012],
+      "crown_m": 9.0,
       "height_m": 10.8
     },
     {
-      "at": [123.238171105, 13.629813643],
-      "crown_m": 8,
+      "at": [123.23803645346, 13.62987144057],
+      "crown_m": 10.0,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.23799976429, 13.62981632071],
+      "crown_m": 11.0,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.23809179351, 13.62982051582],
+      "crown_m": 10.0,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.23817754073, 13.62980554052],
+      "crown_m": 11.0,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.23824005002, 13.62983042578],
+      "crown_m": 10.0,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.23836237217, 13.6299621779],
+      "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.238622619, 13.629843972],
-      "crown_m": 8,
+      "at": [123.23829338904, 13.62997593098],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23847324648, 13.62996063721],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23863024916, 13.629837963],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23871194958, 13.62980365433],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23871012717, 13.62972836619],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23869972394, 13.62965802534],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23868675409, 13.62957033045],
+      "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.237875899, 13.629546192],
-      "crown_m": 5,
+      "at": [123.23867469513, 13.62948879447],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23862436614, 13.62931194094],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23862738852, 13.62925150028],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.2384341974, 13.62930157065],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23836109132, 13.62935706207],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.23843942286, 13.62921526107],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23831056176, 13.6292112643],
+      "crown_m": 7.0,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.23814498987, 13.62923095905],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.2380227031, 13.62924550505],
+      "crown_m": 5.0,
       "height_m": 6.0
     },
     {
-      "at": [123.238171601, 13.629479924],
-      "crown_m": 5,
-      "height_m": 6.0
-    },
-    {
-      "at": [123.238377008, 13.629363535],
-      "crown_m": 8,
+      "at": [123.23775296739, 13.62927759008],
+      "crown_m": 8.0,
       "height_m": 9.6
     },
     {
-      "at": [123.237831546, 13.629843852],
-      "crown_m": 5,
+      "at": [123.23771237728, 13.62929531106],
+      "crown_m": 8.0,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.23787038761, 13.62954877452],
+      "crown_m": 5.0,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.23793983339, 13.62954807332],
+      "crown_m": 4.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.2381583439, 13.62948525232],
+      "crown_m": 5.0,
       "height_m": 6.0
     }
   ],
-  "areas": [],
+  "areas": [
+    {
+      "ring": [
+        [123.23823115323, 13.62979940583],
+        [123.23842664201, 13.62978515336],
+        [123.23842606688, 13.62976892836],
+        [123.2382305781, 13.62978318084],
+        [123.23823115323, 13.62979940583]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23814887245, 13.62946963089],
+        [123.23814998735, 13.62950108307],
+        [123.23823036272, 13.62949522315],
+        [123.23822924783, 13.62946377097],
+        [123.23814887245, 13.62946963089]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23781420507, 13.62954309697],
+        [123.23781181986, 13.62960207551],
+        [123.23787568243, 13.62960395489],
+        [123.23790547696, 13.62956039127],
+        [123.2378798113, 13.62953068783],
+        [123.23781420507, 13.62954309697]
+      ],
+      "cover": "planting"
+    }
+  ],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -50,7 +222,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6296076,123.2381788,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.68 m, 3.31 m. Meets 5 m check limit. Large northeast classroom, west/top classroom chain and isolated central-east roof enclose a concrete court/yard. Ignore unverified operating-status label. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Two large distinguishable interior canopy groups west of open concrete yard, perimeter belts along north/west/east/south and central small green pockets. Actual exposed yard is bounded by classroom roofs and planted islands. No broad lawn/hedge visible. Ignore map operating-status text; no furniture inferred from tiny courtyard objects. Large northeast classroom, west/top classroom chain and isolated central-east roof enclose a concrete court/yard. Ignore unverified operating-status label. Independent excluded check errors: 1.68 m, 3.31 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

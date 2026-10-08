@@ -3,12 +3,58 @@
   "title": "Villa Corazon Elementary School grounds",
   "trees": [
     {
-      "at": [123.231300407, 13.623403601],
-      "crown_m": 3,
+      "at": [123.23130102856, 13.62354187415],
+      "crown_m": 4.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.23130446205, 13.62340814756],
+      "crown_m": 4.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.23132849395, 13.62335128105],
+      "crown_m": 4.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.2311727043, 13.62331409955],
+      "crown_m": 3.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.23118272783, 13.62323627602],
+      "crown_m": 3.0,
+      "height_m": 5
+    },
+    {
+      "at": [123.23129306854, 13.62358308723],
+      "crown_m": 4.0,
       "height_m": 5
     }
   ],
-  "areas": [],
+  "areas": [
+    {
+      "ring": [
+        [123.23117732707, 13.62319209011],
+        [123.23116937113, 13.62325386071],
+        [123.23118755719, 13.62325607178],
+        [123.23119551313, 13.62319430118],
+        [123.23117732707, 13.62319209011]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23117211701, 13.62326853424],
+        [123.23115884912, 13.62334277645],
+        [123.23117403682, 13.62334663758],
+        [123.23118316535, 13.62328296177],
+        [123.23117211701, 13.62326853424]
+      ],
+      "cover": "planting"
+    }
+  ],
   "status": "draft",
   "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
@@ -20,7 +66,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6233634,123.2312041,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied villa-corazon-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.70 m, 3.97 m. Meets 5 m check limit. Central red roof and eastern classroom row; western mapped roof extends farther than clearly visible white roof in this reference. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied villa-corazon-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Compact courtyard gap west of the eastern classroom row, small separate courtyard plants and east fence-edge crowns. The bright white/green roofs remain roofs. No broad grass or identifiable hedge; the dark roof-edge bands are shadows. Central red roof and eastern classroom row; western mapped roof extends farther than clearly visible white roof in this reference. Independent excluded check errors: 1.70 m, 3.97 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

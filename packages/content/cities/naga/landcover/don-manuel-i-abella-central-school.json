@@ -3,77 +3,287 @@
   "title": "Don Manuel I. Abella Central School grounds",
   "trees": [
     {
-      "at": [123.23999892, 13.629633586],
-      "crown_m": 10,
-      "height_m": 12.0
+      "at": [123.23984953341, 13.62981988264],
+      "crown_m": 17.0,
+      "height_m": 20.4
     },
     {
-      "at": [123.240163948, 13.629617554],
-      "crown_m": 11,
-      "height_m": 13.2
+      "at": [123.23995765568, 13.62982070497],
+      "crown_m": 9.0,
+      "height_m": 10.8
     },
     {
-      "at": [123.240290318, 13.62959699],
-      "crown_m": 10,
-      "height_m": 12.0
+      "at": [123.24016253106, 13.6298023049],
+      "crown_m": 9.0,
+      "height_m": 10.8
     },
     {
-      "at": [123.240074832, 13.629332586],
-      "crown_m": 6,
+      "at": [123.24032715054, 13.62978724157],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24044318817, 13.62975251644],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24054025505, 13.62973672033],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.2406569, 13.62974619123],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.2407920871, 13.62961275284],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24077308692, 13.62949497421],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24072424719, 13.62936942322],
+      "crown_m": 13.0,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.24070741671, 13.62925309555],
+      "crown_m": 13.0,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.24070231957, 13.62914059976],
+      "crown_m": 13.0,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.24067764222, 13.62903621739],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24065764321, 13.62895195956],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24063102897, 13.62887765807],
+      "crown_m": 9.0,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.24055129537, 13.62895377482],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24044977327, 13.62892699901],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24039410451, 13.62902986825],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24041116893, 13.62911686551],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24054136414, 13.6291466191],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24050514045, 13.62929142494],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24048209955, 13.62938718047],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24055633277, 13.62959519294],
+      "crown_m": 13.0,
+      "height_m": 15.6
+    },
+    {
+      "at": [123.24037182889, 13.629624437],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.240279866, 13.62961131892],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.2401792764, 13.6296186681],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24008032016, 13.62961492724],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24001768822, 13.62967202462],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.23995845402, 13.62958063787],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.23977443558, 13.62943876926],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.23975997847, 13.62936540095],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.2397691685, 13.62927588986],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.23983678817, 13.62922185893],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.2399248418, 13.62925055648],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24004153095, 13.62921702447],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24008730457, 13.62921148995],
+      "crown_m": 17.0,
+      "height_m": 20.4
+    },
+    {
+      "at": [123.24007497201, 13.62932354326],
+      "crown_m": 6.0,
       "height_m": 7.2
     },
     {
-      "at": [123.24064406, 13.629404121],
-      "crown_m": 6,
+      "at": [123.24010816974, 13.62939751857],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24029113192, 13.62919094853],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24022298728, 13.62901441795],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.2400926404, 13.62898511676],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23997584809, 13.62897706228],
+      "crown_m": 6.0,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.23978013886, 13.62903957954],
+      "crown_m": 6.0,
       "height_m": 7.2
     }
   ],
   "areas": [
     {
       "ring": [
-        [123.240310337, 13.629124755],
-        [123.240310302, 13.629124537],
-        [123.240310289, 13.629124317],
-        [123.240310299, 13.629124097],
-        [123.24031033, 13.629123879],
-        [123.240310384, 13.629123665],
-        [123.240310458, 13.629123456],
-        [123.240310554, 13.629123256],
-        [123.240310669, 13.629123067],
-        [123.240310803, 13.629122888],
-        [123.240310954, 13.629122724],
-        [123.240311121, 13.629122575],
-        [123.240311302, 13.629122442],
-        [123.240311495, 13.629122327],
-        [123.2403117, 13.629122232],
-        [123.240311913, 13.629122156],
-        [123.240312132, 13.629122101],
-        [123.240351838, 13.629114126],
-        [123.240347517, 13.629091783],
-        [123.240306301, 13.629093544],
-        [123.240306075, 13.629093542],
-        [123.240305849, 13.62909352],
-        [123.240305626, 13.629093476],
-        [123.24030541, 13.62909341],
-        [123.2403052, 13.629093325],
-        [123.240305001, 13.62909322],
-        [123.240304813, 13.629093096],
-        [123.240304638, 13.629092955],
-        [123.240304479, 13.629092798],
-        [123.240304336, 13.629092627],
-        [123.240304211, 13.629092443],
-        [123.240304105, 13.629092248],
-        [123.240304019, 13.629092044],
-        [123.240303955, 13.629091832],
-        [123.240303912, 13.629091615],
-        [123.240303891, 13.629091396],
-        [123.240303736, 13.629087871],
-        [123.240277684, 13.629092111],
-        [123.240287155, 13.629141083],
-        [123.240312921, 13.62913689],
-        [123.240310337, 13.629124755]
+        [123.24033534561, 13.62909234766],
+        [123.24030630352, 13.62909358848],
+        [123.24030584403, 13.62909356437],
+        [123.24030561279, 13.62909351841],
+        [123.2403051825, 13.62909336621],
+        [123.24030478698, 13.62909313338],
+        [123.24030444282, 13.6290928267],
+        [123.24030416992, 13.6290924639],
+        [123.24030397517, 13.62909205631],
+        [123.24030386668, 13.62909162397],
+        [123.24030384523, 13.62909139997],
+        [123.24030266529, 13.62906455766],
+        [123.24028627592, 13.62905830388],
+        [123.24027556278, 13.62909066],
+        [123.24028496005, 13.62911974741],
+        [123.24032918412, 13.62911435187],
+        [123.24033534561, 13.62909234766]
       ],
       "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.24024930432, 13.62922847731],
+        [123.24024196837, 13.62927828595],
+        [123.2402883642, 13.62927433864],
+        [123.24032107597, 13.62925820966],
+        [123.24030071883, 13.62923092115],
+        [123.24024930432, 13.62922847731]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.24024993267, 13.62916343527],
+        [123.24022994376, 13.6292062953],
+        [123.24027686917, 13.62921486981],
+        [123.24030774598, 13.62919904178],
+        [123.24029205945, 13.6291763986],
+        [123.24024993267, 13.62916343527]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.24016313456, 13.62922265247],
+        [123.24013441048, 13.62923993635],
+        [123.24014108502, 13.62930371503],
+        [123.24021508465, 13.62928626612],
+        [123.24022647296, 13.62925740187],
+        [123.24019328421, 13.62923216493],
+        [123.24016313456, 13.62922265247]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.24012832524, 13.62904240544],
+        [123.24020515498, 13.62902990261],
+        [123.240201113, 13.62900900299],
+        [123.24012428326, 13.62902150582],
+        [123.24012832524, 13.62904240544]
+      ],
+      "cover": "planting"
     }
   ],
   "status": "draft",
@@ -87,7 +297,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6293582,123.2402615,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied don-manuel-i-abella-central-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.82 m, 3.44 m. Meets 5 m check limit. Central red roof, western classroom row and fan-shaped south courtyard. Dense crowns obscure much of the yard. The upper west classroom corner is obscured by canopy, so the independent check uses the visible south-front classroom corner instead. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+      "note": "Inspected owner-supplied don-manuel-i-abella-central-school.png on 2026-10-08; capture date unknown. URL locates the site. Near-continuous northwest/interior, west and south/east canopy with individually distinguishable crowns; fan-shaped courtyard paths around visible low garden wedges and south entry planting. Preserve courtyard exposed wedges instead of blanket paving. Crowns may overhang classroom roofs; trunk fits stay within each observed crown. No shadow hedges or invented courtyard fixtures. Crown-width observations: Main northwest and southwest/southeast crowns about 70-90 px, smaller classroom gaps 35-60 px and tiny courtyard plants 25-35 px. Central red roof, western classroom row and fan-shaped south courtyard. Dense crowns obscure much of the yard. The upper west classroom corner is obscured by canopy, so the independent check uses the visible south-front classroom corner instead. Independent excluded check errors: 0.82 m, 3.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }
