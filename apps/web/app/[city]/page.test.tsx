@@ -12,6 +12,9 @@ import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity } from '@/lib/cities';
 import CityPage from './page';
 
+vi.mock('@/lib/city-meta', () => ({
+  readCityMeta: vi.fn().mockResolvedValue({ status: 'missing' }),
+}));
 vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
@@ -19,9 +22,11 @@ type PageElement = ReactElement<{
   children: ReactElement<{ dialogue?: RuntimeDialogueCatalog; cityLife?: RuntimeCityLife }>;
 }>;
 
+const loadedPacks = await loadCityPacks();
+
 describe('city page client boundary', () => {
   it('passes season admission and calendars without pipeline-only geometry', async () => {
-    const { packs } = await loadCityPacks();
+    const { packs } = loadedPacks;
     for (const pack of packs) {
       vi.mocked(loadCity).mockResolvedValue(pack);
       const page = (await CityPage({
@@ -40,7 +45,7 @@ describe('city page client boundary', () => {
     }
   });
   it('serializes every catalog without editorial sources while preserving speech', async () => {
-    const { packs, errors } = await loadCityPacks();
+    const { packs, errors } = loadedPacks;
     expect(errors).toEqual([]);
     expect(packs.some((pack) => pack.dialogue)).toBe(true);
     for (const pack of packs) {
@@ -67,7 +72,7 @@ describe('city page client boundary', () => {
     }
   });
   it('supports a city without a speech catalog', async () => {
-    const { packs } = await loadCityPacks();
+    const { packs } = loadedPacks;
     const pack = packs[0]!;
     vi.mocked(loadCity).mockResolvedValue({ ...pack, dialogue: undefined });
     const page = (await CityPage({

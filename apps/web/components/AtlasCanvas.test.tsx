@@ -1,3 +1,4 @@
+import type { CityMeta } from '@atlas/shared';
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -6,6 +7,7 @@ import { useUiStore } from '@/state/ui';
 import { AtlasCanvas } from './AtlasCanvas';
 import { eventFixtures } from './procession-fixtures.test-utils';
 import { emergencyFixture } from './emergency-fixtures.test-utils';
+import { loadLandmarks } from '@/lib/content';
 import { attachUrlSync } from '@/state/useUrlSync';
 
 const mock = vi.hoisted(() => ({ createAtlas: vi.fn() }));
@@ -18,10 +20,27 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
+it.each([
+  'absent',
+  'zero',
+  'late',
+  '404',
+  'malformed',
+  'zoom-floor',
+  'pointer',
+  'recovery',
+] as const)(
   'creates the map before optional geography arrives (%s) and installs it in place',
   async (mode) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    let tileFrame = false;
+    let frame!: FrameRequestCallback;
+    const handlers = new Map<string, () => void>();
+    vi.stubGlobal('requestAnimationFrame', (next: FrameRequestCallback) => {
+      frame = next;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal('matchMedia', () => ({
       matches: false,
       addEventListener: vi.fn(),
@@ -30,8 +49,8 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
       {} as WebGL2RenderingContext,
     );
-    const meta = {
-      slug: 'fixture',
+    const meta: CityMeta = {
+      slug: `fixture-${mode}`,
       name: { en: 'Fixture' },
       subdivisionLabel: { en: 'district' },
       languages: ['en'],
@@ -69,14 +88,22 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
       vi.fn((url: string) =>
         url.endsWith('.meta.json')
           ? Promise.resolve({ ok: true, json: () => Promise.resolve(meta) })
-          : url.endsWith('.emergency.json')
-            ? emergency
-            : events,
+          : url.endsWith('.landmarks.json')
+            ? Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+            : url.endsWith('.emergency.json')
+              ? emergency
+              : events,
       ),
     );
     const atlas = {
+      getStats: () => ({ hasDrawnTileFrame: tileFrame }),
       getCamera: () => ({ ...meta.defaultCamera, zoom: mode === 'zoom-floor' ? 15 : 14 }),
-      on: () => () => {},
+      on: (event: string, handler: () => void) => {
+        handlers.set(event, handler);
+        return () => {
+          handlers.delete(event);
+        };
+      },
       setProcessions: vi.fn(),
       setEmergency: vi.fn(),
       destroy: vi.fn(),
@@ -101,7 +128,14 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
       await act(async () => {
         root.render(
           createElement(AtlasCanvas, {
-            slug: 'fixture',
+            requestLandmarks:
+              mode === 'pointer'
+                ? () => {
+                    void loadLandmarks(`fixture-${mode}`);
+                  }
+                : undefined,
+            metaState: { status: 'ready', meta },
+            slug: `fixture-${mode}`,
             name: 'Fixture',
             subdivisionLabel: 'district',
             cityLife,
@@ -117,6 +151,33 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
           vi.advanceTimersByTime(250);
         });
         expect(new URLSearchParams(window.location.search).get('z')).toBe('15');
+      }
+      if (mode === 'pointer') {
+        const { interactive } = mock.createAtlas.mock.calls[0]![1] as {
+          interactive: (feature: unknown) => boolean;
+        };
+        const feature = { id: 'osm:way/1', class: 'landmark', landmarkId: 'landmark/test' };
+        expect(interactive(feature)).toBe(false);
+        expect(interactive(feature)).toBe(false);
+        expect(fetch).toHaveBeenCalledTimes(1);
+      } else expect(fetch).not.toHaveBeenCalled();
+      await act(async () => {
+        useUiStore.setState({
+          startup: { city: `fixture-${mode}`, atlas: atlas as never, status: 'ready' },
+        });
+        await Promise.resolve();
+      });
+      if (mode === 'recovery') {
+        act(() => handlers.get('contextlost')!());
+        expect(useUiStore.getState().startup?.status).toBe('restoring');
+        act(() => handlers.get('contextrestored')!());
+        expect(useUiStore.getState().startup?.status).toBe('drawing');
+        await act(async () => {
+          tileFrame = true;
+          frame(100);
+          await Promise.resolve();
+        });
+        expect(useUiStore.getState().startup?.status).toBe('ready');
       }
       const requests = vi
         .mocked(fetch)
@@ -147,7 +208,9 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
           await emergency;
         });
         expect(atlas.setEmergency).toHaveBeenLastCalledWith(
-          mode === 'late' || mode === 'zoom-floor' ? emergencyFixture : undefined,
+          mode === 'late' || mode === 'zoom-floor' || mode === 'pointer' || mode === 'recovery'
+            ? emergencyFixture
+            : undefined,
         );
         expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       }

@@ -376,6 +376,8 @@ export type LabelInView = {
 
 /** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
 export type AtlasStats = {
+  /** A glyph pass has completed using at least one actual tile mesh since context creation. */
+  hasDrawnTileFrame: boolean;
   quality: QualityState;
   /** Frames drawn in the last second (idle frames that draw nothing don't count). */
   fps: number;
@@ -575,6 +577,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // Frame state
   let cellDirty = true;
+  let cellsHaveTiles = false;
+  let hasDrawnTileFrame = false;
   /**
    * What the cells were last drawn for, in a flat view: the zoom, where the map and label grids
    * start, and which of their cells are on screen. A pan that changes none of it (within a cell)
@@ -844,6 +848,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
+    cellsHaveTiles = region.length > 0 || crownTiles.length > 0;
     names.collect(targets, v, labelPlacement, labels);
     labelsForReport = names.draw(
       gl,
@@ -1884,6 +1889,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         folklorePacket,
         cropPass,
       );
+      hasDrawnTileFrame ||= cellsHaveTiles;
       drawDirty = false;
       fireworksPass(
         gl,
@@ -1991,6 +1997,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    cellsHaveTiles = false;
+    hasDrawnTileFrame = false;
     lastCloudAt = performance.now();
     clearFolklore();
     host.invalidateFrame();
@@ -2179,6 +2187,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getFeature: (featureId) => source.featureById(featureId),
     getStats: () => ({
+      hasDrawnTileFrame,
       quality: quality.state,
       fps: drawTimes.length,
       frameMs,

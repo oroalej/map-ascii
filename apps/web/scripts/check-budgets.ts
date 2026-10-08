@@ -4,19 +4,24 @@
  * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted). The
  * asynchronous map renderer has its own gzipped budget, and each city's `<slug>.pmtiles`
  * must stay under its cap. Each `<slug>.processions.json` has a 60 KiB gzip cap.
- * The page's own HTML, with the content inlined
- * in it, is reported alongside.
+ * City HTML has a raw-size cap. Startup JSON counts automatic tile sidecars fetched before
+ * the first tile frame: currently none (meta is inline; subdivisions, landmarks, processions
+ * and emergency wait for readiness). Interaction-triggered requests are outside that set.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { canvasChunks, gzippedChunks } from './chunk-budgets';
 
 const KB = 1024;
 const MB = 1024 * KB;
 const BUDGETS = {
   initialJs: 250 * KB,
   renderer: 120 * KB,
+  canvasAsync: 200 * KB,
+  cityHtml: 48 * KB,
+  startupJson: 16 * KB,
   pmtiles: 40 * MB,
   processions: 60 * KB,
   emergency: 32 * KB,
@@ -65,6 +70,40 @@ for (const slug of slugs) {
   let js = 0;
   for (const src of scripts) js += gzipSync(readFileSync(join(out, src))).length;
   rows.push({ what: `/${slug} initial JS (gzipped)`, size: js, budget: BUDGETS.initialJs });
+  const entries = readdirSync(chunks)
+    .filter(
+      (file) =>
+        file.endsWith('.js') && readFileSync(join(chunks, file), 'utf8').includes('Map of '),
+    )
+    .map((file) => `/_next/static/chunks/${file}`);
+  if (!entries.length) throw new Error('Could not find the AtlasCanvas async entry');
+  const async = canvasChunks(out, entries, scripts);
+  rows.push({
+    what: `/${slug} canvas async JS (gzipped)`,
+    size: gzippedChunks(out, async),
+    budget: BUDGETS.canvasAsync,
+  });
+  rows.push({
+    what: `/${slug} HTML (raw)`,
+    size: Buffer.byteLength(html),
+    budget: BUDGETS.cityHtml,
+  });
+  // No JSON is needed before the first tile frame: meta is inline; all sidecars are deferred.
+  const startupJson: string[] = [];
+  rows.push({
+    what: `/${slug} startup JSON (gzipped)`,
+    size: startupJson.reduce(
+      (sum, suffix) => sum + gzipSync(readFileSync(join(tiles, `${slug}.${suffix}.json`))).length,
+      0,
+    ),
+    budget: BUDGETS.startupJson,
+  });
+  for (const src of scripts) {
+    const source = readFileSync(join(out, src), 'utf8');
+    if (source.includes('webglcontextlost') || source.includes('#version 300 es'))
+      throw new Error(`/${slug} initial chunk contains the renderer: ${src}`);
+  }
+  notes.push(`/${slug} canvas async chunks: ${[...async].join(', ')}`);
   rows.push({
     what: `/${slug} renderer chunk (gzipped)`,
     size: rendererSize,

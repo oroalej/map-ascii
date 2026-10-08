@@ -3,6 +3,7 @@ import { runtimeDialogueCatalog, runtimeCityLife } from '@atlas/shared';
 import { notFound } from 'next/navigation';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity, loadRegistry } from '@/lib/cities';
+import { readCityMeta } from '@/lib/city-meta';
 
 /** Only registered cities have pages (static export: one page per city pack). */
 export const dynamicParams = false;
@@ -25,6 +26,7 @@ export default async function CityPage({ params }: Props) {
   return (
     <main>
       <CityAtlas
+        metaState={await readCityMeta(city.slug)}
         slug={city.slug}
         name={city.name.en}
         subdivisionLabel={city.subdivision.label.en}
@@ -35,9 +37,7 @@ export default async function CityPage({ params }: Props) {
         dialogue={runtimeDialogueCatalog(pack.dialogue)}
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
-        landmarks={content.landmarks}
-        art={content.art}
-        tours={content.tours}
+        hasTours={content.tours.length > 0}
       />
     </main>
   );

@@ -1,15 +1,17 @@
 'use client';
 
 import { useEffect, useId, useRef } from 'react';
-import { useAtlasInstance } from '@/state/store';
-import { tourControls, tourSlug, useTourStore } from '@/state/tour';
+import dynamic from 'next/dynamic';
+import { tourControls, useTourStore } from '@/state/tour';
 import styles from './TourMenu.module.css';
 
+const TourList = dynamic(() => import('./InteractionDetails').then((m) => m.TourList), {
+  ssr: false,
+});
+
 /** The tours menu (SPEC.md §5, `T`): the city's tours, and a button to start each. */
-export function TourMenu() {
-  const tours = useTourStore((s) => s.tours);
+export function TourMenu({ hasTours }: { hasTours: boolean }) {
   const open = useTourStore((s) => s.menuOpen);
-  const ready = useAtlasInstance((s) => s.atlas !== null);
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -23,7 +25,7 @@ export function TourMenu() {
     return () => window.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
 
-  if (tours.length === 0) return null;
+  if (!hasTours) return null;
 
   return (
     <div ref={rootRef} className={styles.menu}>
@@ -37,36 +39,7 @@ export function TourMenu() {
       >
         Tours <span className={styles.key}>T</span>
       </button>
-      {open && (
-        <ul id={listId} className={styles.list} aria-label="Tours">
-          {tours.map((tour) => (
-            <li key={tour.id}>
-              <button
-                type="button"
-                className={styles.tour}
-                disabled={!ready}
-                onClick={() => tourControls.start(tourSlug(tour.id))}
-              >
-                <span className={styles.title}>{tour.title.en}</span>
-                <span className={styles.meta}>
-                  {tour.steps.length} {tour.steps.length === 1 ? 'stop' : 'stops'}
-                  {tour.status === 'draft' && (
-                    <span
-                      className={styles.badge}
-                      title="Narration not yet checked against sources"
-                    >
-                      draft
-                    </span>
-                  )}
-                </span>
-                {tour.description && (
-                  <span className={styles.description}>{tour.description.en}</span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <TourList id={listId} />}
     </div>
   );
 }

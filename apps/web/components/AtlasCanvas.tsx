@@ -1,19 +1,16 @@
 'use client';
 import { useEmojiStore, loadEmojiPrefs, saveEmojiPrefs } from '@/state/emoji';
 
-import { createAtlas, DEFAULT_CELLS, type CellSchedule } from '@atlas/renderer';
+import { createAtlas, DEFAULT_CELLS, type Atlas, type CellSchedule } from '@atlas/renderer';
 import {
   zoomLevel,
   type RuntimeCityLife,
-  type EmergencyData,
   type RuntimeDialogueCatalog,
-  type CityMeta,
   type ClimateConfig,
-  type ProcessionRoute,
   type TrafficMix,
 } from '@atlas/shared';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { isCityMeta, isCityProcessions, isCityEmergency } from '@/lib/guards';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { isCityEmergency } from '@/lib/guards';
 import { isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { SMALL_SCREEN } from '@/lib/screen';
@@ -24,6 +21,10 @@ import { loadSpeechPrefs, saveSpeechPrefs, useSpeechStore } from '@/state/speech
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
+import { afterFirstTileFrame } from '@/lib/startup';
+import { cityJson } from '@/lib/city-json';
+import { installProcessions } from '@/lib/processions';
+import type { MetaState } from '@/lib/city-meta';
 import styles from './AtlasCanvas.module.css';
 
 let webgl2Supported: boolean | undefined;
@@ -46,90 +47,11 @@ const cellSchedule = (small: boolean): CellSchedule =>
       }
     : DEFAULT_CELLS;
 
-type MetaState =
-  | { status: 'loading' }
-  | { status: 'ready'; meta: CityMeta }
-  | { status: 'missing' }
-  | { status: 'invalid'; message: string };
-
-/**
- * The city's events (`<slug>.processions.json`, step 07). A city without any has no
- * file, and a missing or stale file only means none are shown.
- */
-async function loadProcessions(slug: string): Promise<readonly ProcessionRoute[]> {
-  try {
-    const response = await fetch(`/tiles/${slug}.processions.json`);
-    if (!response.ok) return [];
-    const json: unknown = await response.json();
-    return isCityProcessions(json) ? json.processions : [];
-  } catch {
-    return [];
-  }
-}
-
-const EMPTY_PROCESSIONS: readonly ProcessionRoute[] = [];
-function useCityEmergency(slug: string, configured: boolean): EmergencyData | undefined {
-  const [state, setState] = useState<{ slug: string; data?: EmergencyData }>({ slug });
-  useEffect(() => {
-    if (!configured) return;
-    const abort = new AbortController();
-    void fetch(`/tiles/${slug}.emergency.json`, { signal: abort.signal })
-      .then(async (response) => {
-        if (!response.ok) return undefined;
-        const value: unknown = await response.json();
-        return isCityEmergency(value) ? value : undefined;
-      })
-      .catch(() => undefined)
-      .then((data) => {
-        if (!abort.signal.aborted) setState({ slug, data });
-      });
-    return () => abort.abort();
-  }, [slug, configured]);
-  return configured && state.slug === slug ? state.data : undefined;
-}
-function useCityProcessions(slug: string): readonly ProcessionRoute[] {
-  const [state, setState] = useState({ slug, routes: EMPTY_PROCESSIONS });
-  useEffect(() => {
-    let cancelled = false;
-    void loadProcessions(slug).then((routes) => {
-      if (!cancelled) setState({ slug, routes });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
-  return state.slug === slug ? state.routes : EMPTY_PROCESSIONS;
-}
-
-/** Load metadata independently of optional event geography. */
-function useCityMeta(slug: string): MetaState {
-  const [state, setState] = useState<{ slug: string; value: MetaState }>({
-    slug,
-    value: { status: 'loading' },
-  });
-  useEffect(() => {
-    let cancelled = false;
-    const load = async (): Promise<MetaState> => {
-      const response = await fetch(`/tiles/${slug}.meta.json`);
-      if (!response.ok) return { status: 'missing' };
-      const json: unknown = await response.json();
-      return isCityMeta(json)
-        ? { status: 'ready', meta: json }
-        : { status: 'invalid', message: 'not a city meta file' };
-    };
-    void load()
-      .catch((err: unknown) => ({ status: 'invalid', message: String(err) }) as const)
-      .then((next) => {
-        if (!cancelled) setState({ slug, value: next });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
-  return state.slug === slug ? state.value : { status: 'loading' };
-}
+const loadEmergency = cityJson('emergency', isCityEmergency);
 
 export function AtlasCanvas({
+  metaState,
+  requestLandmarks,
   slug,
   name,
   subdivisionLabel,
@@ -140,6 +62,8 @@ export function AtlasCanvas({
   dialogue,
   utilitiesDerived = false,
 }: {
+  metaState: MetaState;
+  requestLandmarks?: (() => void) | undefined;
   utilitiesDerived?: boolean;
   slug: string;
   name: string;
@@ -150,39 +74,63 @@ export function AtlasCanvas({
   cityLife?: RuntimeCityLife | undefined;
   dialogue?: RuntimeDialogueCatalog | undefined;
 }) {
+  const landmarkRequest = useRef(requestLandmarks);
+  useEffect(() => {
+    landmarkRequest.current = requestLandmarks;
+  }, [requestLandmarks]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Static export renders on the server, where we optimistically assume support.
   const supported = useSyncExternalStore(subscribeNoop, detectWebGL2, () => true);
-  const metaState = useCityMeta(slug);
   const meta = metaState.status === 'ready' ? metaState.meta : null;
-  const processions = useCityProcessions(slug);
-  const emergencyConfig = cityLife?.emergency;
-  const emergency = useCityEmergency(
-    slug,
-    !!(
-      emergencyConfig?.ambulance?.max ||
-      emergencyConfig?.police?.max ||
-      emergencyConfig?.fire?.max
-    ),
-  );
-  const emergencyRef = useRef(emergency);
-  useEffect(() => {
-    emergencyRef.current = emergency;
-  }, [emergency]);
   const atlasInstance = useAtlasInstance((state) => state.atlas);
   const level = useAtlasStore((s) => (s.camera ? zoomLevel(s.camera.zoom) : null));
   const subdivision = useUiStore((s) => s.subdivision);
-  const [contextLost, setContextLost] = useState(false);
 
   useEffect(() => {
-    useUiStore.setState({ meta, processions });
-  }, [meta, processions]);
+    useUiStore.setState({ meta });
+    if (!supported || !meta) {
+      const status = !supported
+        ? 'unsupported'
+        : metaState.status === 'invalid'
+          ? 'invalid'
+          : 'missing';
+      const startup = { city: slug, atlas: null, status } as const;
+      useUiStore.setState({ startup });
+      return () => {
+        if (useUiStore.getState().startup === startup) useUiStore.setState({ startup: null });
+      };
+    }
+  }, [meta, metaState.status, supported, slug]);
   useEffect(() => {
-    atlasInstance?.setProcessions(processions);
-  }, [atlasInstance, processions]);
-  useEffect(() => {
-    atlasInstance?.setEmergency(emergency);
-  }, [atlasInstance, emergency]);
+    if (!atlasInstance) return;
+    let cancelled = false;
+    const current = () =>
+      !cancelled &&
+      useAtlasInstance.getState().atlas === atlasInstance &&
+      useUiStore.getState().startup?.city === slug;
+    const off = afterFirstTileFrame(slug, () => {
+      void Promise.resolve()
+        .then(() => {
+          if (!current()) return;
+          const config = cityLife?.emergency;
+          if (config?.ambulance?.max || config?.police?.max || config?.fire?.max) {
+            void loadEmergency(slug)
+              .then((data) => {
+                if (current()) atlasInstance.setEmergency(data);
+              })
+              .catch(() => {
+                if (current()) atlasInstance.setEmergency(undefined);
+              });
+          }
+          return installProcessions(slug, atlasInstance, current);
+        })
+        .catch(() => {});
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, [slug, atlasInstance, cityLife]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -210,33 +158,58 @@ export function AtlasCanvas({
     useEmojiStore.setState(emojiPrefs);
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
-    const atlas = createAtlas(canvas, {
-      emergency: emergencyRef.current,
-      lifeHoverPause,
-      quality,
-      utilities: { derive: utilitiesDerived },
-      tilesUrl: `/tiles/${slug}.pmtiles`,
-      theme: store.theme,
-      cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
-      bounds: meta.regionBounds,
-      initialCamera: camera,
-      year: store.year,
-      reducedMotion: prefersReducedMotion(),
-      gpuTiming: isDebugRequested(),
-      profiling: isDebugRequested(),
-      interactive: (feature) => isPickable(feature, useUiStore.getState().clickable),
-      life: lifeSettings(lifePrefs),
-      traffic,
-      climate,
-      timezone,
-      cityLife,
-      dialogue,
-      speech: speechPrefs.enabled,
-      emoji: emojiPrefs.enabled,
-    });
+    let atlas: Atlas;
+    try {
+      atlas = createAtlas(canvas, {
+        lifeHoverPause,
+        quality,
+        utilities: { derive: utilitiesDerived },
+        tilesUrl: `/tiles/${slug}.pmtiles`,
+        theme: store.theme,
+        cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
+        bounds: meta.regionBounds,
+        initialCamera: camera,
+        year: store.year,
+        reducedMotion: prefersReducedMotion(),
+        gpuTiming: isDebugRequested(),
+        profiling: isDebugRequested(),
+        interactive: (feature) => {
+          if (feature?.landmarkId) landmarkRequest.current?.();
+          return isPickable(feature, useUiStore.getState().clickable);
+        },
+        life: lifeSettings(lifePrefs),
+        traffic,
+        climate,
+        timezone,
+        cityLife,
+        dialogue,
+        speech: speechPrefs.enabled,
+        emoji: emojiPrefs.enabled,
+      });
+    } catch {
+      const startup = { city: slug, atlas: null, status: 'unsupported' } as const;
+      useUiStore.setState({ startup });
+      return () => {
+        if (useUiStore.getState().startup === startup) useUiStore.setState({ startup: null });
+      };
+    }
     // The atlas clamps the camera to the region; start the store from where it really is.
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas, canvas });
+    useUiStore.setState({ startup: { city: slug, atlas, status: 'drawing' }, processions: [] });
+    let readyFrame = 0;
+    const awaitTileFrame = () => {
+      readyFrame = 0;
+      if (
+        useAtlasInstance.getState().atlas !== atlas ||
+        useUiStore.getState().startup?.status === 'restoring'
+      )
+        return;
+      if (atlas.getStats().hasDrawnTileFrame)
+        useUiStore.setState({ startup: { city: slug, atlas, status: 'ready' } });
+      else readyFrame = requestAnimationFrame(awaitTileFrame);
+    };
+    awaitTileFrame();
     const offs = [
       useQualityStore.subscribe(({ choice }) => {
         atlas.setQuality(choice);
@@ -252,8 +225,15 @@ export function AtlasCanvas({
       }),
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
-      atlas.on('contextlost', () => setContextLost(true)),
-      atlas.on('contextrestored', () => setContextLost(false)),
+      atlas.on('contextlost', () => {
+        cancelAnimationFrame(readyFrame);
+        readyFrame = 0;
+        useUiStore.setState({ startup: { city: slug, atlas, status: 'restoring' } });
+      }),
+      atlas.on('contextrestored', () => {
+        useUiStore.setState({ startup: { city: slug, atlas, status: 'drawing' } });
+        awaitTileFrame();
+      }),
       atlas.on('procession', (run) => useUiStore.setState({ procession: run })),
       useLifeStore.subscribe((prefs) => {
         atlas.setLife(lifeSettings(prefs));
@@ -262,53 +242,30 @@ export function AtlasCanvas({
     ];
     return () => {
       for (const off of offs) off();
-      setContextLost(false);
-      useUiStore.setState({ procession: null });
-      useAtlasInstance.setState({ atlas: null, canvas: null });
+      cancelAnimationFrame(readyFrame);
+      if (useUiStore.getState().startup?.atlas === atlas)
+        useUiStore.setState({ procession: null, processions: [], startup: null });
+      if (useAtlasInstance.getState().atlas === atlas)
+        useAtlasInstance.setState({ atlas: null, canvas: null });
       atlas.destroy();
     };
   }, [supported, meta, slug, traffic, climate, timezone, cityLife, dialogue, utilitiesDerived]);
 
-  if (!supported) {
-    return (
-      <p role="alert" className={styles.notice}>
-        ASCII Atlas needs WebGL2, which this browser does not support.
-      </p>
-    );
-  }
-
+  if (!supported) return null;
   return (
-    <>
-      <canvas
-        ref={canvasRef}
-        className={styles.canvas}
-        aria-label={[
-          `Map of ${name}`,
-          level && `${level} level`,
-          subdivision &&
-            `${subdivisionLabel} ${subdivision.approximate ? 'about ' : ''}${subdivision.name}`,
-        ]
-          .filter(Boolean)
-          .join(', ')}
-        // Focusable so the map's keyboard controls (+/-, arrow keys) work.
-        tabIndex={0}
-      />
-      {contextLost && (
-        <p role="status" className={styles.notice}>
-          The graphics context was lost. Restoring the map…
-        </p>
-      )}
-      {metaState.status === 'missing' && (
-        <p role="status" className={styles.notice}>
-          No map data for {name} yet. Run <code>pnpm data:build -- --city {slug}</code>.
-        </p>
-      )}
-      {metaState.status === 'invalid' && (
-        <p role="alert" className={styles.notice}>
-          The map data for {name} is invalid. Rebuild it with{' '}
-          <code>pnpm data:build -- --city {slug}</code>.
-        </p>
-      )}
-    </>
+    <canvas
+      ref={canvasRef}
+      className={styles.canvas}
+      aria-label={[
+        `Map of ${name}`,
+        level && `${level} level`,
+        subdivision &&
+          `${subdivisionLabel} ${subdivision.approximate ? 'about ' : ''}${subdivision.name}`,
+      ]
+        .filter(Boolean)
+        .join(', ')}
+      // Focusable so the map's keyboard controls (+/-, arrow keys) work.
+      tabIndex={0}
+    />
   );
 }

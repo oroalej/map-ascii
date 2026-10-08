@@ -405,11 +405,16 @@ type AtlasState = {
 | Frame rate | 60 fps desktop, ≥30 fps mid-range Android |
 | Initial JS (web app, gzipped) | < 250 KB; the map renderer loads as a separate chunk |
 | Map renderer chunk (gzipped) | < 120 KB |
+| Canvas async dependency set (gzipped, excluding initial/worker chunks) | < 200 KiB |
+| City page HTML (raw) | < 48 KiB; aim below 40 KiB |
+| Startup JSON (gzipped, before the first tile frame) | < 16 KiB; no sidecar JSON is required after build-time meta inlining |
 | First meaningful render | < 2.5 s on 4G |
 | `<city>.pmtiles` size | < 40 MB per city (the city plus its region at low zoom) |
 | `<city>.processions.json` (gzipped) | < 60 KB; ground permissions and exclusions are clipped and coordinates are compact |
 | `<city>.emergency.json` (gzipped) | ≤ 32 KiB; contracted directed graph and compact roadside targets |
 | Tile decode | off main thread; < 16 ms per tile on desktop |
+
+Startup export (2026-10-08, `tiles-naga-20261008-0851`): Naga initial JS is 198 KiB gzip, the canvas async set is 91 KiB gzip, and automatic startup JSON is zero. Initial chunks contain no WebGL context handler or shader source; interaction UI uses the details/cues imports. City HTML is 65,683 raw bytes (14,301 bytes gzip), exceeding the 48 KiB cap and the below-40 KiB aspiration. The required inline metadata, dialogue and Life payloads now account for about 51 KiB before RSC escaping; the cap remains enforced and unmet. The historical Oct 3 export was 116,276 raw bytes and is not a fresh comparison build.
 
 Zod stays out of the browser bundle: the pipeline validates each generated file with its schema when it writes it, the web app checks only their shape (`apps/web/lib/guards.ts`), and `packages/shared` keeps the plain values the browser needs (class list, camera ranges, search options) in zod-free modules and is marked side-effect free. CI checks the size budgets after the static build (`pnpm check:budgets`: the gzipped scripts each city page loads, the separate renderer chunk, each `<city>.pmtiles`, and gzip-compressed `<city>.processions.json` / `<city>.emergency.json`). The tile worker and legacy `nomodule` polyfills are excluded from initial JS. Frame rate and decode time are checked by hand on real devices with the `?debug=1` overlay, which shows the renderer's `getStats()` (headless CI runs WebGL in software, so its timings mean little).
 

@@ -184,6 +184,8 @@ export const step: Step = {
     const art = placeArt(features, content.art);
     await mkdir(outDir, { recursive: true });
     await writeJson(join(outDir, `${city.slug}.art.json`), art);
+    await writeJson(join(outDir, `${city.slug}.landmarks.json`), content.landmarks);
+    await writeJson(join(outDir, `${city.slug}.tours.json`), content.tours);
     await writeDetailLayouts(ctx);
     const drafts = art.pieces.filter((p) => p.status === 'draft').length;
     console.log(`  placed ${art.pieces.length} art pieces (${drafts} draft)`);

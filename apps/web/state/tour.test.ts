@@ -19,7 +19,13 @@ describe('tourControls', () => {
 
   beforeEach(() => {
     useAtlasStore.setState(initialAtlasState());
-    useTourStore.setState({ tours: [tour], active: null, menuOpen: true });
+    useTourStore.setState({
+      dataStatus: 'ready',
+      pending: null,
+      tours: [tour],
+      active: null,
+      menuOpen: true,
+    });
     runner = { show: vi.fn(), hold: vi.fn(), cancelHold: vi.fn(), stop: vi.fn() };
     setTourRunner(runner as unknown as TourRunner);
   });
