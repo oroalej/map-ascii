@@ -475,6 +475,8 @@ export function bakeMassSite(
     return polygons(f.geometry).map((poly) => poly.map(asPoints));
   });
   const groundPolys = p.crowd_boundary ? [[p.crowd_boundary]] : authoredPolys;
+  // Traffic may close a wider precinct than the crowd fills.
+  const closure = p.traffic_closure ?? p.crowd_boundary;
   const boundaryXY = p.crowd_boundary?.map(frame.toMeters);
   const radius_m = boundaryXY
     ? Math.ceil(Math.max(...boundaryXY.map((q) => Math.hypot(...q)))) + 2
@@ -681,7 +683,7 @@ export function bakeMassSite(
     location,
     anchor: frame.toLngLat(seed[1]),
     radius_m: crowdRadius,
-    ...(p.crowd_boundary && { closure_zone: [p.crowd_boundary] }),
+    ...(closure && { closure_zone: [closure] }),
     seated_grounds,
     ...(p.altar && {
       altar: { ...p.altar, images },

@@ -282,4 +282,9 @@ it('a boundary replaces radius and ground restrictions while altar permission st
   expect(site.altar_ground?.some((r) => pointInPolygon(q(20, 0), [r]))).toBe(true);
   expect(site.altar?.images).toBe(2);
   expect(site.closure_zone).toEqual([event.crowd_boundary]);
+  // A wider car-free precinct closes traffic without widening the crowd.
+  const wider = { ...event, traffic_closure: box(-60, -60, 60, 60) };
+  const closed = bakeMassSite([church, feature('osm:way/2', 'park', box(4, 4, 10, 10))], wider, 2);
+  expect(closed.closure_zone).toEqual([wider.traffic_closure]);
+  expect(closed.grounds).toEqual(site.grounds);
 });

@@ -1028,6 +1028,8 @@ export function contentSchemas(languages?: readonly string[]) {
         kind: z.literal('mass'),
         site: OsmId,
         crowd_boundary: EventRing.optional(),
+        /** Car-free precinct while the Mass lasts; defaults to the crowd boundary. */
+        traffic_closure: EventRing.optional(),
         altar: EventAltar.optional(),
         grounds: z.array(OsmAreaId).min(1),
         /** Authored exterior forecourt; the pipeline snaps only to safe connected cells. */

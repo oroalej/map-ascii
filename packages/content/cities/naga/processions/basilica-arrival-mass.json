@@ -4,7 +4,7 @@
     "en": "Mass after the fluvial procession"
   },
   "story": {
-    "en": "The concluding Mass follows the fluvial landing, a gathering documented in 2022 and 2024. Its 18:00 replay start follows the illustrative 16:00–18:00 river window; the ninety-minute duration is illustrative. The owner marked the Basilica Loop as a car-free crowd precinct on 2026-10-07 and limited the crowd to the forecourt on 2026-10-08, as at the Cathedral. People fill the north park, the Centennial Globe lawn and Basilica Road, facing the Basilica; selected outdoor seating remains seated. The side parking and the loop behind the church stay clear."
+    "en": "The concluding Mass follows the fluvial landing, a gathering documented in 2022 and 2024. Its 18:00 replay start follows the illustrative 16:00–18:00 river window; the ninety-minute duration is illustrative. The owner marked the Basilica Loop as a car-free crowd precinct on 2026-10-07 and limited the crowd to the forecourt on 2026-10-08, as at the Cathedral. People fill the north park, the Centennial Globe lawn and Basilica Road, facing the Basilica; selected outdoor seating remains seated. The side parking and the loop behind the church stay clear of people, and the whole loop stays car-free."
   },
   "status": "verified",
   "kind": "mass",
@@ -39,8 +39,29 @@
     {
       "title": "OSM Basilica Loop and owner annotation",
       "url": "https://www.openstreetmap.org/way/20301218",
-      "note": "OSM Basilica Loop curb; owner annotation, 2026-10-07: main loop and short northern pieces, offset four metres outward from the mapped six-metre carriageway centreline. On 2026-10-08 the owner limited the crowd to the forecourt: the boundary is cut along the south curb of Basilica Road (OSM way 23523456), in front of the facade."
+      "note": "OSM Basilica Loop curb; owner annotation, 2026-10-07: main loop and short northern pieces, offset four metres outward from the mapped six-metre carriageway centreline. On 2026-10-08 the owner limited the crowd to the forecourt: the boundary is cut along the south curb of Basilica Road (OSM way 23523456), in front of the facade. The whole annotated loop remains the car-free traffic closure, with its parking emptied of cars."
     }
+  ],
+  "traffic_closure": [
+    [123.1989881, 13.6331684],
+    [123.1990192, 13.633078],
+    [123.1990313, 13.6330436],
+    [123.1991693, 13.632651],
+    [123.1992973, 13.6322868],
+    [123.1993368, 13.6322531],
+    [123.1993364, 13.6321746],
+    [123.1995445, 13.631494],
+    [123.1996779, 13.6315382],
+    [123.2003938, 13.63179],
+    [123.2005668, 13.6318426],
+    [123.2003104, 13.6324522],
+    [123.2002785, 13.6325534],
+    [123.2002852, 13.6326138],
+    [123.200182, 13.6330103],
+    [123.2000751, 13.633402],
+    [123.2000648, 13.6334328],
+    [123.2000406, 13.633536],
+    [123.1989881, 13.6331684]
   ],
   "crowd_boundary": [
     [123.1989881, 13.6331684],
