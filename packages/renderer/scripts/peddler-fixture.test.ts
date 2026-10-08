@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { expect, it } from 'vitest';
 import {
   makePeddlerPerfWorld,

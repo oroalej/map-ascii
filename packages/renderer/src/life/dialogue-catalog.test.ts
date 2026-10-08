@@ -76,14 +76,20 @@ it.each(entries)(
       population.step(0, peddlerWeather, 0);
       const owner = population.owners[0]!;
       const caller = new PeddlerCaller([entry], periods);
-      caller.step(owner, 0, { ...peddlerWeather, ...context }, true, false);
+      caller.step(
+        owner,
+        0,
+        { ...peddlerWeather, ...context, wind: { dir: [1, 0], strength: context.wind } },
+        true,
+        false,
+      );
       owner.callToken++;
       owner.resumeToken += Number(weather === 'clearing');
       owner.leaving = context.peddler!.event === 'leaving';
       caller.step(
         owner,
         0,
-        { ...peddlerWeather, ...context },
+        { ...peddlerWeather, ...context, wind: { dir: [1, 0], strength: context.wind } },
         true,
         context.peddler!.event === 'hover',
       );

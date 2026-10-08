@@ -164,13 +164,13 @@ function clipSegment(
   for (const [p, d] of [
     [a.x, dx],
     [a.y, dy],
-  ]) {
+  ] as const) {
     if (!d) {
-      if (p! < low || p! > high) return;
+      if (p < low || p > high) return;
       continue;
     }
-    const aa = (low - p!) / d!,
-      bb = (high - p!) / d!;
+    const aa = (low - p) / d,
+      bb = (high - p) / d;
     from = Math.max(from, Math.min(aa, bb));
     to = Math.min(to, Math.max(aa, bb));
   }

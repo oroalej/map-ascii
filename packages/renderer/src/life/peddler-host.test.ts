@@ -56,7 +56,7 @@ it('configured worker and inline frames produce identical active peddlers', () =
       weather: { minutes: 480, rain: 0, sunAltitude: 20 },
       cellMeters: 1,
     },
-    visible: [19, 0, peddlerCenter, 1000],
+    visible: [19, 0, peddlerCenter, { rain: 0, sunAltitude: 20 }],
   };
   for (let i = 0; i < 3; i++) {
     const result = api.frame(input);

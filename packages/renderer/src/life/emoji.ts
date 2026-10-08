@@ -453,7 +453,7 @@ export class PeddlerEmojiObserver {
       if (this.clock >= t.until) t.cue = undefined;
       const pick = () => {
         const pool = ambientPool(o, env);
-        let choice = t!.rng() * pool.reduce((n, e) => n + e.weight, 0);
+        let choice = t.rng() * pool.reduce((n, e) => n + e.weight, 0);
         return pool.find((e) => (choice -= e.weight) < 0)?.mood;
       };
       if (p.callToken !== t.token) {
