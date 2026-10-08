@@ -4,13 +4,14 @@
     "en": "Peñafrancia fluvial procession"
   },
   "story": {
-    "en": "OSM places this reconstructed route from Danlugan ni Ina through Panganiban, Colgante and Magsaysay bridges to Dagsaan near the Basilica. This sequence is inferred; the eyewitness source records passage under Colgante. The 16:00–18:00 replay, 120 follower boats, 16 escorts and riverside crowds are illustrative; spectators pack both banks and the Panganiban, Colgante and Magsaysay bridges the boats pass under, thickest around Magsaysay Bridge, and fill the Dagsaan landing, Balatas-Cararayan Road beside it and Basilica Loop's west leg toward the Basilica, closed to cars, as the project owner asked on 2026-10-08. About 1.5 million attended in 2024; river conditions moved the 2026 departure to 21:00."
+    "en": "OSM places this reconstructed route from Danlugan ni Ina through Panganiban, Colgante and Magsaysay bridges to Dagsaan near the Basilica. This sequence is inferred; the eyewitness source records passage under Colgante. The 16:00–18:00 replay, 120 follower boats, 16 escorts and riverside crowds are illustrative; spectators pack both banks and the Panganiban, Colgante and Magsaysay bridges the boats pass under, thickest around Magsaysay Bridge, and fill the Dagsaan landing, Balatas-Cararayan Road beside it and Basilica Loop's west leg toward the Basilica, closed to cars, as the project owner asked on 2026-10-08. The pagoda stops where the landing footway meets the river, the voyadores stretched on beyond it. About 1.5 million attended in 2024; river conditions moved the 2026 departure to 21:00."
   },
   "status": "verified",
   "kind": "fluvial",
   "route": {
     "from": "osm:node/6791580317",
-    "to": "osm:way/23670362"
+    "to": "osm:way/1203053284",
+    "beyond_m": 300
   },
   "schedule": {
     "month": 9,

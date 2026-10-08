@@ -57,6 +57,23 @@ const procession = (route: Fluvial['route']): Fluvial => ({
 });
 
 describe('routeProcessions', () => {
+  it('keeps the river beyond the landing on the same river, recording where the pagoda stops', () => {
+    const { routes } = routeProcessions(features, [
+      procession({ from: 'osm:node/13', to: 'osm:node/11', beyond_m: 300 }),
+    ]);
+    const route = routes[0]!;
+    if (route.kind !== 'fluvial') throw Error();
+    // Landing 0.0004° downstream of the start; then on west past the confluence on the Naga
+    // River (not up the longer stream), until the river ends at x = 0.
+    expect(route.landing_m).toBeCloseTo(0.0004 * 111_320, -1);
+    expect(route.length_m).toBeCloseTo(0.0029 * 111_320, -1);
+    expect(route.route.every(([, y]) => Math.abs(y) < 1e-6)).toBe(true);
+    expect(route.route.at(-1)![0]).toBeCloseTo(0, 6);
+    const short = routeProcessions(features, [
+      procession({ from: 'osm:node/13', to: 'osm:node/11', beyond_m: 20 }),
+    ]).routes[0]!;
+    expect(short.length_m).toBe(Math.round(0.0004 * 111_320 + 20));
+  });
   it('resolves a following Mass first, retaining a nonzero offset and carrying midnight', () => {
     const parent = {
       ...procession({ to: 'osm:node/10', upstream_m: 200 }),

@@ -1347,7 +1347,8 @@ describe('street event simulation', () => {
         if (!live) {
           w.play(route.id, eventOccurrence(route.schedule, new Date('2026-06-01')));
           expect(life.movers).not.toContain(start);
-          w.step(180, undefined, 18);
+          // Past the end of the run, river holds included.
+          w.step(200, undefined, 18);
           expect(w.procession()).toBeUndefined();
           expect(life.movers).toContain(start);
           expect(life.parked).toContain(parked);

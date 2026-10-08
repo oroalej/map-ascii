@@ -60,6 +60,11 @@ export const PROCESSION = {
     tailPadding: 10,
   },
   playSeconds: 180,
+  /**
+   * A river procession shows its whole formation on the water from the start and holds it
+   * this long, s of a replay, before moving off; at the landing it holds as long again.
+   */
+  holdSeconds: 5,
   columns: PROCESSION_DEFAULTS.fluvial.columns,
   ranks: PROCESSION_DEFAULTS.fluvial.ranks,
   /** Escorts ahead of the formation, and small boats following the pagoda. */
@@ -275,6 +280,11 @@ export class ProcessionScene {
   private readonly formation: { columns: number; ranks: number };
   /** The pagoda's lag behind the lead, as a share of the run. */
   private readonly pagodaLag: number;
+  /** Where the pagoda sets off (its whole flotilla on the water) and stops, m along the route. */
+  private readonly start: number;
+  private readonly landing: number;
+  /** The share of the run held still at each end. */
+  private readonly hold: number;
 
   constructor(readonly route: FluvialRoute) {
     const [lng0, lat0] = route.route[0]!;
@@ -373,10 +383,19 @@ export class ProcessionScene {
       });
     }
 
-    const count = Math.floor(this.length * PROCESSION.crowdPerMeter);
+    // The flotilla's last boat starts on the water at the route's start; the pagoda stops at
+    // the landing with the boats ahead of it stretched beyond.
+    this.landing = Math.min(this.length, Math.max(0, route.landing_m ?? this.length));
+    this.start = Math.min(
+      this.landing,
+      Math.max(0, ...this.boats.map((b) => VEHICLES[b.vehicle].length / 2 - b.along)),
+    );
+    this.hold = PROCESSION.holdSeconds / this.playDuration;
+
+    const count = Math.floor(this.landing * PROCESSION.crowdPerMeter);
     for (const side of [-1, 1]) {
       for (let i = 0; i < count; i++) {
-        const s = rng() * this.length;
+        const s = rng() * this.landing;
         const back = between(rng, ...PROCESSION.crowdDepth);
         const rank = rng();
         const candle = rng() < PROCESSION.candles;
@@ -403,22 +422,11 @@ export class ProcessionScene {
     }
   }
 
-  /** How long playing it takes, s (`PROCESSION.playSpeed`). */
+  /** How long playing it takes, s (`PROCESSION.playSpeed`), holds at both ends included. */
   get playDuration() {
-    return Math.max(
-      PROCESSION.playSeconds,
-      (this.length + this.formationLength()) / PROCESSION.playSpeed,
-    );
-  }
-
-  /** From the pagoda's center to the lead voyador's bow, m. */
-  private formationLength() {
     return (
-      VEHICLES.pagoda.length / 2 +
-      6 +
-      (this.formation.ranks - 1) * PROCESSION.rankGap +
-      VEHICLES.voyador.length +
-      6
+      Math.max(PROCESSION.playSeconds, (this.landing - this.start) / PROCESSION.playSpeed) +
+      2 * PROCESSION.holdSeconds
     );
   }
 
@@ -453,14 +461,17 @@ export class ProcessionScene {
     return (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
   }
 
-  /** The distance along the route of something `lag` behind the lead, `progress` into the run. */
+  /**
+   * Where the pagoda would be, m along the route, for something `lag` behind the lead,
+   * `progress` into the run: still at the start and at the landing during the holds.
+   */
   private travelled(progress: number, lag: number) {
-    const lead = this.formationLength();
-    const u = Math.min(1, Math.max(0, progress)) * (1 + this.pagodaLag) - lag;
-    return -lead + profileAt(this.profile, u) * (this.length + lead);
+    const moving = Math.min(1, Math.max(0, (progress - this.hold) / (1 - 2 * this.hold)));
+    const u = moving * (1 + this.pagodaLag) - lag;
+    return this.start + profileAt(this.profile, u) * (this.landing - this.start);
   }
 
-  /** The pagoda's distance along the route at `progress` (0–1): from before the start to the landing. */
+  /** The pagoda's distance along the route at `progress` (0–1): from the start to the landing. */
   pagodaAt(progress: number) {
     return this.travelled(progress, this.pagodaLag);
   }
@@ -689,7 +700,7 @@ export class ProcessionScene {
         );
     }
     if (crowds) {
-      const landing = this.length;
+      const landing = this.landing;
       for (const p of this.people) {
         const near =
           Math.abs(p.s - pagoda) < PROCESSION.crowdNear ||

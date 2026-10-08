@@ -210,7 +210,16 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
     if (!line(p.route) || !isNumber(p.length_m) || p.length_m <= 0) return false;
     if (p.kind === 'fluvial')
       return (
-        only(p, [...base, 'route', 'length_m', 'banks', 'formation', 'crowd_ground']) &&
+        only(p, [
+          ...base,
+          'route',
+          'length_m',
+          'landing_m',
+          'banks',
+          'formation',
+          'crowd_ground',
+        ]) &&
+        (p.landing_m === undefined || (isNumber(p.landing_m) && p.landing_m > 0)) &&
         (p.crowd_ground === undefined ||
           (isRecord(p.crowd_ground) &&
             only(p.crowd_ground, ['grounds', 'blocked', 'water', 'bridges', 'closure_zone']) &&

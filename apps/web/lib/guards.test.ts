@@ -194,6 +194,13 @@ describe('browser shape guards agree with the schemas', () => {
       { ...fluvial, crowd_ground: { grounds: rings, blocked: [], water: [], bridges: [] } },
       true,
     );
+    // A river event's pagoda can stop at a landing short of the route's end.
+    for (const [landing_m, valid] of [
+      [400, true],
+      [0, false],
+      ['400', false],
+    ] as const)
+      agrees({ ...fluvial, landing_m }, valid);
     // A river event's owner-marked ground closes to traffic.
     for (const [closure_zone, valid] of [
       [rings, true],
