@@ -81,7 +81,12 @@ export class PeddlerCaller {
     t.stop = owner.callToken;
     t.leaving = owner.leaving;
     t.resume = owner.resumeToken;
-    if (!trigger || (owner.leaving && event !== 'leaving')) return;
+    if (
+      !trigger ||
+      (owner.leaving && event !== 'leaving') ||
+      (env.wet && owner.canopy === 0 && event !== 'leaving')
+    )
+      return;
     t.serial++;
     t.event = event;
     t.cue = undefined;

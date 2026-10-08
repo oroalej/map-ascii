@@ -239,7 +239,7 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
-import { PuffStore, PuffSelector, EMPTY_PUFFS } from './exhaust';
+import { PuffStore, PuffSelector, EMPTY_PUFFS, PUFF, PUFF_STRIDE } from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
 import {
   collectSeasonAnchors,
@@ -8600,7 +8600,7 @@ export class LifeWorld {
         this.peddlers.delete(life);
       }
     this.peddlerWeather = env;
-    if (zoom !== undefined && zoom < LIFE_ZOOM.person[0]) {
+    if (zoom !== undefined && zoom < LIFE_ZOOM.person.min) {
       for (const population of this.peddlers.values()) population.hide();
       return;
     }
@@ -12828,6 +12828,7 @@ export class LifeWorld {
       if (!shows('person') || !this.peddlerWeather) return admitted;
       let speeches = admitted.filter((a) => a.speech).length,
         emojis = admitted.filter((a) => a.emoji).length;
+      const extraPuffs: number[] = [];
       for (const life of this.tiles.values()) {
         const population = this.peddlers.get(life);
         if (!population) continue;
@@ -12850,8 +12851,12 @@ export class LifeWorld {
               agent.lng > bounds[2] ||
               agent.lat < bounds[1] ||
               agent.lat > bounds[3])
-          )
+          ) {
+            population.hide(owner);
             continue;
+          }
+          if (this.puffPacket.length + extraPuffs.length < PUFF.visible * PUFF_STRIDE)
+            extraPuffs.push(...population.visiblePuff(owner, admitted.length));
           if (agent.speech) {
             if (speeches >= MOMENTS.scene.capacity) agent.speech = undefined;
             else speeches++;
@@ -12862,6 +12867,12 @@ export class LifeWorld {
           }
           admitted.push(inspection ? inspection.present(owner, agent) : agent);
         }
+      }
+      if (extraPuffs.length) {
+        const packet = new Float64Array(this.puffPacket.length + extraPuffs.length);
+        packet.set(this.puffPacket);
+        packet.set(extraPuffs, this.puffPacket.length);
+        this.puffPacket = packet;
       }
       return admitted;
     };

@@ -55,6 +55,17 @@ it('rejects the complete pair when any cart cell fails person ground clearance',
   expect(g.owners!.some((owner) => owner > 0)).toBe(false);
   expect(g.speakers!.points.size).toBe(0);
 });
+it('allows a stop puff only after the full stamped fry-cart owner survives', () => {
+  const g = grid(),
+    out = new Uint8Array(3600);
+  g.stampedVehicles = new Uint8Array(1);
+  const a = { ...agent, peddler: { ...agent.peddler!, prop: 'fry-cart' as const } };
+  packLife(out, g, [a], themes.dark, index);
+  expect(g.stampedVehicles[0]).toBe(1);
+  g.allowsGroundCell = () => false;
+  packLife(out, g, [a], themes.dark, index);
+  expect(g.stampedVehicles[0]).toBe(0);
+});
 it.each([0.1, 0.5, 1])('retains a stamped carrier underneath an open canopy (%s)', (open) => {
   const g = grid(),
     out = new Uint8Array(3600);

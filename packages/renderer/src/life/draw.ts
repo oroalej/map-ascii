@@ -538,7 +538,12 @@ export function packLife(
         } else {
           drawn += n;
           for (const at of journal.before.keys()) groundCells[at / 4] = 1;
-          if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
+          if (
+            n &&
+            detailedStamp &&
+            (agent.kind === 'vehicle' || agent.peddler?.prop === 'fry-cart')
+          )
+            stampedVehicles[index] = 1;
         }
       }
     journal = undefined;
@@ -615,6 +620,7 @@ function drawAgent(
         CellBit.person,
         vehicleByte(agent.paint ?? 0, part),
       ]);
+      detailedStamp = drawn;
     } else {
       const c = Math.floor(cart[0]),
         r = Math.floor(cart[1]),

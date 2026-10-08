@@ -11,7 +11,15 @@ import {
 import { EXTENT, tileToLngLat, lngLatToTile } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { LifeLine, SITE_STRIDE, type LifeGeometry } from './geometry';
-import { hotAt, inHours, MAX_TILE_AGENTS, umbrellaShare } from './config';
+import {
+  hotAt,
+  inHours,
+  MAX_TILE_AGENTS,
+  umbrellaShare,
+  RUN,
+  HEAT,
+  SHELTER_DEPARTURE,
+} from './config';
 import {
   PolygonIndex,
   bodyCorners,
@@ -27,10 +35,11 @@ import { isPeddlerCart, peddlerCartOffset, Paint, VEHICLES } from './vehicles';
 import type { LifeEnv, VisibleAgent } from './simulate';
 import { PeddlerCaller } from './peddler-calls';
 import { PeddlerEmojiObserver, type EmojiObservation } from './emoji';
+import { PUFF } from './exhaust';
 
 export type PeddlerSignals = Pick<
   LifeEnv,
-  'minutes' | 'rain' | 'sunAltitude' | 'windPreset' | 'wind' | 'pointer' | 'emojiView'
+  'minutes' | 'rain' | 'sunAltitude' | 'windPreset' | 'wind' | 'pointer' | 'emojiView' | 'emojiTime'
 > & { wet: boolean; zoom?: number };
 export function peddlerWindow(config: PeddlerConfig, minutes: number | undefined) {
   if (minutes === undefined) return;
@@ -78,6 +87,16 @@ type Route = {
   line: number;
   site?: Point;
 };
+type Leg = { route: Route; from: number; to: number };
+type WeatherVisit = {
+  kind: 'shelter' | 'shade';
+  phase: 'approach' | 'stay' | 'return';
+  legs: Leg[];
+  trail: Leg[];
+  index: number;
+  release?: number;
+  fallback: boolean;
+};
 export type PeddlerOwner = {
   x: number;
   y: number;
@@ -105,6 +124,9 @@ export type PeddlerOwner = {
   resumeToken: number;
   sheltered: boolean;
   shaded: boolean;
+  visit?: WeatherVisit;
+  shelterAttempt: boolean;
+  puff?: { x: number; y: number; at: number };
 };
 type Slot = {
   config: PeddlerConfig;
@@ -348,6 +370,193 @@ export class PeddlerPopulation {
     }
     return true;
   }
+  private visitPlan(owner: PeddlerOwner, kind: WeatherVisit['kind']): Leg[] | undefined {
+    const { geo, perMeter } = this.context,
+      covers: Point[] = [];
+    if (kind === 'shelter') {
+      for (let i = 0; i < geo.sites.length; i += SITE_STRIDE)
+        if (geo.sites[i + 4] === 1)
+          covers.push({ x: geo.sites[i]! / perMeter, y: geo.sites[i + 1]! / perMeter });
+    } else {
+      for (let i = 0; i < geo.perches.length; i += 2)
+        covers.push({ x: geo.perches[i]! / perMeter, y: geo.perches[i + 1]! / perMeter });
+    }
+    const reach = kind === 'shelter' ? RUN.shelter.reach : HEAT.reach;
+    const routes = this.routesFor(owner.config),
+      queue = [{ route: owner.route, at: owner.distance, cost: 0, legs: [] as Leg[] }];
+    const seen = new Map<Route, Map<number, number>>();
+    let best: { cost: number; legs: Leg[] } | undefined;
+    // Bounded search of already checked configured routes; no off-line shelter connector.
+    for (let scan = 0; scan < queue.length && scan < 128; scan++) {
+      const node = queue[scan]!;
+      const ends = seen.get(node.route) ?? new Map<number, number>();
+      if (node.cost > reach || (ends.get(node.at) ?? Infinity) <= node.cost) continue;
+      ends.set(node.at, node.cost);
+      seen.set(node.route, ends);
+      for (const cover of covers) {
+        const distance = Math.max(
+          0,
+          Math.min(
+            node.route.length,
+            (cover.x - node.route.a.x) * node.route.hx + (cover.y - node.route.a.y) * node.route.hy,
+          ),
+        );
+        const target = {
+          x: node.route.a.x + node.route.hx * distance,
+          y: node.route.a.y + node.route.hy * distance,
+        };
+        const cost = node.cost + Math.abs(distance - node.at);
+        const dir = distance >= node.at ? 1 : -1;
+        if (
+          cost > reach ||
+          cost >= (best?.cost ?? Infinity) ||
+          Math.hypot(target.x - cover.x, target.y - cover.y) > 2
+        )
+          continue;
+        if (
+          !this.safe(
+            owner.config,
+            target,
+            target,
+            node.route.hx * dir,
+            node.route.hy * dir,
+            node.route.site,
+          )
+        )
+          continue;
+        best = { cost, legs: [...node.legs, { route: node.route, from: node.at, to: distance }] };
+      }
+      for (const end of [0, node.route.length]) {
+        const point = end === 0 ? node.route.a : node.route.b,
+          cost = node.cost + Math.abs(end - node.at);
+        if (cost > reach || cost >= (best?.cost ?? Infinity)) continue;
+        const legs = [...node.legs, { route: node.route, from: node.at, to: end }];
+        for (const route of routes) {
+          if (route === node.route) continue;
+          if (Math.hypot(route.a.x - point.x, route.a.y - point.y) < 0.02)
+            queue.push({ route, at: 0, cost, legs });
+          else if (Math.hypot(route.b.x - point.x, route.b.y - point.y) < 0.02)
+            queue.push({ route, at: route.length, cost, legs });
+        }
+      }
+    }
+    return best?.legs;
+  }
+  private beginVisit(owner: PeddlerOwner, kind: WeatherVisit['kind']) {
+    const plan = this.visitPlan(owner, kind);
+    if (!plan && kind === 'shade') return false;
+    owner.visit = {
+      kind,
+      phase: 'approach',
+      legs: plan ?? [
+        { route: owner.route, from: owner.distance, to: owner.dir === 1 ? owner.route.length : 0 },
+      ],
+      trail: [],
+      index: 0,
+      fallback: !plan,
+    };
+    owner.pause = 0;
+    return true;
+  }
+  private call(owner: PeddlerOwner, env: PeddlerSignals, eligible: boolean, hovered: boolean) {
+    owner.pause = 5 + owner.rng() * 10;
+    owner.nextCall = 40 + owner.rng() * 50;
+    owner.callToken++;
+    owner.lastCall = owner.effectClock;
+    if (owner.config.prop === 'fry-cart')
+      owner.puff = {
+        x:
+          owner.x +
+          owner.hx * peddlerCartOffset('fry-cart') -
+          owner.hy * (VEHICLES['fry-cart'].width / 2 + 0.4),
+        y:
+          owner.y +
+          owner.hy * peddlerCartOffset('fry-cart') +
+          owner.hx * (VEHICLES['fry-cart'].width / 2 + 0.4),
+        at: owner.effectClock,
+      };
+    this.caller.step(owner, 0, env, eligible, hovered);
+  }
+  private visitStep(
+    owner: PeddlerOwner,
+    dt: number,
+    env: PeddlerSignals,
+    eligible: boolean,
+    hovered: boolean,
+  ) {
+    const visit = owner.visit!;
+    if (visit.phase === 'stay') {
+      if (visit.kind === 'shelter') {
+        if (env.wet) {
+          visit.release = undefined;
+          return;
+        }
+        visit.release ??=
+          SHELTER_DEPARTURE.first +
+          owner.rng() * (SHELTER_DEPARTURE.last - SHELTER_DEPARTURE.first);
+        visit.release -= dt;
+        if (visit.release > 0) return;
+        owner.sheltered = false;
+        owner.resumeToken++;
+        this.caller.step(owner, 0, env, eligible, hovered);
+      } else {
+        owner.pause = Math.max(0, owner.pause - dt);
+        if (owner.pause > 0) return;
+        owner.shaded = false;
+      }
+      visit.phase = 'return';
+      visit.legs = visit.trail
+        .slice()
+        .reverse()
+        .map((leg) => ({ route: leg.route, from: leg.to, to: leg.from }));
+      visit.index = 0;
+    }
+    const leg = visit.legs[visit.index];
+    if (!leg) {
+      owner.visit = undefined;
+      return;
+    }
+    const dir: 1 | -1 =
+      leg.to >= owner.distance && owner.route === leg.route ? 1 : leg.to >= leg.from ? 1 : -1;
+    const hx = leg.route.hx * dir,
+      hy = leg.route.hy * dir;
+    if (!this.fits(owner, owner, hx, hy)) return;
+    owner.route = leg.route;
+    owner.dir = dir;
+    owner.hx = hx;
+    owner.hy = hy;
+    const current = Math.max(
+      0,
+      Math.min(
+        leg.route.length,
+        (owner.x - leg.route.a.x) * leg.route.hx + (owner.y - leg.route.a.y) * leg.route.hy,
+      ),
+    );
+    const distance =
+      current + Math.sign(leg.to - current) * Math.min(Math.abs(leg.to - current), dt * 0.84);
+    const target = {
+      x: leg.route.a.x + leg.route.hx * distance,
+      y: leg.route.a.y + leg.route.hy * distance,
+    };
+    if (!this.fits(owner, target)) return;
+    owner.walked += Math.hypot(target.x - owner.x, target.y - owner.y);
+    Object.assign(owner, target);
+    owner.distance = distance;
+    if (Math.abs(distance - leg.to) > 1e-6) return;
+    if (visit.phase === 'approach') visit.trail.push(leg);
+    visit.index++;
+    if (visit.index < visit.legs.length) return;
+    if (visit.phase === 'return') {
+      owner.visit = undefined;
+      return;
+    }
+    visit.phase = 'stay';
+    if (visit.kind === 'shelter') owner.sheltered = !visit.fallback;
+    else {
+      owner.shaded = true;
+      this.call(owner, env, eligible, hovered);
+    }
+  }
   step(dt: number, env: PeddlerSignals, ordinaryPopulation: number) {
     const pointer = env.pointer && lngLatToTile(this.context.tile, ...env.pointer.lngLat);
     const hovered = (owner: PeddlerOwner) =>
@@ -410,6 +619,7 @@ export class PeddlerPopulation {
             resumeToken: 0,
             sheltered: false,
             shaded: false,
+            shelterAttempt: false,
           };
           if (this.fits(owner, owner)) {
             slot.owner = owner;
@@ -421,26 +631,46 @@ export class PeddlerPopulation {
       const owner = slot.owner;
       if (!owner) continue;
       if (!window || slot.rank >= share) owner.leaving = true;
-      this.caller.step(owner, dt, env, eligible(owner), hovered(owner));
+      this.caller.step(owner, env.emojiTime?.dt ?? dt, env, eligible(owner), hovered(owner));
       if (this.context.held?.(owner)) continue;
       owner.effectClock += dt;
+      if (owner.puff) {
+        if (owner.effectClock - owner.puff.at >= PUFF.life[0]) owner.puff = undefined;
+        else {
+          owner.puff.x += (env.wind?.dir[0] ?? 0) * (env.wind?.strength ?? 0) * PUFF.drift * dt;
+          owner.puff.y +=
+            (env.wind?.dir[1] ?? -1) * Math.max(0.15, env.wind?.strength ?? 0) * PUFF.drift * dt;
+        }
+      }
       owner.window = window?.window ?? owner.window;
       const open =
         env.windPreset !== 'gusty' &&
         env.windPreset !== 'storm' &&
         owner.umbrellaRank < umbrellaShare(env.rain, env.sunAltitude ?? -90);
       owner.canopy = Math.max(0, Math.min(1, owner.canopy + (open ? 1 : -1) * dt));
+      if (owner.leaving) {
+        owner.visit = undefined;
+        owner.sheltered = owner.shaded = false;
+      } else {
+        if (!env.wet) owner.shelterAttempt = false;
+        if (env.wet && owner.canopy === 0 && !owner.shelterAttempt && !owner.visit) {
+          owner.shelterAttempt = true;
+          this.beginVisit(owner, 'shelter');
+        }
+        if (owner.visit) {
+          this.visitStep(owner, dt, env, eligible(owner), hovered(owner));
+          continue;
+        }
+      }
       if (owner.pause > 0 && !owner.leaving) {
         owner.pause = Math.max(0, owner.pause - dt);
         continue;
       }
       owner.nextCall -= dt;
       if (owner.nextCall <= 0 && !owner.leaving) {
-        owner.pause = 5 + owner.rng() * 10;
-        owner.nextCall = 40 + owner.rng() * 50;
-        owner.callToken++;
-        owner.lastCall = owner.effectClock;
-        this.caller.step(owner, 0, env, eligible(owner), hovered(owner));
+        if (hotAt(env.minutes, env.rain, env.sunAltitude) && this.beginVisit(owner, 'shade'))
+          continue;
+        this.call(owner, env, eligible(owner), hovered(owner));
         continue;
       }
       const travel = dt * 1.2 * 0.7 * (env.wet && owner.canopy > 0 ? 0.8 : 1),
@@ -518,7 +748,7 @@ export class PeddlerPopulation {
         },
       };
     });
-    this.emoji.step(dt, env, observations);
+    this.emoji.step(env.emojiTime?.dt ?? dt, env, observations);
   }
   visible(owner: PeddlerOwner, env: PeddlerSignals): VisibleAgent {
     const { tile, perMeter } = this.context,
@@ -565,5 +795,13 @@ export class PeddlerPopulation {
         lamp: owner.config.lamp && (env.sunAltitude ?? 0) < 0 ? flicker : 0,
       },
     };
+  }
+  visiblePuff(owner: PeddlerOwner, index: number): number[] {
+    if (!owner.puff) return [];
+    const [lng, lat] = tileToLngLat(this.context.tile, {
+      x: owner.puff.x * this.context.perMeter,
+      y: owner.puff.y * this.context.perMeter,
+    });
+    return [index, lng, lat, (owner.effectClock - owner.puff.at) / PUFF.life[0], 0];
   }
 }
