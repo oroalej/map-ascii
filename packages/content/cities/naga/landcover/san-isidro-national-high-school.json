@@ -1,0 +1,47 @@
+{
+  "id": "landcover/san-isidro-national-high-school",
+  "title": "San Isidro National High School grounds",
+  "trees": [
+    {
+      "at": [123.268437576, 13.632477413],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.268376541, 13.632418817],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.26846065, 13.632533025],
+      "crown_m": 5,
+      "height_m": 6.0
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.268556762, 13.632593234],
+        [123.268529461, 13.632576806],
+        [123.268436128, 13.632666869],
+        [123.268469609, 13.632691007],
+        [123.268556762, 13.632593234]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/relation/14210960",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.06 m, 8.34 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. One shared rotated reference; western high-school roof and elementary school's lower classroom chain checked independently. Separate parents and packs remain. The first lower-left elementary corner match used the wrong roof end. Added its visible northeast end as a distributed fit control and checked the neighboring lower roof and excluded NHS southeast corner. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+    }
+  ]
+}

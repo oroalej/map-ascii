@@ -1,0 +1,93 @@
+{
+  "id": "landcover/don-manuel-i-abella-central-school",
+  "title": "Don Manuel I. Abella Central School grounds",
+  "trees": [
+    {
+      "at": [123.23999892, 13.629633586],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.240163948, 13.629617554],
+      "crown_m": 11,
+      "height_m": 13.2
+    },
+    {
+      "at": [123.240290318, 13.62959699],
+      "crown_m": 10,
+      "height_m": 12.0
+    },
+    {
+      "at": [123.240074832, 13.629332586],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24064406, 13.629404121],
+      "crown_m": 6,
+      "height_m": 7.2
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.240310337, 13.629124755],
+        [123.240310302, 13.629124537],
+        [123.240310289, 13.629124317],
+        [123.240310299, 13.629124097],
+        [123.24031033, 13.629123879],
+        [123.240310384, 13.629123665],
+        [123.240310458, 13.629123456],
+        [123.240310554, 13.629123256],
+        [123.240310669, 13.629123067],
+        [123.240310803, 13.629122888],
+        [123.240310954, 13.629122724],
+        [123.240311121, 13.629122575],
+        [123.240311302, 13.629122442],
+        [123.240311495, 13.629122327],
+        [123.2403117, 13.629122232],
+        [123.240311913, 13.629122156],
+        [123.240312132, 13.629122101],
+        [123.240351838, 13.629114126],
+        [123.240347517, 13.629091783],
+        [123.240306301, 13.629093544],
+        [123.240306075, 13.629093542],
+        [123.240305849, 13.62909352],
+        [123.240305626, 13.629093476],
+        [123.24030541, 13.62909341],
+        [123.2403052, 13.629093325],
+        [123.240305001, 13.62909322],
+        [123.240304813, 13.629093096],
+        [123.240304638, 13.629092955],
+        [123.240304479, 13.629092798],
+        [123.240304336, 13.629092627],
+        [123.240304211, 13.629092443],
+        [123.240304105, 13.629092248],
+        [123.240304019, 13.629092044],
+        [123.240303955, 13.629091832],
+        [123.240303912, 13.629091615],
+        [123.240303891, 13.629091396],
+        [123.240303736, 13.629087871],
+        [123.240277684, 13.629092111],
+        [123.240287155, 13.629141083],
+        [123.240312921, 13.62913689],
+        [123.240310337, 13.629124755]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/730948736",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6293582,123.2402615,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied don-manuel-i-abella-central-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 0.82 m, 3.44 m. Meets 5 m check limit. Central red roof, western classroom row and fan-shaped south courtyard. Dense crowns obscure much of the yard. The upper west classroom corner is obscured by canopy, so the independent check uses the visible south-front classroom corner instead. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "id": "landcover/san-isidro-elementary-school",
+  "title": "San Isidro Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.268746381, 13.632482177],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.268668733, 13.632394866],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.269136755, 13.632839984],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.269415064, 13.632663873],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.269607056, 13.632863178],
+      "crown_m": 6,
+      "height_m": 7.2
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.268579477, 13.63221205],
+        [123.268516328, 13.632319911],
+        [123.268534968, 13.632331981],
+        [123.268584624, 13.632280659],
+        [123.268747494, 13.632403003],
+        [123.2687842, 13.63234976],
+        [123.268579477, 13.63221205]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.268652349, 13.632656963],
+        [123.268503861, 13.632656697],
+        [123.268459437, 13.632706535],
+        [123.268739299, 13.632890848],
+        [123.268816514, 13.632767391],
+        [123.268652349, 13.632656963]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/relation/14210961",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6327770,123.2689804,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.06 m, 8.34 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. One shared rotated reference; western high-school roof and elementary school's lower classroom chain checked independently. Separate parents and packs remain. The first lower-left elementary corner match used the wrong roof end. Added its visible northeast end as a distributed fit control and checked the neighboring lower roof and excluded NHS southeast corner. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

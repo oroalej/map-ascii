@@ -1,0 +1,56 @@
+{
+  "id": "landcover/cararayan-national-high-school",
+  "title": "Cararayan National High School grounds",
+  "trees": [
+    {
+      "at": [123.238011673, 13.629836171],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.238171105, 13.629813643],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.238622619, 13.629843972],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.237875899, 13.629546192],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.238171601, 13.629479924],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.238377008, 13.629363535],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.237831546, 13.629843852],
+      "crown_m": 5,
+      "height_m": 6.0
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881097068",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6296076,123.2381788,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.68 m, 3.31 m. Meets 5 m check limit. Large northeast classroom, west/top classroom chain and isolated central-east roof enclose a concrete court/yard. Ignore unverified operating-status label. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

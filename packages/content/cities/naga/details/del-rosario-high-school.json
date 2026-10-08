@@ -1,0 +1,136 @@
+{
+  "id": "detail/del-rosario-high-school",
+  "osm_id": "osm:way/885899787",
+  "title": "Del Rosario High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23951659, 13.618406381],
+        [123.239453998, 13.618323728],
+        [123.239490606, 13.618423265],
+        [123.23951659, 13.618406381]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.239089758, 13.618588696],
+        [123.239089828, 13.618588905],
+        [123.239089878, 13.61858912],
+        [123.239089905, 13.618589339],
+        [123.23908991, 13.61858956],
+        [123.239089893, 13.61858978],
+        [123.239089854, 13.618589997],
+        [123.239089793, 13.618590209],
+        [123.23908971, 13.618590415],
+        [123.239089608, 13.618590611],
+        [123.239089486, 13.618590797],
+        [123.239089346, 13.618590971],
+        [123.23908919, 13.61859113],
+        [123.239089017, 13.618591274],
+        [123.239088832, 13.6185914],
+        [123.239088634, 13.618591508],
+        [123.239088426, 13.618591597],
+        [123.239044255, 13.618608038],
+        [123.239056347, 13.618640916],
+        [123.239285813, 13.618570112],
+        [123.239283284, 13.618569065],
+        [123.239280698, 13.618567689],
+        [123.239278264, 13.618566074],
+        [123.239276004, 13.618564234],
+        [123.239273941, 13.618562188],
+        [123.239272093, 13.618559955],
+        [123.23927048, 13.618557557],
+        [123.239269117, 13.618555017],
+        [123.239268016, 13.618552359],
+        [123.239267189, 13.618549609],
+        [123.239266643, 13.618546793],
+        [123.239266383, 13.61854394],
+        [123.239266413, 13.618541075],
+        [123.239266731, 13.618538226],
+        [123.239267335, 13.618535422],
+        [123.239268219, 13.618532689],
+        [123.239269375, 13.618530053],
+        [123.239270791, 13.61852754],
+        [123.239272453, 13.618525174],
+        [123.239274346, 13.618522977],
+        [123.239276451, 13.618520972],
+        [123.239278749, 13.618519177],
+        [123.239281216, 13.618517609],
+        [123.23928383, 13.618516284],
+        [123.239284721, 13.618515885],
+        [123.239119576, 13.618573115],
+        [123.239119359, 13.618573179],
+        [123.239119137, 13.618573222],
+        [123.239118911, 13.618573243],
+        [123.239118685, 13.618573243],
+        [123.239118459, 13.618573221],
+        [123.239118237, 13.618573178],
+        [123.23911802, 13.618573114],
+        [123.239117811, 13.618573029],
+        [123.239117611, 13.618572926],
+        [123.239117422, 13.618572803],
+        [123.239117247, 13.618572663],
+        [123.239117087, 13.618572507],
+        [123.239116943, 13.618572337],
+        [123.239116818, 13.618572154],
+        [123.239116711, 13.618571959],
+        [123.239116624, 13.618571756],
+        [123.23911589, 13.618569761],
+        [123.2390861, 13.618579426],
+        [123.239089758, 13.618588696]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.239546569, 13.618482202],
+        [123.239539129, 13.618461974],
+        [123.239519895, 13.618474471],
+        [123.239517878, 13.618475673],
+        [123.23951577, 13.618476716],
+        [123.239354574, 13.618548896],
+        [123.239425277, 13.61852708],
+        [123.239546569, 13.618482202]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.239473446, 13.61835926],
+        [123.23949367, 13.61841425]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/885899787",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 2.64 m, 3.26 m. Meets 5 m check limit. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

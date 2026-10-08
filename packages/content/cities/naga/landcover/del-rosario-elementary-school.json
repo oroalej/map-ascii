@@ -1,0 +1,31 @@
+{
+  "id": "landcover/del-rosario-elementary-school",
+  "title": "Del Rosario Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.236405503, 13.617820805],
+      "crown_m": 4,
+      "height_m": 5
+    },
+    {
+      "at": [123.237140281, 13.617740873],
+      "crown_m": 4,
+      "height_m": 5
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/729766923",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6179108,123.2367629,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.93 m, 4.17 m. Meets 5 m check limit. Red southern roof, pale western classroom and northern green classroom chain bound the central concrete courtyard. Corrected northern check from the long eastern block to the short adjacent green classroom. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

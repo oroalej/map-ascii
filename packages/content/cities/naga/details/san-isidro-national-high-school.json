@@ -1,0 +1,68 @@
+{
+  "id": "detail/san-isidro-national-high-school",
+  "osm_id": "osm:relation/14210960",
+  "title": "San Isidro National High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.268255959, 13.632287592],
+        [123.268217129, 13.632341654],
+        [123.268271207, 13.63237803],
+        [123.268310036, 13.632323968],
+        [123.268255959, 13.632287592]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.268529316, 13.632462891],
+        [123.268527937, 13.632462455],
+        [123.268526912, 13.632462337],
+        [123.268510674, 13.632451414],
+        [123.268358995, 13.632662592],
+        [123.268405347, 13.632693772],
+        [123.268555095, 13.632481294],
+        [123.268533018, 13.632466444],
+        [123.268532578, 13.632465603],
+        [123.268531682, 13.632464496],
+        [123.26853058, 13.632463581],
+        [123.268529316, 13.632462891]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.268526347, 13.632469474],
+        [123.268510573, 13.632491436],
+        [123.268408695, 13.632613337]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/relation/14210960",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.06 m, 8.34 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. One shared rotated reference; western high-school roof and elementary school's lower classroom chain checked independently. Separate parents and packs remain. The first lower-left elementary corner match used the wrong roof end. Added its visible northeast end as a distributed fit control and checked the neighboring lower roof and excluded NHS southeast corner. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships. Only supported interior links are authored; a complete source-clear frontage-to-building/pitch link could not be established from this reference. The approach gate remains unmet."
+    }
+  ]
+}

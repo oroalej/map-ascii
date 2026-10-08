@@ -1,0 +1,26 @@
+{
+  "id": "landcover/del-rosario-high-school",
+  "title": "Del Rosario High School grounds",
+  "trees": [
+    {
+      "at": [123.239083308, 13.618434542],
+      "crown_m": 6,
+      "height_m": 7.2
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/885899787",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 2.64 m, 3.26 m. Meets 5 m check limit. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

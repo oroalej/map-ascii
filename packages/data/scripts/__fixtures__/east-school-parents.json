@@ -14472,6 +14472,33 @@
     "geometry": {
       "type": "LineString",
       "coordinates": [
+        [123.220484, 13.6186193],
+        [123.2205238, 13.618856],
+        [123.2204761, 13.6189607],
+        [123.2200431, 13.6192996]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23518762",
+      "class": "road_minor",
+      "highway": "residential",
+      "name": "Tenth Street",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Concepcion Grande",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
         [123.2382023, 13.6291339],
         [123.2380977, 13.6284888],
         [123.2380508, 13.6281069],
@@ -14803,6 +14830,35 @@
       "kind": "highway=residential",
       "width": 6,
       "subdivision": "Cararayan",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2183125, 13.6179782],
+        [123.2187134, 13.6176786],
+        [123.2187697, 13.6176525],
+        [123.2188086, 13.6176812],
+        [123.2188768, 13.6177673],
+        [123.2193437, 13.6184958],
+        [123.2199879, 13.6193475]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519669",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 6,
+      "subdivision": "Concepcion Grande",
       "subdivision_approx": true
     },
     "tippecanoe": {
@@ -17197,6 +17253,33 @@
       "width": 6,
       "oneway": 1,
       "subdivision": "Cararayan",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "roads",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "LineString",
+      "coordinates": [
+        [123.2505631, 13.6536999],
+        [123.2504201, 13.6536755],
+        [123.2503894, 13.6536657],
+        [123.2503812, 13.6536378],
+        [123.2503889, 13.6533918]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23519416",
+      "class": "road_minor",
+      "highway": "residential",
+      "kind": "highway=residential",
+      "width": 5,
+      "subdivision": "Pacol",
       "subdivision_approx": true
     },
     "tippecanoe": {
