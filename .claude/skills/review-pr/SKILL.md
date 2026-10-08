@@ -93,7 +93,7 @@ For each candidate finding, yours or a subagent's:
 - A reuse finding must cite the existing helper by `path:line`, and you must have read that helper.
 - Merge duplicates found by different areas.
 - Set each finding's severity:
-  - **blocker:** wrong behavior a user or CI would hit, with a concrete failing scenario. That covers a crash, wrong output, a failing or broken test, data loss, a broken `AGENTS.md` rule (attribution, a hardcoded city, Google imagery, a backend), or a budget breach.
+  - **blocker:** wrong behavior a user or CI would hit, with a concrete failing scenario. That covers a crash, wrong output, a failing or broken test, data loss, a broken `AGENTS.md` rule (attribution, a hardcoded city, a backend), or a budget breach.
   - **should-fix:** a real defect with no visible failure yet. Examples: an edge case that gives wrong results, a hot-path cost with its path named, new behavior without a test, a doc that now says something false, or duplicated logic that has already drifted apart.
   - **nit:** everything else, such as dead code, comment wording, naming, duplication that still agrees, commit structure, and test tidiness.
   - If it's unclear whether something is a should-fix or a nit, it's a nit. `$review-pr` fixes and re-reviews only blockers and should-fix items; nits go to the PR body unfixed.

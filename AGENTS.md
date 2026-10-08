@@ -115,6 +115,5 @@ Implementation plans live in the gitignored `.plans/` folder of the main checkou
 
 ## Don'ts
 
-- Don't use Google Maps / Street View imagery or tiles (terms forbid use on non-Google maps).
 - Don't present OSM edit history as a city's construction history.
 - Don't add a tile server or backend; the site is fully static.
