@@ -1356,6 +1356,47 @@ describe('street event simulation', () => {
       }
     },
   );
+  it('lets a running event’s people pray, wave and call out its cheers in turns', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      1,
+      1,
+    );
+    const w = new LifeWorld(undefined, undefined, {
+      dialogue: [
+        { id: 'cheer-viva', kind: 'cheer', turns: 1, conditions: { occasions: ['procession'] } },
+        { id: 'cheer-amen', kind: 'cheer', turns: 1, conditions: { occasions: ['mass'] } },
+      ],
+    });
+    w.setProcessions([street, mass]);
+    w.sync([{ key: 'road', tile, life: b.finish() }]);
+    const life = worldTiles(w).get('road')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    w.play(street.id, eventOccurrence(street.schedule, new Date('2026-06-01')));
+    const moods = new Set<string>(),
+      said = new Set<string>();
+    for (let i = 0; i < 120; i++) {
+      w.step(0.5, undefined, 18);
+      for (const a of w.visible(18, 1, point(1500))) {
+        if (!eventActor(a)) continue;
+        if (a.emoji) moods.add(a.emoji.mood);
+        if (a.speech) said.add(a.speech.exchangeId);
+      }
+    }
+    expect(moods.size).toBeGreaterThan(0);
+    expect([...said]).toEqual(['cheer-viva']);
+    w.stop();
+    w.step(0.5, undefined, 18);
+    expect(
+      w.visible(18, 1, point(1500)).some((a) => a.speech?.exchangeId.startsWith('cheer-')),
+    ).toBe(false);
+  });
   it('reuses event time only at unchanged progress and retains exact sub-minute time', () => {
     const { w } = world();
     const timing = eventOccurrence(street.schedule, new Date('2026-06-01'));

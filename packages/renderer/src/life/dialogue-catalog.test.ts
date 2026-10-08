@@ -4,6 +4,8 @@ import { dialogueChoices, SCENE_PROFILES } from '@atlas/shared';
 import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
+import { assignEventCues, eventCheers } from './event-cues';
+import type { VisibleAgent } from './simulate';
 
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on dialogue edits.
 import.meta.glob('../../../content/cities/*/dialogue.json');
@@ -19,8 +21,30 @@ const entries = packs.flatMap(({ city, dialogue }) =>
     : [],
 );
 const choices = entries.map(({ entry }) => entry);
+// Event cheers are called out by running events (event-cues.ts), not by street moments.
+const cheers = entries.filter(({ entry }) => entry.kind === 'cheer');
 
-it.each(entries)(
+it.each(cheers)('$city/$entry.id is called out by each of its events', ({ entry }) => {
+  const byEvent = eventCheers(choices);
+  const people = Array.from({ length: 200 }, (_, i): VisibleAgent => ({
+    kind: 'person',
+    lng: 0,
+    lat: 0,
+    flap: 0,
+    candleSeed: i,
+  }));
+  for (const occasion of entry.conditions!.occasions!) {
+    expect(byEvent[occasion]).toContain(entry.id);
+    const said = new Set<string>();
+    for (let clock = 0; clock < 600; clock += 3) {
+      for (const person of people) delete person.speech;
+      assignEventCues(people, occasion, clock, { cheers: byEvent[occasion], emoji: true });
+      for (const person of people) if (person.speech) said.add(person.speech.exchangeId);
+    }
+    expect(said).toContain(entry.id);
+  }
+});
+it.each(entries.filter(({ entry }) => entry.kind !== 'cheer'))(
   '$city/$entry.id can emit every intended turn with its declared roles and legal context',
   ({ entry, periods }) => {
     const weather = entry.conditions?.weather;

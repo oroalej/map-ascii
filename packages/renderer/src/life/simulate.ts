@@ -205,6 +205,7 @@ import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
+import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
 import { SignalControl } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
@@ -9206,6 +9207,8 @@ export class LifeWorld {
   };
   private eventOwners = new Map<string, object>();
   private eventGrounds = groundsForRoutes([]);
+  /** Event cheer exchange ids by event kind, from the dialogue catalog. */
+  private cheers?: ReturnType<typeof eventCheers>;
   private trafficClosureCache?: {
     scene: GroundProcessionScene | ProcessionScene;
     terrain: GroundTerrain;
@@ -12327,6 +12330,16 @@ export class LifeWorld {
             })
           : [];
     for (const agent of staged) agent.event = true;
+    // A few of the event's people pray, wave or call out its cheers, in turns.
+    if (scene && staged.length) {
+      this.cheers ??= eventCheers(
+        this.momentOptions?.enabled === false ? undefined : this.momentOptions?.dialogue,
+      );
+      assignEventCues(staged, scene.route.kind, this.clock, {
+        cheers: this.cheers[scene.route.kind],
+        emoji: this.emojiObserver,
+      });
+    }
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
