@@ -42,7 +42,7 @@ Seed landmarks (location and name only, sourced to OSM; dates and stories wait f
 
 ### Clickable landmarks and facts
 
-The pack has sourced facts for exactly twelve landmarks: Plaza Rizal, Plaza Quince Martires, San Francisco Parish, Naga Metropolitan Cathedral, Ateneo de Naga University, Universidad de Santa Isabel, Peñafrancia Basilica Minore, the old Peñafrancia Shrine, Immaculate Conception Parish, People Power Monument, Padre Jorge Barlin Plaza and Jesse Robredo Monument. Facts live in each landmark JSON and link to its research sources. Their presence controls pointer eligibility; other landmarks retain their drawings and labels and remain selectable through search, tours, Places in view or shared URLs.
+The pack has sourced facts for exactly thirteen landmarks: Plaza Rizal, Plaza Quince Martires, San Francisco Parish, Naga Metropolitan Cathedral, Ateneo de Naga University, Universidad de Santa Isabel, Peñafrancia Basilica Minore, the old Peñafrancia Shrine, Immaculate Conception Parish, People Power Monument, Padre Jorge Barlin Plaza, Jesse Robredo Monument and Old Abella Mansion Arch. Facts live in each landmark JSON and link to its research sources. Their presence controls pointer eligibility; other landmarks retain their drawings and labels and remain selectable through search, tours, Places in view or shared URLs.
 
 “Peñafrancia Church” means the old Shrine, distinct from the Basilica. Immaculate Conception means the Concepcion Pequeña parish, distinct from Quipayo. Robredo means the seated statue inscribed “Matino, Mahusay, Matapat” beside Museo ni Jesse Robredo at `[123.1972939, 13.6285397]`, OSM `node/13958319312`, linked as `landmark/jesse-robredo-monument`; the City Hall bust `node/13105399473` remains outside the clickable list. Its facts cite Bicol Mail’s 2017 report on the museum opening. Fact dates concern sourced institutions, events or monuments and do not date current building footprints.
 
@@ -58,6 +58,8 @@ Tour 2 is in the city pack (`packages/content/cities/naga/tours/`) as a draft: i
 Tour narration must be fact-checked against sources before shipping. Draft text may use placeholders marked `TODO(verify)`.
 
 ## 4. Research backlog (content team)
+
+Heritage identification: the twenty-two individual omissions in the October 8, 2026 data note below remain open. Verify standing structures and exact lots before adding footprints. Almeda especially needs an independent location and historical source; an AI-assisted directory coordinate does not resolve its identity or construction date.
 
 The owner’s October 5 Magsaysay clarification retains the earlier orange/yellow forecourt lights over open ground. Only the portions of yard strings that overlap existing roadside tree crowns are removed; both outside ends of a crossing string remain. Those crowns receive wrapped Christmas lights. The complete roof-edge house lights and both Christmas trees remain, with their existing positions and full-footprint pedestrian clearance. Walking paths and parking remain absent. The seasonal envelope follows the outer envelope of the earlier display patches; geography and layout are illustrative, not a surveyed property boundary or an actual annual installation.
 
@@ -104,7 +106,40 @@ Record each item in `packages/content/cities/naga/` with its sources:
 
 Emergency vehicles (2026-10-07): illustrative OSM-derived episodes, without live dispatch data. The pack permits one ambulance, two police cars and one fire truck. Police patrols are a regular presence: safe offscreen admissions are scheduled every 5–15 simulated seconds while a patrol slot is available, with lights off between calls. Ambulance and fire responses remain occasional. Their intervals and dwell/call durations are simulation settings. Hospital destinations use `building_hospital`, and station destinations use retained `amenity=police` / `amenity=fire_station` tags. The two mapped Guard Houses are excluded from police dispatch origins: [way 222404483](https://www.openstreetmap.org/way/222404483) and [way 222405532](https://www.openstreetmap.org/way/222405532). The generated graph retains legal road directions and snapped roadside terminals; building samples represent decorative incident destinations.
 
-As of 2026-10-04, the city pack contains 70 landmark records, 67 landcover packs and 64 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
+As of 2026-10-08, the city pack contains 72 landmark records, 67 landcover packs and 64 site-detail packs. The dated entries below record intermediate layouts and inventories; later corrections supersede their earlier descriptions.
+
+Heritage identification (2026-10-08): [Ordinance No. 2003-003, Section 6](https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/) supplies the preservation list. The Old Abella Mansion Arch is attached to existing RAD Building footprint [way/23665222](https://www.openstreetmap.org/way/23665222), south of Panganiban Drive and west of Blumentritt Street. [Naga City Tourism](https://tourism.naga.gov.ph/attractions/the-old-abella-arch/) supports its four facts; [Bicol Mail's 2019 report and photograph](https://www.bicolmail.net/single-post/2019/07/04/naga-fetes-phil-spanish-friendship-day) identify the arch within the RAD perimeter. These pages and an Esri World Imagery reference were inspected on October 8, 2026. Direct Google Maps and Street View inspection was unavailable. The modern host remains undated, with unchanged geometry; the facts concern the arch and former mansion, not the host. Existing landmark display supplies search, selection, labels, walls and night lighting, with labels and walls at z17. No masonry reconstruction or raster ships.
+
+Heritage dates appear in facts only until the year timeline is implemented.
+
+Coverage is one of twenty requested sites, below the handoff's half-coverage target. The following unresolved identities are intentionally omitted rather than attached to nearby roofs. The three conditional ruins are also omitted individually. Each remains a research backlog item requiring a standing structure, exact lot and independent footprint match:
+
+| Omitted site | Unresolved evidence |
+|---|---|
+| Almeda Ancestral House | Abella Street is supported, but a proposed directory coordinate is AI-assisted and the candidate roof is obscured by canopy. |
+| Roco Ancestral House | Barlin Street and a wooden house are documented, but the [2009 photograph](https://planetnaga.wordpress.com/2009/01/05/old-houses-in-naga/) cannot be tied to one current lot. |
+| Old Provincial Jail | Published references identify the complex behind PhilamLife, without a distinct surviving jail footprint. |
+| Administracion de Correo | The [2024 account](https://dateline-ibalon.com/2024/07/spanish-era-buildings-declared-as-important-cultural-properties-in-naga-city/) identifies a right-hand 1826 building, but its inscription cannot be matched to a separate current footprint. |
+| Lorenzo House | Barlin Street only; no exact surviving lot verified. |
+| Badiola House | Barlin Street only; no exact surviving lot verified. |
+| Amanse House | Barlin Street only; no exact surviving lot verified. |
+| Barlin–Dimasalang corner house | Several corner footprints; the listed house's corner and survival remain unresolved. |
+| Abella stone structure at Elias Angeles–Paz | No source/photo identifies which corner footprint survives. |
+| Elias Angeles–Dimasalang corner house | No surviving-house identity or exact corner verified. |
+| Abella business buildings | No surviving General Luna row or representative roof independently identified. |
+| De la Rosa buildings | Calle Caceres is named, but no surviving row or roof identified. |
+| Villafrancia House | The 2009 image shows a family name and 1927 inscription, without an exact Peñafrancia Avenue lot. |
+| House beside Villafrancia | Its parent lot and unspecified neighboring house remain unresolved. |
+| Ocampo House | Peñafrancia Avenue only; no exact surviving lot verified. |
+| Jordana House | Peñafrancia Avenue only; no exact surviving lot verified. |
+| Yllana House | Liboton Street only; no exact surviving lot verified. |
+| Villa Ignacio House | Liboton Street only; no exact surviving lot verified. |
+| Dy-Liacco Ancestral House | J. Hernandez Avenue only; no exact surviving lot verified. |
+| Pantranco stone fence (conditional) | No surviving building host verified; standalone wall geometry is outside scope. |
+| Contreras property ruins (conditional) | Balintawak Street and a historical office address do not establish a surviving ruins footprint. |
+| Adjacent Contreras property ruins (conditional) | Unnamed property's position, survival and separate footprint remain unresolved. |
+
+The [2026 cultural-properties account](https://dateline-ibalon.com/2026/02/the-movement-to-protect-naga-citys-remaining-cultural-properties-judge-soliman-m-santos-jr-retd/) supports continued research, but does not settle these individual building identities. The jail and Correo are separate omissions, with no invented combined landmark.
 
 St. John Hospital and STI College correction (2026-10-04): the owner's new close-up references supersede their earlier schematic outdoor layouts. Remove St. John's added grounds, three trees, grass/planting/shrubs and two walking/paving routes. Remove STI's broad estimated grounds envelope, ten trees, all supplemental grass/planting and six paving strips. Both retain their curated landmark identities, complete mapped roofs, source access geometry and hospital/school classification. The Hospital legend category remains. No new geometry is inferred from these references and no raster ships. This supersedes the earlier landscaping descriptions for these two sites; the other school and hospital layouts remain.
 
