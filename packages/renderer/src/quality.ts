@@ -6,6 +6,7 @@ export type Knobs = {
   crownSway: boolean;
   groundWind: boolean;
   shadows: boolean;
+  clouds: boolean;
   waterDetail: boolean;
   fish: boolean;
   beams: boolean;
@@ -17,6 +18,7 @@ const high: Knobs = {
   crownSway: true,
   groundWind: true,
   shadows: true,
+  clouds: true,
   waterDetail: true,
   fish: true,
   beams: true,
@@ -29,6 +31,7 @@ const effects: Knobs = {
   crownSway: false,
   groundWind: false,
   shadows: false,
+  clouds: false,
   waterDetail: false,
   fish: false,
   beams: false,

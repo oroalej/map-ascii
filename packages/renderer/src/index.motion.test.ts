@@ -49,6 +49,8 @@ import type * as FolklorePassModule from './folklore-pass';
 import type { FolkloreQuad } from './folklore-pass';
 import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
+import { cloudCover, driftClouds, SKY, skyAnchor } from './life/sky';
+import { moonlight } from './life/moon';
 import { viewportFor } from './camera';
 
 const folkloreCapture = vi.hoisted(() => ({
@@ -257,6 +259,115 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it('keeps storm cloud cover independent of Life, motion and live wind resolution', () => {
+    atlas.setLife({ enabled: false });
+    draw(100);
+    let weather = vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+    expect(weather.cloudCover).toBe(1);
+    expect(weather.rain).toBe(1);
+    atlas.setReducedMotion(true);
+    draw(200);
+    weather = vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+    expect(weather.cloudCover).toBe(1);
+    expect(weather.rain).toBe(0);
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      reducedMotion: true,
+      life: { enabled: false, wind: 'live' },
+      climate: { wind: [], default: { from: 90, strength: 'storm' }, source: 'test' },
+    });
+    draw(300);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]).toMatchObject({
+      cloudCover: 1,
+      rain: 0,
+      cloudOffset: [0, 0],
+    });
+  });
+
+  it('advances clouds only while watched and rebases motion and context transitions', () => {
+    atlas.setLife({ enabled: false, wind: 'breeze' });
+    const weather = () => vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+    draw(100);
+    const first = weather().cloudOffset!;
+    draw(200);
+    expect(weather().cloudOffset).toEqual(driftClouds(first, weather().wind!, 0.1, false));
+    const frozen = weather().cloudOffset!;
+    time = 210;
+    visibility.watched = false;
+    visibility.changed!(false);
+    draw(5000);
+    expect(weather().cloudOffset).toEqual(frozen);
+    time = 10_000;
+    visibility.watched = true;
+    visibility.changed!(true);
+    draw(10_020);
+    expect(weather().cloudOffset).toEqual(driftClouds(frozen, weather().wind!, 0.02, false));
+    atlas.setReducedMotion(true);
+    const reduced = weather().cloudOffset!;
+    draw(20_000);
+    atlas.setCamera({ lng: 0.001 });
+    draw(20_100);
+    expect(weather().cloudOffset).toEqual(reduced);
+    time = 30_000;
+    atlas.setReducedMotion(false);
+    draw(30_020);
+    expect(weather().cloudOffset).toEqual(driftClouds(reduced, weather().wind!, 0.02, false));
+    const beforeLoss = weather().cloudOffset!;
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    time = 40_000;
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    draw(40_020);
+    expect(weather().cloudOffset).toEqual(driftClouds(beforeLoss, weather().wind!, 0.02, false));
+    const beforeGap = weather().cloudOffset!;
+    draw(50_000);
+    expect(weather().cloudOffset).toEqual(
+      driftClouds(beforeGap, weather().wind!, SKY.maxDt, false),
+    );
+  });
+
+  it('updates cover on sun ticks from the shown moment and attenuates fresh moonlight', () => {
+    atlas.destroy();
+    let date = new Date('2026-07-29T22:00:00Z');
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      life: { enabled: false, time: 'live', wind: 'breeze' },
+      now: () => date,
+      reducedMotion: true,
+    });
+    const seed = skyAnchor([-1, -1, 1, 1]).seed;
+    const check = () => {
+      const call = vi.mocked(glyphPass).mock.calls.at(-1)!;
+      const expected = cloudCover(date, seed);
+      expect(call[11]!.cloudCover).toBe(expected);
+      expect(call[13]).toBeCloseTo(moonlight(date, 0, 0) * (1 - SKY.moonLoss * expected), 10);
+      expect(call[11]!.rain).toBe(0);
+    };
+    draw(100);
+    check();
+    const cover = vi.mocked(glyphPass).mock.calls.at(-1)![11]!.cloudCover;
+    date = new Date('2026-07-30T00:00:00Z');
+    atlas.setCamera({ zoom: 17 });
+    draw(200);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.cloudCover).toBe(cover);
+    draw(1100);
+    check();
+    atlas.setCamera({ zoom: 18 });
+    draw(2100);
+    check();
+    expect(moonlight(date, 0, 0)).toBeGreaterThan(0.1);
+    atlas.setLife({ time: 720 });
+    draw(2200);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.cloudCover).toBe(
+      cloudCover(atCityMinutes(date, { lng: 0 }, 720), seed),
+    );
+  });
   it('keeps ordinary agents when Wind or Time changes clear folklore', () => {
     atlas.destroy();
     const original = Hosts.createInlineHost,

@@ -13,6 +13,7 @@ import {
   selectPass,
   type TileDraw,
   type View,
+  type Weather,
 } from './passes';
 import * as twgl from 'twgl.js';
 import { classId, classVisibility, groundFlags } from './classes';
@@ -34,6 +35,65 @@ const view: View = {
   width: 800,
   height: 600,
 };
+
+it('sets cloud coordinates, seed and detail explicitly and resets to clear defaults', () => {
+  const names = [
+    'u_cloudCover',
+    'u_cloudSeed',
+    'u_cloudDetail',
+    'u_meterOrigin',
+    'u_meterStep',
+    'u_cloudOffset',
+  ];
+  const setters = Object.fromEntries(names.map((name) => [name, vi.fn()]));
+  const programs = {
+    glyph: { program: {}, uniformSetters: setters },
+    emptyVao: null,
+  } as unknown as Programs;
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (weather?: Weather) =>
+    glyphPass(
+      gl,
+      programs,
+      { sub: {} } as CellTargets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      0,
+      true,
+      1,
+      weather,
+    );
+  draw({
+    rain: 0,
+    wind: null,
+    cloudCover: 0.6,
+    cloudSeed: 0xf1234567,
+    cloudDetail: true,
+    meterOrigin: [8150, 123],
+    meterStep: [1, 1.8],
+    cloudOffset: [4, 5],
+  });
+  for (const [i, value] of [0.6, 0xf1234567, true, [8150, 123], [1, 1.8], [4, 5]].entries())
+    expect(setters[names[i]!]!).toHaveBeenLastCalledWith(value);
+  draw();
+  for (const [i, value] of [0, 0, false, [0, 0], [0, 0], [0, 0]].entries())
+    expect(setters[names[i]!]!).toHaveBeenLastCalledWith(value);
+});
 
 it('supplies wind-driven bunting independently of Life and stills it for Calm or reduced motion', () => {
   const strength = vi.fn(),

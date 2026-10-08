@@ -46,6 +46,7 @@ import {
 } from '../glyphs/select';
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
+import { SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
@@ -136,11 +137,29 @@ uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
 uniform float u_moon;
+uniform float u_cloudCover;
+uniform uint u_cloudSeed;
+uniform bool u_cloudDetail;
+uniform vec2 u_meterOrigin;
+uniform vec2 u_meterStep;
+uniform vec2 u_cloudOffset;
 
 out vec4 o_color;
 
 ${cellHashGlsl}
 ${waterEffectGlsl}
+${skyNoiseGlsl}
+
+// Ambient material only: light emission is composed afterwards, as before.
+float cloudShade = 1.0;
+float cloudFactor(vec2 grid) {
+  if (u_daylight <= 0.0) return 1.0;
+  if (u_cloudCover >= 1.0) return 1.0 - ${SKY.shadow} * u_daylight;
+  if (!u_cloudDetail) return 1.0 - 0.5 * ${SKY.shadow} * u_cloudCover * u_daylight;
+  if (u_cloudCover < ${SKY.detailMin}) return 1.0;
+  vec2 world_m = u_meterOrigin + (grid / u_cell) * u_meterStep - u_cloudOffset;
+  return 1.0 - ${SKY.shadow} * u_daylight * cloudShadow(world_m, u_cloudCover, u_cloudSeed);
+}
 
 float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
@@ -150,19 +169,19 @@ vec3 daylit(vec3 color) {
   float dusk = 1.0 - abs(u_daylight - 0.5) * 2.0;
   color = mix(color, color * vec3(1.2, 0.88, 0.68), dusk * 0.45);
   vec3 tint = mix(vec3(0.4, 0.48, 0.78), vec3(0.6, 0.64, 0.76), u_moon);
-  return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon));
+  return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon)) * cloudShade;
 }
 
 vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.shade}) return color * ${float(TONE.shade)};
-  if (tone == ${Tone.light}) return mix(color, vec3(1.0), ${float(TONE.light)} * (1.0 - night));
+  if (tone == ${Tone.light}) return mix(color, vec3(cloudShade), ${float(TONE.light)} * (1.0 - night));
   if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
   return color;
 }
 
 vec3 fillOf(int cls, vec3 color) {
   vec3 pigment = color * u_fillColors[cls] / max(u_colors[cls], vec3(1.0 / 255.0));
-  return mix(u_background, pigment, u_fills[cls]);
+  return mix(u_background * cloudShade, pigment, u_fills[cls]);
 }
 
 float lamps() {
@@ -650,6 +669,7 @@ void main() {
     return;
   }
 
+  cloudShade = cloudFactor(grid);
   vec4 g = texelFetch(u_glyphs, cell, 0);
   int cls = int(g.g * 255.0 + 0.5) & 63;
   int rawState = int(g.b * 255.0 + 0.5);
@@ -819,7 +839,7 @@ void main() {
   // Blades caught by a gust show their pale sides, more as it strengthens (glyphs/select.ts
   // WIND_LIGHT by wind level).
   if (awning == 0 && windLevel > 0) {
-    color = mix(color, vec3(1.0), windLevel == 3 ? ${float(WIND_LIGHT[3])}
+    color = mix(color, vec3(cloudShade), windLevel == 3 ? ${float(WIND_LIGHT[3])}
       : windLevel == 2 ? ${float(WIND_LIGHT[2])} : ${float(WIND_LIGHT[1])});
   }
   if (state == ${CellState.hover}) {

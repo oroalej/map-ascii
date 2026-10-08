@@ -768,7 +768,18 @@ export function effectClockPass(gl: GL, targets: CellTargets) {
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
-export type Weather = { rain: number; wind: WindNow | null; fish?: boolean; detail?: boolean };
+export type Weather = {
+  rain: number;
+  wind: WindNow | null;
+  fish?: boolean;
+  detail?: boolean;
+  cloudCover?: number;
+  cloudSeed?: number;
+  cloudDetail?: boolean;
+  meterOrigin?: readonly [number, number];
+  meterStep?: readonly [number, number];
+  cloudOffset?: readonly [number, number];
+};
 
 const fixturesOf = new WeakMap<
   CellTargets,
@@ -1013,6 +1024,12 @@ export function glyphPass(
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_daylight: daylight,
+    u_cloudCover: weather.cloudCover ?? 0,
+    u_cloudSeed: weather.cloudSeed ?? 0,
+    u_cloudDetail: weather.cloudDetail ?? false,
+    u_meterOrigin: weather.meterOrigin ?? [0, 0],
+    u_meterStep: weather.meterStep ?? [0, 0],
+    u_cloudOffset: weather.cloudOffset ?? [0, 0],
     u_light: targets.lightTex,
     u_fixtures: targets.fixtureTex,
     u_fixturePaints: themeRes.uniforms.fixtures,

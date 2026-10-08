@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QualityController } from './quality';
+import { QualityController, TIERS } from './quality';
 
 const drive = (
   q: QualityController,
@@ -18,6 +18,14 @@ const drive = (
   return changes;
 };
 describe('adaptive quality', () => {
+  it('retains cloud detail on high and crowd and drops it on effects and pixels', () => {
+    expect(TIERS.map((tier) => [tier.name, tier.knobs.clouds])).toEqual([
+      ['high', true],
+      ['crowd', true],
+      ['effects', false],
+      ['pixels', false],
+    ]);
+  });
   it('steps down under sustained load, waits for quiet, and observes cooldown', () => {
     const q = new QualityController('auto');
     expect(drive(q, 0, 4500, 30, 15, false)).toEqual([]);
