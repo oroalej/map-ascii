@@ -1,0 +1,51 @@
+{
+  "id": "landcover/carolina-elementary-school",
+  "title": "Carolina Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.287004654, 13.663930129],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.287355099, 13.663940145],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.287307013, 13.663872168],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.288155091, 13.663801516],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.287303778, 13.664115063],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.287143581, 13.663933012],
+      "crown_m": 5,
+      "height_m": 6.0
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/833125856",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6639421,123.2874582,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied carolina-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 12.14 m, 15.05 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Northern row, western red roof and southern classroom row enclose a predominantly bare yard. Lawn only in visible peripheral green patches. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

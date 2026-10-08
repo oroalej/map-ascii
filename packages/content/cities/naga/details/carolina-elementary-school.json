@@ -1,0 +1,104 @@
+{
+  "id": "detail/carolina-elementary-school",
+  "osm_id": "osm:way/833125856",
+  "title": "Carolina Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.287589698, 13.664232314],
+        [123.287690999, 13.663944714],
+        [123.287961143, 13.663939143],
+        [123.287958397, 13.663906885],
+        [123.287958389, 13.663906665],
+        [123.287958404, 13.663906445],
+        [123.287958441, 13.663906227],
+        [123.287958499, 13.663906015],
+        [123.287958579, 13.663905808],
+        [123.287958679, 13.66390561],
+        [123.287958799, 13.663905423],
+        [123.287958937, 13.663905248],
+        [123.287959092, 13.663905087],
+        [123.287959262, 13.663904942],
+        [123.287959446, 13.663904813],
+        [123.287959643, 13.663904703],
+        [123.287959675, 13.663904689],
+        [123.287703234, 13.663909977],
+        [123.287708842, 13.663894056],
+        [123.287632139, 13.663895637],
+        [123.287626245, 13.663911564],
+        [123.287137295, 13.663921647],
+        [123.287127117, 13.663950541],
+        [123.28714599, 13.663951256],
+        [123.287146216, 13.663951275],
+        [123.287146439, 13.663951316],
+        [123.287146657, 13.663951378],
+        [123.287146867, 13.66395146],
+        [123.287147068, 13.663951562],
+        [123.287147258, 13.663951683],
+        [123.287147435, 13.663951821],
+        [123.287147597, 13.663951975],
+        [123.287147742, 13.663952144],
+        [123.28714787, 13.663952326],
+        [123.287147979, 13.663952519],
+        [123.287148068, 13.663952722],
+        [123.287148136, 13.663952932],
+        [123.287148183, 13.663953148],
+        [123.287148207, 13.663953367],
+        [123.287148209, 13.663953588],
+        [123.287148116, 13.663955908],
+        [123.287613385, 13.663946314],
+        [123.287507267, 13.66423307],
+        [123.287589698, 13.664232314]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.28756039, 13.664210351],
+        [123.287594989, 13.664100437],
+        [123.287659768, 13.663922368]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.287515842, 13.664227152],
+        [123.287685823, 13.663941746],
+        [123.28768616, 13.663941251],
+        [123.287686546, 13.663940792],
+        [123.287686979, 13.663940373],
+        [123.287687453, 13.663939999],
+        [123.287687964, 13.663939674],
+        [123.287688505, 13.663939401],
+        [123.287689073, 13.663939182],
+        [123.287689661, 13.663939021],
+        [123.287690262, 13.663938919],
+        [123.287952691, 13.663910686]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/833125856",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6639421,123.2874582,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied carolina-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 12.14 m, 15.05 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Northern row, western red roof and southern classroom row enclose a predominantly bare yard. Lawn only in visible peripheral green patches. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

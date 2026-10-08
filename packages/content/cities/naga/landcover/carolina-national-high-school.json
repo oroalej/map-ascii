@@ -1,0 +1,83 @@
+{
+  "id": "landcover/carolina-national-high-school",
+  "title": "Carolina National High School grounds",
+  "trees": [
+    {
+      "at": [123.291366444, 13.66162319],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.291159759, 13.661632335],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.291126886, 13.661500548],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.291209779, 13.661301552],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.29180615, 13.661337938],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.290821665, 13.661320331],
+      "crown_m": 7,
+      "height_m": 8.4
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.291306785, 13.661340105],
+        [123.29132389, 13.661391775],
+        [123.291398372, 13.661383946],
+        [123.291381267, 13.661332276],
+        [123.291306785, 13.661340105]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.291201125, 13.661351211],
+        [123.291220745, 13.66141048],
+        [123.291260473, 13.661405956],
+        [123.291240964, 13.661347024],
+        [123.291201125, 13.661351211]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.291075948, 13.661436708],
+        [123.291096805, 13.661552094],
+        [123.291168251, 13.661541905],
+        [123.291167001, 13.661530738],
+        [123.291130732, 13.66143095],
+        [123.291075948, 13.661436708]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881084574",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6613951,123.2914070,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied carolina-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 6.92 m, 10.74 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Western red roof, northern long classroom and central classroom provide distributed matches; retain green courtyard islands and clear paths between roofs. Added the clear northeast end of the north roof to constrain shear across the campus; independent central and northwest roof checks remain excluded. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}
