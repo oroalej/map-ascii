@@ -1,6 +1,6 @@
 # Naga ambient dialogue
 
-The catalog contains 104 short, fictional scenes in 15 categories: 42 one-speaker utterances and 62 exchanges. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
+The catalog contains 105 scenes: 104 short, fictional ordinary scenes in 15 categories (42 one-speaker utterances and 62 exchanges), plus one sourced, tap-only procession cheer utterance. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
 
 New scripts are original compositions. [Jon Epstein's *Standard Bikol* (Peace Corps, 1967)](https://files.eric.ed.gov/fulltext/ED018772.pdf) supplies grammatical reference for actor/goal focus, pronouns, questions and demonstratives. [Malcolm Mintz's *Bikol Dictionary* (University of Hawaii Press, 1971)](https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary) supplies lexical reference. Existing catalog entries retain their original sources. A reference supports language forms; it does not attest each authored sentence.
 
@@ -64,3 +64,7 @@ Four weather IDs bring the current inventory to 104 scenes (42 utterances and 62
 - `weather-clearing-linger` combines DIGDI/PA/AKO (here, still, I) as an independent observation.
 
 Every word was checked against Mintz's 1971 dictionary, downloaded from its University of Hawaii Press Manifold page. Stress marks are omitted following the existing catalog convention; no new spellings are inferred. These are original fictional compositions, with English and Tagalog meanings rather than literal quotations. Native-speaker review remains pending. The proposed fierce-sun and renewed-rain warnings were omitted in favor of these short supported compositions. Heat is the shared dry/high-sun midday rule, not measured temperature; clearing lines belong only to current post-rain shelter countdowns.
+
+## Tap-only procession cheer
+
+The single procession-cheer-viva utterance uses the traditional Spanish chant recorded by the City of Naga in its 2022 shrine article. English and Tagalog translations are illustrative. A tap near the pagoda or andas requests it; ordinary conversation never selects this profile. The existing 104 scenes and all fifteen ordinary profile counts remain unchanged. Jeepney riders are not available, so no transit-call line is added.

@@ -53,7 +53,12 @@ export class TapSources {
   }
   read(tap: Pick<LifeTap, 'frame' | 'agent'>) {
     const source = this.frames.find((f) => f.frame === tap.frame);
-    return source && { target: tap.agent === undefined ? undefined : source.targets[tap.agent] };
+    return (
+      source && {
+        targets: source.targets,
+        target: tap.agent === undefined ? undefined : source.targets[tap.agent],
+      }
+    );
   }
   latest() {
     return this.frames[this.frames.length - 1]?.targets ?? [];

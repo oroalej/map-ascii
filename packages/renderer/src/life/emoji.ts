@@ -467,6 +467,8 @@ export class EmojiObserver {
       this.groups.add(g);
       state.group = g;
       state.requestedAt = clock;
+      state.eligible = true;
+      state.speaking = false;
     }
   }
   private admit(

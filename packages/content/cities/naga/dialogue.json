@@ -2659,6 +2659,23 @@
         "weather": "clearing"
       },
       "delivery": "utterance"
+    },
+    {
+      "id": "procession-cheer-viva",
+      "kind": "talk",
+      "profile": "procession-cheer",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        { "bcl": "Viva la Virgen!", "en": "Long live the Virgin!", "fil": "Mabuhay ang Birhen!" }
+      ],
+      "sources": [
+        {
+          "title": "The historic and original home of Ina — City of Naga (2022)",
+          "url": "https://www2.naga.gov.ph/the-historic-and-original-home-of-ina-penafrancia-shrine/",
+          "note": "The city article records this traditional Spanish procession chant. Translations are illustrative; this single utterance is requested only by a tap near the procession."
+        }
+      ]
     }
   ]
 }

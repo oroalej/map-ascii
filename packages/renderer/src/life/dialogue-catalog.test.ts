@@ -65,6 +65,8 @@ it.each(entries)(
     if (sceneOwned) {
       const host = new SceneSpeech(42, [entry], periods);
       const scene = {
+        kind: entry.kind,
+        requested: ['transit-call', 'procession-cheer'].includes(entry.profile!),
         key: {},
         speakers: owners.map((owner, i) => ({ owner, member: 0, figure: context.figures[i]! })),
         profiles: [entry.profile!],
@@ -144,7 +146,15 @@ it('never enables school, vendor, transit or sheltered scripts for an ordinary m
   const selected = choices.filter((entry) => dialogueEligible(entry, context));
   expect(
     selected.some((e) =>
-      ['school', 'vendor-order', 'vendor-thanks', 'transit', 'companion'].includes(e.profile!),
+      [
+        'school',
+        'vendor-order',
+        'vendor-thanks',
+        'transit',
+        'companion',
+        'transit-call',
+        'procession-cheer',
+      ].includes(e.profile!),
     ),
   ).toBe(false);
   expect(

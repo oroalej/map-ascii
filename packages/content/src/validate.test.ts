@@ -117,9 +117,17 @@ describe('loadCityPacks', () => {
     const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
-    expect(speech?.exchanges).toHaveLength(104);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
+    const tapOnly = speech!.exchanges.filter((e) =>
+      ['transit-call', 'procession-cheer'].includes(e.profile!),
+    );
+    const ordinary = speech!.exchanges.filter((e) => !tapOnly.includes(e));
+    expect(ordinary).toHaveLength(104);
+    expect(ordinary.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
+    expect(ordinary.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
+    expect(tapOnly.map((e) => [e.profile, e.delivery, e.speakers])).toEqual([
+      ['procession-cheer', 'utterance', [0]],
+    ]);
+    expect(speech!.exchanges.length).toBeLessThanOrEqual(120);
     expect(
       speech?.exchanges
         .filter((e) => ['heat', 'clearing'].includes(e.conditions?.weather ?? ''))
@@ -133,7 +141,7 @@ describe('loadCityPacks', () => {
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
-      counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
+      if (!tapOnly.includes(e)) counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
       const script = e.lines
         .map((line) =>
           line

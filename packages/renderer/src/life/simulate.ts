@@ -34,6 +34,8 @@ import {
 } from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
+import { EventTaps } from './event-taps';
+import { ProcessionGlyph } from './procession-glyphs';
 import {
   TapSources,
   TapReactions,
@@ -8697,6 +8699,78 @@ export class LifeWorld {
       if (person) return { life, person };
     }
   }
+  private eventTaps?: EventTaps;
+  private syncEventTaps(create = false) {
+    if (!create && !this.eventTaps) return;
+    const run = this.procession();
+    const scope = run && `${run.id}/${this.eventScope(run)}`;
+    if (this.eventTaps && this.eventTaps.scope !== scope) {
+      this.eventTaps.clear();
+      this.eventTaps = undefined;
+    }
+    if (create && scope)
+      this.eventTaps ??= new EventTaps(
+        scope,
+        this.momentOptions,
+        this.emojiMemory,
+        this.emojiObserver,
+      );
+    return this.eventTaps;
+  }
+  private stepEventTaps(dt: number, zoom = 19) {
+    const state = this.syncEventTaps();
+    if (!state) return;
+    const visible = new Set(
+      (this.tapSources?.latest() ?? []).flatMap((t) => (t?.agent.event ? [t.owner] : [])),
+    );
+    state.step(dt, zoom, this.emojiClock, visible);
+  }
+  private tapProcession(tap: LifeTap, minutes: number, zoom: number) {
+    if (!this.procession()) return false;
+    const targets = this.tapSources?.read(tap)?.targets ?? [];
+    const distance = (agent: VisibleAgent) => {
+      return (
+        (Math.hypot(
+          (agent.lng - tap.at[0]) * Math.cos((tap.at[1] * Math.PI) / 180),
+          agent.lat - tap.at[1],
+        ) *
+          MERCATOR_METERS) /
+        360
+      );
+    };
+    if (
+      !targets.some(
+        (t) =>
+          t?.agent.event &&
+          (t.agent.vehicle === 'pagoda' || t.agent.glyph === ProcessionGlyph.andas) &&
+          distance(t.agent) <= 6 * tap.cellMeters,
+      )
+    )
+      return false;
+    if (zoom < MOMENTS.zoom) return true;
+    const seen = new Set<object>();
+    const crowd = targets
+      .flatMap((target, index) => {
+        if (
+          !target?.agent.event ||
+          target.agent.kind !== 'person' ||
+          target.agent.prop ||
+          target.agent.vehicle ||
+          target.agent.aboard ||
+          seen.has(target.owner)
+        )
+          return [];
+        seen.add(target.owner);
+        return [{ target, index, distance: distance(target.agent) }];
+      })
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+      .slice(0, 8);
+    const state = this.syncEventTaps(true)!;
+    for (const { target } of crowd) state.react(target.owner, this.emojiClock, 'festive', 3);
+    for (const { target } of crowd)
+      if (state.request(target, this.emojiClock, minutes, 'procession-cheer')) break;
+    return true;
+  }
   private tapPeople(tap: LifeTap, reach: number, cap: number, mood: EmojiMood, duration = 2.5) {
     const ref = this.tiles.values().next().value;
     if (!ref) return;
@@ -8745,6 +8819,12 @@ export class LifeWorld {
       }
     }
     if (target.agent.kind === 'person' && !target.agent.vehicle && zoom >= MOMENTS.zoom) {
+      if (target.agent.event && !target.agent.prop) {
+        const state = this.syncEventTaps(true);
+        if (state?.request(target, this.emojiClock, minutes, 'greeting'))
+          state.react(target.owner, this.emojiClock, 'wave', 2.5);
+        return;
+      }
       for (const life of this.tiles.values()) {
         const person =
           life.movers.find((m) => m === target.owner && m.kind === 'person') ??
@@ -8835,7 +8915,7 @@ export class LifeWorld {
               },
               agent: (target) => this.tapAgent(target, minutes, zoom, rain),
               signal: (tap) => this.tapSignal(tap),
-              procession: () => false,
+              procession: (tap) => this.tapProcession(tap, minutes, zoom),
               carnival: () => {},
               candle: () => {},
               tree: () => false,
@@ -9526,6 +9606,8 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.eventTaps?.clear();
+    this.eventTaps = undefined;
     this.signalPresses = undefined;
     this.barkUntil = undefined;
     this.tapSources?.clear();
@@ -11480,6 +11562,7 @@ export class LifeWorld {
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
       this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
+      this.stepEventTaps(0, zoom);
       this.sampleFolklore(weather, 0);
       return;
     }
@@ -11487,6 +11570,7 @@ export class LifeWorld {
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
     this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
+    this.stepEventTaps(Math.max(0, dt), zoom);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.folklore.clear(true);
@@ -12321,6 +12405,8 @@ export class LifeWorld {
   /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
   play(id: string, timing?: EventTiming): boolean {
     if (!this.scenes.has(id)) return false;
+    this.eventTaps?.clear();
+    this.eventTaps = undefined;
     if (!this.played && this.live) {
       const scene = this.scenes.get(this.live.id);
       this.suspendedLiveOwners = {
@@ -12424,6 +12510,7 @@ export class LifeWorld {
       this.suspendedLiveOwners = undefined;
     }
     this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
+    this.syncEventTaps();
     this.reconcileEventTraffic();
   }
 
@@ -12557,6 +12644,7 @@ export class LifeWorld {
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
     const scene = run && this.scenes.get(run.id)!;
+    const eventTaps = this.syncEventTaps();
     const staged =
       scene instanceof GroundProcessionScene
         ? this.eventAgents
@@ -12570,14 +12658,16 @@ export class LifeWorld {
                     a.lat <= bounds[3])),
             )
             .slice(0, maxAgents)
-            .map((a) =>
-              inspection
+            .map((raw) => {
+              const a = eventTaps ? identifyEventActor({ ...raw }, eventActor(raw)!) : raw;
+              if (eventTaps) eventTaps.attach(this.eventOwners.get(eventActor(a)!)!, a);
+              return inspection
                 ? identifyEventActor(
                     inspection.present(this.eventOwners.get(eventActor(a)!)!, a),
                     eventActor(a)!,
                   )
-                : a,
-            )
+                : a;
+            })
         : scene
           ? scene.agents(run.progress, this.clock, {
               boats: shows('boat'),
@@ -12587,7 +12677,10 @@ export class LifeWorld {
               inspection,
               scope: this.eventScope(run),
               ...(tapOwners && {
-                observe: (owner: object, agent: VisibleAgent) => tapOwners.present(owner, agent),
+                observe: (owner: object, agent: VisibleAgent) => {
+                  eventTaps?.attach(owner, agent);
+                  tapOwners.present(owner, agent);
+                },
               }),
             })
           : [];
