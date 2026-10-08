@@ -2,15 +2,12 @@ import { access, readdir, readFile } from 'node:fs/promises';
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  City,
-  contentSchemas,
-  dialogueCatalog,
   type DialogueCatalog,
-  TilesLock,
   processionReferenceErrors,
   resolveProcessionSchedules,
   ProcessionScheduleError,
 } from '@atlas/shared';
+import { City, contentSchemas, dialogueCatalog, TilesLock } from '@atlas/shared/schemas';
 import type { z } from 'zod';
 
 /**

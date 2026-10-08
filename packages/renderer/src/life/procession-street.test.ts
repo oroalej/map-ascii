@@ -19,7 +19,7 @@ import { LifeBuilder, LifeLine } from './geometry';
 import { CellBit, EVENT_PERSON_BITS, MAX_TILE_AGENTS } from './config';
 import { metersPerUnit, tileToLngLat, lngLatToTile } from '../raster/geometry';
 import { worldTiles } from './testing/scenarios';
-import { createInlineHost } from './host';
+import { createInlineHost } from './inline-host';
 import { createLifeWorkerApi } from './worker-api';
 import { makeCellGuard } from './cell-guard';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';

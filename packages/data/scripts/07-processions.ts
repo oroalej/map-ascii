@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { CityProcessions, type ProcessionRoute } from '@atlas/shared';
+import { type ProcessionRoute } from '@atlas/shared';
+import { CityProcessions } from '@atlas/shared/schemas';
 import type { Feature, Geometry } from 'geojson';
 import { readFeatures, readJson, writeJson } from './lib/io';
 import { Territory, geometryOutsideVoid } from './lib/territory';

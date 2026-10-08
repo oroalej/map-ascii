@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { CityEmergency, decodeEmergency, type EmergencyConfig } from '@atlas/shared';
+import { decodeEmergency, type EmergencyConfig } from '@atlas/shared';
+import { CityEmergency } from '@atlas/shared/schemas';
 import type { Geom } from 'polyclip-ts';
 import { intersection } from 'polyclip-ts';
 import turfBbox from '@turf/bbox';

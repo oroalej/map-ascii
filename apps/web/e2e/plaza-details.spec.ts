@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { DetailLayouts, normalizeCredits, type SiteDetail, type Landmark } from '@atlas/shared';
+import { normalizeCredits, type SiteDetail, type Landmark } from '@atlas/shared';
+import { DetailLayouts } from '@atlas/shared/schemas';
 import { expect, test } from '@playwright/test';
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import { isCityMeta } from '../lib/guards';
