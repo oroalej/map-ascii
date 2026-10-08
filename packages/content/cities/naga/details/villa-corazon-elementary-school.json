@@ -1,0 +1,102 @@
+{
+  "id": "detail/villa-corazon-elementary-school",
+  "osm_id": "osm:way/881094775",
+  "title": "Villa Corazon Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.231180179, 13.623169585],
+        [123.231177544, 13.623190044],
+        [123.23117663, 13.623189933],
+        [123.231159924, 13.623339907],
+        [123.231144959, 13.623338087],
+        [123.231138771, 13.623377869],
+        [123.231144693, 13.623378589],
+        [123.231148417, 13.62335565],
+        [123.231148463, 13.623355439],
+        [123.231148528, 13.623355232],
+        [123.231148614, 13.623355033],
+        [123.231148719, 13.623354843],
+        [123.231148843, 13.623354663],
+        [123.231148984, 13.623354496],
+        [123.23114914, 13.623354343],
+        [123.231149311, 13.623354205],
+        [123.231149495, 13.623354084],
+        [123.23114969, 13.62335398],
+        [123.231149894, 13.623353895],
+        [123.231150106, 13.62335383],
+        [123.231150323, 13.623353784],
+        [123.231150544, 13.623353759],
+        [123.231150766, 13.623353755],
+        [123.231150987, 13.623353772],
+        [123.231216687, 13.623361772],
+        [123.231216911, 13.62336181],
+        [123.231217129, 13.623361869],
+        [123.23121734, 13.623361949],
+        [123.231217543, 13.623362048],
+        [123.231217734, 13.623362166],
+        [123.231217913, 13.623362302],
+        [123.231218077, 13.623362454],
+        [123.231218224, 13.623362622],
+        [123.231218355, 13.623362802],
+        [123.231218466, 13.623362994],
+        [123.231218557, 13.623363196],
+        [123.231218628, 13.623363405],
+        [123.231218677, 13.62336362],
+        [123.231218705, 13.623363839],
+        [123.23121871, 13.623364059],
+        [123.231218693, 13.623364279],
+        [123.231217351, 13.623374701],
+        [123.231223475, 13.623347633],
+        [123.231219499, 13.62334715],
+        [123.231237489, 13.623207466],
+        [123.231238403, 13.623207577],
+        [123.231241745, 13.623181636],
+        [123.231244572, 13.623159686],
+        [123.231182427, 13.62315213],
+        [123.231180179, 13.623169585]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23118447, 13.623193927],
+        [123.231203333, 13.623227634],
+        [123.231190739, 13.623325413]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.231187643, 13.623158649],
+        [123.231213577, 13.623348137],
+        [123.231213705, 13.623348697],
+        [123.231215489, 13.623355741]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881094775",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6233634,123.2312041,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied villa-corazon-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.70 m, 3.97 m. Meets 5 m check limit. Central red roof and eastern classroom row; western mapped roof extends farther than clearly visible white roof in this reference. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

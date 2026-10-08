@@ -1,0 +1,26 @@
+{
+  "id": "landcover/villa-corazon-elementary-school",
+  "title": "Villa Corazon Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.231300407, 13.623403601],
+      "crown_m": 3,
+      "height_m": 5
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881094775",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6233634,123.2312041,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied villa-corazon-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.70 m, 3.97 m. Meets 5 m check limit. Central red roof and eastern classroom row; western mapped roof extends farther than clearly visible white roof in this reference. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

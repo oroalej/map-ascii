@@ -1,0 +1,88 @@
+{
+  "id": "detail/concepcion-grande-elementary-school",
+  "osm_id": "osm:way/881073797",
+  "title": "Concepcion Grande Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.220760563, 13.619685999],
+        [123.22076148, 13.619684908],
+        [123.220762161, 13.619683664],
+        [123.220762579, 13.619682315],
+        [123.220762718, 13.619680913],
+        [123.220762573, 13.619679511],
+        [123.22076215, 13.619678164],
+        [123.220761464, 13.619676923],
+        [123.220760542, 13.619675836],
+        [123.220759419, 13.619674944],
+        [123.220758139, 13.619674283],
+        [123.220756751, 13.619673876],
+        [123.220755309, 13.619673741],
+        [123.220753866, 13.619673882],
+        [123.22075248, 13.619674294],
+        [123.220751203, 13.619674961],
+        [123.220750084, 13.619675857],
+        [123.220748088, 13.619677805],
+        [123.220542881, 13.619459015],
+        [123.22048017, 13.619520214],
+        [123.220708888, 13.619738859],
+        [123.220760815, 13.619691375],
+        [123.220758062, 13.619688439],
+        [123.220760563, 13.619685999]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.220460623, 13.619808166],
+        [123.220617843, 13.619654738],
+        [123.220596003, 13.619633938],
+        [123.220438783, 13.619787366],
+        [123.220460623, 13.619808166]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.220755324, 13.619680928],
+        [123.220716902, 13.619718423],
+        [123.220678002, 13.619691595]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.22070898, 13.619730757],
+        [123.220622388, 13.619647979]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881073797",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6196605,123.2204586,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied concepcion-grande-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 23.18 m, 31.60 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Tentative identification of central dark roof and adjacent roofs; image crop does not show the whole long mapped parcel. Check errors determine whether this identification is usable. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

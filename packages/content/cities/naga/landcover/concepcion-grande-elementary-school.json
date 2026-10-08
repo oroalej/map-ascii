@@ -1,0 +1,41 @@
+{
+  "id": "landcover/concepcion-grande-elementary-school",
+  "title": "Concepcion Grande Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.220412406, 13.619792051],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.220521559, 13.619732503],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.220666518, 13.619620195],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.220438067, 13.619533766],
+      "crown_m": 5,
+      "height_m": 6.0
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881073797",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6196605,123.2204586,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied concepcion-grande-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 23.18 m, 31.60 m. Does not meet the 5 m registration gate; conservative source-constrained estimates only. Tentative identification of central dark roof and adjacent roofs; image crop does not show the whole long mapped parcel. Check errors determine whether this identification is usable. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}

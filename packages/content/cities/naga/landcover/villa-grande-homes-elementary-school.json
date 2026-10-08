@@ -1,0 +1,96 @@
+{
+  "id": "landcover/villa-grande-homes-elementary-school",
+  "title": "Villa Grande Homes Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.219497492, 13.6129831],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.21975203, 13.612897835],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.219883412, 13.612884997],
+      "crown_m": 5,
+      "height_m": 6.0
+    },
+    {
+      "at": [123.219834041, 13.61270294],
+      "crown_m": 7,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.219661173, 13.612657945],
+      "crown_m": 9,
+      "height_m": 10.8
+    },
+    {
+      "at": [123.21978892, 13.612500695],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.219477404, 13.612741447],
+      "crown_m": 8,
+      "height_m": 9.6
+    },
+    {
+      "at": [123.219474894, 13.612627315],
+      "crown_m": 6,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.22007874, 13.612741127],
+      "crown_m": 9,
+      "height_m": 10.8
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.219815998, 13.612569402],
+        [123.219653492, 13.612486166],
+        [123.219476758, 13.612585583],
+        [123.21953385, 13.612867891],
+        [123.219641168, 13.61283824],
+        [123.219641389, 13.61283819],
+        [123.219641614, 13.612838162],
+        [123.219641841, 13.612838155],
+        [123.219642067, 13.612838169],
+        [123.219642291, 13.612838205],
+        [123.21964251, 13.612838263],
+        [123.219642722, 13.612838341],
+        [123.219642925, 13.612838438],
+        [123.219643117, 13.612838555],
+        [123.219643297, 13.612838689],
+        [123.219643462, 13.61283884],
+        [123.219643612, 13.612839006],
+        [123.219643744, 13.612839185],
+        [123.219643857, 13.612839376],
+        [123.21964395, 13.612839577],
+        [123.219644023, 13.612839786],
+        [123.219661623, 13.612899975],
+        [123.219885273, 13.612865198],
+        [123.219815998, 13.612569402]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881073805",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6126627,123.2197822,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied villa-grande-homes-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site, not an asserted capture URL. Affine independent check errors: 1.70 m, 0.53 m. Meets 5 m check limit. Four northern classrooms and east-side roof are recognizable; southern roofs are mostly obscured/cropped. Imagery-to-OSM disagreements are clipped to complete mapped obstacles; no surveyed boundary, species, court markings, construction date or exact inventory inferred. No bitmap ships."
+    }
+  ]
+}
