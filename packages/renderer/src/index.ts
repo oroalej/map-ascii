@@ -1843,7 +1843,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
           cloudCover: cover,
           cloudSeed: sky.seed,
-          cloudDetail: knobs.clouds,
+          cloudDetail:
+            knobs.clouds &&
+            sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
           cloudOffset,
           ...(placement?.world ? skyGrid(sky, placement.world) : {}),
         },

@@ -24,6 +24,7 @@ export const SKY = {
   maxDt: 0.25,
   dirtyCover: 0.01,
   detailMin: 0.05,
+  detailPixels: 4,
   coarsePurpose: utilitySeed('sky:coarse'),
   finePurpose: utilitySeed('sky:fine'),
 } as const;

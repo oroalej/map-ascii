@@ -259,6 +259,29 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
+  it.each([1, 2])('uses uniform cloud dimming below the detail resolution at DPR %s', (dpr) => {
+    vi.stubGlobal('devicePixelRatio', dpr);
+    atlas.setQuality('high');
+    const anchor = skyAnchor([-1, -1, 1, 1]);
+    const boundary = Math.log2(
+      (anchor.meters * SKY.detailPixels * SKY.fineCells) / (SKY.wrap * dpr),
+    );
+    const weather = () => vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+    atlas.setCamera({ zoom: boundary - 0.1 });
+    draw(100);
+    expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
+    atlas.setCamera({ zoom: boundary + 0.1 });
+    draw(200);
+    expect(weather()).toMatchObject({ cloudDetail: true, cloudCover: 1 });
+    atlas.setCamera({ zoom: 12 });
+    draw(300);
+    expect(weather().cloudDetail).toBe(true);
+    atlas.setQuality('low');
+    atlas.setCamera({ zoom: 18 });
+    draw(1400);
+    expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
+  });
+
   it('keeps storm cloud cover independent of Life, motion and live wind resolution', () => {
     atlas.setLife({ enabled: false });
     draw(100);
