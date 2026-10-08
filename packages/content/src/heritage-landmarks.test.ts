@@ -9,9 +9,10 @@ const landmarks = Object.values(records);
 const heritage = landmarks.filter((landmark) => landmark.type === 'heritage');
 const ordinance = 'https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/';
 
-// Unfinished research is tracked explicitly; accounting for scope does not satisfy full coverage.
+// Every requested site and conditional ruin is either a heritage landmark or omitted with a reason.
 const sites = [
   'almeda-ancestral-house',
+  'bichara-theatre',
   'roco-ancestral-house',
   'old-abella-mansion-arch',
   'old-provincial-jail',
@@ -36,62 +37,49 @@ const sites = [
   'contreras-adjacent-property-ruins',
 ] as const;
 
-const pending: Partial<Record<(typeof sites)[number], string>> = {
-  'old-provincial-jail':
-    'Complex map, 1935 aerial, 2025 proposed plan and current frontage do not resolve the surviving jail/Cuartel to a separate georeferenced OSM outline; one proposed candidate is modern SJ Complex.',
-  'administracion-de-correo':
-    'The 1826 inscription account and Cuartel/Almacenes proposed-plan names need reconciliation with a current facade and distinct surviving OSM outline; the complex alone is insufficient.',
+const omitted: Partial<Record<(typeof sites)[number], string>> = {
   'lorenzo-house':
-    'Ordinance, registry searches and Barlin imagery provide no named facade or exact surviving family lot.',
-  'badiola-house':
-    'Alumni place Harong pub in Badiolas Barlin home, but its connection to the documented Sa Harong/Our House/Hillary/Jikka property remains unverified.',
+    'A Street View sweep of Barlin Street (August 2025) found no Lorenzo sign, gate or plaque, and no source ties the family to a Barlin lot.',
   'amanse-house':
-    'The official newsletter mentions Patricio Amanse without locating his family house; no named facade or exact surviving lot is resolved.',
-  'barlin-dimasalang-corner-house':
-    'Current imagery shows old houses on opposite corners, including Jikka to the east; the unnamed listed corner cannot be chosen by appearance or elimination.',
-  'abella-paz-stone-structure':
-    'Elias Angeles and Paz identifies an intersection, but no source/photo establishes which corner footprint is the surviving Abella structure.',
-  'elias-angeles-dimasalang-corner-house':
-    'Several corner footprints remain plausible; no surviving-house identity or marker verified.',
+    'Bicol Star issues of 1964-1970 document the Amanse family without a street, and the Barlin Street sweep found no Amanse sign or address.',
   'de-la-rosa-buildings':
-    'Calle Caceres is named, but no surviving De la Rosa building or row footprint is independently identified.',
-  'villafrancia-house':
-    'Named 2009/2011 facade references and sparse current/historical panoramas leave the exact surviving lot unresolved; the Flickr coarse public pin is not reliable footprint evidence.',
-  'house-beside-villafrancia':
-    'The Villafrancia parent lot is unresolved, so its unspecified neighboring house cannot be identified.',
-  'ocampo-house': 'Peñafrancia Avenue only; no family marker or exact surviving lot verified.',
+    'A Calle Caceres Street View sweep (2025) found no De la Rosa sign or lettering, only a De Leon building, and no source locates the De la Rosa row.',
+  'ocampo-house':
+    'A dense Peñafrancia Avenue Street View sweep (August 2025) found no Ocampo sign or lettering, and no source ties the family to an avenue lot.',
   'jordana-house':
-    'The official Jordana Street naming, 1969 cadastral neighbor notice and Camarines Lumber compound lead do not identify the surviving ancestral house outline.',
+    'The Jordana compound beside San Francisco Church (New Camarines Lumber lane) holds several old structures and no Jordana sign, so no single house can be chosen.',
   'yllana-house':
-    'The primary 2016 stockholder address 252 Liboton is a locator without a named facade or proof of the surviving historic footprint.',
+    'Street View sweeps of both former Liboton streets (Carpio and M. T. Villanueva) found no Yllana sign and no house numbered 252, the 2016 stockholder address.',
   'villa-ignacio-house':
-    'A WWII recollection locates an Ignacio house in Liboton; its separately mentioned Jacob-corner house is not a valid substitute. The exact surviving lot remains unverified.',
+    'A wartime report places the Villa Ignacio house only somewhere in Liboton, and sweeps of both former Liboton streets found no Villa Ignacio lettering.',
   'dy-liacco-ancestral-house':
-    'Primary family recollections describe the Igualdad home opposite the old jail/capitol, but do not resolve a current matched facade or exact OSM lot; Tabuco family addresses are distinct.',
+    'Igualdad is today J. Hernandez Avenue, but family recollections give no lot, and a sweep of the avenue found no Dy-Liacco lettering on any old house.',
   'pantranco-stone-fence':
-    'The ordinance identifies a fence, with no verified surviving building host; standalone wall geometry is excluded.',
+    'A P. Diaz Street sweep (August 2025) found no stone fence or old terminal building, and a wall alone has no building footprint to attach to.',
   'contreras-property-ruins':
-    'Balintawak Street and a historical office address do not identify the surviving Contreras ruins on an existing building footprint.',
+    'A roofless stone ruin stands on Balintawak Street near 13.61995, 123.18525, but nothing ties it to the Contreras name and its OSM way covers the yard, not the walls.',
   'contreras-adjacent-property-ruins':
-    'The adjacent property is unnamed; its location, survival and separate building footprint remain unresolved.',
+    'The neighbouring lot shows only a cut-stone pier and wall, with no building of its own, and the Contreras lot itself is unidentified.',
 };
 
 describe('Naga heritage scope', () => {
-  it('accounts for each requested site and conditional ruin as implemented or unfinished', () => {
+  it('accounts for each requested site and conditional ruin as added or omitted', () => {
     const added = heritage.map((landmark) => landmark.id.replace('landmark/', ''));
-    expect([...added, ...Object.keys(pending)].sort()).toEqual([...sites].sort());
+    expect([...added, ...Object.keys(omitted)].sort()).toEqual([...sites].sort());
     for (const site of sites) {
-      expect(Number(added.includes(site)) + Number(site in pending)).toBe(1);
-      if (site in pending) expect(pending[site]!.length).toBeGreaterThan(30);
+      expect(Number(added.includes(site)) + Number(site in omitted)).toBe(1);
+      if (site in omitted) expect(omitted[site]!.length).toBeGreaterThan(30);
     }
   });
 
-  it('sources each heritage identity and attaches it to a unique OSM footprint', () => {
+  it('sources each heritage identity and attaches it to a unique OSM footprint or outline', () => {
     for (const landmark of heritage) {
-      expect(landmark.osm_id).toMatch(/^osm:way\/\d+$/);
-      expect(landmark.geometry).toBeUndefined();
+      const way = landmark.osm_id ?? landmark.replaces;
+      expect(way).toMatch(/^osm:way\/\d+$/);
+      // Curated outlines replace an OSM building; every other site keeps its OSM footprint.
+      expect(landmark.geometry?.type ?? 'osm').toBe(landmark.replaces ? 'Polygon' : 'osm');
       expect(landmark.sources[0]!.url).toBe(
-        `https://www.openstreetmap.org/way/${landmark.osm_id!.split('/')[1]}`,
+        `https://www.openstreetmap.org/way/${way!.split('/')[1]}`,
       );
       expect(
         landmark.sources.some(
@@ -101,11 +89,26 @@ describe('Naga heritage scope', () => {
     }
     const attached = landmarks.flatMap((landmark) => (landmark.osm_id ? [landmark.osm_id] : []));
     expect(new Set(attached).size).toBe(attached.length);
+    const replaced = landmarks.flatMap((landmark) =>
+      landmark.replaces ? [landmark.replaces] : [],
+    );
+    expect(replaced.filter((id) => attached.includes(id))).toEqual([]);
+  });
+
+  it('splits the aggregate OSM ruin outline into the jail and the post office, undated', () => {
+    const ruins = ['old-provincial-jail', 'administracion-de-correo'].map((slug) =>
+      heritage.find((landmark) => landmark.id === `landmark/${slug}`)!,
+    );
+    for (const ruin of ruins) {
+      expect(ruin.replaces).toBe('osm:way/23672266');
+      expect(ruin.start_year).toBeUndefined();
+      expect(ruin.sources.some((source) => source.title.includes('traced'))).toBe(true);
+    }
   });
 
   it('keeps the arch host undated and distinguishes it from the former mansion', () => {
     const arch = heritage.find((landmark) => landmark.id === 'landmark/old-abella-mansion-arch')!;
-    expect(arch.osm_id).toBe('osm:way/23665222');
+    expect(arch.osm_id).toBe('osm:way/23671432');
     expect(arch.start_year).toBeUndefined();
     expect(arch.sources[0]!.note).toContain('it is not the historic mansion');
     expect(arch.facts).toHaveLength(4);

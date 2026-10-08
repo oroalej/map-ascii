@@ -1,0 +1,86 @@
+{
+  "id": "landmark/administracion-de-correo",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [123.1874632, 13.6253887],
+        [123.1875028, 13.6254392],
+        [123.1875739, 13.6254063],
+        [123.1875343, 13.6253558],
+        [123.1874632, 13.6253887]
+      ]
+    ]
+  },
+  "replaces": "osm:way/23672266",
+  "name": {
+    "en": "Administración de Correo"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap way/23672266 (replaced)",
+      "url": "https://www.openstreetmap.org/way/23672266",
+      "note": "ODbL. A single building outline covering both ruins, replaced on this map by two traced outlines. Edit dates are not construction dates."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the two stone buildings at the old Post Office site on Peñafrancia Avenue."
+    },
+    {
+      "title": "Dateline Ibalon: Spanish-era Buildings Declared as Important Cultural Properties in Naga City (July 2024)",
+      "url": "https://dateline-ibalon.com/2024/07/spanish-era-buildings-declared-as-important-cultural-properties-in-naga-city/",
+      "note": "Places the \"1826\" inscription on the right building as seen from Peñafrancia Avenue, the smaller southwest ruin traced here, with a solitary-confinement cell (bartolina) at its back. Records postal, telegraph, library, hospital and barracks uses."
+    },
+    {
+      "title": "Google Street View",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=K8PK-A6tLpXDMv3xWZ67UQ&heading=101&pitch=0",
+      "note": "August 2025 panorama inspected October 8, 2026. From Peñafrancia Avenue, two roofless masonry ruins stand behind a fence: a long building with about seven arched, barred openings (left, northeast) and a smaller one (right, southwest). Capture dates are not construction dates. No image is saved or distributed."
+    },
+    {
+      "title": "Outline traced from Google Maps satellite (z21)",
+      "url": "https://www.google.com/maps/@13.62546,123.18752,21z/data=!3m1!1e3",
+      "note": "Inspected October 8, 2026. OSM maps both roofless ruins as one outline, way/23672266, which these two curated outlines replace. The smaller southwest ruin was traced from its walls on the satellite mosaic, then the traced pair was shifted (no rotation) so its centre matches the OSM outline. Accuracy is about two metres. Imagery date unknown; no bitmap ships."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The two stone buildings at the old Post Office site were listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "This right-hand building, seen from Peñafrancia Avenue, bears an \"1826\" inscription."
+      },
+      "source": 2,
+      "year": 1826,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "Historians describe the Administración de Correo as housing the telegraph station linking the city with outlying towns."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "A 1931-born neighbour recalled the buildings serving as a hospital, schools office, library, Japanese barracks, and later a post and telegraph office and prison."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The city council declared the two Spanish-era buildings Important Cultural Properties through Resolution No. 2024-264, adopted May 7, 2024."
+      },
+      "source": 2,
+      "year": 2024,
+      "certainty": "exact"
+    }
+  ]
+}

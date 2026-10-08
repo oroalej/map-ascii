@@ -1,0 +1,74 @@
+{
+  "id": "landmark/villafrancia-house",
+  "osm_id": "osm:way/23669833",
+  "name": {
+    "en": "Villafrancia House"
+  },
+  "type": "heritage",
+  "start_year": 1927,
+  "certainty": "circa",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23669833",
+      "url": "https://www.openstreetmap.org/way/23669833",
+      "note": "ODbL. Existing building footprint set back on the river side of Peñafrancia Avenue, retained unchanged. Edit dates are not construction dates; no construction year is assigned. Generated subdivision: San Francisco."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Villafrancia home among the Peñafrancia Avenue houses."
+    },
+    {
+      "title": "Planet Naga: Old Houses in Naga (January 5, 2009)",
+      "url": "https://planetnaga.wordpress.com/2009/01/05/old-houses-in-naga/",
+      "note": "Blog. Its named photograph shows the VILLAFRANCIA 1927 gable, white lyre-and-star wall panels and striped awnings. Says the house was built in 1927 for Ludivico Arejola, rented in 1949 to Melchor Villanueva as the first site of Naga College Foundation, and later bought by Ermelo Almeda. The builder attribution is the blog's claim."
+    },
+    {
+      "title": "Dateline Ibalon: Dr. Melchor T. Villanueva, lasting legacy of education and service in Naga City (2023)",
+      "url": "https://dateline-ibalon.com/2023/02/dr-melchor-t-villanueva-lasting-legacy-of-education-and-service-in-naga-city/",
+      "note": "Says Naga College Foundation opened in a rented house along Peñafrancia Avenue, dated 1947 there, against the blog's 1949."
+    },
+    {
+      "title": "Google Street View",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=_eEoKAv4JAS0J5MxbvbMfg&heading=160&pitch=0",
+      "note": "August 2025 panorama inspected October 8, 2026. The gable reads VILLAFRANCIA 1927, above the same dark wooden walls, capiz windows, striped awnings, white lyre-and-star panels and white wall with black iron palings as the 2009 photograph. Capture dates are not construction dates. No image is saved or distributed."
+    },
+    {
+      "title": "Google Maps satellite",
+      "url": "https://www.google.com/maps/@13.62868,123.18979,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected October 8, 2026 with the frozen OSM outlines. The light roof set back from the avenue occupies way/23669833. Imagery date is unknown; no age is inferred and no bitmap ships."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Villafrancia home on Peñafrancia Avenue was listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Its front gable is lettered VILLAFRANCIA 1927."
+      },
+      "source": 4,
+      "year": 1927,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "A 2009 local blog says the house was built in 1927 for Ludivico Arejola and later bought by Ermelo Almeda."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The same blog says Melchor Villanueva rented the house in 1949 as the first site of Naga College Foundation."
+      },
+      "source": 2,
+      "year": 1949,
+      "certainty": "circa"
+    }
+  ]
+}

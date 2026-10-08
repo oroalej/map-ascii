@@ -1,0 +1,59 @@
+{
+  "id": "landmark/bichara-theatre",
+  "osm_id": "osm:way/23671040",
+  "name": {
+    "en": "Bichara Theatre"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23671040",
+      "url": "https://www.openstreetmap.org/way/23671040",
+      "note": "ODbL. Existing building footprint on the northwest corner of General Luna and Abella streets, retained unchanged. Edit dates are not construction dates; no construction year is assigned. Generated subdivision: Dinaga."
+    },
+    {
+      "title": "Owner request: Bichara Theatre, Victor Bichara and Emily Panayotti",
+      "note": "Requested October 8, 2026, after the official newsletter's movie-house history. Not in Ordinance No. 2003-003."
+    },
+    {
+      "title": "Naga City 75th-anniversary newsletter (2023), pages 8–10",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf",
+      "note": "Official CEPPIO newsletter. Says the Lebanese couple Victor Bichara and Emily Panayotti opened movie houses in the 1920s, that the pre-war Bichara Theatre reopened in early 1946, and that the Bichara Theatre is now called the Bichara Mall."
+    },
+    {
+      "title": "Google Street View",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=IFwkgHmTPxKSOlV3cRmVZQ&heading=335&pitch=0",
+      "note": "August 2025 panorama inspected October 8, 2026. The corner building's Gen. Luna frontage carries a Bichara Mall sign beside its McDonald's; a 2024 McDonald's store list (BPI, https://bpi.com.ph/content/dam/bau/promos/2024-promos/vybe-x-mcdonald%27s/vybe-upgrade-promo-list-of-participating-mcdonalds-stores.pdf) gives Bichara Complex, corner Gen. Luna and Calle Abella. Whether the present building is the pre-war theatre structure is not established, so no construction date is assigned. Capture dates are not construction dates. No image is saved or distributed."
+    },
+    {
+      "title": "Google Maps satellite",
+      "url": "https://www.google.com/maps/@13.62269,123.18425,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected October 8, 2026 with the frozen OSM outlines. The large corner roof occupies way/23671040. Imagery date is unknown; no age is inferred and no bitmap ships."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Lebanese couple Victor Bichara and Emily Panayotti opened movie houses in Naga in the 1920s, a turning point for the city's cinema business."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The pre-war Bichara Theatre reopened in the early months of 1946, lifting post-war spirits alongside the Alex Theatre and the Almedas' Cine Cita."
+      },
+      "source": 2,
+      "year": 1946,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "By 2023 the Bichara Theatre had become the Bichara Mall, likely the last of downtown's old movie houses still showing films."
+      },
+      "source": 2,
+      "year": 2023,
+      "certainty": "circa"
+    }
+  ]
+}
