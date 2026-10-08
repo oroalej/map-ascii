@@ -168,6 +168,30 @@
     },
     {
       "camera": {
+        "lng": 123.1855013,
+        "lat": 13.6238706,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Quality Bakery, also listed as Ruivivar's Quality Cafe, is remembered for chiffon and marble cakes. A 2014 visit paired tablea tsokolate with pan Legaspi, cheese and butter. This camera uses an approximate directory location."
+      },
+      "select": "landmark/quality-bakery",
+      "sources": [
+        {
+          "title": "Naga City Deck: Tsokolate and pan Legaspi at Quality Bakery (2014)",
+          "url": "https://www.nagacitydeck.com/2014/06/happy-finds-in-naga-tsokolate-at.html",
+          "note": "Firsthand visit published June 22, 2014; menu items are documented at that time and availability may change."
+        },
+        {
+          "title": "Restaurant Guru: Quality Bakery (Ruivivar's Quality Cafe)",
+          "url": "https://restaurantguru.com/Quality-Cafe-Naga-2",
+          "note": "Directory name, address and published business coordinates checked on 2026-10-08. Point is an approximate business location; its precise footprint and entrance are unconfirmed."
+        }
+      ]
+    },
+    {
+      "camera": {
         "lng": 123.1857624,
         "lat": 13.6241238,
         "zoom": 17.5
