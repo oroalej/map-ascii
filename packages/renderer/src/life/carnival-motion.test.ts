@@ -7,8 +7,85 @@ import {
   encodeCarnivalUv,
 } from './carnival-motion';
 import { SeasonalPart } from './seasonal-glyphs';
+import { CarnivalBoosts, carnivalKey, carnivalContains, carnivalFootprint } from './carnival-boost';
+import { offsetUtility } from '@atlas/shared';
+import { carnivalExtraTime, carnivalMotionGlsl } from './carnival-motion';
+import { tapCarnivalFixture } from './tap-fixtures';
 import { packSeasonalFixtures } from './seasonal';
 import type { SeasonalCarnivalRecord } from '@atlas/shared';
+
+const ride: SeasonalCarnivalRecord = {
+  version: 1,
+  kind: 'carnival',
+  id: 'ride',
+  season: 'winter',
+  installation: 'fair',
+  anchor: 'osm:way/1',
+  seed: 1,
+  style: 'carousel',
+  at: [0, 0],
+  size_m: [10, 10],
+  angle_deg: 30,
+};
+const projection = (lng: number, lat: number): [number, number] => [
+  lng * 111319.49 * 2,
+  -lat * 111319.49,
+];
+it('integrates the boost continuously on tap, retrigger and expiry, returning to normal speed', () => {
+  const boosts = new CarnivalBoosts(),
+    key = carnivalKey(ride);
+  expect(boosts.time(key, 10)).toBe(10);
+  boosts.request(ride, 10);
+  expect(boosts.time(key, 10)).toBe(10);
+  expect((boosts.time(key, 10.001) - 10) / 0.001).toBeCloseTo(2, 3);
+  const retrigger = boosts.time(key, 12);
+  boosts.request(ride, 12);
+  expect(boosts.time(key, 12)).toBe(retrigger);
+  expect(boosts.time(key, 18.001) - boosts.time(key, 18)).toBeCloseTo(0.001, 10);
+  expect(boosts.time(key, 100) - 100).toBeCloseTo(retrigger - 12 + 3);
+  const boost = { at: 10, offset: 2 };
+  expect(carnivalPose(12, false, boost)).toEqual(carnivalPose(12 + carnivalExtraTime(boost, 12)));
+  expect(carnivalPose(12, true, boost)).toEqual(carnivalPose(0));
+});
+it('projects exact component footprints and preserves phases through pan and zoom', () => {
+  const rect = {
+    ...ride,
+    id: 'wheel',
+    style: 'ferris-wheel' as const,
+    size_m: [8, 20] as [number, number],
+  };
+  const shifted = { ...ride, id: 'next', at: offsetUtility(ride.at, 20, 0) };
+  expect(
+    tapCarnivalFixture(
+      [
+        { kind: 'season-installation', record: ride },
+        { kind: 'season-installation', record: shifted },
+      ],
+      ride.at,
+      projection,
+    )?.key,
+  ).toBe(carnivalKey(ride));
+  expect(carnivalContains(ride, offsetUtility(ride.at, 4.9, 0), projection)).toBe(true);
+  expect(carnivalContains(ride, offsetUtility(ride.at, 5.1, 0), projection)).toBe(false);
+  const fp = carnivalFootprint(rect, projection),
+    boosts = new CarnivalBoosts();
+  boosts.request(rect, 10);
+  const normal = boosts.uniforms(12, projection),
+    panZoom = boosts.uniforms(12, (lng, lat) => {
+      const [x, y] = projection(lng, lat);
+      return [x * 2 + 40, y * 2 - 20];
+    });
+  expect(normal.count).toBe(1);
+  expect([...normal.axes.slice(0, 4)]).toEqual(fp.axes.map(Math.fround));
+  expect(panZoom.centers[0]).toBe(40);
+  expect(panZoom.centers[1]).toBe(-20);
+  expect(panZoom.centers[2]).toBe(normal.centers[2]);
+  expect([...panZoom.axes.slice(0, 4)]).toEqual([...normal.axes.slice(0, 4)].map((n) => n * 2));
+  expect(boosts.time(carnivalKey(shifted), 12)).toBe(12);
+  expect(carnivalMotionGlsl).toContain('return time+c.z');
+  expect(carnivalMotionGlsl).toContain('int(c.w+0.5)!=part');
+  expect(carnivalMotionGlsl).toContain('dot(uv,uv)>1.0');
+});
 
 it('round-trips local coordinates through the existing fixture bytes without changing part or opacity', () => {
   for (const u of [-1, -0.7, 0, 0.3, 1])

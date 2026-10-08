@@ -564,7 +564,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   if (rideMotion) {
     int local = (glyph << 8) | info;
     vec2 uv = vec2(float(local & 511), float((local >> 9) & 511)) / 255.5 - 1.0;
-    vec4 surface = carnivalSurface(part, uv, u_shimmer ? u_time : 0.0);
+    vec4 surface = carnivalSurface(part, uv, u_shimmer ? carnivalTime(part, vec2(cell)+0.5, u_time) : 0.0);
     color = max(lampLit(daylit(surface.rgb), rainLight), surface.rgb * 0.84);
     if (surface.a < 0.5) {
       under = mix(under, color * 0.34, fixture.a);

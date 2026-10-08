@@ -7,6 +7,34 @@ import { continuityTile, continuityMover, left } from './testing/continuity';
 import { LifeLine } from './geometry';
 import { folkloreTile, folkloreConfig, folkloreCenter, calendar } from './testing/folklore';
 import { lngLatToTile } from '../raster/geometry';
+it('a chosen carnival tap requests party from at most eight people within fifteen metres', () => {
+  const f = vehicleWorld();
+  const at = f.world.visible(19, 1, [0, 0]).find((a) => a.kind === 'person')!;
+  f.life.movers.splice(
+    0,
+    f.life.movers.length,
+    ...Array.from({ length: 10 }, (_, i) => {
+      const person = continuityMover(f.life, f.person.x + i * f.life.perMeter * 2, 'person');
+      person.y = f.person.y;
+      person.group = f.person.group;
+      return person;
+    }),
+  );
+  f.world.visible(19, 1, [0, 0]);
+  const request = vi.spyOn(f.life, 'requestEmoji');
+  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
+    {
+      ...f.tap,
+      frame: f.world.tapSources!.frame,
+      agent: undefined,
+      carnival: { key: 'ride', at: [at.lng, at.lat] },
+    },
+  ]);
+  expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'carnival' }]);
+  expect(request.mock.calls.length).toBeGreaterThan(0);
+  expect(request.mock.calls.length).toBeLessThanOrEqual(8);
+  expect(request.mock.calls.every((c) => c[2] === 'party')).toBe(true);
+});
 it('a ghost tap requests fear from at most six nearby visible people', () => {
   const world = new LifeWorld(undefined, undefined, { enabled: false });
   world.enableTaps();

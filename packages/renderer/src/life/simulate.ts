@@ -8916,7 +8916,7 @@ export class LifeWorld {
               agent: (target) => this.tapAgent(target, minutes, zoom, rain),
               signal: (tap) => this.tapSignal(tap),
               procession: (tap) => this.tapProcession(tap, minutes, zoom),
-              carnival: () => {},
+              carnival: (tap) => this.tapPeople({ ...tap, at: tap.carnival!.at }, 15, 8, 'party'),
               candle: () => {},
               tree: () => false,
               rice: () => false,

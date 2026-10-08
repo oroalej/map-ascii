@@ -1,5 +1,6 @@
 import type { VisibleAgent } from './simulate';
 import type { EmojiRequest } from './emoji';
+import type { SeasonalCarnivalRecord } from '@atlas/shared';
 
 export type TapAction =
   | 'folklore'
@@ -21,7 +22,7 @@ export type LifeTap = {
   agent?: number;
   folklore?: string;
   signal?: { seed: number; midBlock: boolean };
-  carnival?: { key: string; at: readonly [number, number] };
+  carnival?: { key: string; at: readonly [number, number]; record?: SeasonalCarnivalRecord };
   candle?: { key: string; at: readonly [number, number] };
   firework?: boolean;
 };

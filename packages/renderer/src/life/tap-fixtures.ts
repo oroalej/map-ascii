@@ -1,5 +1,30 @@
 import type { StreetFixture } from './fixtures';
 import type { LifeTap } from './tap';
+import { carnivalKey } from './carnival-boost';
+import { carnivalRing } from '@atlas/shared';
+import { pointInside } from './occupancy';
+
+export function tapCarnivalFixture(
+  fixtures: readonly StreetFixture[],
+  point: readonly [number, number],
+  toCell: (lng: number, lat: number) => [number, number],
+): LifeTap['carnival'] {
+  for (const f of fixtures) {
+    if (
+      f.kind !== 'season-installation' ||
+      f.record.kind !== 'carnival' ||
+      f.record.style === 'midway'
+    )
+      continue;
+    const at = toCell(...point),
+      ring = carnivalRing(f.record).map((p) => {
+        const c = toCell(...p);
+        return { x: c[0], y: c[1] };
+      });
+    if (pointInside({ x: at[0], y: at[1] }, [ring]))
+      return { key: carnivalKey(f.record), at: f.record.at, record: f.record };
+  }
+}
 
 /** Snapshot actual posed signal hardware rather than using the centre of an intersection. */
 export function tapSignalFixture(
