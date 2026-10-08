@@ -2,7 +2,7 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { CityMeta, Tour } from '@atlas/shared';
+import type { CityMeta } from '@atlas/shared';
 import { useUiStore } from '@/state/ui';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from '@/state/store';
 import { useAtlasEvents } from '@/state/useAtlasEvents';
@@ -10,10 +10,9 @@ import { useTourPlayer } from '@/state/useTourPlayer';
 import { tourControls, useTourStore } from '@/state/tour';
 import { Attribution } from './Attribution';
 
-const tours: readonly Tour[] = [];
 function WithGlobalEscapeHandlers() {
   useAtlasEvents();
-  useTourPlayer(tours);
+  useTourPlayer('fixture', false);
   return createElement(Attribution);
 }
 let container: HTMLDivElement, root: Root;

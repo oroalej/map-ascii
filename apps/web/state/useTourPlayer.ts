@@ -1,11 +1,9 @@
 'use client';
 
-import type { Tour } from '@atlas/shared';
 import { useEffect } from 'react';
 import { typingInField } from '@/lib/dom';
 import { useAtlasInstance, useAtlasStore } from './store';
 import { setTourRunner, tourControls, useTourStore } from './tour';
-import { parseViewParams } from './url';
 import { selectPlace } from './selection';
 
 /**
@@ -16,18 +14,13 @@ import { selectPlace } from './selection';
  * - `T` opens the tours menu, Space pauses or resumes, Esc exits;
  * - a URL with `tour` and `step` reopens that tour there, paused.
  */
-export function useTourPlayer(tours: readonly Tour[]) {
+export function useTourPlayer(city: string, hasTours: boolean) {
   const atlas = useAtlasInstance((s) => s.atlas);
 
   useEffect(() => {
-    useTourStore.setState({ tours });
-    const { tour, step } = parseViewParams(window.location.search);
-    if (tour) tourControls.restore(tour, step ?? 0);
-    return () => {
-      tourControls.exit();
-      useTourStore.setState({ tours: [], menuOpen: false });
-    };
-  }, [tours]);
+    tourControls.configure(city, hasTours);
+    return () => tourControls.configure(null, false);
+  }, [city, hasTours]);
 
   useEffect(() => {
     if (!atlas) return;
@@ -102,7 +95,7 @@ export function useTourPlayer(tours: readonly Tour[]) {
       if (e.ctrlKey || e.metaKey || e.altKey || typingInField()) return;
       const { active, menuOpen } = useTourStore.getState();
       if (e.key === 't' || e.key === 'T') {
-        if (useTourStore.getState().tours.length === 0) return;
+        if (!useTourStore.getState().hasTours) return;
         e.preventDefault();
         tourControls.setMenuOpen(!menuOpen);
       } else if (e.key === ' ' && active) {

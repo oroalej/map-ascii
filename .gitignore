@@ -50,6 +50,8 @@ apps/web/public/tiles/*.detail-layouts.json
 apps/web/public/tiles/*.search-index.json
 apps/web/public/tiles/*.subdivisions.json
 apps/web/public/tiles/*.art.json
+apps/web/public/tiles/*.landmarks.json
+apps/web/public/tiles/*.tours.json
 apps/web/public/tiles/imagery/
 
 # agent handoff plans (Claude writes them, Codex implements them; see AGENTS.md)
