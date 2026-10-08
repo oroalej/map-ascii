@@ -1697,7 +1697,9 @@ export class TileLife {
       seed,
       this.stalls,
       (m) => this.canIdle(m),
-      (m) => this.momentHost.moments.busy(m),
+      (m) =>
+        this.momentHost.moments.busy(m) ||
+        (m.kind === 'cat' && (this.catPointer?.get(m)?.left ?? 0) > 0),
       true,
     );
     yield* this.scenes.prepare(geo, this.stalls);
@@ -6305,10 +6307,34 @@ export class TileLife {
     const walkDistance = (m: Mover, target: { x: number; y: number }, distance: number) =>
       this.crossingWaits.limit(m, target, distance, clock, minimum);
 
+    if (this.tilePointer)
+      for (const [m, visit] of this.scenes.visits) {
+        if (
+          m.kind !== 'cat' ||
+          (pass?.owns && !pass.owns(m)) ||
+          (near && !near(m.x, m.y)) ||
+          (shows && !shows('cat'))
+        )
+          continue;
+        let flee = this.catPointer?.get(m);
+        if (
+          !flee &&
+          visit.state === 'rest' &&
+          (m.x - this.tilePointer.x) ** 2 + (m.y - this.tilePointer.y) ** 2 <
+            (POINTER.cat * this.tilePointer.cellMeters * this.perMeter) ** 2
+        ) {
+          flee = { left: POINTER.fleeSeconds };
+          (this.catPointer ??= new WeakMap()).set(m, flee);
+          this.pointerEvents.push({ owner: m, mood: 'scared' });
+        }
+        if (flee) flee.left = Math.max(0, flee.left - dt);
+      }
     this.scenes.step(
       dt,
       this.movers,
-      env ?? {},
+      this.tilePointer
+        ? { ...env, cursorCatFlee: (m: Mover) => (this.catPointer?.get(m)?.left ?? 0) > 0 }
+        : (env ?? {}),
       near,
       shows,
       guard,

@@ -76,6 +76,29 @@ const shadeFixture = (covered = false) => {
   return { scene, p };
 };
 describe('local interaction scenes', () => {
+  it('releases a resting cat through its checked return route at flee pace', () => {
+    const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]),
+      cat = person(40, 'cat');
+    (scene as unknown as { idleGuard: () => boolean }).idleGuard = () => true;
+    expect(scene.reserve(cat, 2)).toBe(true);
+    run(scene, [cat], 6);
+    expect(scene.visits.get(cat)?.state).toBe('rest');
+    cat.grooming = true;
+    const before = { x: cat.x, y: cat.y };
+    scene.step(
+      0.1,
+      [cat],
+      { rain: 0, cursorCatFlee: () => true },
+      undefined,
+      undefined,
+      () => true,
+    );
+    expect(scene.visits.get(cat)?.state).toBe('return');
+    expect(Math.hypot(before.x - cat.x, before.y - cat.y)).toBeCloseTo(0.25);
+    expect(cat.grooming).toBe(false);
+    expect(cat.pause).toBe(0);
+  });
   it('gives one deterministic finite cursor shade hold and rearms only when the condition ends', () => {
     const { scene, p } = shadeFixture();
     scene.sites.length = 0;

@@ -18,6 +18,7 @@ import {
   kinematicsOf,
   SHELTER_DEPARTURE,
   HEAT,
+  POINTER,
   hotAt,
   underUmbrella,
   umbrellaShare,
@@ -203,6 +204,7 @@ export class LocalScenes {
   private rain = 0;
   private pointerPeople?: ReadonlySet<object>;
   private pointerShade = false;
+  private cursorCatFlee?: (m: Mover) => boolean;
   private readonly cursorHolds = new Map<Mover, number>();
   readonly cursorAdmissions: Mover[] = [];
   private scan = 0;
@@ -579,6 +581,8 @@ export class LocalScenes {
 
   /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
   private pace(m: Mover, visit: Visit): number {
+    if (m.kind === 'cat' && this.cursorCatFlee?.(m))
+      return Math.max(m.speed, POINTER.fleePace * this.perMeter);
     return visit.state === 'approach' || visit.state === 'return'
       ? (this.dashPace(m) ?? m.speed)
       : m.speed;
@@ -1308,6 +1312,7 @@ export class LocalScenes {
       cityLife?: Pick<CityLifeConfig, 'schedules'>;
       pointerPeople?: ReadonlySet<object>;
       pointerRest?: number;
+      cursorCatFlee?: (m: Mover) => boolean;
     },
     near?: (x: number, y: number) => boolean,
     shows?: (kind: Mover['kind']) => boolean,
@@ -1322,6 +1327,7 @@ export class LocalScenes {
     const rain = env.rain ?? 0;
     this.rain = rain;
     this.pointerPeople = env.pointerPeople;
+    this.cursorCatFlee = env.cursorCatFlee;
     this.pointerShade = (env.pointerRest ?? 0) >= 1 && hotAt(env.minutes, rain, env.sunAltitude);
     this.cursorAdmissions.length = 0;
     for (const m of this.cursorHolds.keys())
@@ -1406,6 +1412,10 @@ export class LocalScenes {
       if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
       if (owns && !owns(m)) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
+      if (m.kind === 'cat' && visit.state === 'rest' && this.cursorCatFlee?.(m)) {
+        m.grooming = false;
+        this.requestReturn(m, visit);
+      }
       diagnostics?.eligible(m, m.kind);
       if (visit.state !== 'approach' && visit.state !== 'return') diagnostics?.hold(m, 'visit');
       if (visit.state === 'return' && visit.blocked > 0) diagnostics?.tag(m, 'blockedReturn');

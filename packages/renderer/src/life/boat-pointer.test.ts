@@ -65,22 +65,20 @@ it('accepts an eased away offset in broad water and caps speed through kinematic
   for (let i = 0; i < 15; i++) f.step();
   expect(f.boat.boatShift).toBeGreaterThan(0);
   expect(f.boat.v).toBeLessThanOrEqual(f.life.perMeter);
-  const polygon = f.life.geo.areas.find((a) => a.kind === 'blocked' && a.water)!;
+  const polygon = f.life.geo.areas!.find((a) => a.kind === 'blocked' && a.water)!;
   expect(
-    f.life
-      .groundBodies(f.boat)
-      .every((body) =>
-        bodyInside(
-          {
-            ...body,
-            x: body.x * f.life.perMeter,
-            y: body.y * f.life.perMeter,
-            length: body.length * f.life.perMeter,
-            width: body.width * f.life.perMeter,
-          },
-          polygon.rings,
-        ),
+    f.life.groundBodies(f.boat).every((body) =>
+      bodyInside(
+        {
+          ...body,
+          x: body.x * f.life.perMeter,
+          y: body.y * f.life.perMeter,
+          length: body.length * f.life.perMeter,
+          width: body.width * f.life.perMeter,
+        },
+        polygon.rings,
       ),
+    ),
   ).toBe(true);
 });
 it.each([
