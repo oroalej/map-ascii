@@ -1061,6 +1061,55 @@ describe('live motion preference', () => {
     draw(350);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
   });
+  it('sends CSS cursor wind and unchanged-point rest, rebases resize and rejects inactive hover', async () => {
+    const frames: FrameInput[] = [];
+    const createInline = InlineHosts.createConfiguredInlineHost;
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation((...args) => {
+      const host = createInline(...args),
+        request = host.request.bind(host);
+      host.request = (frame) => {
+        frames.push(frame);
+        return request(frame);
+      };
+      return host;
+    });
+    await usePauseMode('item');
+    draw(100);
+    input.intents!.hover([100, 90]);
+    draw(150);
+    expect(frames.at(-1)!.step.gust).toBeUndefined();
+    input.intents!.hover([150, 90]);
+    draw(200);
+    expect(frames.at(-1)!.step.gust).toMatchObject({ dir: [1, 0] });
+    expect(frames.at(-1)!.step.gust!.strength).toBeGreaterThan(0);
+    input.intents!.hover([150, 90]);
+    draw(1250);
+    expect(frames.at(-1)!.step.pointerRest).toBe(1.1);
+    expect(frames.at(-1)!.step.gust).toBeUndefined();
+    input.intents!.hover([160, 90]);
+    draw(1300);
+    resized([], {} as ResizeObserver);
+    draw(1350);
+    expect(frames.at(-1)!.step.gust).toBeUndefined();
+    visibility.watched = false;
+    visibility.changed!(false);
+    input.intents!.hover([180, 90]);
+    visibility.watched = true;
+    visibility.changed!(true);
+    draw(1400);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointerRest');
+    atlas.setReducedMotion(true);
+    input.intents!.hover([190, 90]);
+    atlas.setReducedMotion(false);
+    draw(1450);
+    expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
+    canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
+    input.intents!.hover([200, 90]);
+    canvas.dispatchEvent(new Event('webglcontextrestored'));
+    await vi.dynamicImportSettled();
+    draw(1500);
+    expect(frames.at(-1)!.step).not.toHaveProperty('gust');
+  });
   it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', async () => {
     const frames: FrameInput[] = [];
     const createInline = InlineHosts.createConfiguredInlineHost;
@@ -2411,6 +2460,23 @@ describe('label focus in the renderer frame', () => {
     expect(crownPass).not.toHaveBeenCalled();
     expect(cellPass).not.toHaveBeenCalled();
     draw(150);
+    expect(crownPass).toHaveBeenCalledOnce();
+  });
+  it('redraws cursor crowns once on exact expiry even between ordinary animation frames', () => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true, wind: 'calm' });
+    draw(100);
+    input.intents!.hover([100, 100]);
+    draw(150);
+    input.intents!.hover([150, 100]);
+    draw(200);
+    expect(vi.mocked(crownPass).mock.calls.at(-1)![8]!.strength).toBeGreaterThan(0);
+    draw(749);
+    vi.mocked(crownPass).mockClear();
+    draw(751);
+    expect(crownPass).toHaveBeenCalledOnce();
+    expect(vi.mocked(crownPass).mock.calls[0]![8]).toBeUndefined();
+    draw(752);
     expect(crownPass).toHaveBeenCalledOnce();
   });
   it('shifts subcell pans without placement and restores selection after context recreation', () => {

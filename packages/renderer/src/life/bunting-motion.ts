@@ -1,5 +1,6 @@
 import { cellHash, type WindDir } from '../glyphs/select';
 import { WIND_PRESETS, WIND_VARIATION } from './wind';
+import { combineWind, type CursorWind } from './cursor-wind';
 
 /** Cell-local cloth: its upper quarter stays attached and its ink never leaves its owner. */
 export const BUNTING_MOTION = {
@@ -40,8 +41,18 @@ export function buntingMotion(
   time: number,
   response: number,
   direction: WindDir,
+  cursor?: CursorWind,
+  origin: readonly [number, number] = [0, 0],
 ): { source: [number, number]; fold: number } {
-  const gain = Math.max(0, Math.min(1, response));
+  const combined = combineWind(
+    response,
+    direction,
+    world[0] - origin[0],
+    world[1] - origin[1],
+    cursor,
+  );
+  const gain = Math.max(0, Math.min(1, combined.strength));
+  direction = combined.dir;
   const attach = smooth(BUNTING_MOTION.anchor, BUNTING_MOTION.freeEdge, uv[1]);
   if (gain === 0 || attach === 0) return { source: [...uv], fold: 1 };
   const row = seed & 31;
@@ -63,14 +74,16 @@ export function buntingMotion(
 /** Uses the glyph pass's existing atlas, time, world origin and reduced-motion gate. */
 export const buntingMotionGlsl = /* glsl */ `
 vec3 buntingMotion(ivec2 cell, int seed, vec2 uv) {
+  vec2 dir;
+  float gain = clamp(combineWind(u_buntingWind, u_buntingWindDir, vec2(cell), dir), 0.0, 1.0);
   float attach = smoothstep(${BUNTING_MOTION.anchor}, ${BUNTING_MOTION.freeEdge}, uv.y);
   uint h = cellHash(u_origin + cell + ivec2(seed * 131, seed * 17));
   float phase = float(h & 255u) / 255.0 * 6.28318530718;
   float hz = ${BUNTING_MOTION.minHz} + ${BUNTING_MOTION.frequencyRange} * float((h >> 8u) & 255u) / 255.0;
   float angle = u_time * 6.28318530718 * hz + phase;
   float wave = 0.75 * sin(angle) + 0.25 * sin(2.0 * angle + phase);
-  vec2 source = uv - vec2(${BUNTING_MOTION.maxX}, ${BUNTING_MOTION.maxY}) * u_buntingWind * attach * wave * u_buntingWindDir;
-  float fold = 1.0 - ${BUNTING_MOTION.fold} * u_buntingWind * attach * (0.5 + 0.5 * cos(angle));
+  vec2 source = uv - vec2(${BUNTING_MOTION.maxX}, ${BUNTING_MOTION.maxY}) * gain * attach * wave * dir;
+  float fold = 1.0 - ${BUNTING_MOTION.fold} * gain * attach * (0.5 + 0.5 * cos(angle));
   return vec3(source, fold);
 }
 
@@ -82,7 +95,7 @@ float buntingTexel(ivec2 slot, ivec2 pixel) {
 float buntingInk(ivec2 slot, ivec2 pixel, ivec2 cell, int seed, out float fold) {
   fold = 1.0;
   vec2 uv = (vec2(pixel) + 0.5) / u_cell;
-  if (!u_shimmer || u_buntingWind <= 0.0 || uv.y <= ${BUNTING_MOTION.anchor})
+  if (!u_shimmer || (u_buntingWind <= 0.0 && u_cursorWind.z <= 0.0) || uv.y <= ${BUNTING_MOTION.anchor})
     return texelFetch(u_atlas, slot + pixel, 0).r;
   vec3 motion = buntingMotion(cell, seed, uv);
   fold = motion.z;

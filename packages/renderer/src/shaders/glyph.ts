@@ -51,6 +51,7 @@ import { SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
+import { cursorWindGlsl } from '../life/cursor-wind';
 import { festivePulseGlsl } from '../life/seasonal-installations';
 import { carnivalMotionGlsl } from '../life/carnival-motion';
 import { hauntLampGlsl } from '../life/folklore-lighting';
@@ -106,6 +107,7 @@ uniform vec3 u_accent;
 uniform bool u_shimmer;
 uniform float u_buntingWind;
 uniform vec2 u_buntingWindDir;
+${cursorWindGlsl}
 ${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;

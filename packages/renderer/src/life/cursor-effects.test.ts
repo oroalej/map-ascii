@@ -21,3 +21,24 @@ it('retains four geographic rings, subtracts a large origin before upload and ex
   effects.clear();
   expect(effects.project(grid, 1700)).toEqual([]);
 });
+it('seeds movement, averages CSS velocity, keeps rest on duplicates and rebases without a gust', () => {
+  const e = new CursorEffects(),
+    cell = { w: 5, h: 9 };
+  e.move([0, 0], [123, 13], 0, cell);
+  expect(e.gust(0, 1)).toBeUndefined();
+  e.move([50, 90], [123, 13], 120, cell);
+  const gust = e.gust(120, 1)!;
+  expect(gust.strength).toBe(1);
+  expect(gust.dir[1] / gust.dir[0]).toBeCloseTo(1.8);
+  e.move([50, 90], [123, 13], 420, cell);
+  expect(e.rest(420)).toBe(0.3);
+  expect(e.gust(420, 1)!.strength).toBe(0.5);
+  expect(e.gust(720, 1)).toBeUndefined();
+  e.move([60, 90], [123, 13], 730, { w: 10, h: 18 });
+  expect(e.gust(730, 1)).toBeUndefined();
+  e.rebase();
+  e.move([70, 90], [123, 13], 740, cell);
+  expect(e.gust(740, 1)).toBeUndefined();
+  e.clear();
+  expect(e.rest(750)).toBeUndefined();
+});

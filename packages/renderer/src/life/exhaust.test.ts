@@ -1,5 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { VEHICLES } from './vehicles';
+import type { MetricGust } from './pointer';
+
+it('advects both existing and newborn puffs locally without changing far-away arithmetic', () => {
+  const start = { x: 0, y: 0, hx: 1, hy: 0 };
+  const base = spawnPuff(1, 'jeepney', 'diesel', start, start, 0.5, 2, 0, 1, 1, 1, undefined);
+  const gust: MetricGust = { x: base.x, y: base.y, radius: 8, dir: [0, 1], strength: 1 };
+  const born = spawnPuff(1, 'jeepney', 'diesel', start, start, 0.5, 2, 0, 1, 1, 1, undefined, gust);
+  expect(born.y - base.y).toBeCloseTo(PUFF.drift * 0.5);
+  const store = new PuffStore();
+  store.add({ ...base });
+  store.advance(1.1, 0.1, undefined, 1, gust);
+  expect(store.snapshot(1.1)[0]!.y - base.y).toBeCloseTo(PUFF.drift * 0.1);
+  expect(
+    spawnPuff(1, 'jeepney', 'diesel', start, start, 0.5, 2, 0, 1, 1, 1, undefined, {
+      ...gust,
+      x: 100,
+    }),
+  ).toEqual(base);
+});
 import { tileToLngLat } from '../raster/geometry';
 import {
   emitter,

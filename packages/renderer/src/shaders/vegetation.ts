@@ -23,11 +23,13 @@ import {
   TREE_WIND,
   WIND,
 } from '../glyphs/select';
+import { cursorWindGlsl } from '../life/cursor-wind';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 export const vegetationGlsl = /* glsl */ `
 uniform vec2 u_windDir; // where the wind blows: a unit vector in cells (x east, y south)
+${cursorWindGlsl}
 
 int vmod(int a, int n) {
   return ((a % n) + n) % n;
@@ -91,7 +93,7 @@ int windLevel(float gust, float wake) {
 }
 
 // A grass cell's glyph, and its tone (glyphs/select.ts grassCell).
-int grassVariant(ivec2 c, float gust, out int tone) {
+int grassVariant(ivec2 c, float gust, vec2 dir, out int tone) {
   float lush = valueNoise(c, ${GRASS.lushScale}, ${GRASS.lushSeed});
   uint h = cellHash(c);
   tone = (lush < ${float(GRASS.dryBelow)}
@@ -99,8 +101,8 @@ int grassVariant(ivec2 c, float gust, out int tone) {
     ? ${Tone.dry} : lush > ${float(GRASS.shadeAbove)} ? ${Tone.shade} : ${Tone.none};
   if (gust >= ${float(GUST_STEPS[1])}) return ${GrassGlyph.flat};
   if (gust >= ${float(GUST_STEPS[0])}) {
-    if (abs(u_windDir.x) < ${float(GRASS.uprightBelow)}) return ${GrassGlyph.upright};
-    return u_windDir.x > 0.0 ? ${GrassGlyph.leanRight} : ${GrassGlyph.leanLeft};
+    if (abs(dir.x) < ${float(GRASS.uprightBelow)}) return ${GrassGlyph.upright};
+    return dir.x > 0.0 ? ${GrassGlyph.leanRight} : ${GrassGlyph.leanLeft};
   }
   float score = lush + (float((h >> 8u) & 255u) / 256.0 - 0.5) * ${float(GRASS.jitter)};
   return score > ${float(GRASS.dense)} ? 0
@@ -108,19 +110,19 @@ int grassVariant(ivec2 c, float gust, out int tone) {
     : score > ${float(GRASS.thin)} ? 2 : ${GrassGlyph.sparse};
 }
 
-int plantingVariant(ivec2 c, float gust, out int tone) {
+int plantingVariant(ivec2 c, float gust, vec2 dir, out int tone) {
   if (valueNoise(c, ${PLANTING.scale}, ${PLANTING.seed}) < ${float(PLANTING.bareBelow)}) {
     tone = ${Tone.none};
     return ${PLANTING.bareGlyph};
   }
-  return grassVariant(c, gust, tone);
+  return grassVariant(c, gust, dir, tone);
 }
 
-int cropVariant(ivec2 c, float gust) {
+int cropVariant(ivec2 c, float gust, vec2 dir) {
   int row = vmod(c.y, 2);
   if (gust < ${float(GUST_STEPS[0])}) return row;
   if (row == 0 || gust >= ${float(GUST_STEPS[1])}) return ${CropGlyph.flat};
-  return u_windDir.x >= 0.0 ? ${CropGlyph.leanRight} : ${CropGlyph.leanLeft};
+  return dir.x >= 0.0 ? ${CropGlyph.leanRight} : ${CropGlyph.leanLeft};
 }
 
 // Broad patches of a field ripen (glyphs/select.ts cropTone).
@@ -134,7 +136,7 @@ ${Object.entries(CROP_STAGE)
   .map(([name, value]) => `const int CROP_${name.toUpperCase()} = ${value};`)
   .join('\n')}
 
-int cropCell(ivec2 c, float gust, int stage, float progress, float time, out int tone) {
+int cropCell(ivec2 c, float gust, vec2 dir, int stage, float progress, float time, out int tone) {
   float p = clamp(progress, 0.0, 1.0);
   uint h = cellHash(c) >> 8u;
   bool row = vmod(c.y, 2) == 0;
@@ -144,7 +146,7 @@ int cropCell(ivec2 c, float gust, int stage, float progress, float time, out int
       ? ${float(CROP.ripeAbove)} + (${float(CROP_STAGE.ripeStart)} - ${float(CROP.ripeAbove)}) * eased
       : ${float(CROP_STAGE.ripeStart)} * (1.0 - eased);
     tone = valueNoise(c, ${CROP.ripeScale}, ${CROP.ripeSeed}) > threshold ? ${Tone.dry} : ${Tone.none};
-    return cropVariant(c, gust);
+    return cropVariant(c, gust, dir);
   }
   if (stage == CROP_FLOODED) {
     tone = ${Tone.light};
@@ -165,8 +167,7 @@ int cropCell(ivec2 c, float gust, int stage, float progress, float time, out int
 
 // Cells a crown vertex reach cells from its trunk swings in a gust, and springs back in the wake
 // behind it (glyphs/select.ts swayOffset).
-vec2 swayOffset(float reach, float gust, float wake, float time, float phase) {
-  vec2 dir = u_windDir;
+vec2 swayOffset(float reach, float gust, float wake, float time, float phase, vec2 dir) {
   float lean = gust - ${float(SWAY.recoil)} * wake * (0.6 + 0.4 * cos(time * ${float(SWAY.bounce)} + phase));
   float along = lean * min(${float(SWAY.bend)} * reach, ${float(SWAY.max)});
   float across = (gust + 0.6 * wake) * ${float(SWAY.flutter)} * min(reach / 2.0, 1.0)
@@ -233,8 +234,8 @@ int canopyShape(ivec2 c, int variant, vec2 lean, vec2 sun, out int tone) {
   return ${CanopyGlyph.foliage};
 }
 
-int canopyVariant(ivec2 c, int variant, float gust, float time, vec2 sun, out int tone) {
-  int v = canopyShape(c, variant, u_windDir * (gust * ${float(CANOPY.sway)}), sun, tone);
+int canopyVariant(ivec2 c, int variant, float gust, float time, vec2 sun, vec2 dir, out int tone) {
+  int v = canopyShape(c, variant, dir * (gust * ${float(CANOPY.sway)}), sun, tone);
   if (v == ${CanopyGlyph.foliage} && gust >= ${float(TREE_WIND.step)} && flutters(cellHash(c), gust, time)) {
     return ${CanopyGlyph.rustle};
   }

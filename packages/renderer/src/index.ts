@@ -620,7 +620,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
   const cursorEffects = new CursorEffects();
+  let cursorCrownDirty = false;
+  let cursorCrownActive = false;
   function clearLifePointer() {
+    cursorCrownDirty ||= cursorCrownActive;
     lifeHover.pointer(null);
     cursorEffects.clear();
     pointerProjection = null;
@@ -716,6 +719,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const resize = () => {
+    cursorCrownDirty ||= cursorCrownActive;
+    cursorEffects.rebase();
     lifeHover.clear();
     resetQualitySamples();
     const nextDpr = Math.min(window.devicePixelRatio || 1, knobs.maxDpr);
@@ -1070,7 +1075,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const size = cssSize();
       const pointer = lifePointer(size);
       if (pointer && lifeHover.pointerPoint)
-        cursorEffects.move(lifeHover.pointerPoint, pointer, lastPointerInput, {
+        cursorEffects.move(lifeHover.pointerPoint, pointer, at, {
           w: cssCell.width,
           h: cssCell.height,
         });
@@ -1103,7 +1108,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
-            ...(pointer ? { pointer } : {}),
+            ...(pointer
+              ? {
+                  pointer,
+                  pointerRest: cursorEffects.rest(at),
+                  ...(cursorEffects.gust(at, metersPerCssPx(camera) * cssCell.width)
+                    ? { gust: cursorEffects.gust(at, metersPerCssPx(camera) * cssCell.width) }
+                    : {}),
+                }
+              : {}),
           },
           visible: [
             camera.zoom,
@@ -1777,7 +1790,27 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       reducedMotion,
       watched: watch.watched(),
     });
-    if (cellDirty || drawDirty || animating || cursorEffects.active(now)) {
+    const cursorPoint = lifeRunning() && !flight ? lifePointer(cssSize()) : undefined;
+    if (cursorPoint && lifeHover.pointerPoint) {
+      const cell = stepCell(schedule, step ?? 0);
+      cursorEffects.move(lifeHover.pointerPoint, cursorPoint, now, {
+        w: cell.width,
+        h: cell.height,
+      });
+    }
+    const cursor =
+      placement && lifeRunning() && !flight
+        ? cursorEffects.wind(placement, now, cellDev().h / cellDev().w)
+        : undefined;
+    cursorCrownDirty ||= cursorCrownActive && !cursor;
+    if (
+      cellDirty ||
+      drawDirty ||
+      animating ||
+      cursor ||
+      cursorCrownDirty ||
+      cursorEffects.active(now)
+    ) {
       const time = (now - start) / 1000;
       const frameStart = performance.now();
       gpuTimer.begin(now);
@@ -1821,14 +1854,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const swaying =
         knobs.crownSway &&
         !reducedMotion &&
-        wind.strength > 0 &&
+        (wind.strength > 0 || !!cursor) &&
         hasCrowns(crownTiles) &&
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
-      if (placement && (cellsDrawn || (swaying && animating))) {
+      if (placement && (cellsDrawn || cursorCrownDirty || (swaying && (animating || !!cursor)))) {
         const crownStart = performance.now();
-        crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
+        crownPass(
+          gl,
+          programs,
+          targets,
+          v,
+          placement,
+          crownTiles,
+          time,
+          wind,
+          knobs.crownSway ? cursor : undefined,
+        );
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
       }
+      cursorCrownActive = !!cursor && knobs.crownSway;
+      cursorCrownDirty = false;
       selectPass(
         gl,
         programs,
@@ -1843,6 +1888,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         knobs.shadows,
         true,
         cropPass,
+        knobs.groundWind ? cursor : undefined,
       );
       const lifeStart = performance.now();
       drawLife(now, wind);
@@ -1865,6 +1911,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           rain: currentRain(),
           wind,
           ripples: lifeRunning() && placement ? cursorEffects.project(placement, now) : [],
+          cursorWind: cursor,
           detail: camera.zoom >= 18 && knobs.waterDetail,
           fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
           cloudCover: cover,

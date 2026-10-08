@@ -981,6 +981,7 @@ export class TileLife {
       env?.effectCellMeters ?? 0,
       env?.wind,
       env?.nextSourceId,
+      env?.gust,
     );
     const visits = this.scenes.visits.size > 0;
     const services = this.scenes.services.size > 0;
@@ -1018,8 +1019,9 @@ export class TileLife {
     dt: number,
     wind: LifeEnv['wind'],
     owners?: ReadonlyMap<Mover, TileLife>,
+    gust?: CursorGust,
   ) {
-    this.effects.finish(clock, dt, wind, owners);
+    this.effects.finish(clock, dt, wind, owners, gust);
   }
 
   private readonly sharedRoadVertices = new Set<number>();
@@ -7452,7 +7454,7 @@ export class TileLife {
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env, observing);
     if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
-    if (!pass) this.finishEffects(clock, dt, env?.wind);
+    if (!pass) this.finishEffects(clock, dt, env?.wind, undefined, env?.gust);
   }
 
   /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
@@ -11832,7 +11834,7 @@ export class LifeWorld {
       }
     }
     for (const tile of this.tiles.values())
-      tile.finishEffects(this.clock, clamped, wind, effectOwners);
+      tile.finishEffects(this.clock, clamped, wind, effectOwners, gust);
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileLife; m: Mover }[] | undefined;
     for (const tile of this.tiles.values()) {
