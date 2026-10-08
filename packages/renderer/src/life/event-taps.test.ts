@@ -1,11 +1,11 @@
 import { expect, it, vi } from 'vitest';
-import type { DialogueChoice, ProcessionRoute } from '@atlas/shared';
+import type { DialogueChoice, FluvialRoute } from '@atlas/shared';
 import { LifeWorld } from './simulate';
 import { EventTaps } from './event-taps';
 import { ProcessionScene } from './procession';
 import type { LifeTap } from './tap';
 
-const route: ProcessionRoute = {
+const route: FluvialRoute = {
   id: 'procession/test',
   title: { en: 'Test' },
   status: 'draft',
@@ -70,9 +70,19 @@ it.each([false, true])(
   (played) => {
     const f = eventWorld(played);
     const react = vi.spyOn(EventTaps.prototype, 'react');
-    f.world.step(0, undefined, 19, undefined, undefined, { minutes: 960 }, 1, 1.8, 1, undefined, [
-      f.tap,
-    ]);
+    f.world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { minutes: 960, rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      [f.tap],
+    );
     expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
     expect(react).toHaveBeenCalledTimes(8);
     expect(new Set(react.mock.calls.map((c) => c[0])).size).toBe(8);
@@ -99,9 +109,19 @@ it.each([false, true])(
     const f = eventWorld(false, inspection);
     const index = f.agents.findIndex((a) => a.event && a.kind === 'person' && !a.prop && !a.aboard);
     const target = f.agents[index]!;
-    f.world.step(0, undefined, 19, undefined, undefined, { minutes: 720 }, 1, 1.8, 1, undefined, [
-      { ...f.tap, agent: index, at: [target.lng, target.lat] },
-    ]);
+    f.world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { minutes: 720, rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      [{ ...f.tap, agent: index, at: [target.lng, target.lat] }],
+    );
     expect(
       f.world.visible(19, 1, [0, 0]).filter((a) => a.speech?.exchangeId === 'hello'),
     ).toHaveLength(1);

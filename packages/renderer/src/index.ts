@@ -1124,7 +1124,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
             ...(pointer ? { pointer } : {}),
             ...(tapBatch && { taps: tapBatch }),
-            ...(now < feedTrackingUntil ? { tapPointer } : {}),
+            ...(at < feedTrackingUntil ? { tapPointer } : {}),
           },
           visible: [
             camera.zoom,
@@ -1149,20 +1149,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               id: tap.id,
               at: tap.at,
               zoom: camera.zoom,
-              time: (now - start) / 1000,
+              time,
             });
         }
         if (action === 'candle' && tap.candle)
-          candleFlare = new CandleFlare(
-            { at: tap.candle.at, seed: tap.candle.seed ?? 0 },
-            (now - start) / 1000,
-          );
+          candleFlare = new CandleFlare({ at: tap.candle.at, seed: tap.candle.seed ?? 0 }, time);
         if (action === 'carnival') {
           if (tap.carnival?.record) {
-            (carnivalBoosts ??= new CarnivalBoosts()).request(
-              tap.carnival.record,
-              (now - start) / 1000,
-            );
+            (carnivalBoosts ??= new CarnivalBoosts()).request(tap.carnival.record, time);
             continue;
           }
           for (const fixture of fixtures) {
@@ -1171,10 +1165,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               fixture.record.kind === 'carnival' &&
               carnivalKey(fixture.record) === tap.carnival?.key
             ) {
-              (carnivalBoosts ??= new CarnivalBoosts()).request(
-                fixture.record,
-                (now - start) / 1000,
-              );
+              (carnivalBoosts ??= new CarnivalBoosts()).request(fixture.record, time);
               break;
             }
           }

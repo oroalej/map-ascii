@@ -676,6 +676,7 @@ describe('live motion preference', () => {
     draw(140);
     const requests = vi.mocked(fireworksPass).mock.calls.at(-1)![13];
     expect(requests).toHaveLength(1);
+    expect(Number.isFinite(requests![0]!.time)).toBe(true);
     expect(requests![0]!.at[0]).toBeCloseTo(0, 10);
     expect(requests![0]!.at[1]).toBeCloseTo(0, 10);
     draw(180);

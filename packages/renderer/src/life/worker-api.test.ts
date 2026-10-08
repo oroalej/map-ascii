@@ -39,7 +39,14 @@ it('transports pressed canonical signal phases equally and retains them through 
       time: 0,
       wind: { dir: [1, 0], strength: 0 },
     },
-    step: { dt: 0, zoom: 19, cellMeters: 1 },
+    step: {
+      dt: 0,
+      zoom: 19,
+      cellMeters: 1,
+      bounds: undefined,
+      wind: undefined,
+      weather: undefined,
+    },
     visible: [19, 1, center],
   };
   const first = runLifeFrame(direct, input);

@@ -131,7 +131,7 @@ export class TapQueue {
     for (const receipt of receipts ?? []) {
       const tap = this.sent.get(receipt.id);
       this.sent.delete(receipt.id);
-      if (tap?.generation === generation && receipt.action)
+      if (tap && tap.generation === generation && receipt.action)
         chosen.push({ tap, action: receipt.action });
     }
     return chosen;

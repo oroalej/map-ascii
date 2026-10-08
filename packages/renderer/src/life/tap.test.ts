@@ -66,11 +66,21 @@ it('a candle tap reaches nearby seasonal grave visitors only while their season 
     ),
   ).toBe(true);
   request.mockClear();
-  world.step(0, undefined, 19, undefined, undefined, { season: null });
+  world.step(0, undefined, 19, undefined, undefined, { season: null, rain: 0 });
   world.visible(19, levels, at);
-  world.step(0, undefined, 19, undefined, undefined, { season: null }, 1, 1.8, 1, undefined, [
-    { ...tap, frame: world.tapSources!.frame },
-  ]);
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { season: null, rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    [{ ...tap, frame: world.tapSources!.frame }],
+  );
   expect(request).not.toHaveBeenCalled();
 });
 it('a chosen carnival tap requests party from at most eight people within fifteen metres', () => {
@@ -307,7 +317,7 @@ it('leaves tap-free physical state and visible records identical with frame targ
   expect(b.world.tapReceipts).toBeUndefined();
 });
 
-const agent: VisibleAgent = { kind: 'cat', lng: 0, lat: 0, ahead: [1, 0] };
+const agent: VisibleAgent = { kind: 'cat', lng: 0, lat: 0, flap: 0, ahead: [1, 0] };
 function fixture() {
   const sources = new TapSources();
   sources.begin();
