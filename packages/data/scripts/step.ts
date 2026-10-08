@@ -57,6 +57,7 @@ export const files = {
   rawDetailNeighborhood: 'detail-neighborhood.osm.json',
   rawDetailGrounds: 'detail-grounds.osm.json',
   rawDetailPools: 'detail-pools.osm.json',
+  rawDetailWaterfalls: 'detail-waterfalls.osm.json',
   /** The region relation lookup (tags and bounds only). */
   rawRegionRelation: 'region-relation.osm.json',
   /** Region-wide low-detail layers: coastline, major roads, rivers, lakes, places. */

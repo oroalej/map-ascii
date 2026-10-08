@@ -11,11 +11,39 @@ import {
   neighborhoodQuery,
   groundsQuery,
   poolsQuery,
+  waterfallsQuery,
   railQuery,
   regionQueries,
   splitBbox,
   trafficQuery,
 } from './01-fetch';
+import { overpass } from './lib/overpass';
+
+it('caches supplemental waterfall geometry for offline use without replacing saved detail', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'atlas-waterfall-'));
+  const main = join(dir, 'detail.osm.json');
+  const supplemental = join(dir, 'detail-waterfalls.osm.json');
+  const saved = JSON.stringify({ elements: [{ type: 'way', id: 4, tags: { highway: 'path' } }] });
+  const anchor = { type: 'node', id: 7, lat: 1.5, lon: 2.5, tags: { waterway: 'waterfall' } };
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ elements: [anchor] })));
+  await writeFile(main, saved);
+  vi.stubGlobal('fetch', fetch);
+  try {
+    const query = waterfallsQuery('1,2,3,4');
+    expect(query).toContain('nwr["waterway"="waterfall"]');
+    expect(query).toContain('>; out skel qt;');
+    const online = await overpass(query, supplemental, { offline: false });
+    fetch.mockClear();
+    const offline = await overpass(query, supplemental, { offline: true, requireCoverage: true });
+    expect(offline).toEqual(online);
+    expect(offline.elements).toEqual([anchor]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await readFile(main, 'utf8')).toBe(saved);
+  } finally {
+    vi.unstubAllGlobals();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 
 it('fetches recreation grounds and their member geometry in a separate bounded query', () => {
   const query = groundsQuery('1,2,3,4');

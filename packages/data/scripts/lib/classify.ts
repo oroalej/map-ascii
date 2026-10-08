@@ -158,6 +158,10 @@ export function classify(
       : null;
   }
 
+  // A mapped drop can be a node, a crest line or a water footprint. Keep the normal water
+  // rendering and waterway kind; curated facts/detail can attach to this real OSM identity.
+  if (tags.waterway === 'waterfall') return kind === 'area' ? 'water_area' : 'water_stream';
+
   if (kind === 'point') {
     if (frontageOf(tags) && tags.atlas_in_building === 'yes') return null;
     if (oneOf(tags.highway, 'traffic_signals', 'stop') || markedCrossing(tags)) return 'furniture';
