@@ -2,12 +2,15 @@ import { copyFile, mkdir, readFile, stat, utimes, writeFile } from 'node:fs/prom
 import { dirname } from 'node:path';
 import { bboxContains, splitOverpassBbox } from './geo';
 
-/** Public instances, tried in turn on retries. `OVERPASS_URL` pins one. */
+/**
+ * Public global instances (OSM wiki, Overpass API page), tried in turn on retries, with independent
+ * operators first. `OVERPASS_URL` pins one.
+ */
 const endpoints = process.env.OVERPASS_URL
   ? [process.env.OVERPASS_URL]
   : [
       'https://overpass-api.de/api/interpreter',
-      'https://overpass.kumi.systems/api/interpreter',
+      'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
       'https://overpass.private.coffee/api/interpreter',
       // overpass-api.de's two servers, each with its own rate limit, for when it answers 429.
       'https://z.overpass-api.de/api/interpreter',
@@ -194,10 +197,13 @@ export async function overpass(
     );
   }
 
+  // Each retry moves on to the next server in order, passing over skipped ones.
+  let next = 0;
   for (let attempt = 1; ; attempt++) {
-    const current = endpoints.filter((url) => !skipped.has(url));
-    const choices = current.length > 0 ? current : endpoints;
-    const endpoint = choices[(attempt - 1) % choices.length]!;
+    const order = endpoints.map((_, i) => (next + i) % endpoints.length);
+    const index = order.find((i) => !skipped.has(endpoints[i]!)) ?? order[0]!;
+    next = index + 1;
+    const endpoint = endpoints[index]!;
     console.log(
       `  querying ${new URL(endpoint).host}${attempt > 1 ? ` (attempt ${attempt})` : ''}…`,
     );
