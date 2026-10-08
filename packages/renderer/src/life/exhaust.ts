@@ -2,6 +2,7 @@ import { VEHICLES, type CraftType } from './vehicles';
 import { frameBetween } from './frames';
 import { lngLatToTile, tileToLngLat } from '@atlas/shared';
 import type { TileId } from '../tiles';
+import { gustStrength, type MetricGust } from './pointer';
 import { type PUFF_COLOR, PUFF_GLYPHS } from './puff-style';
 import { hasTurnSignals, type SIGNAL_VEHICLES } from './turn-signals';
 
@@ -109,7 +110,15 @@ function drift(
   wx: number,
   wy: number,
   perMeter: number,
+  gust?: MetricGust,
 ) {
+  if (gust) {
+    const local = gustStrength(gust, p.x, p.y) * PUFF.drift;
+    if (local > 0) {
+      wx += gust.dir[0] * local;
+      wy += gust.dir[1] * local;
+    }
+  }
   p.x += (wx + p.vx) * seconds * perMeter;
   p.y += (wy + p.vy) * seconds * perMeter;
 }
@@ -127,6 +136,7 @@ export function spawnPuff(
   dt: number,
   perMeter: number,
   wind: Wind,
+  gust?: MetricGust,
 ): Puff {
   const fraction = Math.max(0, Math.min(1, (at - (clock - dt)) / dt));
   const hx = start.hx + (end.hx - start.hx) * fraction;
@@ -154,7 +164,7 @@ export function spawnPuff(
       ((dy * spec.length) / 2) * perMeter +
       dx * PUFF.tailpipeOffset * spec.width * perMeter,
   };
-  drift(p, Math.max(0, clock - at), windComponent(wind, 0), windComponent(wind, 1), perMeter);
+  drift(p, Math.max(0, clock - at), windComponent(wind, 0), windComponent(wind, 1), perMeter, gust);
   return p;
 }
 
@@ -234,7 +244,7 @@ export class PuffStore {
     this.slots[this.cursor] = puff;
     this.cursor = (this.cursor + 1) % PUFF.cap;
   }
-  advance(clock: number, dt: number, wind: Wind, perMeter: number) {
+  advance(clock: number, dt: number, wind: Wind, perMeter: number, gust?: MetricGust) {
     const gap = Math.max(0, clock - dt - (this.clock ?? clock - dt));
     this.clock = clock;
     if (!this.count) return;
@@ -250,7 +260,7 @@ export class PuffStore {
         this.count--;
       } else {
         const elapsed = Math.max(0, clock - Math.max(clock - dt, p.t0));
-        drift(p, elapsed, wx, wy, perMeter);
+        drift(p, elapsed, wx, wy, perMeter, gust);
       }
     }
   }
