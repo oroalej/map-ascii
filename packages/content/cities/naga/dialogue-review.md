@@ -87,8 +87,8 @@ The 104 legacy scenes remain intact. Added 21 original one-speaker peddler utter
 | peddler-takatak-2 | Kendi, suki! Kendi! | takatak |
 | peddler-heat-sorbetes | Sorbetes! Malipot! | sorbetes |
 | peddler-rain-balut | Balut, mainit pa sa uran! | balut |
-| peddler-clearing | Tapos na an uran. Bili na! | all goods |
-| peddler-heat-tired | Hay, kainit! Bili na, suki! | all goods |
-| peddler-hover-1 | Bili na, suki! | all goods |
+| peddler-clearing | Tapos na an uran. Bili na! | selling trades only |
+| peddler-heat-tired | Hay, kainit! Bili na, suki! | selling trades only |
+| peddler-hover-1 | Bili na, suki! | selling trades only |
 | peddler-hover-2 | Madya digdi, suki! | all goods |
 | peddler-leaving | Puli na ako. | all goods |

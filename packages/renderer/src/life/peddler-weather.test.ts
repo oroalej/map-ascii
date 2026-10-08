@@ -54,6 +54,23 @@ it('takes a separate mapped shelter visit, then releases once with a clearing to
   expect(owner.visit).toBeUndefined();
   expect([owner.x, owner.y]).not.toEqual(stay);
 });
+it.each(['fry-cart', 'flatbed-cart'] as const)(
+  'uses realized rain protection for a wet %s',
+  (prop) => {
+    for (const cover of ['shelter', 'none'] as const) {
+      const { population, owner } = fixture(cover, prop);
+      owner.umbrellaRank = 0;
+      for (let i = 0; i < 60; i++)
+        population.step(1, { ...peddlerWeather, rain: 0.7, wet: true }, 0);
+      expect(owner.canopy).toBe(0);
+      expect(owner.visit?.phase).toBe('stay');
+      expect(owner.visit?.fallback).toBe(cover === 'none');
+      expect(owner.sheltered).toBe(cover === 'shelter');
+      expect(population.visible(owner, { ...peddlerWeather, rain: 0.7 }).peddler!.parasol).toBe(0);
+      expect(owner.callToken).toBe(0);
+    }
+  },
+);
 it('stands at a checked endpoint when no cover is reachable, without calling, and resumes', () => {
   const { population, owner } = fixture('none');
   for (let i = 0; i < 60; i++) population.step(1, { ...peddlerWeather, rain: 0.7, wet: true }, 0);

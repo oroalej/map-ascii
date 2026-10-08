@@ -23,6 +23,48 @@ const entries = packs.flatMap(({ city, dialogue }) =>
 );
 const choices = entries.map(({ entry }) => entry);
 
+it.each(['heat', 'clearing', 'hover'] as const)(
+  'excludes sales-only dialogue for the actual buyer in %s',
+  (mode) => {
+    const pack = packs.find(({ city }) => city.slug === 'naga')!,
+      buyer = pack.city.life!.peddlers!.find(({ id }) => id === 'bote-dyaryo')!,
+      catalog = dialogueChoices(pack.dialogue!),
+      { population } = peddlerFixture([{ ...buyer, share: 1 }]);
+    population.step(0, { ...peddlerWeather, minutes: 540 }, 0);
+    const owner = population.owners[0]!,
+      caller = new PeddlerCaller(catalog, pack.dialogue!.periods),
+      env = { ...peddlerWeather, minutes: 780, sunAltitude: 60 };
+    expect(owner).toBeDefined();
+    const context: DialogueContext = {
+      minutes: 780,
+      rain: 0,
+      wind: 0,
+      sunAltitude: 60,
+      clearing: mode === 'clearing',
+      figures: ['adult'],
+      profiles: ['peddler-call'],
+      delivery: 'utterance',
+      peddler: { goods: buyer.id, event: mode === 'hover' ? 'hover' : undefined },
+    };
+    for (const id of ['peddler-heat-tired', 'peddler-clearing', 'peddler-hover-1'])
+      expect(
+        dialogueEligible(
+          catalog.find((entry) => entry.id === id)!,
+          context,
+          pack.dialogue!.periods,
+        ),
+      ).toBe(false);
+    for (let i = 0; i < 4; i++) {
+      owner.callToken++;
+      if (mode === 'clearing') owner.resumeToken++;
+      caller.step(owner, 10, env, true, mode === 'hover' && i === 0);
+      if (mode === 'hover' && i === 0)
+        expect(caller.cue(owner)?.exchangeId).toBe('peddler-hover-2');
+      else expect(caller.cue(owner)?.exchangeId).toMatch(/^peddler-bote-dyaryo-/);
+    }
+  },
+);
+
 it.each(entries)(
   '$city/$entry.id can emit every intended turn with its declared roles and legal context',
   ({ entry, periods }) => {

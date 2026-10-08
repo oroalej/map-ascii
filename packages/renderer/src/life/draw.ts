@@ -640,7 +640,7 @@ function drawAgent(
       }
     }
     if (!drawn && journal) journal.denied = journal.incomplete = true;
-    if (drawn && agent.peddler.parasol > 0) {
+    if (detailedStamp && agent.peddler.parasol > 0) {
       stampFigure(
         out,
         grid,
@@ -1013,6 +1013,7 @@ function drawPeople(
   if (
     journal &&
     !agent.vehicle &&
+    !agent.peddler &&
     looks.length <= 4 &&
     c0 >= 0 &&
     r0 >= 0 &&

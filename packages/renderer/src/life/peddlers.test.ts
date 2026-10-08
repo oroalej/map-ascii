@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { peddlerBodies, peddlerShare, peddlerWindow } from './peddlers';
 import { MAX_TILE_AGENTS } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LifeWorld } from './simulate';
+import { LifeWorld, type LifeEnv } from './simulate';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import {
   peddlerConfig,
@@ -13,10 +13,29 @@ import {
   peddlerCenter,
   peddlerWeather,
 } from './testing/peddlers';
-import { bodyCorners } from './occupancy';
+import { bodyCorners, bodiesOverlap, type Body } from './occupancy';
+import { EXTENT } from '../raster/geometry';
 import type { EmojiObservation } from './emoji';
 
 describe('isolated peddler population', () => {
+  it('queries ordinary bodies only for owners or an admissible birth attempt', () => {
+    const { population } = peddlerFixture([{ ...peddlerConfig, perTile: 1 }]);
+    const query = vi.spyOn(population.context, 'ordinary');
+    population.step(1, { ...peddlerWeather, minutes: 180 }, 0);
+    population.step(1, peddlerWeather, MAX_TILE_AGENTS);
+    expect(query).not.toHaveBeenCalled();
+    population.step(0, peddlerWeather, 0);
+    expect(query).toHaveBeenCalledTimes(1);
+    population.step(1, { ...peddlerWeather, minutes: 660 }, 0);
+    expect(query).toHaveBeenCalledTimes(2);
+    population.clear();
+    population.step(1, { ...peddlerWeather, minutes: 660 }, 0);
+    expect(query).toHaveBeenCalledTimes(2);
+    const absent = peddlerFixture([{ ...peddlerConfig, share: 0 }]).population,
+      none = vi.spyOn(absent.context, 'ordinary');
+    absent.step(1, peddlerWeather, 0);
+    expect(none).not.toHaveBeenCalled();
+  });
   it('has no births without a local clock or outside inclusive/exclusive hours', () => {
     const { population } = peddlerFixture();
     for (const minutes of [undefined, 299, 660])
@@ -61,6 +80,41 @@ describe('isolated peddler population', () => {
     for (let i = 0; i < 250; i++) population.step(1, { ...peddlerWeather, minutes: 660 }, 0);
     expect(population.owners).toHaveLength(0);
   });
+  it.each(['hours', 'storm'] as const)(
+    'continues through an interior bend during %s departure',
+    (reason) => {
+      const b = new LifeBuilder(),
+        pm = peddlerPM;
+      b.line(
+        [
+          { x: 1000, y: 1500 },
+          { x: 1000 + 40 * pm, y: 1500 },
+          { x: 1000 + 40 * pm, y: 1500 + 40 * pm },
+        ],
+        LifeLine.path,
+        4,
+      );
+      const { population } = peddlerFixture([{ ...peddlerConfig, perTile: 1 }], b.finish());
+      population.step(0, peddlerWeather, 0);
+      const owner = population.owners[0]!;
+      expect(owner).toBeDefined();
+      const start = { x: owner.x, y: owner.y },
+        route = owner.route,
+        interior = owner.dir === 1 ? route.b : route.a,
+        env =
+          reason === 'hours'
+            ? { ...peddlerWeather, minutes: 660 }
+            : { ...peddlerWeather, windPreset: 'storm' as const };
+      population.step(route.length / 0.84 + 0.001, env, 0);
+      expect(population.owners).toContain(owner);
+      expect(owner.x).toBeCloseTo(interior.x);
+      expect(owner.y).toBeCloseTo(interior.y);
+      expect(owner.route).not.toBe(route);
+      population.step(owner.route.length / 0.84 + 0.001, env, 0);
+      expect(population.owners).toHaveLength(0);
+      expect(Math.hypot(owner.x - start.x, owner.y - start.y)).toBeGreaterThan(40);
+    },
+  );
   it('clips near routes and every complete footprint to a mapped terminal radius', () => {
     const config = {
       ...peddlerConfig,
@@ -81,6 +135,87 @@ describe('isolated peddler population', () => {
     const none = peddlerFixture([config], geo).population;
     none.step(1, peddlerWeather, 0);
     expect(none.owners).toHaveLength(0);
+  });
+  it('reverses at an unobstructed dead end and retries a temporary turn obstruction after waiting', () => {
+    for (const obstructed of [false, true]) {
+      const b = new LifeBuilder(),
+        pm = peddlerPM;
+      b.line(
+        [
+          { x: 1000, y: 1500 },
+          { x: 1000 + 30 * pm, y: 1500 },
+        ],
+        LifeLine.path,
+        6,
+      );
+      const { population, ordinary } = peddlerFixture(
+        [{ ...peddlerConfig, prop: 'box-cart', perTile: 1 }],
+        b.finish(),
+      );
+      population.step(0, peddlerWeather, 0);
+      const owner = population.owners[0]!,
+        route = owner.route;
+      Object.assign(owner, {
+        ...route.a,
+        hx: route.hx,
+        hy: route.hy,
+        dir: 1,
+        distance: 0,
+        nextCall: 1e6,
+      });
+      if (obstructed)
+        ordinary.push({ x: route.b.x, y: route.b.y + 1.4, hx: 1, hy: 0, length: 0.1, width: 0.1 });
+      population.step(route.length / 0.84 + 0.001, peddlerWeather, 0);
+      if (obstructed) {
+        expect(owner.dir).toBe(1);
+        expect(owner.transitionWait).toBe(2);
+        ordinary.length = 0;
+        population.step(1, peddlerWeather, 0);
+        expect(owner.dir).toBe(1);
+        population.step(1, peddlerWeather, 0);
+      }
+      expect(owner.dir).toBe(-1);
+      population.step(1, peddlerWeather, 0);
+      expect(owner.distance).toBeLessThan(route.length);
+      expect(population.owners).toContain(owner);
+    }
+  });
+  it('rejects cart admission where straight travel fits but static turnaround hits a parallel carriageway', () => {
+    const b = new LifeBuilder(),
+      pm = peddlerPM;
+    b.line(
+      [
+        { x: 1000, y: 1500 },
+        { x: 1000 + 100 * pm, y: 1500 },
+      ],
+      LifeLine.path,
+      4,
+    );
+    const geo = b.finish();
+    geo.areas = [
+      {
+        kind: 'carriageway',
+        rings: [
+          [
+            { x: 900, y: 1500 + 1.5 * pm },
+            { x: 1200 + 100 * pm, y: 1500 + 1.5 * pm },
+            { x: 1200 + 100 * pm, y: 1500 + 6 * pm },
+            { x: 900, y: 1500 + 6 * pm },
+            { x: 900, y: 1500 + 1.5 * pm },
+          ],
+        ],
+      },
+    ];
+    const config = { ...peddlerConfig, prop: 'box-cart' as const };
+    const { population, blocked } = peddlerFixture([config], geo);
+    expect(blocked.hits(peddlerBodies(config.prop, { x: 1000 / pm, y: 1500 / pm }, 1, 0))).toBe(
+      false,
+    );
+    population.step(1, peddlerWeather, 0);
+    expect(population.owners).toHaveLength(0);
+    const carrier = peddlerFixture([peddlerConfig], geo).population;
+    carrier.step(1, peddlerWeather, 0);
+    expect(carrier.owners.length).toBeGreaterThan(0);
   });
   it('checks unknown-width crossings against uncut carriageways and cart widths', () => {
     const geo = peddlerGeometry(),
@@ -143,6 +278,77 @@ describe('isolated peddler population', () => {
 });
 
 describe('world integration and ordinary isolation', () => {
+  it('shares one fresh ordinary snapshot per frame and projects a neighboring vehicle for yielding', () => {
+    const world = new LifeWorld();
+    world.setPeddlers([{ ...peddlerConfig, perTile: 1 }]);
+    world.sync([
+      { key: 'snapshot-a', tile: peddlerTile, life: peddlerGeometry() },
+      {
+        key: 'snapshot-b',
+        tile: { ...peddlerTile, x: peddlerTile.x + 1 },
+        life: peddlerGeometry(),
+      },
+    ]);
+    world.step(0, undefined, 19, undefined, undefined, { ...peddlerWeather, minutes: 180 });
+    const a = worldTiles(world).get('snapshot-a')!,
+      b = worldTiles(world).get('snapshot-b')!;
+    a.movers.length = 0;
+    b.movers.splice(1);
+    expect(b.movers).toHaveLength(1);
+    for (const life of [a, b]) {
+      life.gatherers.length = life.stalls.length = life.parked.length = 0;
+    }
+    // An ordinary vehicle footprint straddles the neighbor's edge; only its read-only query is mocked.
+    const neighbor: Body = { x: 0.5, y: 1500 / peddlerPM, hx: 1, hy: 0, length: 8, width: 1 };
+    const source = vi.spyOn(b, 'groundBodies').mockImplementation(() => [{ ...neighbor }]);
+    const phase = world as unknown as {
+        stepPeddlers(dt: number, zoom: number, env: LifeEnv): void;
+        ordinaryPeddlerBodies(life: object): Body[];
+      },
+      query = vi.spyOn(phase, 'ordinaryPeddlerBodies');
+    phase.stepPeddlers(0, 19, { ...peddlerWeather, minutes: 180 });
+    expect(source).not.toHaveBeenCalled();
+    phase.stepPeddlers(0, 19, peddlerWeather);
+    expect(source).toHaveBeenCalledTimes(1);
+    expect(query).toHaveBeenCalledTimes(2);
+    const bodiesA = query.mock.results[0]!.value as Body[],
+      bodiesB = query.mock.results[1]!.value as Body[],
+      projected = bodiesA[0]!;
+    expect(projected.x).toBeCloseTo(EXTENT / peddlerPM + neighbor.x);
+    expect(projected.y).toBeCloseTo(neighbor.y);
+    expect(bodiesB[0]!.x).toBeCloseTo(neighbor.x);
+    neighbor.y += 10;
+    phase.stepPeddlers(0, 19, peddlerWeather);
+    expect(source).toHaveBeenCalledTimes(2);
+    expect((query.mock.results[2]!.value as Body[])[0]!.y).toBeCloseTo(neighbor.y);
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: EXTENT - 30 * peddlerPM, y: 1500 },
+        { x: EXTENT, y: 1500 },
+      ],
+      LifeLine.path,
+      6,
+    );
+    const { population } = peddlerFixture(
+      [{ ...peddlerConfig, prop: 'box-cart', perTile: 1 }],
+      builder.finish(),
+    );
+    population.context.ordinary = () => bodiesA;
+    for (let i = 0; i < 10 && !population.owners.length; i++) population.step(0, peddlerWeather, 0);
+    const owner = population.owners[0]!;
+    expect(owner).toBeDefined();
+    Object.assign(owner, { ...owner.route.a, dir: 1, hx: 1, hy: 0, distance: 0, nextCall: 1e6 });
+    for (let i = 0; i < 50; i++) {
+      population.step(1, peddlerWeather, 0);
+      expect(
+        peddlerBodies(owner.config.prop, owner, owner.hx, owner.hy).some((body) =>
+          bodiesOverlap(body, projected),
+        ),
+      ).toBe(false);
+    }
+    expect(owner.distance).toBeLessThan(owner.route.length);
+  });
   it('clears peddler metadata when ordinary observations are reused', () => {
     const world = new LifeWorld();
     world.sync([{ key: 'pool', tile: peddlerTile, life: peddlerGeometry() }]);

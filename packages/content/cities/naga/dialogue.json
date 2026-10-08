@@ -3147,6 +3147,7 @@
         }
       ],
       "conditions": {
+        "goods": ["taho", "balut", "sorbetes", "fishball", "kakanin", "takatak"],
         "weather": "clearing"
       }
     },
@@ -3171,6 +3172,7 @@
         }
       ],
       "conditions": {
+        "goods": ["taho", "balut", "sorbetes", "fishball", "kakanin", "takatak"],
         "weather": "heat"
       }
     },
@@ -3195,6 +3197,7 @@
         }
       ],
       "conditions": {
+        "goods": ["taho", "balut", "sorbetes", "fishball", "kakanin", "takatak"],
         "event": "hover"
       }
     },

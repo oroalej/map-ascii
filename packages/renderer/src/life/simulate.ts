@@ -8582,13 +8582,74 @@ export class LifeWorld {
   private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
   private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
   private peddlerGeneration = 0;
+  private peddlerOrdinarySnapshot?: {
+    ref: TileLife;
+    sources: { life: TileLife; bodies: Body[] }[];
+  };
+  private ordinaryPeddlerBodies(life: TileLife): Body[] {
+    let snapshot = this.peddlerOrdinarySnapshot;
+    if (!snapshot) {
+      const ref = this.groundTerrain?.ref ?? life;
+      snapshot = { ref, sources: [] };
+      for (const other of this.tiles.values()) {
+        const frame = metricFrame(other, ref),
+          bodies: Body[] = [];
+        for (const actors of [other.movers, other.gatherers, other.stalls])
+          for (const actor of actors) {
+            if (!this.owns(other, actor)) continue;
+            for (const body of other.groundBodies(actor))
+              bodies.push({
+                ...body,
+                x: frame.x + body.x * frame.scale,
+                y: frame.y + body.y * frame.scale,
+                length: body.length * frame.scale,
+                width: body.width * frame.scale,
+              });
+          }
+        for (const parked of other.parked) {
+          const spec = VEHICLES[parked.vehicle];
+          bodies.push({
+            x: frame.x + (parked.x / other.perMeter) * frame.scale,
+            y: frame.y + (parked.y / other.perMeter) * frame.scale,
+            hx: parked.hx,
+            hy: parked.hy,
+            length: spec.length * frame.scale,
+            width: spec.width * frame.scale,
+          });
+        }
+        snapshot.sources.push({ life: other, bodies });
+      }
+      this.peddlerOrdinarySnapshot = snapshot;
+    }
+    const frame = metricFrame(snapshot.ref, life),
+      bodies: Body[] = [];
+    for (const source of snapshot.sources) {
+      const neighbor = metricFrame(source.life, life);
+      if (
+        Math.abs(neighbor.x) > EXTENT / life.perMeter + 20 ||
+        Math.abs(neighbor.y) > EXTENT / life.perMeter + 20
+      )
+        continue;
+      for (const body of source.bodies)
+        bodies.push({
+          ...body,
+          x: frame.x + body.x * frame.scale,
+          y: frame.y + body.y * frame.scale,
+          length: body.length * frame.scale,
+          width: body.width * frame.scale,
+        });
+    }
+    return bodies;
+  }
   setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    this.peddlerOrdinarySnapshot = undefined;
     this.peddlerGeneration++;
     for (const population of this.peddlers.values()) population.clear();
     this.peddlers.clear();
     this.peddlerConfig = config ?? [];
   }
   private stepPeddlers(dt: number, zoom: number | undefined, env: LifeEnv) {
+    this.peddlerOrdinarySnapshot = undefined;
     if (!this.peddlerConfig.length) return;
     const retained = new Set([
       ...this.tiles.values(),
@@ -8642,40 +8703,7 @@ export class LifeWorld {
                 indexes.some((index) => index.sweptHits(body, end[i]!)),
               );
             },
-            ordinary: () => {
-              const bodies: Body[] = [];
-              for (const other of this.tiles.values()) {
-                const frame = metricFrame(other, life);
-                if (
-                  Math.abs(frame.x) > EXTENT / life.perMeter + 20 ||
-                  Math.abs(frame.y) > EXTENT / life.perMeter + 20
-                )
-                  continue;
-                for (const actor of [...other.movers, ...other.gatherers, ...other.stalls]) {
-                  if (!this.owns(other, actor)) continue;
-                  for (const body of other.groundBodies(actor))
-                    bodies.push({
-                      ...body,
-                      x: frame.x + body.x * frame.scale,
-                      y: frame.y + body.y * frame.scale,
-                      length: body.length * frame.scale,
-                      width: body.width * frame.scale,
-                    });
-                }
-                for (const parked of other.parked) {
-                  const spec = VEHICLES[parked.vehicle];
-                  bodies.push({
-                    x: frame.x + (parked.x / other.perMeter) * frame.scale,
-                    y: frame.y + (parked.y / other.perMeter) * frame.scale,
-                    hx: parked.hx,
-                    hy: parked.hy,
-                    length: spec.length * frame.scale,
-                    width: spec.width * frame.scale,
-                  });
-                }
-              }
-              return bodies;
-            },
+            ordinary: () => this.ordinaryPeddlerBodies(life),
           },
           this.peddlerConfig,
           {
@@ -8688,6 +8716,7 @@ export class LifeWorld {
       }
       population.step(dt, { ...env, zoom, wet: life.scenes.raining }, life.population);
     }
+    this.peddlerOrdinarySnapshot = undefined;
   }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {

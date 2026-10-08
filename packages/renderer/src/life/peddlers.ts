@@ -78,6 +78,14 @@ export function peddlerBodies(prop: PeddlerProp, p: Point, hx: number, hy: numbe
     },
   ];
 }
+function turnaroundBody(prop: PeddlerProp, p: Point): Body {
+  const radial = Math.max(
+    ...peddlerBodies(prop, p, 1, 0)
+      .flatMap((body) => bodyCorners(body))
+      .map((corner) => Math.hypot(corner.x - p.x, corner.y - p.y)),
+  );
+  return { ...p, hx: 1, hy: 0, length: radial * 2, width: radial * 2 };
+}
 type Route = {
   a: Point;
   b: Point;
@@ -85,6 +93,8 @@ type Route = {
   hy: number;
   length: number;
   line: number;
+  exitA: boolean;
+  exitB: boolean;
   site?: Point;
 };
 type Leg = { route: Route; from: number; to: number };
@@ -120,6 +130,7 @@ export type PeddlerOwner = {
   canopy: number;
   window?: PeddlerHours;
   waiting: number;
+  transitionWait: number;
   identity: string;
   resumeToken: number;
   sheltered: boolean;
@@ -284,19 +295,32 @@ export class PeddlerPopulation {
     const radial = isPeddlerCart(config.prop)
       ? Math.hypot(peddlerCartOffset(config.prop) + VEHICLES[config.prop].length / 2, 0.5)
       : Math.max(1, FIGURE_SIZE_M[config.prop]) / Math.SQRT2;
-    const add = (a: Point, b: Point, line: number, site: Point | undefined, depth = 0) => {
+    const add = (
+      a: Point,
+      b: Point,
+      line: number,
+      site: Point | undefined,
+      exitA: boolean,
+      exitB: boolean,
+      depth = 0,
+    ) => {
       const length = Math.hypot(b.x - a.x, b.y - a.y);
       if (length < 0.1) return;
       const hx = (b.x - a.x) / length,
         hy = (b.y - a.y) / length;
       if (this.safe(config, a, b, hx, hy, site) && this.safe(config, b, a, -hx, -hy, site)) {
-        routes.push({ a, b, hx, hy, length, line, site });
+        // A straight corridor can fit the cart while trapping its turnaround beside a road.
+        for (const point of [a, b]) {
+          const envelope = turnaroundBody(config.prop, point);
+          if (this.obstacles.hits([envelope]) || !this.context.safe([envelope], [envelope])) return;
+        }
+        routes.push({ a, b, hx, hy, length, line, site, exitA, exitB });
         return;
       }
       if (depth >= 12 || length < 2) return;
       const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      add(a, mid, line, site, depth + 1);
-      add(mid, b, line, site, depth + 1);
+      add(a, mid, line, site, exitA, false, depth + 1);
+      add(mid, b, line, site, false, exitB, depth + 1);
     };
     for (let line = 0; line < geo.kinds.length; line++) {
       if (!config.lines.some((kind) => geo.kinds[line] === LifeLine[kind])) continue;
@@ -322,7 +346,15 @@ export class PeddlerPopulation {
             site,
             (config.near?.reach ?? Infinity) - radial,
           );
-          if (clip) add(clip[0], clip[1], line, site);
+          if (clip)
+            add(
+              clip[0],
+              clip[1],
+              line,
+              site,
+              v === geo.starts[line] || Math.hypot(clip[0].x - a.x, clip[0].y - a.y) > 1e-6,
+              v + 2 === geo.starts[line + 1] || Math.hypot(clip[1].x - b.x, clip[1].y - b.y) > 1e-6,
+            );
         }
       }
     }
@@ -345,19 +377,7 @@ export class PeddlerPopulation {
         return false;
     // A heading change is checked with a conservative rotation envelope, not a snapping shortcut.
     if (hx !== owner.hx || hy !== owner.hy) {
-      const radial = Math.max(
-        ...[...from, ...peddlerBodies(owner.config.prop, owner, owner.hx, owner.hy)]
-          .flatMap((body) => bodyCorners(body))
-          .map((p) => Math.hypot(p.x - owner.x, p.y - owner.y)),
-      );
-      const envelope = {
-        x: owner.x,
-        y: owner.y,
-        hx: 1,
-        hy: 0,
-        length: radial * 2,
-        width: radial * 2,
-      };
+      const envelope = turnaroundBody(owner.config.prop, owner);
       if (
         !this.context.safe([envelope], [envelope]) ||
         this.obstacles.hits([envelope]) ||
@@ -560,6 +580,21 @@ export class PeddlerPopulation {
     }
   }
   step(dt: number, env: PeddlerSignals, ordinaryPopulation: number) {
+    let count = this.owners.length;
+    if (
+      !count &&
+      !this.slots.some(
+        (slot) =>
+          !slot.owner &&
+          peddlerWindow(slot.config, env.minutes) &&
+          slot.rank < peddlerShare(slot.config, env) &&
+          env.rain < DIALOGUE_WEATHER.heavyRain &&
+          ordinaryPopulation < MAX_TILE_AGENTS,
+      )
+    ) {
+      this.ordinaryBodies = [];
+      return;
+    }
     const pointer = env.pointer && lngLatToTile(this.context.tile, ...env.pointer.lngLat);
     const hovered = (owner: PeddlerOwner) =>
       !!pointer &&
@@ -577,7 +612,6 @@ export class PeddlerPopulation {
       return lng >= bounds[0] && lng <= bounds[2] && lat >= bounds[1] && lat <= bounds[3];
     };
     this.ordinaryBodies = this.context.ordinary();
-    let count = this.owners.length;
     for (const slot of this.slots) {
       const window = peddlerWindow(slot.config, env.minutes),
         share = peddlerShare(slot.config, env);
@@ -588,12 +622,12 @@ export class PeddlerPopulation {
         env.rain < DIALOGUE_WEATHER.heavyRain &&
         count + ordinaryPopulation < MAX_TILE_AGENTS
       ) {
-        const routes = this.routesFor(slot.config),
+        const routes = this.routesFor(slot.config).filter((route) => route.exitA || route.exitB),
           rng = random(slot.seed ^ Math.imul(++slot.births, 0x85ebca6b));
         const first = Math.floor(rng() * routes.length);
         for (let trial = 0; trial < Math.min(8, routes.length); trial++) {
           const route = routes[(first + trial) % routes.length]!,
-            dir = rng() < 0.5 ? 1 : -1,
+            dir = rng() < 0.5 && route.exitA ? 1 : route.exitB ? -1 : 1,
             p = dir === 1 ? route.a : route.b;
           const owner: PeddlerOwner = {
             ...p,
@@ -617,6 +651,7 @@ export class PeddlerPopulation {
             canopy: 0,
             window: window.window,
             waiting: 0,
+            transitionWait: 0,
             identity: `${this.context.generation ?? 0}:${this.context.tile.z}/${this.context.tile.x}/${this.context.tile.y}:${slot.config.id}:${slot.seed}:${slot.births}`,
             resumeToken: 0,
             sheltered: false,
@@ -646,6 +681,7 @@ export class PeddlerPopulation {
       }
       owner.window = window?.window ?? owner.window;
       const open =
+        (!isPeddlerCart(owner.config.prop) || owner.config.prop === 'box-cart') &&
         env.windPreset !== 'gusty' &&
         env.windPreset !== 'storm' &&
         owner.umbrellaRank < umbrellaShare(env.rain, env.sunAltitude ?? -90);
@@ -675,6 +711,10 @@ export class PeddlerPopulation {
         this.call(owner, env, eligible(owner), hovered(owner));
         continue;
       }
+      if (owner.transitionWait > 0) {
+        owner.transitionWait = Math.max(0, owner.transitionWait - dt);
+        if (owner.transitionWait > 0) continue;
+      }
       const travel = dt * 1.2 * 0.7 * (env.wet && owner.canopy > 0 ? 0.8 : 1),
         distance = Math.max(0, Math.min(owner.route.length, owner.distance + travel * owner.dir)),
         target = {
@@ -696,12 +736,13 @@ export class PeddlerPopulation {
       Object.assign(owner, target);
       owner.distance = distance;
       if (distance > 1e-6 && distance < owner.route.length - 1e-6) continue;
-      if (owner.leaving) {
+      if (owner.leaving && (distance < 1e-6 ? owner.route.exitA : owner.route.exitB)) {
         this.remove(slot);
         count--;
         continue;
       }
       const next = this.routesFor(owner.config).flatMap((route) => {
+        if (owner.leaving && route.line !== owner.route.line) return [];
         const atA = Math.hypot(route.a.x - owner.x, route.a.y - owner.y) < 0.02,
           atB = Math.hypot(route.b.x - owner.x, route.b.y - owner.y) < 0.02;
         if (!atA && !atB) return [];
@@ -709,13 +750,15 @@ export class PeddlerPopulation {
         return this.fits(owner, owner, route.hx * dir, route.hy * dir) ? [{ route, dir }] : [];
       });
       if (next.length) {
-        const chosen = next[Math.floor(owner.rng() * next.length)]!;
+        const onward = owner.leaving ? next.filter(({ route }) => route !== owner.route) : next;
+        const choices = onward.length ? onward : next;
+        const chosen = choices[Math.floor(owner.rng() * choices.length)]!;
         owner.route = chosen.route;
         owner.dir = chosen.dir;
         owner.distance = chosen.dir === 1 ? 0 : chosen.route.length;
         owner.hx = chosen.route.hx * chosen.dir;
         owner.hy = chosen.route.hy * chosen.dir;
-      }
+      } else owner.transitionWait = 2;
     }
     const observations: EmojiObservation[] = this.owners.map((owner) => {
       const clock = peddlerWindow(owner.config, env.minutes),
