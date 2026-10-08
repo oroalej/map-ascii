@@ -21,7 +21,7 @@ import { loadSpeechPrefs, saveSpeechPrefs, useSpeechStore } from '@/state/speech
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
 import { parseViewParams } from '@/state/url';
-import { afterFirstTileFrame } from '@/lib/startup';
+import { scheduleAutomaticJson } from '@/lib/startup';
 import { cityJson } from '@/lib/city-json';
 import { installProcessions } from '@/lib/processions';
 import type { MetaState } from '@/lib/city-meta';
@@ -108,7 +108,15 @@ export function AtlasCanvas({
       !cancelled &&
       useAtlasInstance.getState().atlas === atlasInstance &&
       useUiStore.getState().startup?.city === slug;
-    const off = afterFirstTileFrame(slug, () => {
+    const offProcessions = scheduleAutomaticJson(slug, 'processions', () => {
+      void Promise.resolve()
+        .then(() => {
+          if (!current()) return;
+          return installProcessions(slug, atlasInstance, current);
+        })
+        .catch(() => {});
+    });
+    const offEmergency = scheduleAutomaticJson(slug, 'emergency', () => {
       void Promise.resolve()
         .then(() => {
           if (!current()) return;
@@ -122,13 +130,13 @@ export function AtlasCanvas({
                 if (current()) atlasInstance.setEmergency(undefined);
               });
           }
-          return installProcessions(slug, atlasInstance, current);
         })
         .catch(() => {});
     });
     return () => {
       cancelled = true;
-      off();
+      offProcessions();
+      offEmergency();
     };
   }, [slug, atlasInstance, cityLife]);
 
@@ -186,8 +194,10 @@ export function AtlasCanvas({
         speech: speechPrefs.enabled,
         emoji: emojiPrefs.enabled,
       });
-    } catch {
-      const startup = { city: slug, atlas: null, status: 'unsupported' } as const;
+    } catch (error) {
+      console.error('Could not initialize the atlas', error);
+      const status = canvas.getContext('webgl2') ? 'error' : 'unsupported';
+      const startup = { city: slug, atlas: null, status } as const;
       useUiStore.setState({ startup });
       return () => {
         if (useUiStore.getState().startup === startup) useUiStore.setState({ startup: null });

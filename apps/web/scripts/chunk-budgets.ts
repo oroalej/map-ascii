@@ -19,6 +19,24 @@ export function chunkReferences(source: string): string[] {
   ];
 }
 
+/** Turbopack puts all chunks for an import in its parent's Promise.all loader. */
+export function canvasEntries(
+  out: string,
+  initial: ReadonlySet<string>,
+  renderer: string,
+): string[] {
+  const entries = new Set<string>();
+  for (const path of initial) {
+    const source = readFileSync(join(out, path), 'utf8');
+    for (const group of source.matchAll(/Promise\.all\(\[([^\]]*)\]/g)) {
+      const references = chunkReferences(group[1]!);
+      if (references.includes(renderer)) for (const entry of references) entries.add(entry);
+    }
+  }
+  if (!entries.size) throw new Error('Could not find the canvas import loader in initial JS');
+  return [...entries];
+}
+
 /** Walk the canvas dependency set; worker bootstraps own a separate, excluded graph. */
 export function canvasChunks(
   out: string,

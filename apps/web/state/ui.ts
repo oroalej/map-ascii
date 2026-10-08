@@ -11,7 +11,7 @@ export type UiState = {
   startup: {
     city: string;
     atlas: Atlas | null;
-    status: 'drawing' | 'ready' | 'missing' | 'invalid' | 'unsupported' | 'restoring';
+    status: 'drawing' | 'ready' | 'missing' | 'invalid' | 'unsupported' | 'restoring' | 'error';
   } | null;
   /** Pack landmark IDs with facts; these are distinct from selected OSM feature IDs. */
   clickable: ReadonlySet<string>;

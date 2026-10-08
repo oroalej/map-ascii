@@ -133,6 +133,10 @@ it('loads delayed selected facts before readiness, gates cues/agent tooltips, an
     );
     expect(container.querySelector('[role=alert]')?.textContent).toContain('WebGL2');
     expect(container.textContent).not.toContain('Drawing');
+    act(() => useUiStore.setState({ startup: { city: 'fixture', atlas: null, status: 'error' } }));
+    expect(container.querySelector('[role=alert]')?.textContent).toContain('Unable to draw');
+    expect(container.textContent).not.toContain('WebGL2');
+    expect(container.textContent).not.toContain('Drawing');
     act(() => useUiStore.setState({ startup: null }));
     expect(container.textContent).toContain('Drawing');
   } finally {

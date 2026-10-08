@@ -221,3 +221,56 @@ it.each([
     }
   },
 );
+
+it.each([true, false])(
+  'reports initialization failure according to the actual canvas context (available %s)',
+  async (available) => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    vi.stubGlobal('matchMedia', () => ({
+      matches: false,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      available ? ({} as WebGL2RenderingContext) : null,
+    );
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('shader compilation failed');
+    mock.createAtlas.mockImplementation(() => {
+      throw error;
+    });
+    useAtlasInstance.setState({ atlas: null });
+    useAtlasStore.setState({ camera: null });
+    const root = createRoot(document.createElement('div'));
+    const meta: CityMeta = {
+      slug: 'error',
+      name: { en: 'Error fixture' },
+      subdivisionLabel: { en: 'district' },
+      languages: ['en'],
+      bounds: [0, 0, 1, 1],
+      regionBounds: [0, 0, 1, 1],
+      defaultCamera: { lat: 0.5, lng: 0.5, zoom: 15 },
+      yearRange: [1900, 2026],
+      attribution: [],
+    };
+    try {
+      await act(async () => {
+        root.render(
+          createElement(AtlasCanvas, {
+            slug: 'error',
+            name: 'Error fixture',
+            subdivisionLabel: 'district',
+            metaState: { status: 'ready', meta },
+          }),
+        );
+        await Promise.resolve();
+      });
+      expect(logged).toHaveBeenCalledWith('Could not initialize the atlas', error);
+      expect(useUiStore.getState().startup?.status).toBe(available ? 'error' : 'unsupported');
+      expect(useAtlasInstance.getState().atlas).toBeNull();
+    } finally {
+      act(() => root.unmount());
+    }
+    expect(useUiStore.getState().startup).toBeNull();
+  },
+);

@@ -127,13 +127,18 @@ export function CityAtlas({
     <>
       {status !== 'ready' && (
         <p
-          role={status === 'unsupported' || status === 'invalid' ? 'alert' : 'status'}
+          role={
+            status === 'unsupported' || status === 'invalid' || status === 'error'
+              ? 'alert'
+              : 'status'
+          }
           className={styles.notice}
         >
           {status === 'drawing' && `Drawing ${name}…`}
           {status === 'restoring' && 'The graphics context was lost. Restoring the map…'}
           {status === 'unsupported' &&
             'ASCII Atlas needs WebGL2, which this browser does not support.'}
+          {status === 'error' && 'Unable to draw the map. Reload to try again.'}
           {status === 'missing' && (
             <>
               No map data for {name} yet. Run <code>pnpm data:build -- --city {slug}</code>.

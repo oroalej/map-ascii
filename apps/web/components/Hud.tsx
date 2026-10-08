@@ -27,7 +27,7 @@ import {
 } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
-import { afterFirstTileFrame } from '@/lib/startup';
+import { scheduleAutomaticJson } from '@/lib/startup';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { useSmallScreen } from '@/lib/screen';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
@@ -88,7 +88,7 @@ function useSubdivisionTracking(city: string) {
 
   useEffect(() => {
     let cancelled = false;
-    const off = afterFirstTileFrame(city, () => {
+    const off = scheduleAutomaticJson(city, 'subdivisions', () => {
       void fetch(`/tiles/${city}.subdivisions.json`)
         .then((r) => (r.ok ? r.json() : []))
         .then((json: unknown) => {

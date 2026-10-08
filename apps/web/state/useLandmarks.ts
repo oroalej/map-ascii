@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import type { Landmark } from '@atlas/shared';
 import { loadLandmarks } from '@/lib/content';
-import { afterFirstTileFrame } from '@/lib/startup';
+import { scheduleAutomaticJson } from '@/lib/startup';
 import { useAtlasStore } from './store';
 
 const EMPTY: readonly Landmark[] = [];
@@ -20,7 +20,7 @@ export function useLandmarks(city: string) {
   }, [city, lifetimeRef]);
   useEffect(() => {
     lifetimeRef.current = true;
-    const off = afterFirstTileFrame(city, request);
+    const off = scheduleAutomaticJson(city, 'landmarks', request);
     return () => {
       lifetimeRef.current = false;
       off();

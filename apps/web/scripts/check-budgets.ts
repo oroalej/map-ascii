@@ -12,7 +12,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { canvasChunks, gzippedChunks } from './chunk-budgets';
+import { canvasChunks, canvasEntries, gzippedChunks } from './chunk-budgets';
+import { STARTUP_JSON_BUDGET, startupJsonSize } from './startup-json-budget';
 
 const KB = 1024;
 const MB = 1024 * KB;
@@ -21,7 +22,7 @@ const BUDGETS = {
   renderer: 120 * KB,
   canvasAsync: 200 * KB,
   cityHtml: 48 * KB,
-  startupJson: 16 * KB,
+  startupJson: STARTUP_JSON_BUDGET,
   pmtiles: 40 * MB,
   processions: 60 * KB,
   emergency: 32 * KB,
@@ -70,13 +71,11 @@ for (const slug of slugs) {
   let js = 0;
   for (const src of scripts) js += gzipSync(readFileSync(join(out, src))).length;
   rows.push({ what: `/${slug} initial JS (gzipped)`, size: js, budget: BUDGETS.initialJs });
-  const entries = readdirSync(chunks)
-    .filter(
-      (file) =>
-        file.endsWith('.js') && readFileSync(join(chunks, file), 'utf8').includes('Map of '),
-    )
-    .map((file) => `/_next/static/chunks/${file}`);
-  if (!entries.length) throw new Error('Could not find the AtlasCanvas async entry');
+  const entries = canvasEntries(
+    out,
+    scripts,
+    `/_next/static/chunks/${renderer.path.split(/[\\/]/).pop()!}`,
+  );
   const async = canvasChunks(out, entries, scripts);
   rows.push({
     what: `/${slug} canvas async JS (gzipped)`,
@@ -88,14 +87,9 @@ for (const slug of slugs) {
     size: Buffer.byteLength(html),
     budget: BUDGETS.cityHtml,
   });
-  // No JSON is needed before the first tile frame: meta is inline; all sidecars are deferred.
-  const startupJson: string[] = [];
   rows.push({
     what: `/${slug} startup JSON (gzipped)`,
-    size: startupJson.reduce(
-      (sum, suffix) => sum + gzipSync(readFileSync(join(tiles, `${slug}.${suffix}.json`))).length,
-      0,
-    ),
+    size: startupJsonSize((suffix) => readFileSync(join(tiles, `${slug}.${suffix}.json`))),
     budget: BUDGETS.startupJson,
   });
   for (const src of scripts) {
