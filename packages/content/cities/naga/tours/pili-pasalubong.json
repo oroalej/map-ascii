@@ -4,10 +4,38 @@
     "en": "Pili and pasalubong"
   },
   "description": {
-    "en": "Bread, market goods, frozen dishes and pili sweets to carry home."
+    "en": "Pili specialists, bakery gifts, market dried fish and bottled Bicolano dishes, from Centro to the bus terminal."
   },
   "status": "verified",
   "steps": [
+    {
+      "camera": {
+        "lng": 123.1861632,
+        "lat": 13.6250892,
+        "zoom": 17.5
+      },
+      "duration_ms": 10000,
+      "narration": {
+        "en": "Graceland offers frozen, heat-ready pinangat, laing and Bicol express as pasalubong. Its own FAQ recommends an insulated cooler for frozen dishes; ask this branch about stock and packaging for your journey."
+      },
+      "select": "osm:node/4848986525",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Graceland at 50 (2026)",
+          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+        },
+        {
+          "title": "Graceland: Official pasalubong and travel FAQ",
+          "url": "https://graceland.ph/faqs/",
+          "note": "Brand-level frozen-product list and insulated-cooler advice checked on 2026-10-08; ask the mapped branch about current stock."
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/4848986525",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
     {
       "camera": {
         "lng": 123.1854681,
@@ -16,7 +44,7 @@
       },
       "duration_ms": 12000,
       "narration": {
-        "en": "Casa Moderna’s pan bonete is a soft bonnet-shaped roll. A family account remembers taking home boxes of bonete and markina."
+        "en": "Casa Moderna is remembered for pan bonete, a soft bonnet-shaped roll. A 2011 family account describes taking home boxes of bonete and markina; ask about today’s available breads."
       },
       "select": "osm:node/2502669541",
       "sources": [
@@ -37,13 +65,41 @@
     },
     {
       "camera": {
+        "lng": 123.185172,
+        "lat": 13.622157,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "RPM Pili Nut Candies, listed by city tourism as RPMiranda, is a downtown pili specialist. A 2024 guide names roasted, salted and honey-glazed nuts, pili tarts and coco jam with pili. This map point is approximate; use the 71-B Panelo Building address."
+      },
+      "select": "landmark/rpm-pili-nut-candies",
+      "sources": [
+        {
+          "title": "City of Naga tourism: RPMiranda Pili Nuts Pasalubong",
+          "url": "https://tourism.naga.gov.ph/tr-establishments/rb-miranda-pilinut-pasalubong/"
+        },
+        {
+          "title": "Uma: Pasalubong centers (2024)",
+          "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/",
+          "note": "Published February 1, 2024; product lists document the guide, not guaranteed current stock."
+        },
+        {
+          "title": "Restaurant Guru: RPM Pilinut location",
+          "url": "https://restaurantguru.com/RPM-Pilinut-Naga",
+          "note": "Published map coordinates (13.62215700, 123.18517200) checked on 2026-10-08; Elias Angeles address agrees with the city directory. Approximate business Point only; precise footprint and entrance unconfirmed. Directory category is not used as evidence."
+        }
+      ]
+    },
+    {
+      "camera": {
         "lng": 123.183758,
         "lat": 13.62108,
         "zoom": 17.5
       },
       "duration_ms": 12000,
       "narration": {
-        "en": "At the People’s Mall, a pasalubong guide highlights dried anchovies and dried squid. The market also has the Siopao Center for toasted buns."
+        "en": "At the People’s Mall, the 2025 pasalubong guide recommends dried anchovies and dried squid. Browse the dried-goods stalls and ask about packaging for the journey home."
       },
       "sources": [
         {
@@ -52,94 +108,11 @@
           "note": "Location and name only; no construction date inferred."
         },
         {
-          "title": "City of Naga: Public market history (2021)",
-          "url": "https://www2.naga.gov.ph/naga-lgu-to-explore-plan-to-build-new-public-market/"
-        },
-        {
-          "title": "City of Naga: The Siopao Center (2022)",
-          "url": "https://www2.naga.gov.ph/a-classic-nagueno-delicacy-is-just-around-the-corner-the-siopao-center/"
-        },
-        {
           "title": "Naga City Guide: Pasalubong (2025)",
           "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
         }
-      ]
-    },
-    {
-      "camera": {
-        "lng": 123.183758,
-        "lat": 13.62108,
-        "zoom": 17.5
-      },
-      "duration_ms": 12000,
-      "narration": {
-        "en": "3N is known for toasted siopao. Its baked buns have a different texture from steamed siopao; Naga and Libmanan both figure in the origin accounts."
-      },
-      "select": "landmark/siopao-center",
-      "sources": [
-        {
-          "title": "City of Naga: The Siopao Center (2022)",
-          "url": "https://www2.naga.gov.ph/a-classic-nagueno-delicacy-is-just-around-the-corner-the-siopao-center/"
-        },
-        {
-          "title": "GMC: Toasted siopao (2022)",
-          "url": "https://genmil.com.ph/toasted-siopao/"
-        },
-        {
-          "title": "OpenStreetMap: People’s Mall placement area",
-          "url": "https://www.openstreetmap.org/way/23674855",
-          "note": "Representative Point inside the mapped market, supported by the city’s inside-the-mall address. Exact stall/entrance position is unknown; the Point does not replace the market footprint."
-        }
-      ]
-    },
-    {
-      "camera": {
-        "lng": 123.1861632,
-        "lat": 13.6250892,
-        "zoom": 17.5
-      },
-      "duration_ms": 10000,
-      "narration": {
-        "en": "For savory pasalubong, Graceland offers frozen pinangat, laing and Bicol express."
-      },
-      "select": "osm:node/4848986525",
-      "sources": [
-        {
-          "title": "Dateline Ibalon: Graceland at 50 (2026)",
-          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
-        },
-        {
-          "title": "Naga City Guide: Pasalubong (2025)",
-          "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
-        },
-        {
-          "title": "OpenStreetMap: location",
-          "url": "https://www.openstreetmap.org/node/4848986525",
-          "note": "Mapped business location only; no construction date inferred."
-        }
-      ]
-    },
-    {
-      "camera": {
-        "lng": 123.1895208,
-        "lat": 13.6193575,
-        "zoom": 17.5
-      },
-      "duration_ms": 12000,
-      "narration": {
-        "en": "At stalls 7 and 8 of the CBD II bus terminal, FSJ Pasalubong Sentral gathers local products. Look for bottled laing, Bicol express, ginataang santol and coco jam."
-      },
-      "sources": [
-        {
-          "title": "Uma: Pasalubong centers (2024)",
-          "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/"
-        },
-        {
-          "title": "OpenStreetMap: Bicol Central Station",
-          "url": "https://www.openstreetmap.org/way/293702439",
-          "note": "Camera covers the terminal; exact shop-stall coordinates are unknown."
-        }
-      ]
+      ],
+      "select": "osm:way/23674855"
     },
     {
       "camera": {
@@ -149,24 +122,18 @@
       },
       "duration_ms": 12000,
       "narration": {
-        "en": "SM City Naga has J. Emmanuel’s pili shop, with tarts, bonbon, polvoron, chocolates and spreads to take home. 1st Colonial Grill’s sili ice cream brings an Albay creation into Naga."
+        "en": "For another pili specialist, the 2024 and 2025 guides list J. Emmanuel’s House of Pili at SM City Naga. Look for pili tarts, bonbon, polvoron, chocolates and spreads. The camera shows the mall; the shop’s exact position is unconfirmed."
       },
       "sources": [
         {
           "title": "Naga City Guide: Pasalubong (2025)",
-          "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
+          "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/",
+          "note": "The guide lists the SM branch and brand products; check current branch stock."
         },
         {
           "title": "Uma: Pasalubong centers (2024)",
-          "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/"
-        },
-        {
-          "title": "Wikipedia: Sili ice cream",
-          "url": "https://en.wikipedia.org/wiki/Sili_ice_cream"
-        },
-        {
-          "title": "SM Supermalls: 1st Colonial Grill",
-          "url": "https://www.smsupermalls.com/mall-directory/sm-city-naga/shops/1st-colonial-grill"
+          "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/",
+          "note": "Published February 1, 2024; product lists document the guide, not guaranteed current stock."
         },
         {
           "title": "OpenStreetMap: SM City Naga",
@@ -174,6 +141,30 @@
           "note": "Camera represents the mall, not exact tenant positions."
         }
       ]
+    },
+    {
+      "camera": {
+        "lng": 123.189990525,
+        "lat": 13.6192046375,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Finish at the CBD II bus terminal. The 2024 guide places FSJ Pasalubong Sentral at stalls 7 and 8, with bottled Bicol express, laing, ginataang santol and coco jam, plus goods from local producers. The selection marks the terminal; the exact stalls are unmapped."
+      },
+      "sources": [
+        {
+          "title": "Uma: Pasalubong centers (2024)",
+          "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/",
+          "note": "Published February 1, 2024; product lists document the guide, not guaranteed current stock."
+        },
+        {
+          "title": "OpenStreetMap: Bicol Central Station",
+          "url": "https://www.openstreetmap.org/way/293702439",
+          "note": "Camera covers the terminal; exact shop-stall coordinates are unknown."
+        }
+      ],
+      "select": "osm:way/293702439"
     }
   ]
 }

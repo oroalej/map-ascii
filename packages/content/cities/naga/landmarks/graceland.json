@@ -41,6 +41,11 @@
       "title": "OpenStreetMap: location",
       "url": "https://www.openstreetmap.org/node/4848986525",
       "note": "Mapped business location only; no construction date inferred."
+    },
+    {
+      "title": "Graceland: Official pasalubong and travel FAQ",
+      "url": "https://graceland.ph/faqs/",
+      "note": "Brand-level frozen-product list and insulated-cooler advice checked on 2026-10-08; ask the mapped branch about current stock."
     }
   ],
   "osm_id": "osm:node/4848986525",
@@ -54,7 +59,8 @@
   "pasalubong": [
     {
       "name": "Frozen pinangat, laing and Bicol express",
-      "source": 1
+      "source": 3,
+      "note": "The brand recommends an insulated cooler that maintains frozen temperatures throughout the journey; check branch availability."
     }
   ]
 }
