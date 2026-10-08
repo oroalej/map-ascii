@@ -9,11 +9,15 @@ const endpoints = process.env.OVERPASS_URL
       'https://overpass-api.de/api/interpreter',
       'https://overpass.kumi.systems/api/interpreter',
       'https://overpass.private.coffee/api/interpreter',
+      // overpass-api.de's two servers, each with its own rate limit, for when it answers 429.
+      'https://z.overpass-api.de/api/interpreter',
+      'https://lz4.overpass-api.de/api/interpreter',
     ];
 const maxAttempts = 6;
 /** Mirrors can fall months behind OSM; an answer further behind than this is retried elsewhere. */
 const maxLagMs = 2 * 24 * 60 * 60 * 1000;
-const retryable = new Set([429, 502, 503, 504]);
+/** A busy server (429) or a broken one (5xx) may be fine on the next try or the next server. */
+const retryable = (status: number) => status === 429 || status >= 500;
 
 export type OsmElement = {
   type: 'node' | 'way' | 'relation';
@@ -93,8 +97,19 @@ export function lagging(data: OverpassResponse, receivedAt: number) {
   return `server had OSM data from ${new Date(base).toISOString().slice(0, 10)}`;
 }
 
-/** Servers that answered `lagging` in this run. A mirror months behind stays behind, so skip it. */
-const behind = new Set<string>();
+/** Connection errors from a server that is down, not one too busy to answer. */
+const unreachable = new Set([
+  'UND_ERR_CONNECT_TIMEOUT',
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EHOSTUNREACH',
+]);
+
+/**
+ * Servers that answered `lagging` or HTTP 500, or could not be reached, in this run. A mirror months
+ * behind stays behind, and a misconfigured or down one keeps failing, so skip it.
+ */
+const skipped = new Set<string>();
 
 /**
  * Another checkout's saved download at `copy`, when it answers `query` as a saved download here
@@ -180,7 +195,7 @@ export async function overpass(
   }
 
   for (let attempt = 1; ; attempt++) {
-    const current = endpoints.filter((url) => !behind.has(url));
+    const current = endpoints.filter((url) => !skipped.has(url));
     const choices = current.length > 0 ? current : endpoints;
     const endpoint = choices[(attempt - 1) % choices.length]!;
     console.log(
@@ -205,6 +220,7 @@ export async function overpass(
       // A dropped connection (a busy server resetting it) is as retryable as a 504.
       if (attempt >= maxAttempts) throw error;
       const cause = (error as { cause?: { code?: string } }).cause?.code;
+      if (cause && unreachable.has(cause)) skipped.add(endpoint);
       await wait(`Overpass connection failed${cause ? ` (${cause})` : ''}`);
       continue;
     }
@@ -214,7 +230,7 @@ export async function overpass(
       // Overpass reports timeouts and memory errors as a remark on an otherwise OK response.
       if (data.remark?.includes('error')) throw new Error(`Overpass: ${data.remark}`);
       const late = lagging(data, Date.now());
-      if (late) behind.add(endpoint);
+      if (late) skipped.add(endpoint);
       const problem = late ?? rejection(check, data);
       if (problem) {
         if (attempt >= maxAttempts) throw new Error(`Overpass: ${problem}`);
@@ -226,7 +242,8 @@ export async function overpass(
       await writeFile(queryFile(cacheFile), query);
       return data;
     }
-    if (!retryable.has(response.status) || attempt >= maxAttempts) {
+    if (response.status === 500) skipped.add(endpoint);
+    if (!retryable(response.status) || attempt >= maxAttempts) {
       throw new Error(`Overpass HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
     }
     await wait(`Overpass HTTP ${response.status}`);
