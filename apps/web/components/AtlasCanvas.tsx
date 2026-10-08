@@ -53,6 +53,7 @@ export function AtlasCanvas({
   metaState,
   requestLandmarks,
   slug,
+  tilesVersion,
   name,
   subdivisionLabel,
   traffic,
@@ -66,6 +67,7 @@ export function AtlasCanvas({
   requestLandmarks?: (() => void) | undefined;
   utilitiesDerived?: boolean;
   slug: string;
+  tilesVersion?: string | undefined;
   name: string;
   subdivisionLabel: string;
   traffic?: TrafficMix | undefined;
@@ -173,6 +175,7 @@ export function AtlasCanvas({
         quality,
         utilities: { derive: utilitiesDerived },
         tilesUrl: `/tiles/${slug}.pmtiles`,
+        tilesVersion,
         theme: store.theme,
         cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
         bounds: meta.regionBounds,
@@ -207,19 +210,10 @@ export function AtlasCanvas({
     store.initCamera(atlas.getCamera());
     useAtlasInstance.setState({ atlas, canvas });
     useUiStore.setState({ startup: { city: slug, atlas, status: 'drawing' }, processions: [] });
-    let readyFrame = 0;
-    const awaitTileFrame = () => {
-      readyFrame = 0;
-      if (
-        useAtlasInstance.getState().atlas !== atlas ||
-        useUiStore.getState().startup?.status === 'restoring'
-      )
-        return;
-      if (atlas.getStats().hasDrawnTileFrame)
+    const markReady = () => {
+      if (useAtlasInstance.getState().atlas === atlas)
         useUiStore.setState({ startup: { city: slug, atlas, status: 'ready' } });
-      else readyFrame = requestAnimationFrame(awaitTileFrame);
     };
-    awaitTileFrame();
     const offs = [
       useQualityStore.subscribe(({ choice }) => {
         atlas.setQuality(choice);
@@ -235,14 +229,12 @@ export function AtlasCanvas({
       }),
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
+      atlas.on('ready', markReady),
       atlas.on('contextlost', () => {
-        cancelAnimationFrame(readyFrame);
-        readyFrame = 0;
         useUiStore.setState({ startup: { city: slug, atlas, status: 'restoring' } });
       }),
       atlas.on('contextrestored', () => {
         useUiStore.setState({ startup: { city: slug, atlas, status: 'drawing' } });
-        awaitTileFrame();
       }),
       atlas.on('procession', (run) => useUiStore.setState({ procession: run })),
       useLifeStore.subscribe((prefs) => {
@@ -250,16 +242,28 @@ export function AtlasCanvas({
         saveLifePrefs(slug, prefs);
       }),
     ];
+    // Subscribe first, then recover readiness emitted before the React effect.
+    if (atlas.getStats().readyMs !== null) markReady();
     return () => {
       for (const off of offs) off();
-      cancelAnimationFrame(readyFrame);
       if (useUiStore.getState().startup?.atlas === atlas)
         useUiStore.setState({ procession: null, processions: [], startup: null });
       if (useAtlasInstance.getState().atlas === atlas)
         useAtlasInstance.setState({ atlas: null, canvas: null });
       atlas.destroy();
     };
-  }, [supported, meta, slug, traffic, climate, timezone, cityLife, dialogue, utilitiesDerived]);
+  }, [
+    supported,
+    meta,
+    slug,
+    tilesVersion,
+    traffic,
+    climate,
+    timezone,
+    cityLife,
+    dialogue,
+    utilitiesDerived,
+  ]);
 
   if (!supported) return null;
   return (

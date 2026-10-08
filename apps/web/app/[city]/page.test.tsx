@@ -8,6 +8,7 @@ import { loadCity } from '@/lib/cities';
 import { decodeInlineRuntime } from '@/lib/inline-runtime';
 import CityPage from './page';
 
+vi.mock('@/lib/tiles-version', () => ({ tilesVersion: vi.fn(() => Promise.resolve('1234abcd')) }));
 vi.mock('@/lib/city-meta', () => ({
   readCityMeta: vi.fn().mockResolvedValue({ status: 'missing' }),
 }));
@@ -15,7 +16,7 @@ vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
 type PageElement = ReactElement<{
-  children: ReactElement<{ runtimeGzip: string }>;
+  children: ReactElement<{ runtimeGzip: string; tilesVersion?: string }>;
 }>;
 
 const loadedPacks = await loadCityPacks();
@@ -28,6 +29,7 @@ describe('city page client boundary', () => {
       const page = (await CityPage({
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
+      expect(page.props.children.props.tilesVersion).toBe('1234abcd');
       const life = decodeInlineRuntime(page.props.children.props.runtimeGzip).cityLife;
       expect(life).toEqual(pack.city.life ? runtimeCityLife(pack.city.life) : undefined);
       for (const season of life?.seasons ?? []) {

@@ -7,6 +7,7 @@ import { create } from 'zustand';
  * renderer said about the selected feature when it was picked.
  */
 export type UiState = {
+  ready: boolean;
   /** Readiness belongs to one city and one live renderer, including context recovery. */
   startup: {
     city: string;
@@ -41,6 +42,7 @@ export type UiState = {
 };
 
 export const useUiStore = create<UiState>()(() => ({
+  ready: false,
   startup: null,
   clickable: new Set(),
   selectionSequence: 0,
