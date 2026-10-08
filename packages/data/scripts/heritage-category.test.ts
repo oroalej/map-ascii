@@ -128,3 +128,29 @@ it('marks only curated landmarks with facts and heritage sites as notable', () =
   expect(features.map((f) => f.properties.notable)).toEqual([true, true, undefined]);
   expect(features[2]!.properties).toMatchObject({ landmark: true, landmark_id: 'landmark/2' });
 });
+
+it('adds heritage membership to a listed church while keeping its type', () => {
+  const features: AtlasFeature[] = [
+    {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: { id: 'osm:way/1', class: 'building_religious' },
+      tippecanoe: { layer: 'buildings', minzoom: 12, maxzoom: 16 },
+    },
+  ];
+  const content = {
+    landmarks: [
+      {
+        id: 'landmark/cathedral',
+        osm_id: 'osm:way/1',
+        name: { en: 'Cathedral' },
+        type: 'church',
+        heritage: true,
+        certainty: 'unknown',
+        sources: [{ title: 'Fixture' }],
+      },
+    ],
+  } as ContentBundle;
+  mergeContent(features, content);
+  expect(features[0]!.properties).toMatchObject({ heritage: true, notable: true, landmark: true });
+});

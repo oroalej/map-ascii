@@ -225,6 +225,13 @@ describe('Landmark', () => {
     expect(Landmark.parse({ ...landmark, type: 'heritage' }).type).toBe('heritage');
   });
 
+  it('lets a listed church or school join the heritage category without changing its type', () => {
+    expect(Landmark.parse({ ...landmark, heritage: true })).toMatchObject({ type: 'church' });
+    expect(Landmark.safeParse({ ...landmark, type: 'heritage', heritage: true }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts a valid landmark', () => {
     expect(Landmark.safeParse(landmark).success).toBe(true);
   });

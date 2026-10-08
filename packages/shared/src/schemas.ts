@@ -723,6 +723,8 @@ export function contentSchemas(languages?: readonly string[]) {
       replaces: OsmId.optional(),
       name: text,
       type: LandmarkType,
+      /** A listed heritage site of another type (a church, a school): joins the Heritage legend. */
+      heritage: z.literal(true).optional(),
       start_year: Year.optional(),
       end_year: Year.optional(),
       certainty: Certainty,
@@ -746,6 +748,10 @@ export function contentSchemas(languages?: readonly string[]) {
     .refine((v) => v.replaces === undefined || v.geometry !== undefined, {
       message: 'replaces requires curated geometry',
       path: ['replaces'],
+    })
+    .refine((v) => v.heritage === undefined || v.type !== 'heritage', {
+      message: 'a heritage-type landmark is already heritage',
+      path: ['heritage'],
     })
     .superRefine((landmark, ctx) => {
       landmark.facts?.forEach((fact, index) => {

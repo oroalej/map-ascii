@@ -78,11 +78,11 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     const p = feature.properties;
     p.landmark = true;
     p.landmark_id = landmark.id;
-    if (landmark.type === 'heritage') p.heritage = true;
+    if (landmark.type === 'heritage' || landmark.heritage) p.heritage = true;
     else delete p.heritage;
     // Curated landmarks (with facts) and heritage sites draw the ◆ and join the Landmark legend;
     // other records only carry site details and keep their own class marker.
-    if (landmark.facts || landmark.type === 'heritage') p.notable = true;
+    if (landmark.facts || p.heritage) p.notable = true;
     else delete p.notable;
     if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;

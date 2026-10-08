@@ -413,8 +413,8 @@ function emitDetailStructures(
         if (audit.overlaps(shape, pitch.shape) && !auditFor(pitch.shape).contains(shape))
           throw new Error(`${pack.id} structure ${part.id}: crosses pitch ${pitch.id}`);
     }
+    const roof = part.roof_osm_id ? standingTarget(part.roof_osm_id) : undefined;
     if (part.roof_osm_id) {
-      const roof = standingTarget(part.roof_osm_id);
       if (!roof || !auditFor(roof.shape).contains(shape) || part.height_m <= roof.height)
         throw new Error(
           `${pack.id} structure ${part.id}: roof wing must fit above ${part.roof_osm_id}`,
@@ -453,6 +453,9 @@ function emitDetailStructures(
             : 'terrace'
           : 'flat'),
       detail_overhead: part.overhead,
+      // A roof wing over a landmark building lights with it under legend focus.
+      ...(roof?.target.properties.heritage && { heritage: true }),
+      ...(roof?.target.properties.notable && { notable: true }),
       ...((part.material === 'paving' || metadata) && link),
       ...(!part.overhead &&
         !['paving', 'pitch'].includes(part.material) && { detail_blocked: true }),
