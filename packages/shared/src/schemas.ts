@@ -165,6 +165,7 @@ export const LandmarkType = z.enum([
   'bridge',
   'station',
   'monument',
+  'heritage',
   'other',
 ]);
 export type LandmarkType = z.infer<typeof LandmarkType>;

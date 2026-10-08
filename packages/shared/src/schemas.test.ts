@@ -221,6 +221,10 @@ describe('landmark facts', () => {
 });
 
 describe('Landmark', () => {
+  it('accepts a heritage landmark attached to an OSM footprint', () => {
+    expect(Landmark.parse({ ...landmark, type: 'heritage' }).type).toBe('heritage');
+  });
+
   it('accepts a valid landmark', () => {
     expect(Landmark.safeParse(landmark).success).toBe(true);
   });
