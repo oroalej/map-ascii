@@ -117,6 +117,8 @@ Heritage identification (2026-10-08): [Ordinance No. 2003-003, Section 6](https:
 
 Heritage dates appear in facts only until the year timeline is implemented.
 
+Heritage tile publication (2026-10-08): [tiles-naga-20261008-0510](https://github.com/oroalej/map-ascii/releases/tag/tiles-naga-20261008-0510) includes the arch and the merged agricultural fields. Relative to main's [0325 release](https://github.com/oroalej/map-ascii/releases/tag/tiles-naga-20261008-0325), regeneration from this task's frozen saved-download snapshot also changes four existing street search bounding boxes: Dayangdang Street, Balatas-Cararayan Road, Magsaysay Avenue and M. T. Villanueva Avenue (`osm:way/596568225`). The derived Traslación route is resampled from 156 to 155 points and from 1,383.766 to 1,382.203 metres; one Basilica Mass-site road coordinate changes, and emergency nodes, edges and geometry are regenerated. These are source-snapshot and derived-data differences, not authored street edits or construction-history claims. The unchanged-record check compares against the recomputed merged-base baseline using the same frozen task inputs; it does not assert equality with the previously published assets. Every non-target merged/display record matches that baseline, and all 62 raw-input hashes remain unchanged during implementation.
+
 Coverage is one of twenty requested sites, below the handoff's half-coverage target. The following unresolved identities are intentionally omitted rather than attached to nearby roofs. The three conditional ruins are also omitted individually. Each remains a research backlog item requiring a standing structure, exact lot and independent footprint match:
 
 | Omitted site | Unresolved evidence |
