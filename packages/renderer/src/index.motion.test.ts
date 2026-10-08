@@ -645,6 +645,67 @@ describe('live motion preference', () => {
     expect(center[0]).toBeCloseTo(300);
     expect(center[1]).toBeCloseTo(100);
   });
+  it("ends a replay when another season is shown, keeping its own season's and season-less ones", () => {
+    atlas.destroy();
+    const route = (id: string, season?: string): FluvialRoute => ({
+      id,
+      kind: 'fluvial',
+      title: { en: id },
+      status: 'draft',
+      ...(season && { season }),
+      route: [
+        [0, 0],
+        [0.001, 0],
+      ],
+      length_m: 100,
+      schedule: {
+        month: 9,
+        weekday: 6,
+        nth: 3,
+        offset_days: 0,
+        start: '12:00',
+        duration_min: 240,
+        timezone: 'Asia/Manila',
+      },
+    });
+    const season = (id: string, month: number) => ({
+      id,
+      title: { en: id },
+      window: { from: { month, day: 1 }, to: { month, day: 2 } },
+      emoji: [{ mood: 'party' as const, subjects: ['person' as const], weight: 1 }],
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 1900,
+      timezone: 'Asia/Manila',
+      lifeWorker: false,
+      life: { time: 720, season: 'fiesta' },
+      now: () => new Date('2026-06-01T04:00:00Z'),
+      processions: [route('fiesta-event', 'fiesta'), route('any-season')],
+      cityLife: { source: 'Fixture', seasons: [season('fiesta', 9), season('christmas', 12)] },
+    });
+    const reports: (ProcessionRun | null)[] = [];
+    atlas.on('procession', (run) => reports.push(run));
+    draw(10);
+    expect(atlas.playProcession('fiesta-event')).toBe(true);
+    draw(60);
+    expect(reports.at(-1)?.id).toBe('fiesta-event');
+    // The same season keeps it.
+    atlas.setLife({ season: 'fiesta' });
+    draw(110);
+    expect(reports.at(-1)?.id).toBe('fiesta-event');
+    atlas.setLife({ season: 'christmas' });
+    draw(160);
+    expect(reports.at(-1)).toBeNull();
+    expect(atlas.getSeason()?.id).toBe('christmas');
+    // An event without a season plays on in any season.
+    expect(atlas.playProcession('any-season')).toBe(true);
+    atlas.setLife({ season: 'fiesta' });
+    draw(210);
+    expect(reports.at(-1)?.id).toBe('any-season');
+  });
   it('advances the event clock and lighting in renderer frames, restores preferences and cancels on Life off/reduced motion', () => {
     atlas.destroy();
     const original = Hosts.createInlineHost,

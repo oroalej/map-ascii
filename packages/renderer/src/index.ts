@@ -1516,12 +1516,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crop: CropNow | undefined;
   let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
+  /** The event last started with `playProcession`, until stopped (its run may still be pending). */
+  let played: string | undefined;
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
     clearFolklore();
     lifeHover.clear();
     season = next;
+    // A replay belongs to its season: showing another season ends it.
+    const run = lifeView()?.procession;
+    const replayed = processions.find((p) => p.id === (run && !run.live ? run.id : played));
+    if (replayed?.season && replayed.season !== season?.id) {
+      played = undefined;
+      host.stop();
+      reportProcession();
+    }
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     seasonSnapshot = seasonState();
     warmSeasonalPrograms();
@@ -2232,6 +2242,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     setProcessions(routes) {
       clearFolklore();
       processions = routes;
+      played = undefined;
       host.setProcessions(routes);
       lifeHover.clear();
       livePause.reset();
@@ -2247,6 +2258,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const route = processions.find((p) => p.id === id);
       if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
         return false;
+      played = id;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       reportProcession();
@@ -2254,6 +2266,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return true;
     },
     stopProcession() {
+      played = undefined;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       host.stop();
