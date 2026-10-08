@@ -53,12 +53,9 @@ it.each([
     fromCell: (c, r) => q((c - cols / 2) * 8 + centre, -(r - rows / 2 - offset) * 2),
     tileMatrix: () => [],
   };
-  let payload = throng(route, 0.7, grid, cols, rows, zoom);
-  let frames = 0;
-  while (payload.pending) {
-    expect(++frames).toBeLessThan(1000);
-    payload = throng(route, 0.7, grid, cols, rows, zoom);
-  }
+  // Packing, not preparation, is under test: prepare the whole 12 km field at once.
+  const payload = throng(route, 0.7, grid, cols, rows, zoom, 1, undefined, Infinity);
+  expect(payload.pending).toBe(false);
   const out = new Uint8Array(cols * rows * 4),
     cells: number[] = [],
     glyphs = mapGlyphs(themes.dark);
