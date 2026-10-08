@@ -95,7 +95,7 @@ import { screenArea } from './grid';
 import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
-import { normalizeFocus, type LegendFocus } from './focus';
+import { focusHighlights, normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
@@ -1626,9 +1626,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   const highlights = () => {
     let highlightCount = 0;
-    for (const id of highlightedIds) {
-      const index = source.indexOf(id);
-      if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+    // While a legend entry is focused, highlighted cells are its members (the glyph pass lights
+    // them like a focused class), so tour highlights step aside.
+    const members = focusHighlights(focus, source);
+    if (members) {
+      for (const index of members)
+        if (highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+    } else {
+      for (const id of highlightedIds) {
+        const index = source.indexOf(id);
+        if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+      }
     }
     return {
       hover: hoverIndex,

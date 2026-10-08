@@ -874,8 +874,10 @@ void main() {
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {
-    color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
-    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
+    // A highlighted feature is a member of the focused entry (index.ts focusHighlights).
+    bool member = focusedClass(cls) || state == ${CellState.highlight};
+    color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
+    if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }

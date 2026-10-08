@@ -781,9 +781,17 @@ describe('buildTileGeometry', () => {
     const { fills, points } = buildTileGeometry(
       {
         buildings: layer([
-          feature(3, { id: 'osm:way/3', class: 'building_religious', height: 15, landmark: true }, [
-            square(0, 0, 100),
-          ]),
+          feature(
+            3,
+            {
+              id: 'osm:way/3',
+              class: 'building_religious',
+              height: 15,
+              landmark: true,
+              notable: true,
+            },
+            [square(0, 0, 100)],
+          ),
         ]),
       },
       createIdRegistry(),
@@ -793,6 +801,24 @@ describe('buildTileGeometry', () => {
       [classId('building_religious'), 50, 50],
       [classId('marker_religious'), 50, 50],
       [classId('marker_landmark'), 50, 50],
+    ]);
+  });
+
+  it('keeps a details-only landmark record on its own class marker, without the landmark ◆', () => {
+    const { fills, points } = buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { id: 'osm:way/3', class: 'building_school', height: 9, landmark: true }, [
+            square(0, 0, 100),
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+    );
+    expect((vertices(fills)[0]?.flags ?? 0) & Flags.landmark).toBe(Flags.landmark);
+    expect(vertices(points).map((v) => v.cls)).toEqual([
+      classId('building_school'),
+      classId('marker_school'),
     ]);
   });
 
@@ -812,6 +838,7 @@ describe('buildTileGeometry', () => {
             name: 'Historic House',
             label_lng: lng,
             label_lat: lat,
+            notable: true,
             ...(heritage && { heritage: true }),
           },
           [square(1000, 1000, 200)],

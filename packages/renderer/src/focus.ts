@@ -33,6 +33,27 @@ export function classMask(ids: readonly number[]): Uint32Array {
   return words;
 }
 
+/**
+ * Feature indices lit as legend-focus members, or null with no focus (tour highlights apply).
+ * Landmarks share their buildings' classes, so the Landmark and Heritage entries light their
+ * footprints by feature: every curated landmark (`notable`, which includes heritage sites), or
+ * only the heritage sites.
+ */
+export function focusHighlights(
+  focus: ReturnType<typeof normalizeFocus>,
+  features: { readonly heritage: readonly number[]; readonly notable: readonly number[] },
+): readonly number[] | null {
+  const active =
+    focus.mask[0]! !== 0 || focus.mask[1]! !== 0 || focus.life.size > 0 || focus.folklore;
+  if (!active) return null;
+  const has = (cls: RenderClass) => {
+    const id = classId(cls);
+    return (focus.mask[id >>> 5]! & ((1 << (id & 31)) >>> 0)) !== 0;
+  };
+  if (has('marker_landmark')) return features.notable;
+  return has('marker_heritage') ? features.heritage : [];
+}
+
 export function normalizeFocus(input: LegendFocus | null): {
   mask: Uint32Array;
   life: ReadonlySet<LifeFocus>;

@@ -1,5 +1,13 @@
 import { expect, it } from 'vitest';
-import { classMask, lifeFocusOf, normalizeFocus, LIFE_FOCUS_BIT, focusPulse } from './focus';
+import {
+  classMask,
+  focusHighlights,
+  lifeFocusOf,
+  normalizeFocus,
+  LIFE_FOCUS_BIT,
+  focusPulse,
+} from './focus';
+import { featureInfo } from './raster/geometry';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT } from './life/turn-signals';
 import { CellBit } from './life/config';
 import { legendEntries } from './legend';
@@ -65,4 +73,20 @@ it('adds descriptors after class merging and keeps hardware and fish ineligible'
   expect(
     legendEntries('dark', 20, undefined, { life: false }).some((entry) => entry.focus?.life.length),
   ).toBe(false);
+});
+
+it('lights curated landmark and heritage footprints as focus members, clearing tour highlights', () => {
+  const features = { heritage: [4, 9], notable: [2, 4, 9] };
+  expect(focusHighlights(normalizeFocus(null), features)).toBeNull();
+  const heritage = normalizeFocus({ classes: ['marker_heritage'], life: [] });
+  expect(focusHighlights(heritage, features)).toBe(features.heritage);
+  const landmark = normalizeFocus({ classes: ['marker_landmark', 'marker_heritage'], life: [] });
+  expect(focusHighlights(landmark, features)).toBe(features.notable);
+  expect(focusHighlights(normalizeFocus({ classes: ['building'], life: [] }), features)).toEqual(
+    [],
+  );
+  expect(focusHighlights(normalizeFocus({ classes: [], life: ['people'] }), features)).toEqual([]);
+  const info = featureInfo('osm:way/1', 'building', { heritage: true, notable: true });
+  expect(info).toMatchObject({ heritage: true, notable: true });
+  expect(featureInfo('osm:way/2', 'building', { landmark: true })).not.toHaveProperty('notable');
 });

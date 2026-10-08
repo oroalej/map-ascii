@@ -309,6 +309,10 @@ export type FeatureInfo = {
   height?: number;
   /** Walkable detail surfaces resolve pointer selection to this parent area. */
   parentId?: string;
+  /** A heritage landmark: the Heritage legend entry lights its whole footprint. */
+  heritage?: true;
+  /** A curated landmark or heritage site: the Landmark legend entry lights its footprint. */
+  notable?: true;
 };
 
 /** A feature's info from its tile properties. */
@@ -325,6 +329,8 @@ export function featureInfo(
   if (typeof p.kind === 'string') info.kind = p.kind;
   if (typeof p.height === 'number' && p.height > 0) info.height = p.height;
   if (typeof p.detail_parent === 'string') info.parentId = p.detail_parent;
+  if (p.heritage === true) info.heritage = true;
+  if (p.notable === true) info.notable = true;
   return info;
 }
 
@@ -949,7 +955,9 @@ export function buildTileGeometry(
         points.vertex(p.x, p.y, klass, height, flags, id, variant);
       const addMarkers = (p: TilePoint) => {
         if (marker) addPoint(p, classId(marker));
-        if (landmark)
+        // Only curated landmarks and heritage sites draw the ◆ (pipeline `notable`); records that
+        // just carry site details keep their own class marker, if any.
+        if (landmark && feature.properties.notable === true)
           addPoint(
             p,
             classId(feature.properties.heritage === true ? 'marker_heritage' : 'marker_landmark'),

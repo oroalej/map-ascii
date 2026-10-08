@@ -25,7 +25,5 @@ it('uses the stage/tone pigment distinction for farmland ink, background and foc
   expect(glyphFragment).toContain('water ? u_cropWaterTint : u_cropTint');
   expect(glyphFragment).toContain('fillOf(bgClass, daylit(cropPigment(bgClass');
   expect(glyphFragment).toContain('toned(daylit(cropPigment(cls, tone)), tone, night)');
-  expect(glyphFragment).toContain(
-    'focusedClass(cls) ? mix(fillOf(cls, daylit(cropPigment(cls, tone)))',
-  );
+  expect(glyphFragment).toContain('member ? mix(fillOf(cls, daylit(cropPigment(cls, tone)))');
 });
