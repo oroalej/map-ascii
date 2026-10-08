@@ -42,6 +42,7 @@ export type FolkloreEnvironment = {
   calendar?: FolkloreCalendar;
   clock: number;
   dt: number;
+  pointer?: { lngLat: readonly [number, number]; reachM: number };
 };
 type Ghost = {
   id: string;
@@ -146,6 +147,7 @@ export class FolkloreObserver {
   private selection: Selection | undefined;
   private sprites: FolkloreSprite[] = [];
   private creature: FolkloreSprite | undefined;
+  private cursorShift: Point = { x: 0, y: 0 };
   constructor(private readonly enabled = true) {}
   get configured() {
     return this.enabled && this.config !== undefined;
@@ -163,6 +165,7 @@ export class FolkloreObserver {
       this.tapGhosts = undefined;
       this.tapMan = undefined;
     }
+    this.cursorShift = { x: 0, y: 0 };
     this.geometry = undefined;
     this.ref = undefined;
     this.ghosts.clear();
@@ -225,6 +228,11 @@ export class FolkloreObserver {
       this.geometry = new FolkloreGeometry(ordered, this.ref);
     }
     const geometry = this.geometry!;
+    const pointer = env.pointer && lngLatToTile(this.ref.tile, ...env.pointer.lngLat);
+    if (pointer) {
+      pointer.x /= this.ref.perMeter;
+      pointer.y /= this.ref.perMeter;
+    } else this.cursorShift = { x: 0, y: 0 };
     for (const tile of ordered)
       if (!this.tileSeeds.has(tile.key))
         this.tileSeeds.set(
@@ -283,6 +291,23 @@ export class FolkloreObserver {
           elapsed,
           night.remaining,
         );
+        if (pointer) {
+          const dx = pose.at.x - pointer.x,
+            dy = pose.at.y - pointer.y;
+          const distance = Math.hypot(dx, dy),
+            reach = env.pointer!.reachM;
+          const close = distance < reach;
+          const strength = close ? Math.min(8, reach * 0.5) * (1 - distance / reach) : 0;
+          const k = 1 - Math.exp(-Math.max(0, env.dt) / (close ? 0.3 : 0.6));
+          const x = distance > 1e-9 ? dx / distance : Math.cos(pose.heading),
+            y = distance > 1e-9 ? dy / distance : Math.sin(pose.heading);
+          this.cursorShift.x += (x * strength - this.cursorShift.x) * k;
+          this.cursorShift.y += (y * strength - this.cursorShift.y) * k;
+          if (Math.hypot(this.cursorShift.x, this.cursorShift.y) < 1e-5)
+            this.cursorShift = { x: 0, y: 0 };
+          if (this.cursorShift.x || this.cursorShift.y)
+            pose.at = { x: pose.at.x + this.cursorShift.x, y: pose.at.y + this.cursorShift.y };
+        }
         if (!pose.returned) {
           const alpha = clamp(elapsed / 4) * clamp((night.remaining * 60) / 6);
           const [lng, lat] = tileToLngLat(this.ref.tile, {
@@ -408,8 +433,9 @@ export class FolkloreObserver {
         )
       : [];
     for (const { ghost, at, elapsed, age, site, id } of samples) {
-      let near = false,
-        overlap = false;
+      const cursorDistance = pointer ? Math.hypot(at.x - pointer.x, at.y - pointer.y) : Infinity;
+      let near = cursorDistance < (env.pointer?.reachM ?? 0),
+        overlap = cursorDistance < (env.pointer?.reachM ?? 0) * 0.15;
       for (const body of observations) {
         const dx = at.x - body.x,
           dy = at.y - body.y;

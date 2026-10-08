@@ -111,6 +111,50 @@ describe('ghost observer', () => {
       observer.step([tile], { minutes: 1320, calendar: calendar(11, 2), clock, dt: 1 });
     expect(observer.manananggal).toBeDefined();
   });
+  it('fades under the geographic cursor and restores opacity after it leaves', () => {
+    const t = folkloreTile(),
+      a = new FolkloreObserver(),
+      b = new FolkloreObserver();
+    for (const o of [a, b]) {
+      o.setConfig(folkloreConfig);
+      o.step([t], { minutes: 1320, calendar: calendar(), clock: 0, dt: 0 });
+      o.step([t], { minutes: 1320, calendar: calendar(), clock: 6, dt: 6 });
+    }
+    const ghost = a.packet(19, folkloreCenter).sprites.find((s) => s.kind === 'ghost')!;
+    const env = { minutes: 1320, calendar: calendar(), clock: 6, dt: 0.1 };
+    a.step([t], { ...env, pointer: { lngLat: [ghost.lng, ghost.lat], reachM: 6 } });
+    b.step([t], env);
+    expect(a.packet(19, folkloreCenter).sprites.find((s) => s.id === ghost.id)!.alpha).toBeLessThan(
+      b.packet(19, folkloreCenter).sprites.find((s) => s.id === ghost.id)!.alpha,
+    );
+    a.step([t], { ...env, dt: 2 });
+    expect(a.packet(19, folkloreCenter).sprites.find((s) => s.id === ghost.id)!.alpha).toBeCloseTo(
+      b.packet(19, folkloreCenter).sprites.find((s) => s.id === ghost.id)!.alpha,
+    );
+  });
+  it('eases the manananggal away, decays with a distant cursor and clears exactly without one', () => {
+    const t = folkloreTile(),
+      a = new FolkloreObserver(),
+      b = new FolkloreObserver();
+    const env = { minutes: 1320, calendar: calendar(11, 2), clock: 0, dt: 0 };
+    for (const o of [a, b]) {
+      o.setConfig(folkloreConfig);
+      o.step([t], env);
+      o.step([t], { ...env, clock: 8, dt: 8 });
+    }
+    const creature = b.manananggal!;
+    expect(creature).toBeDefined();
+    const point = [creature.lng, creature.lat] as const;
+    a.step([t], { ...env, clock: 8, dt: 0.3, pointer: { lngLat: point, reachM: 10 } });
+    expect(a.manananggal).not.toEqual(creature);
+    const before = Math.hypot(a.manananggal!.lng - creature.lng, a.manananggal!.lat - creature.lat);
+    a.step([t], { ...env, clock: 8, dt: 1, pointer: { lngLat: folkloreCenter, reachM: 1 } });
+    expect(
+      Math.hypot(a.manananggal!.lng - creature.lng, a.manananggal!.lat - creature.lat),
+    ).toBeLessThan(before);
+    a.step([t], { ...env, clock: 8, dt: 0.1 });
+    expect(a.manananggal).toEqual(creature);
+  });
   it('releases previous-night sources during daytime pans and rebuilds current sites next night', () => {
     const t = folkloreTile(),
       observer = new FolkloreObserver(),

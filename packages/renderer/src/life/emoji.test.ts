@@ -74,6 +74,91 @@ describe('read-only emoji observer', () => {
     f.observer.request([request], 19, 9);
     expect(f.observer.cue(f.m)).toBeUndefined();
   });
+  it('admits explicit cursor relief and suppresses heat only while classified shaded', () => {
+    const f = fixture('person', () => 0.999);
+    f.o.cursorShaded = true;
+    const env = { rain: 0, minutes: 720, sunAltitude: 70, clock: 0.1 };
+    f.observer.step(0.1, 19, env, [f.o], [], [], [], [{ owner: f.m, mood: 'relaxed' }]);
+    expect(f.observer.cue(f.m)?.mood).toBe('relaxed');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).not.toContain('hot');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).not.toContain('melting');
+    f.o.cursorShaded = false;
+    expect(ambientPool(f.o, env).map((x) => x.mood)).toContain('hot');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).toContain('melting');
+  });
+  it('latches cursor mosquitoes at dusk between ticks, throttles events and drops stale conditions', () => {
+    const f = fixture('person', () => 0.999),
+      people = new Set([f.m]);
+    const step = (clock: number, rest = 1, near = true, minutes = 1080) =>
+      f.observer.step(
+        0.1,
+        19,
+        { rain: 0, clock, minutes, pointerRest: rest, pointerPeople: near ? people : undefined },
+        [f.o],
+      );
+    step(0.1, 0);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    step(0.2);
+    expect(f.observer.memory.get(f.m)!.pointerEdges?.has('mosquito')).toBe(true);
+    step(0.3, 0);
+    expect(f.observer.memory.get(f.m)!.pointerEdges?.size).toBe(0);
+    step(0.6);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    step(10.3);
+    expect(f.observer.cue(f.m)?.mood).toBe('mosquito');
+    f.observer.release(f.m);
+    step(20.4); // Throttle expires; the display cooldown still applies.
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    step(30.5, 1, false);
+    step(40.6, 1, true, 720);
+    expect(f.observer.memory.get(f.m)!.pointerEdges?.size).toBe(0);
+    f.observer.dispose();
+    f.observer.memory.get(f.m)!.cooldownUntil = 0;
+    step(41);
+    expect(f.observer.cue(f.m)?.mood).toBe('mosquito');
+  });
+  it('admits a first cursor mosquito with chance one and retains speaking and eligibility gates', () => {
+    for (const gate of ['none', 'speech', 'ineligible'] as const) {
+      const f = fixture('person', () => 0.999);
+      f.o.speaking = gate === 'speech';
+      f.o.eligible = gate !== 'ineligible';
+      f.observer.step(
+        0.1,
+        19,
+        { rain: 0, clock: 0.1, minutes: 1080, pointerRest: 1, pointerPeople: new Set([f.m]) },
+        [f.o],
+      );
+      expect(f.observer.cue(f.m)?.mood).toBe(gate === 'none' ? 'mosquito' : undefined);
+    }
+  });
+  it('admits explicit fear on the first observation with chance one and retains display gates', () => {
+    const f = fixture('cat', () => 0.999);
+    f.observer.step(
+      0.1,
+      19,
+      { rain: 0, clock: 0.1 },
+      [f.o],
+      [],
+      [],
+      [],
+      [{ owner: f.m, mood: 'scared' }],
+    );
+    expect(f.observer.cue(f.m)?.mood).toBe('scared');
+    const track = f.observer.memory.get(f.m)!;
+    expect(track.cooldownUntil).toBeGreaterThan(40);
+    f.observer.release(f.m);
+    f.observer.step(
+      1,
+      19,
+      { rain: 0, clock: 1.1 },
+      [f.o],
+      [],
+      [],
+      [],
+      [{ owner: f.m, mood: 'happy' }],
+    );
+    expect(f.observer.cue(f.m)).toBeUndefined();
+  });
   it('shows relief on shade arrival and excludes ambient heat after arrival', () => {
     const f = fixture();
     f.step(0.1);

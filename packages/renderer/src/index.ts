@@ -1,3 +1,4 @@
+import { CursorEffects } from './life/cursor-effects';
 import { MOMENTS } from './life/moments';
 export type { EmojiCue } from './life/emoji';
 import { spawnMargin } from './life/births';
@@ -646,6 +647,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** The tiles the last cell pass drew, whose tree crowns the crown pass draws over it. */
   let crownTiles: TileDraw[] = [];
   const readback = new Readback(gl);
+  const cursorEffects = new CursorEffects();
+  const cursorRipplesEnabled = () => camera.zoom >= 18 && knobs.waterDetail;
+  let cursorCrownDirty = false;
+  let cursorCrownActive = false;
+  function clearLifePointer() {
+    cursorCrownDirty ||= cursorCrownActive;
+    lifeHover.pointer(null);
+    cursorEffects.clear();
+    pointerProjection = null;
+  }
   const lifeHover = new LifeHoverController(
     readback,
     gl.COLOR_ATTACHMENT0,
@@ -737,6 +748,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
 
   const resize = () => {
+    cursorCrownDirty ||= cursorCrownActive;
+    cursorEffects.rebase();
     lifeHover.clear();
     resetQualitySamples();
     const nextDpr = Math.min(window.devicePixelRatio || 1, knobs.maxDpr);
@@ -774,7 +787,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     limits.minZoom = Math.min(limits.maxZoom, Math.max(baseMinZoom, fitZoom(limits.bounds, size)));
     const clamped = clampCamera(camera, limits, size);
     if (!sameCamera(clamped, camera)) {
-      lifeHover.pointer(null);
+      clearLifePointer();
       camera = clamped;
       emit('camerachange', { ...camera });
     }
@@ -1137,6 +1150,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (flight) clearTaps();
       const tapBatch = taps.batch(drawnLife?.generation);
       const stepDelta = lifePause.delta;
+      if (pointer && lifeHover.pointerPoint)
+        cursorEffects.move(
+          lifeHover.pointerPoint,
+          pointer,
+          at,
+          { w: cssCell.width, h: cssCell.height },
+          cursorRipplesEnabled(),
+        );
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1166,7 +1187,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             },
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
-            ...(pointer ? { pointer } : {}),
+            ...(pointer
+              ? {
+                  pointer,
+                  pointerRest: cursorEffects.rest(at),
+                  ...(cursorEffects.gust(at, metersPerCssPx(camera) * cssCell.width)
+                    ? { gust: cursorEffects.gust(at, metersPerCssPx(camera) * cssCell.width) }
+                    : {}),
+                }
+              : {}),
             ...(tapBatch && { taps: tapBatch }),
             ...(tapPointer.revision !== acceptedPointerRevision ? { tapPointer } : {}),
           },
@@ -1667,7 +1696,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
     }
     if (occurrence !== liveOccurrence) {
-      lifeHover.pointer(null);
+      clearLifePointer();
       livePause.reset();
       liveOccurrence = occurrence;
     }
@@ -1789,7 +1818,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
     clearTaps();
-    lifeHover.pointer(null);
+    clearLifePointer();
     const now = performance.now();
     flight = startFlight(camera, target, limits, cssSize(), {
       reducedMotion,
@@ -1911,7 +1940,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       reducedMotion,
       watched: watch.watched(),
     });
-    if (cellDirty || drawDirty || animating) {
+    const cursorPoint = lifeRunning() && !flight ? lifePointer(cssSize()) : undefined;
+    if (cursorPoint && lifeHover.pointerPoint) {
+      const cell = stepCell(schedule, step ?? 0);
+      cursorEffects.move(
+        lifeHover.pointerPoint,
+        cursorPoint,
+        now,
+        { w: cell.width, h: cell.height },
+        cursorRipplesEnabled(),
+      );
+    }
+    const cursor =
+      placement && lifeRunning() && !flight
+        ? cursorEffects.wind(placement, now, cellDev().h / cellDev().w)
+        : undefined;
+    cursorCrownDirty ||= cursorCrownActive && !cursor;
+    if (cellDirty || drawDirty || animating || cursorCrownDirty) {
       const time = (now - start) / 1000;
       const frameStart = performance.now();
       gpuTimer.begin(now);
@@ -1955,14 +2000,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const swaying =
         knobs.crownSway &&
         !reducedMotion &&
-        wind.strength > 0 &&
+        (wind.strength > 0 || !!cursor) &&
         hasCrowns(crownTiles) &&
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
-      if (placement && (cellsDrawn || (swaying && animating))) {
+      if (placement && (cellsDrawn || cursorCrownDirty || (swaying && animating))) {
         const crownStart = performance.now();
-        crownPass(gl, programs, targets, v, placement, crownTiles, time, wind);
+        crownPass(
+          gl,
+          programs,
+          targets,
+          v,
+          placement,
+          crownTiles,
+          time,
+          wind,
+          knobs.crownSway ? cursor : undefined,
+        );
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
       }
+      cursorCrownActive = !!cursor && knobs.crownSway;
+      cursorCrownDirty = false;
       selectPass(
         gl,
         programs,
@@ -1977,6 +2034,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         knobs.shadows,
         true,
         cropPass,
+        knobs.groundWind ? cursor : undefined,
       );
       const lifeStart = performance.now();
       drawLife(now, wind);
@@ -1998,7 +2056,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         {
           rain: currentRain(),
           wind,
-          detail: camera.zoom >= 18 && knobs.waterDetail,
+          ripples: lifeRunning() && placement ? cursorEffects.project(placement, now) : [],
+          cursorWind: cursor,
+          detail: cursorRipplesEnabled(),
           fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
           cloudCover: cover,
           cloudSeed: sky.seed,
@@ -2143,7 +2203,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     host.invalidateFrame();
     names.clear();
     reportLabels([]);
-    lifeHover.pointer(null);
+    clearLifePointer();
     lifePause.tick(performance.now(), false);
     speech.clear();
     emoji.clear();
@@ -2193,7 +2253,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const watch = watchVisibility(canvas, (watched) => {
     lastCloudAt = performance.now();
     resetQualitySamples();
-    if (!watched) lifeHover.pointer(null);
+    if (!watched) clearLifePointer();
     lifePause.tick(performance.now(), watched && lifeActive() && !lost);
     if (!watched) {
       speech.clear();
@@ -2206,7 +2266,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
   const applyCamera = (next: CameraState, batched = false) => {
     clearTaps();
-    lifeHover.pointer(null);
+    clearLifePointer();
     speech.clear();
     emoji.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
@@ -2236,7 +2296,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     hover: (point) => {
       lastPointerInput = performance.now();
-      lifeHover.pointer(flight ? null : point);
+      if (point && !flight && lifeRunning()) {
+        lifeHover.pointer(point);
+        const at = dpr > 0 ? lifePointer(cssSize()) : undefined,
+          css = stepCell(schedule, step ?? 0);
+        if (at)
+          cursorEffects.move(
+            point,
+            at,
+            performance.now(),
+            { w: css.width, h: css.height },
+            cursorRipplesEnabled(),
+          );
+      } else clearLifePointer();
       pointerOver = point !== null;
       if (!point) canvas.style.cursor = '';
       if (point) {
@@ -2380,7 +2452,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lastCloudAt = performance.now();
       clearFolklore();
       host.invalidateFrame();
-      lifeHover.pointer(null);
+      clearLifePointer();
       lifePause.tick(performance.now(), lifeRunning());
       if (enabled) {
         host.stop();
@@ -2429,7 +2501,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       clearTaps();
       clearFolklore();
       host.invalidateFolklore();
-      lifeHover.pointer(null);
+      clearLifePointer();
       if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
       const wasEnabled = life.enabled;
       life = { ...life, ...settings };
@@ -2478,7 +2550,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
         return false;
       played = id;
-      lifeHover.pointer(null);
+      clearLifePointer();
       lastSun = -Infinity;
       reportProcession();
       drawDirty = true;
@@ -2486,7 +2558,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     stopProcession() {
       played = undefined;
-      lifeHover.pointer(null);
+      clearLifePointer();
       lastSun = -Infinity;
       host.stop();
       reportProcession();
@@ -2496,7 +2568,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       // Phase 4: time filtering.
     },
     setTheme(name) {
-      lifeHover.pointer(null);
+      clearLifePointer();
       theme = themes[name];
       uniforms = themeUniforms(theme);
       // `resize` builds the new theme's glyphs (on restore, while the context is lost).
@@ -2515,7 +2587,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     destroy() {
       crowdPool?.destroy();
       names.clear();
-      lifeHover.pointer(null);
+      clearLifePointer();
       speech.clear();
       emoji.clear();
       cancelHostTurn();

@@ -94,6 +94,118 @@ it('tries a reachable passerby after an unreachable nearest buyer and reserves o
   expect(scene.purchase(stall, [first])).toBe(false);
 });
 describe('local interaction scenes', () => {
+  it('releases a resting cat through its checked return route at flee pace', () => {
+    const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+    const scene = setup(0, [stall]),
+      cat = person(40, 'cat');
+    (scene as unknown as { idleGuard: () => boolean }).idleGuard = () => true;
+    expect(scene.reserve(cat, 2)).toBe(true);
+    run(scene, [cat], 6);
+    expect(scene.visits.get(cat)?.state).toBe('rest');
+    cat.grooming = true;
+    const before = { x: cat.x, y: cat.y };
+    scene.step(
+      0.1,
+      [cat],
+      { rain: 0, cursorCatFlee: () => true },
+      undefined,
+      undefined,
+      () => true,
+    );
+    expect(scene.visits.get(cat)?.state).toBe('return');
+    expect(Math.hypot(before.x - cat.x, before.y - cat.y)).toBeCloseTo(0.25);
+    expect(cat.grooming).toBe(false);
+    expect(cat.pause).toBe(0);
+  });
+  it('gives one deterministic finite cursor shade hold and rearms only when the condition ends', () => {
+    const { scene, p } = shadeFixture();
+    scene.sites.length = 0;
+    const env = {
+      rain: 0,
+      minutes: 720,
+      sunAltitude: 60,
+      pointerRest: 1,
+      pointerPeople: new Set([p]),
+    };
+    const pause = p.pause;
+    scene.step(0.1, [p], env);
+    expect(scene.cursorShaded(p)).toBe(true);
+    expect(scene.cursorAdmissions).toEqual([p]);
+    const duration = 5 + 10 * personSample(p, 0, 'cursor-shade');
+    for (let elapsed = 0; elapsed < duration - 0.2; elapsed += 0.1) {
+      scene.step(0.1, [p], env);
+      expect(scene.cursorHolding(p)).toBe(true);
+      expect(scene.cursorAdmissions).toEqual([]);
+    }
+    scene.step(0.3, [p], env);
+    expect(scene.cursorHolding(p)).toBe(false);
+    scene.step(20, [p], env);
+    expect(scene.cursorHolding(p)).toBe(false);
+    expect(p.pause).toBe(pause);
+    scene.step(0.1, [p], { ...env, pointerRest: 0 });
+    expect(scene.cursorShaded(p)).toBe(false);
+    scene.step(0.1, [p], env);
+    expect(scene.cursorAdmissions).toEqual([p]);
+    expect(scene.visits.has(p)).toBe(false);
+  });
+  it('freezes cursor shade under inspection and inactivity and releases on lost heat or reach', () => {
+    const { scene, p } = shadeFixture();
+    const env = {
+      rain: 0,
+      minutes: 720,
+      sunAltitude: 60,
+      pointerRest: 2,
+      pointerPeople: new Set([p]),
+    };
+    const inspect = () =>
+      scene.step(20, [p], env, undefined, undefined, undefined, undefined, undefined, undefined, p);
+    inspect();
+    expect(scene.cursorHolding(p)).toBe(true);
+    inspect();
+    scene.step(20, [p], env, () => false);
+    expect(scene.cursorHolding(p)).toBe(true);
+    scene.step(0.1, [p], { ...env, minutes: 540 });
+    expect(scene.cursorHolding(p)).toBe(false);
+    scene.step(0.1, [p], env);
+    scene.step(0.1, [p], { ...env, pointerPeople: undefined });
+    expect(scene.cursorHolding(p)).toBe(false);
+  });
+  it('excludes busy, visiting and crossing walkers from cursor shade admission', () => {
+    for (const reason of ['busy', 'visit', 'crossing', 'unsafe'] as const) {
+      const { scene, p } = shadeFixture();
+      if (reason === 'busy') (scene as unknown as { busy: () => boolean }).busy = () => true;
+      if (reason === 'unsafe')
+        (scene as unknown as { idleGuard: () => boolean }).idleGuard = () => false;
+      if (reason === 'visit')
+        scene.visits.set(p, { state: 'shade', site: scene.sites[0]!, time: 10 } as Visit);
+      if (reason === 'crossing')
+        p.crossingWait = { waiting: {} } as NonNullable<Mover['crossingWait']>;
+      scene.step(0.1, [p], {
+        rain: 0,
+        minutes: 720,
+        sunAltitude: 60,
+        pointerRest: 2,
+        pointerPeople: new Set([p]),
+      });
+      expect(scene.cursorHolding(p)).toBe(false);
+      expect(scene.cursorAdmissions).toEqual([]);
+    }
+  });
+  it('treats only cursor-neighborhood people as sheltered and restores exposed rain rules', () => {
+    const scene = setup(),
+      under = person(),
+      outside = person(100);
+    under.group = [{ ...walker, umbrella: 1 }];
+    outside.group = [{ ...walker, umbrella: 1 }];
+    const env = { rain: 1, pointerPeople: new Set([under]) };
+    scene.step(0.1, [], env);
+    expect(scene.caught(under)).toBe(false);
+    expect(scene.dashPace(under)).toBeUndefined();
+    expect(scene.caught(outside)).toBe(true);
+    expect(scene.dashPace(outside)).toBeGreaterThan(outside.speed);
+    scene.step(0.1, [], { rain: 1 });
+    expect(scene.caught(under)).toBe(true);
+  });
   it('adds tree shade after mapped sites and admits only hot walkers without a parasol', () => {
     for (const env of [
       { rain: 0, minutes: 720, sunAltitude: 60 },

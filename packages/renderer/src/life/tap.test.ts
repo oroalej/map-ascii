@@ -54,19 +54,47 @@ it('only presses signal hardware admitted by the drawn-frame capture', () => {
   const f = signalWorld();
   const before = signalState(f.signal.seed, f.world.signalClock);
   expect(before.a).toBe('green');
-  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [f.tap]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
   expect(f.world.tapReceipts![0]!.action).not.toBe('signal');
   expect(f.world.signalOffsets).toBeUndefined();
   expect(signalState(f.signal.seed, f.world.signalClock)).toEqual(before);
   f.world.visible(19, 1, f.at);
-  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-    {
-      ...f.tap,
-      id: 2,
-      frame: f.world.tapSources!.frame,
-      signal: { seed: f.signal.seed, midBlock: false },
-    },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        id: 2,
+        frame: f.world.tapSources!.frame,
+        signal: { seed: f.signal.seed, midBlock: false },
+      },
+    ],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 2, action: 'signal' }]);
   expect(signalState(f.signal.seed, f.world.signalClock, false, f.world.signalOffsets).a).toBe(
     'amber',
@@ -87,13 +115,27 @@ it('requests anger from four stoppable drivers before the signal, excluding a dr
   f.life.movers.push(past, ...drivers);
   f.world.visible(19, 1, f.at);
   const request = vi.spyOn(f.life, 'requestEmoji');
-  f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-    {
-      ...f.tap,
-      frame: f.world.tapSources!.frame,
-      signal: { seed: f.signal.seed, midBlock: false },
-    },
-  ]);
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        frame: f.world.tapSources!.frame,
+        signal: { seed: f.signal.seed, midBlock: false },
+      },
+    ],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'signal' }]);
   const angry = request.mock.calls.filter((call) => call[2] === 'angry');
   expect(angry.map((call) => call[0])).toEqual(drivers.slice(0, 4));
@@ -151,6 +193,8 @@ it('a candle tap reaches nearby seasonal grave visitors only while their season 
     1.8,
     1,
     undefined,
+    undefined,
+    undefined,
     [tap],
   );
   expect(request).toHaveBeenCalled();
@@ -173,6 +217,8 @@ it('a candle tap reaches nearby seasonal grave visitors only while their season 
     1.8,
     1,
     undefined,
+    undefined,
+    undefined,
     [{ ...tap, frame: world.tapSources!.frame }],
   );
   expect(request).not.toHaveBeenCalled();
@@ -192,14 +238,28 @@ it('a chosen carnival tap requests party from at most eight people within fiftee
   );
   f.world.visible(19, 1, [0, 0]);
   const request = vi.spyOn(f.life, 'requestEmoji');
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-    {
-      ...f.tap,
-      frame: f.world.tapSources!.frame,
-      agent: undefined,
-      carnival: { key: 'ride', at: [at.lng, at.lat] },
-    },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        frame: f.world.tapSources!.frame,
+        agent: undefined,
+        carnival: { key: 'ride', at: [at.lng, at.lat] },
+      },
+    ],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'carnival' }]);
   expect(request.mock.calls.length).toBeGreaterThan(0);
   expect(request.mock.calls.length).toBeLessThanOrEqual(8);
@@ -243,6 +303,8 @@ it('a ghost tap requests fear from at most six nearby visible people', () => {
     1,
     1.8,
     1,
+    undefined,
+    undefined,
     undefined,
     [
       {
@@ -304,9 +366,21 @@ it.each(['car', 'jeepney'] as const)(
   (craft) => {
     const f = vehicleWorld();
     f.vehicle.vehicle = craft;
-    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-      f.tap,
-    ]);
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [f.tap],
+    );
     expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'agent' }]);
     expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('honk');
     expect(f.world.emojiMemory.cue(f.person)?.mood).toBe('rushing');
@@ -316,9 +390,21 @@ it.each(['car', 'jeepney'] as const)(
 it('resolves a coach to its consist, but renders the requested horn only on the locomotive', () => {
   const f = vehicleWorld('train');
   expect(f.world.visible(19, 1, [0, 0]).filter((a) => a.emoji)).toEqual([]);
-  f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-    f.tap,
-  ]);
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
   const cues = f.world.visible(19, 1, [0, 0]).filter((a) => a.kind === 'train' && a.emoji);
   expect(cues).toHaveLength(1);
   expect(cues[0]!.vehicle).toBe('locomotive');
@@ -333,9 +419,21 @@ it.each(['dog', 'cat'] as const)(
     f.vehicle.grooming = kind === 'cat';
     const agents = f.world.visible(19, 1, [0, 0]);
     const agent = agents.findIndex((a) => a.kind === kind);
-    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-      { ...f.tap, frame: f.world.tapSources!.frame, agent },
-    ]);
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+    );
     expect(f.vehicle.pause).toBe(0);
     expect(f.vehicle.lying || f.vehicle.grooming).toBe(false);
     expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('yawn');
@@ -355,10 +453,21 @@ it('answers a bark nearest-first with deterministic delays, six dogs maximum and
     frame: f.world.tapSources!.frame,
     agent: agents.findIndex((a) => a.kind === 'dog'),
   };
-  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-    tap,
-    { ...tap, id: 12 },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [tap, { ...tap, id: 12 }],
+  );
   expect(spy.mock.calls.map(([owner]) => owner)).toEqual(dogs.slice(0, 6));
   spy.mock.calls.forEach((args, i) => expect(args[5]).toBeCloseTo([0, 0.4, 0.6, 0.8, 1, 1.2][i]!));
 });
@@ -392,6 +501,8 @@ it.each([false, true])('consumes a closed/rainy cart without a visit or wave (ra
     1.8,
     1,
     undefined,
+    undefined,
+    undefined,
     [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
   );
   expect(f.world.tapReceipts![0]!.action).toBe('agent');
@@ -421,9 +532,21 @@ it.each([true, false])(
     const agents = f.world.visible(19, 1, [0, 0]);
     const agent = agents.findIndex((a) => a.vehicle === 'cart');
     expect(agent).toBeGreaterThanOrEqual(0);
-    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
-      { ...f.tap, frame: f.world.tapSources!.frame, agent },
-    ]);
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+    );
     expect(f.world.tapReceipts![0]!.action).toBe('agent');
     expect(f.life.scenes.visits.size).toBe(capacity ? 1 : 0);
     if (capacity) expect(f.life.scenes.visits.has(f.person)).toBe(true);

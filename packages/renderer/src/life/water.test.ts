@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { waterEffect } from './water';
 describe('water effects', () => {
+  it('adds cursor rings in local cells, preserves the zero-ring path and expires precisely', () => {
+    const origin = [1e8, 2e8] as const;
+    expect(
+      waterEffect(origin[0] + 12, origin[1] + 10, 0, 0, false, 0, [[10, 10, 0.5]], origin),
+    ).toBe(1);
+    expect(
+      waterEffect(origin[0] + 12, origin[1] + 10, 0, 0, false, 0, [[10, 10, 1.5]], origin),
+    ).toBeNull();
+    for (let x = -10; x < 10; x++)
+      expect(waterEffect(x, 4, 3, 1, true, 3, [])).toBe(waterEffect(x, 4, 3, 1, true));
+  });
   const sample = (time: number, rain: number, fish: boolean) => {
     const out: (number | null)[] = [];
     for (let y = -32; y < 32; y++)

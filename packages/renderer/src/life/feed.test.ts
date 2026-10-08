@@ -29,6 +29,8 @@ function fixture(pointer = 'touch', at = birdLngLat(0, 0)) {
       1.8,
       tap.cellMeters,
       undefined,
+      undefined,
+      undefined,
       [t],
     );
   const step = (pointer?: readonly [number, number], activity?: TapPointer, dt = 0.1) =>
@@ -43,6 +45,8 @@ function fixture(pointer = 'touch', at = birdLngLat(0, 0)) {
       1.8,
       tap.cellMeters,
       pointer,
+      undefined,
+      undefined,
       undefined,
       activity,
     );

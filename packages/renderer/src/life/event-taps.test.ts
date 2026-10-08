@@ -113,6 +113,8 @@ it.each([false, true])(
       1.8,
       1,
       undefined,
+      undefined,
+      undefined,
       [tap],
     );
     expect(world.tapReceipts).toEqual([{ id: 1, action: 'agent' }]);
@@ -165,7 +167,21 @@ it('reuses the sourced pack cheer and preserves requested speech over ambient ev
   });
   try {
     const f = eventWorld(false, false, catalog);
-    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+    f.world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [f.tap],
+    );
     const visible = f.world.visible(19, 1, [0, 0]);
     expect(visible.filter((agent) => agent.speech?.exchangeId === 'pack-cheer')).toHaveLength(1);
     const requestedEmoji = visible.filter((agent) => agent.emoji?.id.startsWith('emoji:'));
@@ -192,7 +208,21 @@ it('does not request a street-only chant during a fluvial event', () => {
     },
   ];
   const f = eventWorld(false, false, catalog);
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
   expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(false);
 });
@@ -212,6 +242,8 @@ it.each([false, true])(
       1.8,
       1,
       undefined,
+      undefined,
+      undefined,
       [f.tap],
     );
     expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
@@ -228,7 +260,21 @@ it.each([false, true])(
 );
 it('clears event presentation on occurrence replacement and removal', () => {
   const f = eventWorld();
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
   f.world.setLive(route.id, 0.5, '2027');
   expect(
     f.world
@@ -242,7 +288,21 @@ it('retires idle event tap state and recreates it for the next request', () => {
   const f = eventWorld();
   const step = vi.spyOn(EventTaps.prototype, 'step');
   try {
-    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+    f.world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [f.tap],
+    );
     expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(
       true,
     );
@@ -254,9 +314,21 @@ it('retires idle event tap state and recreates it for the next request', () => {
     f.world.step(0.1, undefined, 19);
     expect(step).not.toHaveBeenCalled();
     f.world.visible(19, 1, [0, 0]);
-    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-      { ...f.tap, id: 2, frame: f.world.tapSources!.frame },
-    ]);
+    f.world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      undefined,
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [{ ...f.tap, id: 2, frame: f.world.tapSources!.frame }],
+    );
     expect(step).toHaveBeenCalledOnce();
     expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(
       true,
@@ -282,6 +354,8 @@ it.each([false, true])(
       1.8,
       1,
       undefined,
+      undefined,
+      undefined,
       [{ ...f.tap, agent: index, at: [target.lng, target.lat] }],
     );
     expect(
@@ -293,28 +367,76 @@ it.each([false, true])(
 );
 it('declines a distant tap or an event that is not running', () => {
   const f = eventWorld();
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-    { ...f.tap, at: [1, 1] },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...f.tap, at: [1, 1] }],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1 }]);
   f.world.setLive(undefined);
   f.world.visible(19, 1, [0, 0]);
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-    { ...f.tap, frame: f.world.tapSources!.frame },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...f.tap, frame: f.world.tapSources!.frame }],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1 }]);
 });
 it('consumes a distant crowd tap only while its event is running', () => {
   const f = eventWorld();
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-    { ...f.tap, crowd: true, at: [1, 1], firework: true },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...f.tap, crowd: true, at: [1, 1], firework: true }],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'procession' }]);
   expect(f.world.visible(19, 1, [0, 0]).some((a) => a.speech?.id.startsWith('scene:'))).toBe(false);
   f.world.setLive(undefined);
   f.world.visible(19, 1, [0, 0]);
-  f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [
-    { ...f.tap, frame: f.world.tapSources!.frame, crowd: true, firework: true },
-  ]);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...f.tap, frame: f.world.tapSources!.frame, crowd: true, firework: true }],
+  );
   expect(f.world.tapReceipts).toEqual([{ id: 1 }]);
 });

@@ -21,6 +21,7 @@ import {
   type CrossingCursor,
 } from './crossing-wait';
 import type { SimulationSeason } from './seasonal-simulation';
+import type { CursorGust } from './pointer';
 import { FolkloreObserver, type FolkloreCalendar, type FolkloreBody } from './folklore';
 import type { RuntimeFolklore } from './folklore-config';
 import { FOLKLORE } from './folklore-config';
@@ -52,6 +53,7 @@ import {
   type EmojiCue,
   type EmojiObservation,
   type EmojiObserverOptions,
+  type PointerEvent,
 } from './emoji';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
@@ -123,6 +125,7 @@ import {
   isWalker,
   PERCH,
   BIRD_POINTER,
+  POINTER,
   BIRD_TAKEOFF,
   BIRD_FLIGHT,
   DEFAULT_ROAD_WIDTH_M,
@@ -384,6 +387,7 @@ export type WorldGroundGuard = ((
     ): boolean;
     roadQueue(life: TileLife, preview: Mover, identity: Mover): boolean;
     pedestrians(life: TileLife): PedestrianView;
+    pointerPeople(at: readonly [number, number], radiusM: number): ReadonlySet<object>;
   };
 type SeamLimit = {
   room: number;
@@ -399,6 +403,7 @@ export type StepPass = {
   owns?: (p: { x: number; y: number }) => boolean;
   seams?: ReadonlyMap<Mover, SeamLimit>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
+  boatGuard?: (m: Mover, before?: Mover) => boolean;
   recoveredLines?: Set<number>;
   recoveryAttempts?: ReadonlySet<Mover>;
   recoveredNow?: ReadonlySet<Mover>;
@@ -502,6 +507,10 @@ export type Mover = {
   momentFacing?: { hx: number; hy: number };
   /** Cats' resting or grooming pose. */
   grooming?: boolean;
+  /** Cursor-owned pet episode; absent in ordinary wandering. */
+  pointerDog?: 'follow' | 'sit';
+  /** Accepted lateral boat displacement in metres; absent in legacy runs. */
+  boatShift?: number;
   kind: Exclude<AgentKind, 'bird'>;
   line: number;
   /** The vertex it last passed (an index into the tile's `coords` pairs). */
@@ -598,6 +607,10 @@ export type LifeEnv = {
   /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
   pointer?: { lngLat: readonly [number, number]; cellMeters: number };
   tapPointer?: TapPointer;
+  pointerRest?: number;
+  gust?: CursorGust;
+  pointerPeople?: ReadonlySet<object>;
+  pointerDogs?: ReadonlySet<Mover>;
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -1020,6 +1033,7 @@ export class TileLife {
       env?.effectCellMeters ?? 0,
       env?.wind,
       env?.nextSourceId,
+      env?.gust,
     );
     const visits = this.scenes.visits.size > 0;
     const services = this.scenes.services.size > 0;
@@ -1057,8 +1071,9 @@ export class TileLife {
     dt: number,
     wind: LifeEnv['wind'],
     owners?: ReadonlyMap<Mover, TileLife>,
+    gust?: CursorGust,
   ) {
-    this.effects.finish(clock, dt, wind, owners);
+    this.effects.finish(clock, dt, wind, owners, gust);
   }
 
   private readonly sharedRoadVertices = new Set<number>();
@@ -1069,6 +1084,10 @@ export class TileLife {
   readonly startled: Flock[] = [];
   readonly birdEmojiOwners = new Set<Flock>();
   private pointerInside?: WeakSet<Flock>;
+  private tilePointer?: FlockPointer;
+  private catPointer?: WeakMap<Mover, { left: number }>;
+  private readonly pointerEvents: PointerEvent[] = [];
+  private readonly followedDogs = new Set<Mover>();
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -1344,6 +1363,7 @@ export class TileLife {
     m.v = preview.v;
     m.roadShift = preview.roadShift;
     m.roadSteering = preview.roadSteering;
+    if (preview.boatShift !== undefined) m.boatShift = preview.boatShift;
     if (
       m.chosenLane !== undefined ||
       m.lat !== undefined ||
@@ -1730,7 +1750,9 @@ export class TileLife {
       seed,
       this.stalls,
       (m) => this.canIdle(m),
-      (m) => this.momentHost.moments.busy(m),
+      (m) =>
+        this.momentHost.moments.busy(m) ||
+        (m.kind === 'cat' && (this.catPointer?.get(m)?.left ?? 0) > 0),
       true,
     );
     yield* this.scenes.prepare(geo, this.stalls);
@@ -2237,6 +2259,7 @@ export class TileLife {
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
   offsetOf(m: Mover, identity = m): number {
     if (isWalker(m.kind)) return this.scenes.walkingOffset(m, identity);
+    if (m.kind === 'boat') return m.boatShift ?? 0;
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
@@ -4689,6 +4712,7 @@ export class TileLife {
         plan?.exit,
         m.vehicle ? m.next : undefined,
       ) ??
+      this.pointerExit(m, options, vertex) ??
       (m.train
         ? this.straightest(m, options)
         : options[
@@ -6094,6 +6118,7 @@ export class TileLife {
     input.gatherer = undefined;
     input.visit = undefined;
     input.passenger = undefined;
+    input.cursorShaded = false;
   }
   private releaseEmojiInputs() {
     for (const input of this.emojiInputs) this.clearEmojiInput(input);
@@ -6142,6 +6167,7 @@ export class TileLife {
       const admitted = eligible(m) && this.visibleMover(m, levels, crowd);
       if (!admitted && this.emoji.memory.get(m)?.clock === undefined) continue;
       const input = this.emojiInput(m, subject, admitted);
+      input.cursorShaded = subject === 'person' && this.scenes.cursorShaded(m);
       input.mover = m;
       input.figure = m.group?.[0]?.figure;
       input.vendor = undefined;
@@ -6156,6 +6182,7 @@ export class TileLife {
       const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
       if (!admitted && this.emoji.memory.get(g)?.clock === undefined) continue;
       const input = this.emojiInput(g, 'person', admitted);
+      input.cursorShaded = this.scenes.cursorShaded(g);
       input.gatherer = g;
       input.figure = g.walker.figure;
       input.held = input.arrival = input.still = input.vendor = undefined;
@@ -6164,6 +6191,7 @@ export class TileLife {
       const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
       if (!admitted && this.emoji.memory.get(s)?.clock === undefined) continue;
       const input = this.emojiInput(s, 'person', admitted);
+      input.cursorShaded = this.scenes.cursorShaded(s);
       input.figure = 'adult';
       input.vendor = true;
       input.held = input.arrival = input.still = undefined;
@@ -6180,6 +6208,7 @@ export class TileLife {
   freezeEmoji() {
     this.tapRequests?.clear();
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     this.pointerInside = undefined;
     this.emoji.freeze();
   }
@@ -6189,6 +6218,7 @@ export class TileLife {
   }
   disposeEmoji() {
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     this.pointerInside = undefined;
     this.clearBirdEmojiOwners();
     this.emoji.dispose();
@@ -6245,6 +6275,33 @@ export class TileLife {
   ) {
     if (dt <= 0) return;
     if (!env?.pointer) this.pointerInside = undefined;
+    if (!env?.pointer) {
+      this.catPointer = undefined;
+      this.pointerEvents.length = 0;
+    }
+    this.tilePointer = undefined;
+    if (env?.pointer) {
+      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
+      Object.assign(this.flockPointer, at, { cellMeters: env.pointer.cellMeters });
+      this.tilePointer = this.flockPointer;
+    }
+    for (const dog of this.followedDogs)
+      if (!env?.pointerDogs?.has(dog)) {
+        if (dog.pointerDog === 'sit') {
+          dog.pause = 0;
+          dog.momentFacing = undefined;
+        }
+        delete dog.pointerDog;
+        this.followedDogs.delete(dog);
+      }
+    for (const dog of env?.pointerDogs ?? [])
+      if (this.movers.includes(dog) && !dog.pointerDog) {
+        dog.pointerDog = 'follow';
+        dog.pause = 0;
+        dog.lying = false;
+        dog.trot = 0;
+        this.followedDogs.add(dog);
+      }
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -6304,10 +6361,34 @@ export class TileLife {
     const walkDistance = (m: Mover, target: { x: number; y: number }, distance: number) =>
       this.crossingWaits.limit(m, target, distance, clock, minimum);
 
+    if (this.tilePointer)
+      for (const [m, visit] of this.scenes.visits) {
+        if (
+          m.kind !== 'cat' ||
+          (pass?.owns && !pass.owns(m)) ||
+          (near && !near(m.x, m.y)) ||
+          (shows && !shows('cat'))
+        )
+          continue;
+        let flee = this.catPointer?.get(m);
+        if (
+          !flee &&
+          visit.state === 'rest' &&
+          (m.x - this.tilePointer.x) ** 2 + (m.y - this.tilePointer.y) ** 2 <
+            (POINTER.cat * this.tilePointer.cellMeters * this.perMeter) ** 2
+        ) {
+          flee = { left: POINTER.fleeSeconds };
+          (this.catPointer ??= new WeakMap()).set(m, flee);
+          this.pointerEvents.push({ owner: m, mood: 'scared' });
+        }
+        if (flee) flee.left = Math.max(0, flee.left - dt);
+      }
     this.scenes.step(
       dt,
       this.movers,
-      env ?? {},
+      this.tilePointer
+        ? { ...env, cursorCatFlee: (m: Mover) => (this.catPointer?.get(m)?.left ?? 0) > 0 }
+        : (env ?? {}),
       near,
       shows,
       guard,
@@ -6319,6 +6400,8 @@ export class TileLife {
       env?.diagnostics,
     );
     const momentView = pass?.momentView;
+    for (const m of this.scenes.cursorAdmissions)
+      this.pointerEvents.push({ owner: m, mood: 'relaxed' });
     this.momentHost.step(
       dt,
       momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
@@ -6342,6 +6425,7 @@ export class TileLife {
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
         this.startled,
+        this.pointerEvents,
         this.tapRequests?.drain(
           emojiEnv.emojiTime?.clock ?? clock,
           (owner) =>
@@ -6366,6 +6450,7 @@ export class TileLife {
       this.clearBirdEmojiOwners();
     }
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
@@ -6386,7 +6471,13 @@ export class TileLife {
     const rejected = (reason: ContinuityRejection) => {
       terrainRejected ||= reason === 'terrain';
     };
-    const fitsGround: GroundGuard = guard ?? this.standaloneGround;
+    const physicalGuard = guard ?? this.standaloneGround;
+    const fitsGround: GroundGuard = pass?.boatGuard
+      ? (owner, before, reserve, reject) =>
+          'kind' in owner && owner.kind === 'boat' && owner.boatShift !== undefined
+            ? pass.boatGuard!(owner, before as Mover | undefined)
+            : physicalGuard(owner, before, reserve, reject)
+      : physicalGuard;
     let livePedestrians = pass?.pedestrians;
 
     // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
@@ -6411,6 +6502,12 @@ export class TileLife {
       }
       if (!this.eligible[i]) continue;
       env?.diagnostics?.eligible(m, m.kind);
+      if (m.kind === 'person' && this.scenes.cursorHolding(m)) {
+        m.waiting = 0;
+        running -= Number(this.stopRun(m));
+        env?.diagnostics?.hold(m, 'pause');
+        continue;
+      }
       if (isWalker(m.kind) && this.scenes.yieldStep(m, dt, guard, walkDistance, pass?.owns))
         continue;
       const maneuver = m.vehicle && this.recoveryLeaders.get(m.line);
@@ -6583,11 +6680,10 @@ export class TileLife {
         continue;
       }
       if (m.kind === 'dog') {
-        const speed = this.dogSpeed(
-          m,
-          dt,
-          this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock),
-        );
+        const speed =
+          m.pointerDog && this.tilePointer
+            ? this.followPointer(m, this.tilePointer, fitsGround, dt)
+            : this.dogSpeed(m, dt, this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock));
         if (speed === undefined) {
           m.waiting = 0;
           continue;
@@ -6595,20 +6691,52 @@ export class TileLife {
         speeds[i] = speed;
       }
       if (m.kind === 'cat') {
-        const idle = this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock);
-        if (!idle) {
+        const pointer = this.tilePointer;
+        let flee = this.catPointer?.get(m);
+        if (pointer) {
+          const close =
+            (m.x - pointer.x) ** 2 + (m.y - pointer.y) ** 2 <
+            (POINTER.cat * pointer.cellMeters * this.perMeter) ** 2;
+          if (!close && flee && flee.left <= 0) {
+            this.catPointer!.delete(m);
+            flee = undefined;
+          }
+          if (close && !flee && (m.pause > 0 || m.grooming)) {
+            flee = { left: POINTER.fleeSeconds };
+            (this.catPointer ??= new WeakMap()).set(m, flee);
+            this.pointerEvents.push({ owner: m, mood: 'scared' });
+          }
+        }
+        if (flee && flee.left > 0) {
           m.pause = 0;
           m.grooming = false;
-        }
-        if (m.pause > 0) {
-          m.pause -= dt;
-          continue;
-        }
-        m.grooming = false;
-        if (idle && this.catRng() < CAT.pause.chance * dt) {
-          m.pause = between(this.catRng, CAT.pause.seconds);
-          m.grooming = this.catRng() < CAT.groomChance;
-          continue;
+          flee.left = Math.max(0, flee.left - dt);
+          if (pointer && (pointer.x - m.x) * m.hx + (pointer.y - m.y) * m.hy > 0) {
+            const before = snapshotMover(m);
+            this.turnBack(m);
+            this.advance(m, 0, false);
+            if (!fitsGround(m, before)) {
+              restoreMover(m, before);
+              continue;
+            }
+          }
+          speeds[i] = Math.max(m.speed, POINTER.fleePace * this.perMeter);
+        } else {
+          const idle = this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock);
+          if (!idle) {
+            m.pause = 0;
+            m.grooming = false;
+          }
+          if (m.pause > 0) {
+            m.pause -= dt;
+            continue;
+          }
+          m.grooming = false;
+          if (idle && this.catRng() < CAT.pause.chance * dt) {
+            m.pause = between(this.catRng, CAT.pause.seconds);
+            m.grooming = this.catRng() < CAT.groomChance;
+            continue;
+          }
         }
       }
       if (m.kind === 'person') {
@@ -6664,7 +6792,10 @@ export class TileLife {
           if (guard && !guard(m, previous)) restoreMover(m, previous);
         }
         const was = (m.run ?? 0) > 0;
-        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const sheltered = this.scenes.cursorSheltered(m);
+        const randomPace = sheltered
+          ? (this.stopRun(m), m.speed)
+          : this.runSpeed(m, dt, running < RUN.maxPerTile);
         const pace = dash ?? randomPace;
         running += Number((m.run ?? 0) > 0) - Number(was);
         if (pace !== undefined) speeds[i] = pace;
@@ -6673,6 +6804,30 @@ export class TileLife {
       if (walking) {
         if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
           speeds[i] = 0;
+      }
+      if (m.kind === 'boat' && (this.tilePointer || m.boatShift !== undefined)) {
+        const p = this.tilePointer,
+          pose = this.pose(m);
+        const close =
+          p &&
+          (pose.x - p.x) ** 2 + (pose.y - p.y) ** 2 <
+            (POINTER.boat * p.cellMeters * this.perMeter) ** 2;
+        const before = { ...m },
+          old = m.boatShift ?? 0;
+        const side = p ? (p.x - m.x) * -m.hy + (p.y - m.y) * m.hx : 0;
+        const target = close ? -(side >= 0 ? 1 : -1) * Math.min(3, p.cellMeters * 2) : 0;
+        const shift = old + Math.sign(target - old) * Math.min(Math.abs(target - old), dt * 1.5);
+        if (shift !== old) {
+          m.boatShift = shift;
+          if (!pass?.boatGuard?.(m, before)) {
+            if (before.boatShift === undefined) delete m.boatShift;
+            else m.boatShift = old;
+          } else if (Math.abs(shift) < 1e-9) delete m.boatShift;
+        }
+        if (close) {
+          speeds[i] = Math.min(speeds[i]!, this.perMeter);
+          this.caps[i] = Math.min(this.caps[i]!, this.perMeter);
+        }
       }
       if (m.vehicle) {
         this.motionStats.steps++;
@@ -6761,7 +6916,13 @@ export class TileLife {
           );
       }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
-      if (m.vehicle && (!guard || m.kind !== 'vehicle') && !m.maneuver && !m.latYaw) {
+      if (
+        m.vehicle &&
+        (!guard || m.kind !== 'vehicle') &&
+        !m.maneuver &&
+        !m.latYaw &&
+        m.boatShift === undefined
+      ) {
         m.v =
           distance === 0 && m.v === 0 ? 0 : this.advance(m, distance, true, this.enteredExits) / dt;
         m.waiting = 0;
@@ -7401,7 +7562,7 @@ export class TileLife {
     if (!shows || shows('person')) this.stepGatherers(dt, near, guard);
     if (!shows || shows('bird')) this.stepFlocks(dt, gustAt, near, env, observing);
     if (!this.crossingWaits.shared) this.crossingWaits.registry.resolve();
-    if (!pass) this.finishEffects(clock, dt, env?.wind);
+    if (!pass) this.finishEffects(clock, dt, env?.wind, undefined, env?.gust);
   }
 
   /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
@@ -7835,6 +7996,87 @@ export class TileLife {
    * A street dog (config.ts `DOG`): it stops to sniff, now and then lies down a long while,
    * turns back, and trots in short bursts.
    */
+  private followPointer(
+    m: Mover,
+    pointer: FlockPointer,
+    guard: GroundGuard,
+    dt: number,
+  ): number | undefined {
+    const pose = this.pose(m),
+      dx = pointer.x - pose.x,
+      dy = pointer.y - pose.y;
+    const distance = Math.hypot(dx, dy),
+      speed = Math.max(m.speed, DOG.trot.speed * this.perMeter),
+      tolerance = Math.max(0.5 * this.perMeter, speed * dt),
+      along = dx * m.hx + dy * m.hy,
+      to = m.from + m.dir;
+    const lineEnd = to === this.first(m.line) || to === this.last(m.line);
+    const toward = (from: number, next: number) => {
+      const c = this.geo.coords;
+      return (
+        (pointer.x - c[to * 2]!) * (c[next * 2]! - c[from * 2]!) +
+          (pointer.y - c[to * 2 + 1]!) * (c[next * 2 + 1]! - c[from * 2 + 1]!) >
+        0
+      );
+    };
+    const onward = lineEnd
+      ? this.exitOptions(m, to).some((code) => {
+          const exit = this.directedExit(code, to),
+            next = exit.vertex + exit.dir;
+          return toward(exit.vertex, next);
+        })
+      : toward(to, to + m.dir);
+    const blockedEnd = lineEnd && this.segment(m.from, to) - m.d <= tolerance && !onward;
+    const arrived = distance <= POINTER.sit * pointer.cellMeters * this.perMeter;
+    if ((arrived || (Math.abs(along) <= tolerance && !onward) || blockedEnd) && this.canIdle(m)) {
+      const before = snapshotMover(m);
+      if (distance > 1e-9) m.momentFacing = { hx: dx / distance, hy: dy / distance };
+      if (guard(m, before)) {
+        if (arrived && m.pointerDog !== 'sit') this.pointerEvents.push({ owner: m, mood: 'happy' });
+        m.pointerDog = arrived ? 'sit' : 'follow';
+        m.pause = arrived ? 1 : 0;
+        m.lying = false;
+        m.waiting = 0;
+        return;
+      }
+      restoreMover(m, before);
+    }
+    m.pointerDog = 'follow';
+    m.pause = 0;
+    m.momentFacing = undefined;
+    if (along < 0 && !onward) {
+      const before = snapshotMover(m);
+      this.turnBack(m);
+      this.advance(m, 0, false);
+      if (!guard(m, before)) {
+        restoreMover(m, before);
+        return;
+      }
+    }
+    return speed;
+  }
+
+  private pointerExit(m: Mover, options: readonly number[], vertex: number) {
+    const pointer = m.pointerDog && this.tilePointer;
+    if (!pointer || !options.length) return;
+    let best = options[0]!,
+      score = -Infinity;
+    const dx = pointer.x - m.x,
+      dy = pointer.y - m.y;
+    for (const code of options) {
+      const target = this.directedExit(code, vertex),
+        next = target.vertex + target.dir;
+      const x = this.geo.coords[next * 2]! - this.geo.coords[target.vertex * 2]!,
+        y = this.geo.coords[next * 2 + 1]! - this.geo.coords[target.vertex * 2 + 1]!;
+      const value = (dx * x + dy * y) / (Math.hypot(x, y) || 1);
+      if (value > score || (value === score && code < best)) {
+        best = code;
+        score = value;
+      }
+    }
+    return best;
+  }
+
   private dogSpeed(m: Mover, dt: number, idle: boolean): number | undefined {
     const rng = this.dogRng;
     if (!idle) {
@@ -8205,16 +8447,9 @@ export class TileLife {
     const folklore =
       env?.folkloreDisturber &&
       lngLatToTile(this.tile, env.folkloreDisturber.lng, env.folkloreDisturber.lat);
-    let pointer: FlockPointer | undefined;
+    const pointer = this.tilePointer;
     this.birdFlightStep.dt = dt;
-    if (env?.pointer) {
-      pointer = this.flockPointer;
-      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
-      pointer.x = at.x;
-      pointer.y = at.y;
-      pointer.cellMeters = env.pointer.cellMeters;
-      this.pointerInside ??= new WeakSet();
-    }
+    if (pointer) this.pointerInside ??= new WeakSet();
     let feed = this.tapFeed;
     if (feed && (env?.emojiTime?.clock ?? env?.clock ?? this.time) >= feed.until)
       this.tapFeed = feed = undefined;
@@ -9104,6 +9339,8 @@ export class LifeWorld {
   private sampleFolklore(
     weather: Pick<LifeEnv, 'minutes' | 'folkloreDate'> | undefined,
     dt: number,
+    pointer?: readonly [number, number],
+    cellMeters = 0,
   ) {
     if (!this.folklore.configured) return;
     const sources = [...this.tiles].map(([key, life]) => ({
@@ -9115,7 +9352,13 @@ export class LifeWorld {
     }));
     this.folklore.step(
       sources,
-      { minutes: weather?.minutes, calendar: weather?.folkloreDate, clock: this.emojiClock, dt },
+      {
+        minutes: weather?.minutes,
+        calendar: weather?.folkloreDate,
+        clock: this.emojiClock,
+        dt,
+        ...(pointer ? { pointer: { lngLat: pointer, reachM: POINTER.folklore * cellMeters } } : {}),
+      },
       (geometry, ghosts) => {
         const bodies: FolkloreBody[] = [],
           pose: Pose = { x: 0, y: 0, hx: 0, hy: 0 };
@@ -10179,6 +10422,9 @@ export class LifeWorld {
           (preview) =>
             gained(preview) &&
             (kind !== 'person' || walkingTransfer(target, c.life, c.m, preview)) &&
+            (kind !== 'boat' ||
+              c.m.boatShift === undefined ||
+              this.boatTransfer(target, preview, c.m, c.life)) &&
             ((kind !== 'vehicle' && kind !== 'person') ||
               guard(
                 target,
@@ -11662,6 +11908,40 @@ export class LifeWorld {
       if (decision) this.failedYield.set(decision.priority, this.clock);
     };
     const methods = {
+      pointerPeople: (at: readonly [number, number], radiusM: number) => {
+        const found = new Set<object>();
+        if (!ref || radiusM <= 0) return found;
+        const p = lngLatToTile(ref.tile, ...at),
+          x = p.x / ref.perMeter,
+          y = p.y / ref.perMeter;
+        const polygon = [
+          [
+            { x: x - radiusM, y: y - radiusM },
+            { x: x + radiusM, y: y - radiusM },
+            { x: x + radiusM, y: y + radiusM },
+            { x: x - radiusM, y: y + radiusM },
+          ],
+        ];
+        const visit = (owner: object) => {
+          const life = owners.get(owner);
+          if (!life || !this.owns(life, owner as GroundAgent)) return;
+          // Posed group members may lie in another bin or on a neighboring tile.
+          if (
+            occupied
+              .bodies(owner)
+              .some(
+                (b) =>
+                  !!((b.kind ?? 0) & BODY_KIND.human) &&
+                  (b.x - x) ** 2 + (b.y - y) ** 2 <= radiusM ** 2,
+              ) ||
+            queryOnly?.bodies(owner).some((b) => (b.x - x) ** 2 + (b.y - y) ** 2 <= radiusM ** 2)
+          )
+            found.add(owner);
+        };
+        occupied.visitInArea(polygon, BODY_KIND.human, visit);
+        queryOnly?.visitInArea(polygon, BODY_KIND.human, visit);
+        return found;
+      },
       eventDenied: (owner: object) => eventDenials.has(owner),
       remove,
       reserveSeam,
@@ -11747,6 +12027,8 @@ export class LifeWorld {
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
     pointer?: readonly [number, number],
+    pointerRest?: number,
+    gust?: CursorGust,
     taps?: readonly LifeTap[],
     tapPointer?: TapPointer,
   ) {
@@ -11762,7 +12044,7 @@ export class LifeWorld {
     if (clamped === 0) {
       this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
       this.stepEventTaps(0, zoom);
-      this.sampleFolklore(weather, 0);
+      this.sampleFolklore(weather, 0, pointer, cellMeters);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
@@ -11813,8 +12095,10 @@ export class LifeWorld {
       emojiView: this.emojiView,
       ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
       ...(tapPointer ? { tapPointer } : {}),
+      ...(pointer && pointerRest !== undefined ? { pointerRest } : {}),
+      ...(pointer && gust ? { gust } : {}),
     };
-    this.sampleFolklore(weather, Math.max(0, dt));
+    this.sampleFolklore(weather, Math.max(0, dt), pointer, cellMeters);
     const folklore = this.folklore.manananggal;
     if (folklore && folklore.alpha > 0.001) env.folkloreDisturber = folklore;
     const event = this.procession();
@@ -11833,6 +12117,41 @@ export class LifeWorld {
       shows,
     );
     const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
+    if (pointer) env.pointerPeople = guard.pointerPeople(pointer, POINTER.person * cellMeters);
+    if (pointer && (!shows || shows('dog'))) {
+      const candidates: { mover: Mover; tile: string; index: number; distance: number }[] = [];
+      for (const [key, life] of this.tiles) {
+        const p = lngLatToTile(life.tile, ...pointer),
+          radius = POINTER.dog * cellMeters * life.perMeter;
+        for (let index = 0; index < life.movers.length; index++) {
+          const m = life.movers[index]!;
+          if (
+            m.kind !== 'dog' ||
+            !this.owns(life, m) ||
+            !life.visibleMover(m, this.lastLevels, this.lastCrowd) ||
+            life.scenes.visits.has(m)
+          )
+            continue;
+          const pose = life.pose(m),
+            distance = (pose.x - p.x) ** 2 + (pose.y - p.y) ** 2;
+          if (distance < radius ** 2)
+            candidates.push({
+              mover: m,
+              tile: key,
+              index,
+              distance: distance / life.perMeter ** 2,
+            });
+        }
+      }
+      candidates.sort(
+        (a, b) =>
+          a.distance - b.distance ||
+          a.mover.rank - b.mover.rank ||
+          a.tile.localeCompare(b.tile) ||
+          a.index - b.index,
+      );
+      env.pointerDogs = new Set(candidates.slice(0, 2).map((c) => c.mover));
+    }
     const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
       owners.find((life) => {
         const f = frameBetween(source.tile, life.tile);
@@ -12022,7 +12341,7 @@ export class LifeWorld {
           preview &&
           target &&
           (m.kind === 'boat'
-            ? this.boatRoom(target, preview, m, intents)
+            ? this.boatTransfer(target, preview, m, source, seam.preview, intents)
             : guard.clearSeam(target, preview, m, reject) &&
               guard(target, preview, seam.preview, undefined, false, m, reject, source));
         if (safe && target && preview) {
@@ -12075,6 +12394,7 @@ export class LifeWorld {
         ),
         {
           crossingGuard: true,
+          boatGuard: (m, before) => this.boatSweep(tile, m, before),
           pedestrians: guard.pedestrians(tile),
           junctions: this.junctions,
           trains,
@@ -12116,7 +12436,7 @@ export class LifeWorld {
             inTile(preview) &&
             this.owns(target, preview) &&
             (m.kind === 'boat'
-              ? this.boatRoom(target, preview, m, [])
+              ? this.boatTransfer(target, preview, m, source)
               : guard(target, preview, m, undefined, false, m, reject, source)),
         )
       ) {
@@ -12146,7 +12466,7 @@ export class LifeWorld {
       }
     }
     for (const tile of this.tiles.values())
-      tile.finishEffects(this.clock, clamped, wind, effectOwners);
+      tile.finishEffects(this.clock, clamped, wind, effectOwners, gust);
     // Trains run on from tile to tile; one leaving the tiles on screen is gone.
     let leaving: { from: TileLife; m: Mover }[] | undefined;
     for (const tile of this.tiles.values()) {
@@ -12228,7 +12548,76 @@ export class LifeWorld {
         }
   }
 
-  /** Connected running routes share an arrival clock, including duplicated buffered lines. */
+  private boatTransfer(
+    target: TileLife,
+    preview: Mover,
+    identity: Mover,
+    source: TileLife,
+    before = identity,
+    reserved: readonly { source: TileLife; target: TileLife; m: Mover }[] = [],
+  ) {
+    if (preview.boatShift === undefined) return this.boatRoom(target, preview, identity, reserved);
+    const frame = frameBetween(source.tile, target.tile),
+      pose = source.pose(before);
+    const start = {
+      ...preview,
+      x: frame.x + pose.x * frame.scale,
+      y: frame.y + pose.y * frame.scale,
+      hx: pose.hx,
+      hy: pose.hy,
+      boatShift: undefined,
+    };
+    return this.boatSweep(target, preview, start, identity, reserved);
+  }
+
+  /** Cursor detours require proven complete water coverage at every swept pose. */
+  private boatSweep(
+    life: TileLife,
+    mover: Mover,
+    before = mover,
+    identity = mover,
+    reserved: readonly { source: TileLife; target: TileLife; m: Mover }[] = [],
+  ) {
+    const terrain = this.groundTerrain;
+    if (!terrain || !terrain.water.polygons.length) return false;
+    const o = terrain.origins.get(life)!;
+    const a = life.pose(before),
+      b = life.pose(mover);
+    const steps = Math.max(
+      1,
+      Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / life.perMeter / 0.3),
+      Math.ceil(Math.hypot(b.hx - a.hx, b.hy - a.hy) * 12),
+    );
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps,
+        hx = a.hx + (b.hx - a.hx) * t,
+        hy = a.hy + (b.hy - a.hy) * t;
+      const norm = Math.hypot(hx, hy) || 1;
+      const sample = {
+        ...mover,
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        hx: hx / norm,
+        hy: hy / norm,
+      };
+      delete sample.boatShift; // The sample coordinates already contain the accepted offset.
+      const bodies = life.groundBodies(sample).map((body) => ({
+        ...body,
+        x: o.x + body.x * o.scale,
+        y: o.y + body.y * o.scale,
+        length: body.length * o.scale,
+        width: body.width * o.scale,
+      }));
+      if (
+        terrain.blocked.hits(bodies) ||
+        !terrain.water.contains(bodies) ||
+        !this.boatRoom(life, sample, identity, reserved)
+      )
+        return false;
+    }
+    return true;
+  }
+
   private boatRoom(
     target: TileLife,
     preview: Mover,

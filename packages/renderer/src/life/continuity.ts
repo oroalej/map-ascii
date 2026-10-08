@@ -440,6 +440,9 @@ export function projectMover(
       };
     }
   }
+  if (m.kind === 'boat' && m.boatShift !== undefined)
+    preview.boatShift =
+      ((oldX - preview.x) * -preview.hy + (oldY - preview.y) * preview.hx) / target.perMeter;
   const pose = target.pose(preview);
   if (
     !m.train &&
