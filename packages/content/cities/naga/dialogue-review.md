@@ -67,7 +67,7 @@ Every word was checked against Mintz's 1971 dictionary, downloaded from its Univ
 
 ## Street peddler calls (2026-10-08)
 
-The 104 legacy scenes remain intact. Added 21 original one-speaker peddler utterances: two plain calls per seven goods, four weather calls, two hover calls and one departure line. Total 125 of 140; 15 slots remain. All include Bikol, English and Tagalog. Sources explain trades and language forms; native-speaker review has not occurred. Takatak sells candy only as a conservative simulation choice under Ordinance 2021-004, without claiming a blanket ambulant ban.
+The 104 legacy scenes remain intact. Added 21 original one-speaker peddler utterances: two plain calls per seven goods, four weather calls, two hover calls and one departure line. Main's six event cheers are also retained. Total 131 of 140; 9 slots remain. All include Bikol, English and Tagalog. Sources explain trades and language forms; native-speaker review has not occurred. Takatak sells candy only as a conservative simulation choice under Ordinance 2021-004, without claiming a blanket ambulant ban.
 
 | ID | Bikol | Context |
 | --- | --- | --- |

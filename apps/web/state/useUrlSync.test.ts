@@ -24,7 +24,13 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/example?lat=1&lng=2&z=15');
   useAtlasStore.setState({ ...initialAtlasState(), camera });
   useAtlasInstance.setState({ atlas: atlas as unknown as Atlas });
-  useTourStore.setState({ tours: [tour], active: null, menuOpen: false });
+  useTourStore.setState({
+    dataStatus: 'ready',
+    pending: null,
+    tours: [tour],
+    active: null,
+    menuOpen: false,
+  });
   setTourRunner(runner);
   detach = attachUrlSync();
 });

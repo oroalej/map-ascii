@@ -181,6 +181,10 @@ it('merges the optional layer without dropping rows and restores the original ar
   );
   const report = JSON.parse(await readFile(join(dir, 'seasons-report.json'), 'utf8')) as {
     audit: { records: number };
+    corridors: { rows: number }[];
   };
-  expect(report.audit.records).toBeGreaterThan(100);
+  // Runs ship one record per edge; their rows are counted in the corridor report.
+  expect(report.audit.records).toBeGreaterThan(0);
+  expect(report.corridors[0]!.rows).toBeGreaterThan(100);
+  expect(report.audit.records).toBeLessThan(report.corridors[0]!.rows);
 });

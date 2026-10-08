@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { WorkerRequest } from './tiles';
+import type * as PMtilesModule from 'pmtiles';
+import { FetchSource, type Source } from 'pmtiles';
+import { RangeCacheSource } from './range-cache';
 const fixtures = vi.hoisted(() => ({
+  source: vi.fn(),
   fetch: vi.fn(),
   geometry: vi.fn(),
   sites: vi.fn(() => new Float64Array([1, 100, 200])),
@@ -21,8 +25,12 @@ vi.mock('./raster/geometry', () => ({
   transferables: () => [],
 }));
 
-vi.mock('pmtiles', () => ({
+vi.mock('pmtiles', async (load) => ({
+  ...(await load<typeof PMtilesModule>()),
   PMTiles: class {
+    constructor(source: unknown) {
+      fixtures.source(source);
+    }
     getHeader() {
       return Promise.resolve({
         minZoom: 7,
@@ -46,6 +54,29 @@ beforeEach(() => {
     active ? { residential: new Float64Array() } : {},
   );
 });
+
+it.each([false, true])(
+  'selects the pinned range source=%s and keeps Windows misses no-store',
+  async (pinned) => {
+    const scope = {
+      postMessage: vi.fn(),
+      onmessage: null as ((event: MessageEvent<WorkerRequest>) => void) | null,
+    };
+    vi.stubGlobal('self', scope);
+    vi.stubGlobal('navigator', { userAgent: 'Windows Chrome' });
+    vi.stubGlobal('caches', undefined);
+    const fetch = vi.fn(() => Promise.resolve(new Response(new Uint8Array(3), { status: 206 })));
+    vi.stubGlobal('fetch', fetch);
+    await import('./tiles.worker');
+    const url = `https://fixture.test/tiles/map.pmtiles${pinned ? '?v=1234abcd' : ''}`;
+    scope.onmessage!({ data: { type: 'init', url } } as MessageEvent<WorkerRequest>);
+    await vi.waitFor(() => expect(fixtures.source).toHaveBeenCalledTimes(1));
+    const source = fixtures.source.mock.calls[0]![0] as Source;
+    expect(source.constructor.name).toBe(pinned ? RangeCacheSource.name : FetchSource.name);
+    await source.getBytes(0, 3);
+    expect(fetch).toHaveBeenCalledWith(url, expect.objectContaining({ cache: 'no-store' }));
+  },
+);
 
 it('extracts drawable sites only when active, while finishing queued supplemental work across deactivation', async () => {
   fixtures.fetch.mockResolvedValue({ data: new Uint8Array() });

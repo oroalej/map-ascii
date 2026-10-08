@@ -3,6 +3,7 @@
  * and for vehicles their paint and part, for people their paint, part, and candle), which the
  * glyph pass draws over the map (shaders/glyph.ts). Pure, so it can be unit-tested.
  */
+import { THRONG_HEADINGS, type ThrongInkScale, type ThrongPayload } from './throng';
 import { classId } from '../classes';
 import { PackingOutcome } from './diagnostics';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
@@ -69,7 +70,11 @@ export type LifeGrid = {
   /** A point's position on the grid, in fractional cells (passes.ts `GridPlacement.toCell`). */
   toCell: (lng: number, lat: number) => [number, number];
   /** Reject a complete ground agent when any of its ASCII cells crosses forbidden terrain. */
-  allowsGroundCell?: (agent: VisibleAgent, col: number, row: number) => boolean;
+  allowsGroundCell?: ((agent: VisibleAgent, col: number, row: number) => boolean) & {
+    /** Immutable geographic terrain identities, when supplied by a paired life frame. */
+    terrainKey?: object;
+    hardTerrainKey?: object;
+  };
   /** Final painted agent index + 1; zero means no owner (including bird shadows). */
   owners?: Uint32Array;
   speakers?: SpeakerGrid;
@@ -186,6 +191,31 @@ let journal:
       members?: MemberRaster[];
     }
   | undefined;
+const crowdJournal: NonNullable<typeof journal> = { before: new Map(), denied: false };
+const CROWD_PREVIOUS: [number, number, number, number, number] = [0, 0, 0, 0, 0];
+let crowdRollbackCells = new Uint32Array(16);
+let crowdRollbackBytes = new Uint8Array(64);
+let crowdRollbackOwners = new Uint32Array(16);
+let crowdRollbackSize = 0;
+function rememberCrowdCell(out: Uint8Array, at: number) {
+  if (crowdRollbackSize === crowdRollbackCells.length) {
+    const capacity = crowdRollbackCells.length * 2;
+    const cells = new Uint32Array(capacity),
+      bytes = new Uint8Array(capacity * 4),
+      owners = new Uint32Array(capacity);
+    cells.set(crowdRollbackCells);
+    bytes.set(crowdRollbackBytes);
+    owners.set(crowdRollbackOwners);
+    crowdRollbackCells = cells;
+    crowdRollbackBytes = bytes;
+    crowdRollbackOwners = owners;
+  }
+  const slot = crowdRollbackSize++;
+  crowdRollbackCells[slot] = at;
+  for (let b = 0; b < 4; b++) crowdRollbackBytes[slot * 4 + b] = out[at + b]!;
+  crowdRollbackOwners[slot] = drawingOwners?.[at / 4] ?? 0;
+  crowdJournal.before.set(at, CROWD_PREVIOUS);
+}
 let fallbackStampedVehicles = new Uint8Array(0);
 let detailedStamp = false;
 let detailedPeopleStamp = false;
@@ -203,6 +233,9 @@ export type LifePackMetadata = {
   focus?: ReadonlySet<LifeFocus>;
   /** Only clocked candle writes; callers resolve final owners after all occlusion/rollback. */
   clockCells?: number[];
+  throng?: ThrongPayload;
+  throngMask?: Uint32Array;
+  throngCells?: number[];
 };
 
 /** Every complete texel write also replaces its frame-local owner. */
@@ -261,19 +294,21 @@ function rememberGroundCell(out: Uint8Array, at: number) {
     if (groundCells[at / 4]) journal.denied = true;
     // Preserve the ordinary five-value owner journal; speech adds its member
     // only when enabled, avoiding an unused slot in every painted-cell array.
-    journal.before.set(
-      at,
-      drawingSpeakers
-        ? [
-            out[at]!,
-            out[at + 1]!,
-            out[at + 2]!,
-            out[at + 3]!,
-            drawingOwners?.[at / 4] ?? 0,
-            drawingSpeakers.members[at / 4]!,
-          ]
-        : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
-    );
+    if (journal === crowdJournal) rememberCrowdCell(out, at);
+    else
+      journal.before.set(
+        at,
+        drawingSpeakers
+          ? [
+              out[at]!,
+              out[at + 1]!,
+              out[at + 2]!,
+              out[at + 3]!,
+              drawingOwners?.[at / 4] ?? 0,
+              drawingSpeakers.members[at / 4]!,
+            ]
+          : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
+      );
   }
   if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
@@ -317,6 +352,12 @@ export function packLife(
   if (drawingOwners && drawingOwners.length !== cells)
     throw new RangeError('Life owners must match the cell grid');
   out.fill(0);
+  if (metadata.throngMask) {
+    if (metadata.throngCells)
+      for (const cell of metadata.throngCells) metadata.throngMask.fill(0, cell * 8, cell * 8 + 8);
+    else metadata.throngMask.fill(0);
+  }
+  if (metadata.throngCells) metadata.throngCells.length = 0;
   if (grid.stampedVehicles && grid.stampedVehicles.length < agents.length)
     throw new RangeError('Wrong stamped vehicle mask size');
   if (!grid.stampedVehicles && fallbackStampedVehicles.length < agents.length)
@@ -340,12 +381,24 @@ export function packLife(
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
     else groundCells.fill(0, 0, cells);
     let drawn = 0;
-    // Fixed obstacles keep their cells as movers pass: parked cars, then vendors.
+    // Reserve event scenery, then event actors, then ownerless crowds; parked cars,
+    // vendor carts and ordinary movers follow in that order.
     // Owner indices still refer to the caller's original array.
-    for (const priority of [0, 1, 2])
+    for (const priority of [-2, -1, 0, 1, 2, 3]) {
+      if (priority === 0 && metadata.throng)
+        drawn += packThrong(out, grid, metadata.throng, theme, glyphIndex, glyphs, metadata);
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
-        if ((agent.parked ? 0 : agent.vehicle === 'cart' ? 1 : 2) !== priority) continue;
+        const stage = agent.eventScenery
+          ? -2
+          : agent.event || agent.eventGround
+            ? -1
+            : agent.parked
+              ? 1
+              : agent.vehicle === 'cart'
+                ? 2
+                : 3;
+        if (stage !== priority) continue;
         drawingOwner = index + 1;
         drawingClockCells =
           agent.candle && agent.effectClock !== undefined ? clockCells : undefined;
@@ -537,7 +590,7 @@ export function packLife(
           }
         } else {
           drawn += n;
-          for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+          if (!agent.eventScenery) for (const at of journal.before.keys()) groundCells[at / 4] = 1;
           if (
             n &&
             detailedStamp &&
@@ -546,6 +599,7 @@ export function packLife(
             stampedVehicles[index] = 1;
         }
       }
+    }
     journal = undefined;
     drawingOwner = 0;
     drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
@@ -561,6 +615,305 @@ export function packLife(
     drawingMini = false;
   }
 }
+
+/** New figure looks prepared per frame; every cell sharing a look reuses its ink. */
+export const MAX_COLD_THRONG_STAMPS = 128;
+/** One look's complete ink, relative to its anchor cell; dynamic occupancy is checked on copy. */
+type CrowdInk = {
+  cells?: Int32Array;
+  bytes?: Uint8Array;
+  /** Most street-level figures occupy one texel: avoid two tiny typed allocations each. */
+  single?: readonly [number, number, number];
+  complete: boolean;
+};
+type InkTable = {
+  theme: Theme;
+  glyphs: LifeGlyphs;
+  key: string;
+  cellWidth: number;
+  cellHeight: number;
+  inks: Map<number, CrowdInk>;
+};
+/** Recent scales survive zooming back and forth. */
+const inkTables: InkTable[] = [];
+const MAX_INK_TABLES = 8;
+function inkTable(theme: Theme, glyphs: LifeGlyphs, scale: ThrongInkScale, grid: LifeGrid) {
+  let table = inkTables.find(
+    (t) =>
+      t.theme === theme &&
+      t.glyphs === glyphs &&
+      t.key === scale.key &&
+      t.cellWidth === grid.cellWidth &&
+      t.cellHeight === grid.cellHeight,
+  );
+  if (table) return table;
+  table = {
+    theme,
+    glyphs,
+    key: scale.key,
+    cellWidth: grid.cellWidth,
+    cellHeight: grid.cellHeight,
+    inks: new Map(),
+  };
+  if (inkTables.length >= MAX_INK_TABLES) inkTables.shift();
+  inkTables.push(table);
+  return table;
+}
+let crowdInk = new Uint8Array(0);
+let crowdInkGround = new Uint8Array(0);
+/**
+ * Draw one look (`ThrongCell.look`) centred on a cell of a small scratch patch, in a metric
+ * frame at the shared ink scale, including any part that would leave the screen.
+ */
+function prepareCrowdInk(
+  look: number,
+  scale: ThrongInkScale,
+  grid: LifeGrid,
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+  glyphs: LifeGlyphs,
+): CrowdInk {
+  const paint = look & 31,
+    seated = !!((look >>> 7) & 1),
+    angle = ((look >>> 8) / THRONG_HEADINGS) * 2 * Math.PI;
+  const hx = Math.cos(angle),
+    hy = Math.sin(angle);
+  const agent: VisibleAgent = {
+    kind: 'person',
+    lng: 0,
+    lat: 0,
+    paint,
+    flap: (look >>> 5) & 1,
+    candle: !!((look >>> 6) & 1),
+    eventGround: 'throng',
+    ahead: [hx, hy],
+    side: [hy, -hx],
+    ...(seated && {
+      eventRole: 'seated' as const,
+      people: [{ figure: 'seated' as const, paint, lateral: 0, back: 0, flap: 0 }],
+    }),
+  };
+  const pad = Math.ceil(3 * (Math.abs(scale.x) + Math.abs(scale.y))) + 4;
+  const size = pad * 2 + 1;
+  if (crowdInk.length < size * size * 4) {
+    crowdInk = new Uint8Array(size * size * 4);
+    crowdInkGround = new Uint8Array(size * size);
+  }
+  crowdInk.fill(0, 0, size * size * 4);
+  crowdInkGround.fill(0, 0, size * size);
+  const owners = drawingOwners,
+    occupied = groundCells;
+  drawingOwners = undefined;
+  groundCells = crowdInkGround;
+  const capture = crowdJournal;
+  capture.before.clear();
+  capture.denied = capture.incomplete = false;
+  capture.memberCount = undefined;
+  capture.members = undefined;
+  crowdRollbackSize = 0;
+  journal = capture;
+  let n: number;
+  try {
+    n = drawAgent(
+      crowdInk,
+      {
+        cols: size,
+        rows: size,
+        cellWidth: grid.cellWidth,
+        cellHeight: grid.cellHeight,
+        // Metres east/north of the anchor cell's centre.
+        toCell: (x, y) => [pad + 0.5 + x * scale.x, pad + 0.5 - y * scale.y],
+      },
+      agent,
+      theme,
+      glyphIndex,
+      glyphs,
+    );
+  } finally {
+    drawingOwners = owners;
+    groundCells = occupied;
+    journal = undefined;
+  }
+  const singleCell = capture.before.size === 1;
+  let single: readonly [number, number, number] | undefined;
+  const cells = singleCell ? undefined : new Int32Array(capture.before.size * 2),
+    bytes = singleCell ? undefined : new Uint8Array(capture.before.size * 4);
+  let slot = 0;
+  for (const at of capture.before.keys()) {
+    const dc = ((at / 4) % size) - pad,
+      dr = Math.floor(at / 4 / size) - pad;
+    if (singleCell)
+      single = [
+        dc,
+        dr,
+        crowdInk[at]! |
+          (crowdInk[at + 1]! << 8) |
+          (crowdInk[at + 2]! << 16) |
+          (crowdInk[at + 3]! << 24),
+      ];
+    else {
+      cells![slot * 2] = dc;
+      cells![slot * 2 + 1] = dr;
+      bytes!.set(crowdInk.subarray(at, at + 4), slot++ * 4);
+    }
+  }
+  return { cells, bytes, single, complete: !!n && !capture.incomplete };
+}
+function packThrong(
+  out: Uint8Array,
+  grid: LifeGrid,
+  payload: ThrongPayload,
+  theme: Theme,
+  glyphIndex: (glyph: string) => number,
+  glyphs: LifeGlyphs,
+  metadata: LifePackMetadata,
+) {
+  let used = 0,
+    drawn = 0;
+  const speakers = drawingSpeakers;
+  drawingSpeakers = undefined;
+  drawingOwner = 0;
+  drawingFocus = 0;
+  drawingClockCells = undefined;
+  const reusable = crowdJournal;
+  let prepared = 0;
+  payload.stampPending = false;
+  const table = payload.ink && inkTable(theme, glyphs, payload.ink, grid);
+  for (const cell of payload.cells) {
+    let n: number;
+    if (table && cell.look !== undefined) {
+      let ink = table.inks.get(cell.look);
+      if (!ink && prepared >= MAX_COLD_THRONG_STAMPS) {
+        payload.stampPending = true;
+        // Until this scale's ink is ready, the same look from a recent scale stands in.
+        for (let t = inkTables.length - 1; t >= 0 && !ink; t--) {
+          const other = inkTables[t]!;
+          if (other !== table && other.theme === theme && other.glyphs === glyphs)
+            ink = other.inks.get(cell.look);
+        }
+        if (!ink) continue;
+      } else if (!ink) {
+        prepared++;
+        ink = prepareCrowdInk(cell.look, payload.ink!, grid, theme, glyphIndex, glyphs);
+        table.inks.set(cell.look, ink);
+      }
+      if (!ink.complete) continue;
+      // Every texel of the figure stands on its own permitted, terrain-clear ground.
+      if (cell.permitInk !== ink || cell.permitVersion !== payload.version) {
+        const allows = payload.allows;
+        let permitted = true;
+        if (allows && ink.single)
+          permitted = allows(cell.agent, cell.col + ink.single[0], cell.row + ink.single[1]);
+        else if (allows)
+          for (let i = 0; i < ink.cells!.length && permitted; i += 2)
+            permitted = allows(
+              cell.agent,
+              cell.col + ink.cells![i]!,
+              cell.row + ink.cells![i + 1]!,
+            );
+        cell.permitted = permitted;
+        cell.permitInk = ink;
+        cell.permitVersion = payload.version;
+      }
+      if (!cell.permitted) continue;
+      if (ink.single) {
+        const [dc, dr, value] = ink.single;
+        const col = cell.col + dc,
+          row = cell.row + dr;
+        if (
+          col < 0 ||
+          row < 0 ||
+          col >= grid.cols ||
+          row >= grid.rows ||
+          groundCells[row * grid.cols + col]
+        )
+          continue;
+        if (used + 1 > payload.cap) break;
+        used++;
+        drawn++;
+        const at = (row * grid.cols + col) * 4;
+        for (let b = 0; b < 4; b++) out[at + b] = (value >>> (b * 8)) & 255;
+        if (drawingOwners) drawingOwners[at / 4] = 0;
+        groundCells[at / 4] = 1;
+        metadata.throngMask?.set(FULL_CROWD_MASK, at * 2);
+        metadata.throngCells?.push(at / 4);
+        continue;
+      }
+      const cells = ink.cells!,
+        bytes = ink.bytes!;
+      let denied = false;
+      for (let i = 0; i < cells.length; i += 2) {
+        const col = cell.col + cells[i]!,
+          row = cell.row + cells[i + 1]!;
+        if (
+          col < 0 ||
+          row < 0 ||
+          col >= grid.cols ||
+          row >= grid.rows ||
+          groundCells[row * grid.cols + col]
+        ) {
+          denied = true;
+          break;
+        }
+      }
+      if (denied) continue;
+      if (used + cells.length / 2 > payload.cap) break;
+      used += cells.length / 2;
+      drawn++;
+      for (let i = 0; i < cells.length; i += 2) {
+        const col = cell.col + cells[i]!,
+          row = cell.row + cells[i + 1]!;
+        const at = (row * grid.cols + col) * 4;
+        for (let b = 0; b < 4; b++) out[at + b] = bytes[i * 2 + b]!;
+        if (drawingOwners) drawingOwners[at / 4] = 0;
+        groundCells[at / 4] = 1;
+        metadata.throngMask?.set(FULL_CROWD_MASK, at * 2);
+        metadata.throngCells?.push(at / 4);
+      }
+      continue;
+    } else {
+      reusable.before.clear();
+      reusable.denied = false;
+      reusable.incomplete = false;
+      reusable.memberCount = undefined;
+      reusable.members = undefined;
+      crowdRollbackSize = 0;
+      journal = reusable;
+      n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
+    }
+    const attempt = journal;
+    if (!cell.mask && grid.allowsGroundCell)
+      for (const at of attempt.before.keys())
+        if (
+          !grid.allowsGroundCell(cell.agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
+        ) {
+          attempt.denied = true;
+          break;
+        }
+    const overCapacity = used + attempt.before.size > payload.cap;
+    if (!n || attempt.denied || attempt.incomplete || overCapacity) {
+      for (let slot = 0; slot < crowdRollbackSize; slot++) {
+        const at = crowdRollbackCells[slot]!;
+        for (let b = 0; b < 4; b++) out[at + b] = crowdRollbackBytes[slot * 4 + b]!;
+        if (drawingOwners) drawingOwners[at / 4] = crowdRollbackOwners[slot]!;
+      }
+      if (overCapacity) break;
+      continue;
+    }
+    used += attempt.before.size;
+    drawn++;
+    for (const at of attempt.before.keys()) {
+      const i = at / 4;
+      groundCells[i] = 1;
+      if (metadata.throngMask) metadata.throngMask.set(cell.mask ?? FULL_CROWD_MASK, i * 8);
+      metadata.throngCells?.push(i);
+    }
+  }
+  journal = undefined;
+  drawingSpeakers = speakers;
+  return drawn;
+}
+const FULL_CROWD_MASK = new Uint32Array(8).fill(0xffffffff);
 
 /** Decorative ink fills empty cells only after its detailed source was successfully admitted. */
 function drawPuffs(
@@ -674,6 +1027,46 @@ function drawAgent(
       r = Math.floor(row),
       index = glyphIndex(agent.prop === 'event' ? agent.glyph! : '•');
     if (c < 0 || r < 0 || c >= cols || r >= rows || index <= 0 || index > MAX_GLYPHS) return 0;
+    if (agent.eventFootprint && agent.prop === 'event' && agent.ahead && agent.side) {
+      const [ax, ay] = toCell(...agent.ahead),
+        [sx, sy] = toCell(...agent.side);
+      const length = agent.eventFootprint.length,
+        width = agent.eventFootprint.width;
+      const offsets = [
+        [-0.5, -0.5],
+        [0.5, -0.5],
+        [0.5, 0.5],
+        [-0.5, 0.5],
+      ];
+      const corners = offsets.map(([x, y]) => [
+        col + (ax - col) * length * x! + (sx - col) * width * y!,
+        row + (ay - row) * length * x! + (sy - row) * width * y!,
+      ]);
+      const minX = Math.floor(Math.min(...corners.map((p) => p[0]!))),
+        maxX = Math.floor(Math.max(...corners.map((p) => p[0]!)));
+      const minY = Math.floor(Math.min(...corners.map((p) => p[1]!))),
+        maxY = Math.floor(Math.max(...corners.map((p) => p[1]!)));
+      let n = 0;
+      for (let y = minY; y <= maxY; y++)
+        for (let x = minX; x <= maxX; x++) {
+          if (x < 0 || y < 0 || x >= cols || y >= rows) {
+            if (journal) journal.incomplete = true;
+            continue;
+          }
+          const at = (y * cols + x) * 4;
+          rememberGroundCell(out, at);
+          writeCell(
+            out,
+            at,
+            index,
+            classId(lifeClassFor.person),
+            EVENT_PERSON_BITS,
+            personByte(agent.paint ?? PAINT_NONE, PersonPart.figure, agent.candle),
+          );
+          n++;
+        }
+      return n ? 1 : 0;
+    }
     const at = (r * cols + c) * 4;
     rememberGroundCell(out, at);
     writeCell(
@@ -682,7 +1075,7 @@ function drawAgent(
       index,
       classId(lifeClassFor.person),
       agent.eventGround ? EVENT_PERSON_BITS : CellBit.person,
-      personByte(agent.paint ?? PAINT_NONE, PersonPart.figure),
+      personByte(agent.paint ?? PAINT_NONE, PersonPart.figure, agent.candle),
     );
     return 1;
   }
@@ -1473,7 +1866,8 @@ function stamp(
  * longer axis on the grid. A cell takes `─` or `│` where the line runs straight on to the next
  * cell, and `╱` or `╲` where it steps across a row and a column at once, so a slanted line reads
  * as a staircase rather than a band. Cells are painted in turn from its `paints`, and its tip
- * glyph goes in the last cell. A line shorter than a cell on screen isn't drawn. Returns
+ * glyph goes in the last cell. A line shorter than a cell on screen, or one that stays within a
+ * single cell, isn't drawn. Returns
  * whether any cell landed on the grid.
  */
 function drawLine(
@@ -1504,6 +1898,8 @@ function drawLine(
       if (!last || last[0] !== cell[0] || last[1] !== cell[1]) path.push(cell);
     }
   }
+  // A cell long, yet within one cell: no step to turn its glyph by.
+  if (path.length < 2) return false;
   const cls = classId(lifeClassFor.boat);
   const seen = new Set<number>();
   const marks: { at: number; glyph: number }[] = [];

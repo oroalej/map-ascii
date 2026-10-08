@@ -761,7 +761,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Owner supplied overhead correction; © Google and imagery providers. Geometry © OpenStreetMap contributors (ODbL). Representative draft burial layout.",
+  "credit": "Owner supplied overhead correction; © Google and imagery providers. Geometry © OpenStreetMap contributors (ODbL). Representative burial layout.",
   "sources": [
     {
       "title": "OpenStreetMap cemetery, roads and standing facilities",
@@ -770,7 +770,7 @@
     },
     {
       "title": "Owner supplied Peñafrancia cemetery comparison",
-      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Dense raised tomb/crypt rows and low slab roofs replace the misleading uninterrupted lawn appearance. Row axes follow mapped internal access; source road clearances interrupt rows. Counts represent geometry, not individual burials. No deceased names or inferred historical dates."
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Dense raised tomb/crypt rows and low slab roofs replace the misleading uninterrupted lawn appearance. Row axes follow mapped internal access; source road clearances interrupt rows. Counts represent geometry, not individual burials. No deceased names or inferred historical dates."
     }
   ]
 }

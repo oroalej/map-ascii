@@ -483,6 +483,21 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
     } else if (glyph === ProcessionGlyph.drum) {
       fill(slot, w * 0.15, h * 0.3, w * 0.85, h * 0.75);
       fill(slot, w * 0.05, h * 0.2, w * 0.95, h * 0.3);
+    } else if (glyph >= ProcessionGlyph.crowd0 && glyph <= ProcessionGlyph.crowd3) {
+      const phase = glyph.charCodeAt(0) - ProcessionGlyph.crowd0.charCodeAt(0);
+      for (let row = 0; row < 4; row++)
+        for (let col = 0; col < 3; col++) {
+          const x = ((col + 0.2 + ((row + phase) % 2) * 0.15) * w) / 3,
+            y = ((row + 0.15) * h) / 4;
+          fill(slot, x, y, x + w * 0.12, y + h * 0.08);
+          fill(slot, x - w * 0.04, y + h * 0.09, x + w * 0.17, y + h * 0.17);
+        }
+    } else if (glyph === ProcessionGlyph.platform || glyph === ProcessionGlyph.canopy) {
+      fill(slot, w * 0.08, h * 0.12, w * 0.92, h * 0.88);
+    } else if (glyph === ProcessionGlyph.table) {
+      fill(slot, w * 0.1, h * 0.3, w * 0.9, h * 0.7);
+    } else if (glyph === ProcessionGlyph.support) {
+      fill(slot, w * 0.4, h * 0.1, w * 0.6, h * 0.9);
     } else if (glyph === ProcessionGlyph.bugle) {
       fill(slot, w * 0.15, h * 0.4, w * 0.7, h * 0.55);
       fill(slot, w * 0.7, h * 0.25, w * 0.9, h * 0.7);

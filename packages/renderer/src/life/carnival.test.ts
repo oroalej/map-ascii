@@ -199,7 +199,7 @@ it('blocks solid ride footprints only while active and leaves the midway walkabl
   expect(world.cellTerrain()!.trees.hits([body(ride)])).toBe(false);
 });
 it('lazily supplies physical obstacles when already loaded raw tiles acquire an active season', () => {
-  const parse = vi.spyOn(shared, 'parseSeasonalRecord');
+  const parse = vi.spyOn(shared, 'parseSeasonalTileRecord');
   const world = new LifeWorld();
   world.setSeasons(simulationSeasons([season]));
   world.sync([

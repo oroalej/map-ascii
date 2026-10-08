@@ -317,7 +317,11 @@ describe('glyph set', () => {
   const peddlerGlyphs = ['\uE0C9', '\uE0CA', '\uE0CB'];
   it('appends distinct procedural carts after the complete previous atlas', () => {
     for (const theme of Object.values(themes)) {
-      expect(mapGlyphs(theme).slice(415)).toEqual([...FOLKLORE_GLYPHS, ...peddlerGlyphs]);
+      expect(mapGlyphs(theme).slice(415)).toEqual([
+        ...FOLKLORE_GLYPHS,
+        ...PROCESSION_GLYPHS.slice(4),
+        ...peddlerGlyphs,
+      ]);
       for (const glyph of peddlerGlyphs) {
         expect(draw(glyph).drawn).toBe(true);
         expect(personGlyphs()).not.toContain(glyph);
@@ -335,7 +339,11 @@ describe('glyph set', () => {
           .update(JSON.stringify(glyphs.slice(0, 415)))
           .digest('hex'),
       ).toBe('35aa289039b8d6935914eaa68161933bdac91f51b6afaeb09d03509683ddf96c');
-      expect(glyphs.slice(415)).toEqual([...FOLKLORE_GLYPHS, ...peddlerGlyphs]);
+      expect(glyphs.slice(415)).toEqual([
+        ...FOLKLORE_GLYPHS,
+        ...PROCESSION_GLYPHS.slice(4),
+        ...peddlerGlyphs,
+      ]);
       expect(glyphs.slice(408, 409 + PEDESTRIAN_GLYPHS.length)).toEqual([
         ...CANDLE_GLYPHS,
         ...PEDESTRIAN_GLYPHS,
@@ -380,7 +388,12 @@ describe('glyph set', () => {
       expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS);
       expect(
         glyphs.slice(-PROCESSION_GLYPHS.length - FOLKLORE_GLYPHS.length - peddlerGlyphs.length),
-      ).toEqual([...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS, ...peddlerGlyphs]);
+      ).toEqual([
+        ...PROCESSION_GLYPHS.slice(0, 4),
+        ...FOLKLORE_GLYPHS,
+        ...PROCESSION_GLYPHS.slice(4),
+        ...peddlerGlyphs,
+      ]);
       for (const glyph of [...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS]) {
         const rendered = draw(glyph);
         expect(rendered.drawn).toBe(true);

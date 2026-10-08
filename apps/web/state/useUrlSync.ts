@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { initialAtlasState, useAtlasInstance, useAtlasStore } from './store';
-import { tourControls } from './tour';
+import { tourControls, useTourStore } from './tour';
 import { parseViewParams, serializeViewParams } from './url';
 import { selectPlace } from './selection';
 
@@ -21,7 +21,11 @@ function currentUrl(): string | null {
     year: s.year,
     defaultYear: DEFAULT_YEAR,
     sel: s.selectedId,
-    tour: s.tour,
+    tour:
+      s.tour ??
+      (useTourStore.getState().pending
+        ? { ...useTourStore.getState().pending!, paused: true }
+        : null),
   });
   return `${window.location.pathname}?${query}${window.location.hash}`;
 }
@@ -40,6 +44,7 @@ const here = () => `${window.location.pathname}${window.location.search}${window
 export function attachUrlSync() {
   const initial = parseViewParams(window.location.search);
   const store = useAtlasStore.getState();
+  tourControls.restoreFromUrl(initial.tour ?? null, initial.step ?? 0);
   selectPlace(initial.sel ?? null);
   if (initial.year !== undefined) store.setYear(initial.year);
 
@@ -75,6 +80,15 @@ export function attachUrlSync() {
     }
   });
 
+  const offPending = useTourStore.subscribe((state, previous) => {
+    if (fromHistory || state.pending === previous.pending) return;
+    window.clearTimeout(timer);
+    timer = window.setTimeout(() => {
+      const next = currentUrl();
+      if (next && next !== here()) window.history.replaceState(null, '', next);
+    }, REPLACE_DELAY_MS);
+  });
+
   const onPopState = () => {
     window.clearTimeout(timer);
     const params = parseViewParams(window.location.search);
@@ -85,9 +99,7 @@ export function attachUrlSync() {
       // Even an empty camera update stops a flight from the history entry just left.
       atlas?.setCamera(params.camera);
       atlas?.setHighlighted([]);
-      if (!params.tour || !tourControls.restore(params.tour, params.step ?? 0)) {
-        tourControls.exit();
-      }
+      tourControls.restoreFromUrl(params.tour ?? null, params.step ?? 0);
       const store = useAtlasStore.getState();
       selectPlace(params.sel ?? null);
       store.setYear(year);
@@ -101,6 +113,7 @@ export function attachUrlSync() {
   return () => {
     window.clearTimeout(timer);
     unsubscribe();
+    offPending();
     window.removeEventListener('popstate', onPopState);
   };
 }

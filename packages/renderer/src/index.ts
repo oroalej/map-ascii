@@ -134,6 +134,8 @@ import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
+import { createThrongPool } from './life/throng-pool';
+import { deferredHost } from './life/deferred-host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { EmojiController, type EmojiInView } from './life/emoji-view';
@@ -239,6 +241,8 @@ export type AtlasOptions = {
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
   tilesUrl: string;
+  /** Content pin, supplied only for archive bytes matching the published lock. */
+  tilesVersion?: string | undefined;
   theme?: ThemeName;
   /**
    * Map cell size in CSS pixels by zoom (SPEC.md §2 "Cell size"; default `DEFAULT_CELLS`:
@@ -268,6 +272,11 @@ export type AtlasOptions = {
   profiling?: boolean;
   /** Run Life in a worker when available; false selects the synchronous in-process path. */
   lifeWorker?: boolean;
+  /**
+   * Prepare event crowd ground in a pool of workers when available; false prepares it on the
+   * main thread within a per-frame budget.
+   */
+  crowdWorkers?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -302,6 +311,8 @@ export type AtlasOptions = {
 export type { ProcessionRun } from './life/simulate';
 
 export type AtlasEventMap = {
+  /** First qualifying canvas draw submission in this context generation. */
+  ready: { firstTileFrame: number };
   folklorechange: boolean;
   /** A visible simulated agent under the mouse, in canvas CSS pixels. */
   lifehover: LifeHover;
@@ -373,6 +384,9 @@ export type LabelInView = {
 
 /** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
 export type AtlasStats = {
+  readyMs: number | null;
+  /** A glyph pass has completed using at least one actual tile mesh since context creation. */
+  hasDrawnTileFrame: boolean;
   quality: QualityState;
   /** Frames drawn in the last second (idle frames that draw nothing don't count). */
   fps: number;
@@ -462,6 +476,9 @@ const smooth = (average: number, sample: number) =>
  * Steps 1–3 run only when the camera or tiles change (passes.ts has the passes).
  */
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
+  const createdAt = performance.now();
+  let readyMs: number | null = null;
+  let drawableBuffers = false;
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
   if (!gl) {
     throw new Error('ASCII Atlas requires WebGL2, which this browser does not support.');
@@ -580,6 +597,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
@@ -756,9 +774,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // Tiles
   const profiler = options.profiling ? new FrameProfiler() : undefined;
+  const archiveUrl = new URL(options.tilesUrl, canvas.ownerDocument.baseURI);
+  if (options.tilesVersion) archiveUrl.searchParams.set('v', options.tilesVersion);
   const tileCache = new TileCache(
     gl,
-    new URL(options.tilesUrl, canvas.ownerDocument.baseURI).href,
+    archiveUrl.href,
     () => {
       if (destroyed) return;
       cellDirty = true;
@@ -806,6 +826,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     grid = next.grid;
     labelGrid = nextLabels.grid;
     labelVisibilityDirty = true;
+    // Coarse coverage can arrive and draw while the detailed view still loads.
+    tileCache.regionTilesForView(camera, cssSize());
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -821,6 +843,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     cellsFor = cellsKey(v, placement, labelPlacement);
     cellsTargets = targets;
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
+    const regionTiles = tileCache.regionTilesForView(camera, cssSize());
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
@@ -838,8 +861,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return out;
     };
     // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
-    const region = layer(tileCache.regionTilesFor(tiles));
+    const region = layer(regionTiles);
     crownTiles = layer(tiles);
+    drawableBuffers = region.length > 0 || crownTiles.length > 0;
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
     names.collect(targets, v, labelPlacement, labels);
     labelsForReport = names.draw(
@@ -941,10 +965,29 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     dialogue: options.dialogue && dialogueChoices(options.dialogue),
     periods: options.dialogue?.periods,
   };
-  const host =
-    options.lifeWorker !== false && typeof Worker !== 'undefined'
-      ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
-      : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler);
+  const host = deferredHost(
+    () =>
+      options.lifeWorker !== false && typeof Worker !== 'undefined'
+        ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
+        : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler),
+    () => life.enabled && !reducedMotion && !lost && !destroyed,
+    { processions, emergency: options.emergency },
+  );
+  let hostTurn = 0;
+  const cancelHostTurn = () => {
+    if (hostTurn) cancelAnimationFrame(hostTurn);
+    hostTurn = 0;
+  };
+  const scheduleHost = () => {
+    if (hostTurn || host.started || !life.enabled || reducedMotion || lost || destroyed) return;
+    hostTurn = requestAnimationFrame(() => {
+      hostTurn = 0;
+      if (host.start()) {
+        lastSun = -Infinity;
+        drawDirty = true;
+      }
+    });
+  };
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
   const lifeView = () => lifePause.view(host.latest());
@@ -1116,7 +1159,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (!lifeShown) return;
     }
     // Nothing out, and the texture already empty: nothing to upload.
-    if (agents.length === 0 && !lifeShown) {
+    const acceptedCrowd = lifeActive() ? drawnLife?.throngRun : undefined;
+    const crowdEvent = acceptedCrowd && processions.find((p) => p.id === acceptedCrowd.id);
+    if (agents.length === 0 && !crowdEvent && !lifeShown) {
       agentsDrawn = 0;
       lifeAgents = agents;
       return;
@@ -1126,6 +1171,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       (emojiEnabled && camera.zoom >= EMOJI_ZOOM);
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
+    const guardLife = drawnLife;
+    if (crowdEvent && !crowdPool && options.crowdWorkers !== false && typeof Worker !== 'undefined')
+      crowdPool = createThrongPool(() => {
+        drawDirty = true;
+      });
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -1138,11 +1188,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
-      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
+      drawnLife,
       trackSpeech ? speechSpeakers : undefined,
       drawnLife?.puffs,
+      crowdEvent && acceptedCrowd
+        ? {
+            event: crowdEvent,
+            progress: acceptedCrowd.progress,
+            quality: knobs.throng,
+            clock: drawnLife?.signalClock,
+            guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
+            pool: crowdPool,
+          }
+        : undefined,
     );
-    lifeShown = agents.length > 0;
+    lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;
   };
   const reportCues = (kind: 'speech' | 'emoji', now: number) => {
@@ -1484,12 +1544,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crop: CropNow | undefined;
   let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
+  /** The event last started with `playProcession`, until stopped (its run may still be pending). */
+  let played: string | undefined;
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
     clearFolklore();
     lifeHover.clear();
     season = next;
+    // A replay belongs to its season: showing another season ends it.
+    const run = lifeView()?.procession;
+    const replayed = processions.find((p) => p.id === (run && !run.live ? run.id : played));
+    if (replayed?.season && replayed.season !== season?.id) {
+      played = undefined;
+      host.stop();
+      reportProcession();
+    }
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     seasonSnapshot = seasonState();
     warmSeasonalPrograms();
@@ -1899,6 +1969,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         reducedMotion,
       );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
+      if (readyMs === null && drawableBuffers && !destroyed && !lost) {
+        readyMs = performance.now() - createdAt;
+        if (typeof performance.mark === 'function') performance.mark('atlas:ready');
+        scheduleHost();
+        emit('ready', { firstTileFrame: readyMs });
+      }
       gpuTimer.end();
       lastDraw = now;
       frameMs = smooth(frameMs, performance.now() - frameStart);
@@ -1977,6 +2053,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    readyMs = null;
+    drawableBuffers = false;
+    cancelHostTurn();
+    if (!host.started) host.clearTiles();
     lastCloudAt = performance.now();
     clearFolklore();
     host.invalidateFrame();
@@ -1990,7 +2070,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     hoverIndex = 0;
     emit('hover', { featureId: null, feature: null, point: null });
     cancelAnimationFrame(raf);
-    programs?.glyphWarmup?.cancel();
+    if (programs) deletePrograms(gl, programs);
     programs = undefined;
     dropGlyphs(false);
     targets = undefined;
@@ -2133,6 +2213,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emoji.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      if (!enabled && life.enabled) host.start();
+      else cancelHostTurn();
       lastCloudAt = performance.now();
       clearFolklore();
       host.invalidateFrame();
@@ -2165,6 +2247,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getFeature: (featureId) => source.featureById(featureId),
     getStats: () => ({
+      readyMs,
+      hasDrawnTileFrame: readyMs !== null,
       quality: quality.state,
       fps: drawTimes.length,
       frameMs,
@@ -2184,7 +2268,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       host.invalidateFolklore();
       lifeHover.pointer(null);
       if (settings.time !== undefined && settings.time !== life.time) livePause.reset();
+      const wasEnabled = life.enabled;
       life = { ...life, ...settings };
+      if (!wasEnabled && life.enabled) host.start();
+      if (!life.enabled) cancelHostTurn();
       updateSeason();
       lifePause.tick(performance.now(), lifeRunning());
       speech.clear();
@@ -2211,6 +2298,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     setProcessions(routes) {
       clearFolklore();
       processions = routes;
+      played = undefined;
       host.setProcessions(routes);
       lifeHover.clear();
       livePause.reset();
@@ -2226,6 +2314,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const route = processions.find((p) => p.id === id);
       if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
         return false;
+      played = id;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       reportProcession();
@@ -2233,6 +2322,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return true;
     },
     stopProcession() {
+      played = undefined;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       host.stop();
@@ -2260,10 +2350,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      crowdPool?.destroy();
       names.clear();
       lifeHover.pointer(null);
       speech.clear();
       emoji.clear();
+      cancelHostTurn();
       host.dispose();
       clearFolklore();
       destroyed = true;

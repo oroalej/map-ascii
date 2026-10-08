@@ -49,6 +49,76 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('requests coarse coverage before fine tiles and draws it while they load', () => {
+    const { cache, source } = setup();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    const coarse = source.request.mock.calls[0]![0];
+    expect(coarse.z).toBeLessThan(camera.zoom);
+    const coarseRequests = source.request.mock.calls.length;
+    expect(cache.tilesToDraw(camera, size)).toEqual([]);
+    expect(source.request.mock.calls[coarseRequests]![0].z).toBeGreaterThan(coarse.z);
+    source.handlers.tile(tileKey(coarse), geometry);
+    expect(cache.regionTilesForView(camera, size)).toContainEqual(coarse);
+    expect(cache.tilesToDraw(camera, size)).toContainEqual(coarse);
+    cache.suspend();
+    source.request.mockClear();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    cache.resume();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(source.request).toHaveBeenCalled();
+  });
+
+  it('does not request coarse coverage before the archive header arrives', () => {
+    const cache = new TileCache({} as GL, 'https://example.test/x.pmtiles', vi.fn());
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(sources[0]!.request).not.toHaveBeenCalled();
+  });
+
+  it('keeps loaded region children visible while a zoomed-out tile loads', () => {
+    const { cache, source } = setup();
+    cache.regionTilesForView(camera, size);
+    const child = source.request.mock.calls[0]![0];
+    expect(child.z).toBe(11);
+    const absentChild = { ...child, x: child.x ^ 1 };
+    source.handlers.tile(tileKey(child), geometry);
+    source.handlers.tile(tileKey(absentChild), null);
+    source.request.mockClear();
+    const zoomedOut = { ...camera, zoom: 10.5 };
+    expect(cache.regionTilesForView(zoomedOut, size)).toContainEqual(child);
+    expect(cache.regionTilesForView(zoomedOut, size)).not.toContainEqual(absentChild);
+    expect(source.request.mock.calls.every(([tile]) => tile.z === 10)).toBe(true);
+    expect(cache.tilesToDraw(zoomedOut, size)).toContainEqual(child);
+  });
+
+  it.each([false, true])(
+    'draws a loaded grandparent through a null parent and view absence=%s',
+    (absent) => {
+      const { cache, source } = setup();
+      cache.tilesToDraw(camera, size);
+      const tile = source.request.mock.calls[0]![0];
+      const parent = { z: tile.z - 1, x: Math.floor(tile.x / 2), y: Math.floor(tile.y / 2) };
+      const grandparent = { z: tile.z - 2, x: Math.floor(tile.x / 4), y: Math.floor(tile.y / 4) };
+      source.handlers.tile(tileKey(parent), null);
+      source.handlers.tile(tileKey(grandparent), geometry);
+      if (absent) source.handlers.tile(tileKey(tile), null);
+      source.request.mockClear();
+      expect(cache.tilesToDraw(camera, size)).toContainEqual(grandparent);
+      expect(cache.tilesToDraw(camera, size)).not.toContainEqual(parent);
+      expect(cache.tilesToDraw(camera, size)).not.toContainEqual(tile);
+      expect(
+        source.request.mock.calls.some(([requested]) => tileKey(requested) === tileKey(tile)),
+      ).toBe(!absent);
+    },
+  );
+  it('excludes null children from fallback', () => {
+    const { cache, source } = setup();
+    cache.tilesToDraw(camera, size);
+    const tile = source.request.mock.calls[0]![0];
+    const child = { z: tile.z + 1, x: tile.x * 2, y: tile.y * 2 };
+    source.handlers.tile(tileKey(child), null);
+    expect(cache.tilesToDraw(camera, size)).not.toContainEqual(child);
+  });
   it('backfills detailed tiles loaded before activation and remembers computed-empty sites', () => {
     const { cache, source } = setup();
     const tile = { z: 16, x: 55193, y: 30261 };

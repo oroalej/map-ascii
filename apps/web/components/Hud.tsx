@@ -1,9 +1,7 @@
 'use client';
 
+import { cityTime, legendEntries, legendGroup } from '@atlas/renderer/hud';
 import {
-  cityTime,
-  legendEntries,
-  legendGroup,
   type Atlas,
   type FixtureVisibility,
   type LegendIcon,
@@ -29,6 +27,7 @@ import {
 } from 'react';
 import { areaAt, scaleBar } from '@/lib/geo';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
+import { scheduleAutomaticJson } from '@/lib/startup';
 import { isSubdivisionAreas } from '@/lib/guards';
 import { useSmallScreen } from '@/lib/screen';
 import { TIME_CHOICES, useLifeStore, WIND_CHOICES, type TimeChoice } from '@/state/life';
@@ -76,8 +75,12 @@ function QualityControl() {
 const round = (value: number, step: number) => Math.round(value / step) * step;
 
 /** Load `<city>.subdivisions.json` and keep the subdivision under the view's center current. */
+const EMPTY_AREAS: readonly SubdivisionArea[] = [];
 function useSubdivisionTracking(city: string) {
-  const [areas, setAreas] = useState<readonly SubdivisionArea[]>([]);
+  const [loaded, setAreas] = useState<{ city: string; areas: readonly SubdivisionArea[] } | null>(
+    null,
+  );
+  const areas = loaded?.city === city ? loaded.areas : EMPTY_AREAS;
   // To about 10 m: the name under the center doesn't need looking up every frame of a pan.
   const center = useAtlasStore((s) =>
     s.camera ? `${round(s.camera.lng, 1e-4)},${round(s.camera.lat, 1e-4)}` : null,
@@ -85,13 +88,16 @@ function useSubdivisionTracking(city: string) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/tiles/${city}.subdivisions.json`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((json: unknown) => {
-        if (!cancelled && isSubdivisionAreas(json)) setAreas(json);
-      })
-      .catch(() => {});
+    const off = scheduleAutomaticJson(city, 'subdivisions', () => {
+      void fetch(`/tiles/${city}.subdivisions.json`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((json: unknown) => {
+          if (!cancelled && isSubdivisionAreas(json)) setAreas({ city, areas: json });
+        })
+        .catch(() => {});
+    });
     return () => {
+      off();
       cancelled = true;
     };
   }, [city]);

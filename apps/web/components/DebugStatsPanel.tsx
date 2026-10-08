@@ -99,6 +99,7 @@ export default function DebugStatsPanel() {
         {[
           `quality ${stats.quality.name} (${stats.quality.tier})`,
           `fps    ${String(stats.fps).padStart(5)}`,
+          `ready  ${stats.readyMs === null ? 'pending' : `${ms(stats.readyMs)} ms`}`,
           `cpu    ${ms(stats.frameMs)} ms`,
           `gpu    ${stats.gpuFrameMs === null ? '  n/a' : ms(stats.gpuFrameMs)} ms`,
           `cells  ${ms(stats.cellPassMs)} ms`,

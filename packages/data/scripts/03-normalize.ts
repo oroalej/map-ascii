@@ -307,7 +307,7 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
-    if (cls.startsWith('road_') || cls === 'path') {
+    if (cls.startsWith('road_') || cls === 'path' || cls === 'barrier') {
       for (const tag of EVENT_ACCESS_TAGS) if (tags[tag]) properties[tag] = tags[tag];
     }
     if (cls.startsWith('building')) {

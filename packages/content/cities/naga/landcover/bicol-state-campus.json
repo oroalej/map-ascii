@@ -320,7 +320,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Bicol State College of Applied Sciences and Technology — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Bicol State College of Applied Sciences and Technology — Owner-supplied overhead reference (Google Maps), date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: original site and surrounding features",
@@ -329,11 +329,11 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. "
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. "
     },
     {
       "title": "Owner-supplied Central II red-perimeter/yellow-grass annotation",
-      "note": "Inspected 2026-10-02. Open Grandstand field grass and edge crowns are split at the existing Central II/Bicol visual-envelope seam. The adjoining field remains ownership-unspecified. Standing source roofs, drives and both earlier basketball surfaces remain clear. Mature edge planting, without trees in the yellow field interior; exact source/image alignment and dimensions are draft."
+      "note": "Inspected 2026-10-02. Open Grandstand field grass and edge crowns are split at the existing Central II/Bicol visual-envelope seam. The adjoining field remains ownership-unspecified. Standing source roofs, drives and both earlier basketball surfaces remain clear. Mature edge planting, without trees in the yellow field interior; exact source/image alignment and dimensions are schematic."
     }
   ]
 }

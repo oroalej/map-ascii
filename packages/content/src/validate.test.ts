@@ -119,8 +119,8 @@ describe('loadCityPacks', () => {
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
     const legacy = speech!.exchanges.filter((e) => e.profile !== 'peddler-call');
     const peddlers = speech!.exchanges.filter((e) => e.profile === 'peddler-call');
-    expect(legacy).toHaveLength(104);
-    expect(legacy.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
+    expect(legacy).toHaveLength(110);
+    expect(legacy.filter((e) => e.delivery === 'utterance')).toHaveLength(48);
     expect(legacy.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
     expect(peddlers).toHaveLength(21);
     expect(speech!.exchanges.length).toBeLessThanOrEqual(140);
@@ -143,6 +143,8 @@ describe('loadCityPacks', () => {
             e.conditions?.goods?.includes(goods) && !e.conditions?.weather && !e.conditions?.event,
         ),
       ).toHaveLength(2);
+    expect(legacy.filter((e) => e.kind === 'cheer')).toHaveLength(6);
+    expect(speech!.exchanges).toHaveLength(131);
     expect(
       legacy
         .filter((e) => ['heat', 'clearing'].includes(e.conditions?.weather ?? ''))
@@ -156,7 +158,8 @@ describe('loadCityPacks', () => {
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
-      if (e.profile !== 'peddler-call') counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
+      if (e.profile !== 'peddler-call' && e.kind !== 'cheer')
+        counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
       const script = e.lines
         .map((line) =>
           line

@@ -8,7 +8,7 @@ import { localFrame } from './geo';
 import { intersection } from 'polyclip-ts';
 import { seatingFootprint } from './footprints';
 import { deriveSidewalks } from './streets';
-import type { AtlasFeature } from '../03-normalize';
+import { normalize, type AtlasFeature } from '../03-normalize';
 
 type F = Feature<Geometry, Record<string, unknown>>;
 const point = (id: string, at: number[]): F => ({
@@ -74,6 +74,108 @@ const features = [
   ),
 ];
 describe('street event routing', () => {
+  it('propagates authored crowd areas into baked street permissions', () => {
+    const crowd = area('osm:way/12', 'park', 0.0008, 0.0005, 0.0012, 0.0008);
+    const route = routeProcessions(
+      [...features, crowd],
+      [Procession.parse({ ...base, crowd_areas: ['osm:way/12'] })],
+    ).routes[0]!;
+    if (route.kind !== 'procession') throw Error();
+    expect(route.crowd_grounds!.some((ring) => pointInPolygon([0.001, 0.00065], [ring]))).toBe(
+      true,
+    );
+    expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+  });
+  it('keeps the roadside crowd out of excluded grounds but never the carriageway', () => {
+    // A 2 m square beside the first leg, 7 m from the centreline: in the verge, off the road.
+    const frame = localFrame([0.0005, 0.0005]);
+    const square = (id: string, offset: number): F => {
+      const c: [number, number] = [-offset / Math.SQRT2, offset / Math.SQRT2];
+      const ring = [
+        [-1, -1],
+        [1, -1],
+        [1, 1],
+        [-1, 1],
+        [-1, -1],
+      ].map(([x, y]) => frame.toLngLat([c[0] + x!, c[1] + y!]));
+      return {
+        type: 'Feature',
+        properties: { id, class: 'park' },
+        geometry: { type: 'Polygon', coordinates: [ring] },
+      };
+    };
+    const inside = frame.toLngLat([-7 / Math.SQRT2, 7 / Math.SQRT2]);
+    const bake = (exclude?: string[]) => {
+      const route = routeProcessions(
+        [...features, square('osm:way/13', 7), square('osm:way/14', 0)],
+        [Procession.parse({ ...base, ...(exclude && { crowd_exclude: exclude }) })],
+      ).routes[0]!;
+      if (route.kind !== 'procession') throw Error();
+      return route;
+    };
+    expect(bake().blocked.some((ring) => pointInPolygon(inside, [ring]))).toBe(false);
+    const route = bake(['osm:way/13']);
+    expect(route.blocked.some((ring) => pointInPolygon(inside, [ring]))).toBe(true);
+    expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+    expect(() => bake(['osm:way/14'])).toThrow(/overlaps the route carriageway/);
+  });
+  it.each([undefined, 2])(
+    'derives altar image count from the preceding procession (%s)',
+    (images) => {
+      const church = area('osm:way/10', 'building_worship', 0.00199, 0.00029, 0.00201, 0.00031);
+      const ground = area('osm:way/11', 'park', 0.0016, 0.0, 0.0024, 0.0006);
+      const preceding = Procession.parse({
+        ...base,
+        formation: images === undefined ? undefined : { images },
+      });
+      const mass = Procession.parse({
+        id: 'procession/mass',
+        kind: 'mass',
+        title: base.title,
+        story: base.story,
+        status: 'draft',
+        site: 'osm:way/10',
+        grounds: ['osm:way/11'],
+        radius_m: 50,
+        altar: { at: [0.002, 0.0004], radius_m: 2 },
+        schedule: { follows: base.id, duration_min: 90 },
+      });
+      const route = routeProcessions([...features, church, ground], [mass, preceding]).routes[0]!;
+      if (route.kind !== 'mass') throw Error();
+      expect(route.site.altar?.images).toBe(images ?? 1);
+      expect(CityProcessions.safeParse({ processions: [route] }).success).toBe(true);
+    },
+  );
+  it.each([
+    [{ barrier: 'gate' }, true],
+    [{ barrier: 'gate', foot: 'no' }, false],
+    [{ barrier: 'gate', access: 'private' }, false],
+    [{ barrier: 'gate', access: 'private', foot: 'yes' }, true],
+    [{ barrier: 'wall' }, false],
+  ] as const)('routes according to normalized gate access %j', (tags, allowed) => {
+    const way = road('osm:way/3', [
+      [0, 0],
+      [0.002, 0],
+    ]);
+    const boundary = area('boundary', 'park', -0.01, -0.01, 0.01, 0.01);
+    if (boundary.geometry.type !== 'Polygon') throw Error();
+    const gate = normalize(
+      {
+        type: 'FeatureCollection',
+        features: [{ ...point('unused', [0.001, 0]), id: 'node/9', properties: tags }],
+      },
+      { type: 'Feature', geometry: boundary.geometry, properties: { name: 'Fixture' } },
+      10,
+    ).features.find((f) => f.properties.id === 'osm:node/9')!;
+    expect(gate).toBeDefined();
+    const source = [features[0]!, features[1]!, way, gate];
+    if (!allowed) expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow();
+    else {
+      const route = routeProcessions(source, [Procession.parse(base)]).routes[0]!;
+      if (route.kind !== 'procession') throw Error();
+      expect(route.blocked.some((ring) => pointInPolygon([0.001, 0], [ring]))).toBe(false);
+    }
+  });
   it.each(['road_major', 'road_mid'])('excludes default-derived sidewalk bands on %s', (cls) => {
     const source = [
       features[0]!,
@@ -301,7 +403,8 @@ describe('street event routing', () => {
     expect(
       route.segments.every((segment) => segment.width_m === 6 && segment.sidewalk_m === 0),
     ).toBe(true);
-    expect(route.water).toEqual([]);
+    // Water outside the carriageway is retained for the expanded verge envelope.
+    expect(route.water!.length).toBeGreaterThan(0);
   });
   it('follows pinned via ways despite a shorter admissible road', () => {
     const r = routeProcessions(
@@ -353,7 +456,7 @@ describe('street event routing', () => {
     if (r.kind !== 'procession') throw Error();
     expect(r.bridges!.length).toBeGreaterThan(0);
     expect(r.water!.length).toBeGreaterThan(0);
-    expect(r.water!.flat().every((q) => Math.abs(q[1]) < 0.0001)).toBe(true);
+    expect(r.water!.flat().every((q) => Math.abs(q[1]) <= 0.001)).toBe(true);
     expect(CityProcessions.safeParse({ processions: [r] }).success).toBe(true);
     source[2]!.properties.bridge = 'no';
     expect(() => routeProcessions(source, [Procession.parse(base)])).toThrow('not near');
