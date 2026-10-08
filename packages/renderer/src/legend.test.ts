@@ -8,6 +8,51 @@ import { themes } from './theme';
 import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+
+it.each(['dark', 'light'] as const)(
+  'keeps separate Heritage and Landmark identities with overlapping membership in %s',
+  (theme) => {
+    for (const zoom of [7, 12, 15, 17, 21]) {
+      for (const present of [
+        ['marker_heritage'],
+        ['marker_landmark', 'marker_heritage'],
+      ] as const) {
+        const entries = legendEntries(theme, zoom, present);
+        const heritage = entries.find((entry) => entry.id === 'class:marker_heritage')!;
+        const landmark = entries.find((entry) => entry.id === 'class:marker_landmark')!;
+        expect(heritage).toMatchObject({
+          label: 'Heritage',
+          classes: ['marker_heritage'],
+          glyphs: '◆',
+        });
+        expect(landmark).toMatchObject({ label: 'Landmark', classes: [...present], glyphs: '◆' });
+        expect(new Set(entries.map((entry) => entry.id)).size).toBe(entries.length);
+        const contains = (entry: typeof heritage, cls: string) => {
+          const { mask } = normalizeFocus(entry.focus!);
+          const id = classId(cls);
+          return (mask[id >>> 5]! >>> (id & 31)) & 1;
+        };
+        expect(contains(heritage, 'marker_heritage')).toBe(1);
+        expect(contains(heritage, 'marker_landmark')).toBe(0);
+        expect(contains(landmark, 'marker_heritage')).toBe(1);
+        expect(contains(landmark, 'marker_landmark')).toBe(Number(present.length === 2));
+        for (const cls of ['building', 'marker_school', 'marker_religious']) {
+          expect(contains(heritage, cls)).toBe(0);
+          expect(contains(landmark, cls)).toBe(0);
+        }
+      }
+      const generic = legendEntries(theme, zoom, ['marker_landmark']);
+      expect(generic.some((entry) => entry.id === 'class:marker_heritage')).toBe(false);
+      expect(generic.find((entry) => entry.id === 'class:marker_landmark')!.classes).toEqual([
+        'marker_landmark',
+      ]);
+      expect(
+        legendEntries(theme, zoom, []).some((entry) => /Landmark|Heritage/.test(entry.label)),
+      ).toBe(false);
+    }
+    expect(themes[theme].styles.marker_heritage).toEqual(themes[theme].styles.marker_landmark);
+  },
+);
 it('keeps seasonal hardware in Map and seasonal crowds and atmospheric events in Simulated', () => {
   const entries = legendEntries('dark', 19, ['path', 'park'], {
     life: true,

@@ -16,6 +16,7 @@ export const markerClasses = [
   'marker_station',
   'marker_landmark',
   'marker_hospital',
+  'marker_heritage',
 ] as const;
 export type MarkerClass = (typeof markerClasses)[number];
 
@@ -47,14 +48,17 @@ export type LifeClass = (typeof lifeClasses)[number];
 export type RenderClass = AtlasClass | MarkerClass | PartClass | LifeClass;
 
 /**
- * Id 0 means "empty cell"; classes are numbered from 1 in this order. Markers come first so
- * they, like the road and detail classes early in `AtlasClass`, keep ids that fit the select
- * shader's 32-bit class masks (glyphs/select.ts `classBit`). Parts and life classes come last;
- * they are never in a mask.
+ * Id 0 means "empty cell"; classes are numbered from 1 in this order. Markers and the road
+ * and detail classes used by the select shader keep ids within its 32-bit class masks
+ * (glyphs/select.ts `classBit`). The heritage marker reuses the building-part slot below.
+ * Building parts, feature parts and life classes use per-class arrays rather than that mask.
  */
 export const renderClasses: readonly RenderClass[] = [
-  ...markerClasses,
-  ...ATLAS_CLASSES,
+  ...markerClasses.filter((cls) => cls !== 'marker_heritage'),
+  // Heritage needs a see-through mask bit. Building parts use per-class arrays instead;
+  // reuse their slot so every other geographic cell class retains its numeric id.
+  ...ATLAS_CLASSES.map((cls) => (cls === 'building_part' ? 'marker_heritage' : cls)),
+  'building_part',
   ...partClasses,
   ...lifeClasses,
 ];
@@ -100,7 +104,7 @@ export const markerFor: Partial<Record<AtlasClass, MarkerClass>> = {
  * buildings and under paths. Classes not listed (place labels, drawn as text) are never cells.
  */
 export const priority: readonly (readonly RenderClass[])[] = [
-  ['marker_landmark'],
+  ['marker_landmark', 'marker_heritage'],
   [
     'marker_religious',
     'marker_school',

@@ -354,6 +354,7 @@ function makeTheme(background: number, c: Palette): Theme {
       marker_market: { kind: 'single', glyphs: ['$'], color: c.market },
       marker_station: { kind: 'single', glyphs: ['Ħ'], color: c.station },
       marker_landmark: { kind: 'single', glyphs: ['◆'], color: c.landmark },
+      marker_heritage: { kind: 'single', glyphs: ['◆'], color: c.landmark },
       monument: { kind: 'single', glyphs: ['▲'], color: c.monument },
       // Variant 0 is an unknown kind; then palm, needleleaved, broadleaved (classes.ts TREE_KINDS).
       tree: { kind: 'variant', glyphs: ['♣', 'Ψ', '↑', '♣'], color: c.tree },
@@ -542,6 +543,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   marker_market: 'Market',
   marker_station: 'Train station',
   marker_landmark: 'Landmark',
+  marker_heritage: 'Heritage',
   // The life layer is decoration, not data; the legend says so.
   life_vehicle: 'Traffic (simulated)',
   life_person: 'People (simulated)',

@@ -93,7 +93,7 @@ uniform vec3 u_haunts[8];
 uniform int u_hauntCount;
 uniform vec2 u_hauntOrigin;
 uniform vec2 u_hauntCell;
-uniform int u_pulse;
+uniform ivec2 u_pulse;
 uniform sampler2D u_overlay;
 uniform sampler2D u_labelAtlas;
 uniform vec2 u_labelCell;
@@ -826,7 +826,7 @@ void main() {
     color *= light * variation;
     back *= light;
   }
-  if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
+  if (cls == u_pulse.x || cls == u_pulse.y) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];
   // Zoomed out, major and secondary roads glow as a lit corridor; it hands over to the streetlights.
   if ((bits & ${CellBit.streetlight}) != 0) {

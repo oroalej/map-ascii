@@ -295,7 +295,11 @@ export function legendEntries(
   for (const [cls, style] of Object.entries(theme.styles) as [RenderClass, ClassStyle][]) {
     if (!life && (lifeClasses as readonly string[]).includes(cls)) continue;
     if (!visibleAt(cls, zoom)) continue;
-    if (onScreen && isCellClass(cls) && !onScreen.has(cls)) continue;
+    // A heritage marker belongs to two categories while occupying only one map cell.
+    const members: RenderClass[] =
+      cls === 'marker_landmark' ? ['marker_landmark', 'marker_heritage'] : [cls];
+    const presentMembers = members.filter((member) => !onScreen || onScreen.has(member));
+    if (onScreen && isCellClass(cls) && !presentMembers.length) continue;
     // Trains only run where there is track on screen.
     if (cls === 'life_train' && onScreen && !onScreen.has('rail')) continue;
     const canonical = classAliases[cls] ?? cls;
@@ -308,10 +312,16 @@ export function legendEntries(
     const glyphs = sample(style);
     const existing = byId.get(id);
     if (existing) {
-      existing.classes.push(cls);
+      existing.classes.push(...presentMembers);
       if (!existing.glyphs.includes(glyphs)) existing.glyphs += ` ${glyphs}`;
     } else {
-      const entry: LegendEntry = { id, classes: [cls], label, glyphs, color: css(style.color) };
+      const entry: LegendEntry = {
+        id,
+        classes: isCellClass(cls) ? presentMembers : [cls],
+        label,
+        glyphs,
+        color: css(style.color),
+      };
       if (cls === 'life_person') entry.icons = peopleIcons(theme);
       if (cls === 'life_boat') entry.icons = boatIcons(theme);
       byId.set(id, entry);

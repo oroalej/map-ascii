@@ -39,6 +39,8 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     const p = feature.properties;
     p.landmark = true;
     p.landmark_id = landmark.id;
+    if (landmark.type === 'heritage') p.heritage = true;
+    else delete p.heritage;
     if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;
     if (landmark.start_year !== undefined || landmark.end_year !== undefined) {

@@ -154,6 +154,8 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   certainty?: 'exact' | 'circa';
   landmark?: boolean;
   landmark_id?: string;
+  /** Additional category for curated heritage landmarks; geographic identity is unchanged. */
+  heritage?: boolean;
   /** A landmark's OSM name, when the curated name replaced it. */
   osm_name?: string;
   /** Place labels: the OSM `place` value, or `province`. */

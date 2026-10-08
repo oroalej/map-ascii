@@ -796,6 +796,42 @@ describe('buildTileGeometry', () => {
     ]);
   });
 
+  it('uses one heritage marker with the original selection, label, walls and floodlight', () => {
+    const tile = { z: 16, x: 1, y: 1 };
+    const [lng, lat] = tileToLngLat(tile, { x: 1100, y: 1100 });
+    const input = (heritage: boolean) => ({
+      buildings: layer([
+        feature(
+          3,
+          {
+            id: 'osm:way/heritage',
+            class: 'building',
+            height: 8,
+            landmark: true,
+            landmark_id: 'landmark/heritage',
+            name: 'Historic House',
+            label_lng: lng,
+            label_lat: lat,
+            ...(heritage && { heritage: true }),
+          },
+          [square(1000, 1000, 200)],
+        ),
+      ]),
+    });
+    const registry = createIdRegistry();
+    const ordinary = buildTileGeometry(input(false), registry, tile, 16);
+    const heritage = buildTileGeometry(input(true), registry, tile, 16);
+    const markers = vertices(heritage.points).filter((v) => v.cls === classId('marker_heritage'));
+    expect(markers).toHaveLength(1);
+    expect(vertices(heritage.points).some((v) => v.cls === classId('marker_landmark'))).toBe(false);
+    expect(heritage.points.ids).toEqual(ordinary.points.ids);
+    expect(heritage.fills).toEqual(ordinary.fills);
+    expect(heritage.labels).toEqual(ordinary.labels);
+    expect(heritage.labels[0]).toMatchObject({ text: 'Historic House', rank: LabelRank.landmark });
+    expect(heritage.life.floods).toEqual(ordinary.life.floods);
+    expect(heritage.life.floods).toHaveLength(3);
+  });
+
   it('turns POI points into markers', () => {
     for (const [cls, marker] of [
       ['building_school', 'marker_school'],

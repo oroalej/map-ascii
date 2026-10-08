@@ -947,7 +947,11 @@ export function buildTileGeometry(
         points.vertex(p.x, p.y, klass, height, flags, id, variant);
       const addMarkers = (p: TilePoint) => {
         if (marker) addPoint(p, classId(marker));
-        if (landmark) addPoint(p, classId('marker_landmark' satisfies RenderClass));
+        if (landmark)
+          addPoint(
+            p,
+            classId(feature.properties.heritage === true ? 'marker_heritage' : 'marker_landmark'),
+          );
       };
       // A tree's crown, sized by the pipeline's `crown` diameter in meters. Its trunk's own cell
       // is the `tree` point.

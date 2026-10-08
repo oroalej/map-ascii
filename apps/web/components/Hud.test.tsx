@@ -200,6 +200,42 @@ it.each([640, 640.5, 641])('matches the compact CSS breakpoint at %s CSS pixels'
   expect(legend().open).toBe(width > 640);
 });
 
+it('focuses Heritage separately and updates Landmark overlap as live membership changes', async () => {
+  const instance = renderer();
+  await mount(instance);
+  const button = (label: string) =>
+    [...legend().querySelectorAll<HTMLButtonElement>('button')].find((candidate) =>
+      candidate.textContent?.includes(label),
+    )!;
+  act(() =>
+    instance.emit('classeschange', [
+      'marker_landmark',
+      'marker_heritage',
+      'marker_school',
+      'marker_religious',
+    ]),
+  );
+  select('osm:way/heritage');
+  act(() => button('Heritage').click());
+  expect(useUiStore.getState().legendFocus).toBe('class:marker_heritage');
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: ['marker_heritage'], life: [] });
+  act(() => button('Landmark').click());
+  expect(useUiStore.getState().legendFocus).toBe('class:marker_landmark');
+  expect(instance.focus).toHaveBeenLastCalledWith({
+    classes: ['marker_landmark', 'marker_heritage'],
+    life: [],
+  });
+  act(() => instance.emit('classeschange', ['marker_heritage']));
+  expect(useUiStore.getState().legendFocus).toBe('class:marker_landmark');
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: ['marker_heritage'], life: [] });
+  act(() => instance.emit('classeschange', ['marker_landmark']));
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: ['marker_landmark'], life: [] });
+  expect(button('Heritage')).toBeUndefined();
+  expect(useAtlasStore.getState().selectedId).toBe('osm:way/heritage');
+  act(() => button('Landmark').click());
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+});
+
 it('suppresses phone bottom controls for visible facts and retains tour suppression after close', async () => {
   await mount(renderer());
   const controls = container.querySelector('[data-touring]')!;
@@ -268,6 +304,28 @@ it('retains selected IDs and updates the clear label when display wording change
     container.querySelector('button[aria-label="Clear legend focus: Translated road"]'),
   ).not.toBeNull();
   expect(legend().querySelector('button[aria-pressed="true"]')?.textContent).toContain(name);
+});
+
+it('keeps Heritage and Landmark buttons distinct when their translated wording matches', async () => {
+  const original = rendererExports.legendEntries;
+  vi.spyOn(rendererExports, 'legendEntries').mockImplementation((...args) =>
+    original(...args).map((entry) =>
+      ['class:marker_landmark', 'class:marker_heritage'].includes(entry.id)
+        ? { ...entry, label: 'Translated category' }
+        : entry,
+    ),
+  );
+  const instance = renderer();
+  await mount(instance);
+  act(() => instance.emit('classeschange', ['marker_heritage']));
+  const buttons = [...legend().querySelectorAll<HTMLButtonElement>('button')];
+  expect(buttons).toHaveLength(2);
+  act(() => buttons[0]!.click());
+  expect(useUiStore.getState().legendFocus).toBe('class:marker_landmark');
+  act(() => buttons[1]!.click());
+  expect(useUiStore.getState().legendFocus).toBe('class:marker_heritage');
+  expect(buttons[0]!.getAttribute('aria-pressed')).toBe('false');
+  expect(buttons[1]!.getAttribute('aria-pressed')).toBe('true');
 });
 
 it('publishes focus clearance for sheet layout and removes it on clear and unmount', async () => {

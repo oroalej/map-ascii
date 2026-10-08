@@ -1009,7 +1009,7 @@ export function glyphPass(
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,
-    u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+    u_pulse: reducedMotion ? [-1, -1] : [classId('marker_landmark'), classId('marker_heritage')],
     u_lifeTime: lifeTime,
     ...hauntUniforms(
       folklore,
