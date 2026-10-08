@@ -44,6 +44,34 @@ function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = ()
   return { observer, o, m, tile, step };
 }
 describe('read-only emoji observer', () => {
+  it('admits explicit fear on the first observation with chance one and retains display gates', () => {
+    const f = fixture('cat', () => 0.999);
+    f.observer.step(
+      0.1,
+      19,
+      { rain: 0, clock: 0.1 },
+      [f.o],
+      [],
+      [],
+      [],
+      [{ owner: f.m, mood: 'scared' }],
+    );
+    expect(f.observer.cue(f.m)?.mood).toBe('scared');
+    const track = f.observer.memory.get(f.m)!;
+    expect(track.cooldownUntil).toBeGreaterThan(40);
+    f.observer.release(f.m);
+    f.observer.step(
+      1,
+      19,
+      { rain: 0, clock: 1.1 },
+      [f.o],
+      [],
+      [],
+      [],
+      [{ owner: f.m, mood: 'happy' }],
+    );
+    expect(f.observer.cue(f.m)).toBeUndefined();
+  });
   it('shows relief on shade arrival and excludes ambient heat after arrival', () => {
     const f = fixture();
     f.step(0.1);

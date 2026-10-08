@@ -18,6 +18,15 @@ const pose = (a: VisibleAgent) => [a.lng, a.lat, a.ahead, a.flap, a.people, a.tu
 const person = (lng = 0): VisibleAgent => ({ kind: 'person', lng, lat: 0, flap: 0 });
 
 describe('per-item inspection', () => {
+  it.each(['bird', 'cat', 'dog'] as const)('keeps %s moving under a confirmed tooltip', (kind) => {
+    const inspection = new LifeInspection(),
+      owner = {};
+    inspection.begin(0);
+    const view = inspection.present(owner, { kind, lng: 0, lat: 0, flap: 0 });
+    inspection.finish([view]);
+    inspection.select({ id: view.inspectionId!, revision: 1, time: 0 }, 0);
+    expect(inspection.held(owner)).toBe(false);
+  });
   it('admits reordered capped identities with collisions and releases an evicted selection', () => {
     const inspection = new LifeInspection(),
       owners = Array.from({ length: 8 }, () => ({}));

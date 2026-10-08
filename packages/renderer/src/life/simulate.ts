@@ -41,6 +41,7 @@ import {
   type EmojiCue,
   type EmojiObservation,
   type EmojiObserverOptions,
+  type PointerEvent,
 } from './emoji';
 /**
  * The life layer's simulation (SPEC.md §4 "Life layer"): vehicles, people, and boats moving
@@ -1024,6 +1025,8 @@ export class TileLife {
   readonly birdEmojiOwners = new Set<Flock>();
   private pointerInside?: WeakSet<Flock>;
   private tilePointer?: FlockPointer;
+  private catPointer?: WeakMap<Mover, { left: number }>;
+  private readonly pointerEvents: PointerEvent[] = [];
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -6134,6 +6137,7 @@ export class TileLife {
   /** Freeze pending/active cues, but never replay an undelivered physical event. */
   freezeEmoji() {
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     this.pointerInside = undefined;
     this.emoji.freeze();
   }
@@ -6143,6 +6147,7 @@ export class TileLife {
   }
   disposeEmoji() {
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     this.pointerInside = undefined;
     this.clearBirdEmojiOwners();
     this.emoji.dispose();
@@ -6199,6 +6204,10 @@ export class TileLife {
   ) {
     if (dt <= 0) return;
     if (!env?.pointer) this.pointerInside = undefined;
+    if (!env?.pointer) {
+      this.catPointer = undefined;
+      this.pointerEvents.length = 0;
+    }
     this.tilePointer = undefined;
     if (env?.pointer) {
       const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
@@ -6302,6 +6311,7 @@ export class TileLife {
         this.scenes.purchaseCompletions,
         this.momentHost.voiceCompletions,
         this.startled,
+        this.pointerEvents,
       );
       for (const flock of this.birdEmojiOwners) {
         const track = this.emoji.memory.get(flock);
@@ -6312,6 +6322,7 @@ export class TileLife {
       this.clearBirdEmojiOwners();
     }
     this.startled.length = 0;
+    this.pointerEvents.length = 0;
     // Inputs are borrowed only for this observer call; do not retain actor references.
     this.releaseEmojiInputs();
     const table = pass?.junctions ?? this.localJunctions;
@@ -6537,20 +6548,52 @@ export class TileLife {
         speeds[i] = speed;
       }
       if (m.kind === 'cat') {
-        const idle = this.canIdle(m);
-        if (!idle) {
+        const pointer = this.tilePointer;
+        let flee = this.catPointer?.get(m);
+        if (pointer) {
+          const close =
+            (m.x - pointer.x) ** 2 + (m.y - pointer.y) ** 2 <
+            (POINTER.cat * pointer.cellMeters * this.perMeter) ** 2;
+          if (!close && flee && flee.left <= 0) {
+            this.catPointer!.delete(m);
+            flee = undefined;
+          }
+          if (close && !flee && (m.pause > 0 || m.grooming)) {
+            flee = { left: POINTER.fleeSeconds };
+            (this.catPointer ??= new WeakMap()).set(m, flee);
+            this.pointerEvents.push({ owner: m, mood: 'scared' });
+          }
+        }
+        if (flee && flee.left > 0) {
           m.pause = 0;
           m.grooming = false;
-        }
-        if (m.pause > 0) {
-          m.pause -= dt;
-          continue;
-        }
-        m.grooming = false;
-        if (idle && this.catRng() < CAT.pause.chance * dt) {
-          m.pause = between(this.catRng, CAT.pause.seconds);
-          m.grooming = this.catRng() < CAT.groomChance;
-          continue;
+          flee.left = Math.max(0, flee.left - dt);
+          if (pointer && (pointer.x - m.x) * m.hx + (pointer.y - m.y) * m.hy > 0) {
+            const before = snapshotMover(m);
+            this.turnBack(m);
+            this.advance(m, 0, false);
+            if (!fitsGround(m, before)) {
+              restoreMover(m, before);
+              continue;
+            }
+          }
+          speeds[i] = Math.max(m.speed, POINTER.fleePace * this.perMeter);
+        } else {
+          const idle = this.canIdle(m);
+          if (!idle) {
+            m.pause = 0;
+            m.grooming = false;
+          }
+          if (m.pause > 0) {
+            m.pause -= dt;
+            continue;
+          }
+          m.grooming = false;
+          if (idle && this.catRng() < CAT.pause.chance * dt) {
+            m.pause = between(this.catRng, CAT.pause.seconds);
+            m.grooming = this.catRng() < CAT.groomChance;
+            continue;
+          }
         }
       }
       if (m.kind === 'person') {

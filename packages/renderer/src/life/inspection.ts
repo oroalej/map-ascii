@@ -68,7 +68,7 @@ export class LifeInspection {
     this.release(clock);
     const actor =
       command.id === null ? undefined : this.visible.find((actor) => actor.id === command.id);
-    if (!actor || actor.kind === 'bird') return;
+    if (!actor || ['bird', 'cat', 'dog'].includes(actor.kind)) return;
     const { owner } = actor;
     this.selected = { owner, actor, at: clock, effects: command.time };
     this.clockHistory = true;
