@@ -33,13 +33,8 @@ it.each([
   'creates the map before optional geography arrives (%s) and installs it in place',
   async (mode) => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
-    let tileFrame = false;
-    let frame!: FrameRequestCallback;
+    let tileFrame = mode === 'late';
     const handlers = new Map<string, () => void>();
-    vi.stubGlobal('requestAnimationFrame', (next: FrameRequestCallback) => {
-      frame = next;
-      return 1;
-    });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal('matchMedia', () => ({
       matches: false,
@@ -96,7 +91,7 @@ it.each([
       ),
     );
     const atlas = {
-      getStats: () => ({ hasDrawnTileFrame: tileFrame }),
+      getStats: () => ({ hasDrawnTileFrame: tileFrame, readyMs: tileFrame ? 42 : null }),
       getCamera: () => ({ ...meta.defaultCamera, zoom: mode === 'zoom-floor' ? 15 : 14 }),
       on: (event: string, handler: () => void) => {
         handlers.set(event, handler);
@@ -128,6 +123,7 @@ it.each([
       await act(async () => {
         root.render(
           createElement(AtlasCanvas, {
+            tilesVersion: '1234abcd',
             requestLandmarks:
               mode === 'pointer'
                 ? () => {
@@ -143,6 +139,7 @@ it.each([
         );
         await Promise.resolve();
       });
+      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       if (mode === 'zoom-floor') {
         expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ initialCamera: { zoom: 10 } });
@@ -160,13 +157,14 @@ it.each([
         expect(interactive(feature)).toBe(false);
         expect(interactive(feature)).toBe(false);
         expect(fetch).toHaveBeenCalledTimes(1);
-      } else expect(fetch).not.toHaveBeenCalled();
+      } else if (mode !== 'late') expect(fetch).not.toHaveBeenCalled();
+      expect(useUiStore.getState().startup?.status).toBe(mode === 'late' ? 'ready' : 'drawing');
       await act(async () => {
-        useUiStore.setState({
-          startup: { city: `fixture-${mode}`, atlas: atlas as never, status: 'ready' },
-        });
+        tileFrame = true;
+        handlers.get('ready')!();
         await Promise.resolve();
       });
+      expect(useUiStore.getState().startup?.status).toBe('ready');
       if (mode === 'recovery') {
         act(() => handlers.get('contextlost')!());
         expect(useUiStore.getState().startup?.status).toBe('restoring');
@@ -174,7 +172,7 @@ it.each([
         expect(useUiStore.getState().startup?.status).toBe('drawing');
         await act(async () => {
           tileFrame = true;
-          frame(100);
+          handlers.get('ready')!();
           await Promise.resolve();
         });
         expect(useUiStore.getState().startup?.status).toBe('ready');
@@ -197,6 +195,7 @@ it.each([
       });
       expect(atlas.setProcessions).toHaveBeenLastCalledWith(routes);
       expect(useUiStore.getState().processions).toEqual(routes);
+      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       expect(atlas.destroy).not.toHaveBeenCalled();
       if (mode !== 'absent' && mode !== 'zero') {
@@ -212,6 +211,7 @@ it.each([
             ? emergencyFixture
             : undefined,
         );
+        expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
         expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       }
     } finally {

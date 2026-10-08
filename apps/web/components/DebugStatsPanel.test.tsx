@@ -8,6 +8,7 @@ import DebugStatsPanel from './DebugStatsPanel';
 vi.mock('@/lib/debug', () => ({ debugCaptureMs: () => 30_000 }));
 
 const stats: AtlasStats = {
+  readyMs: 42,
   hasDrawnTileFrame: true,
   quality: { choice: 'high', tier: 0, name: 'high' },
   fps: 60,
@@ -55,6 +56,7 @@ it('cancels a capture when the atlas is replaced and enables the next capture', 
   act(() => {
     vi.advanceTimersByTime(500);
   });
+  expect(container.textContent).toContain('ready   42.0 ms');
   act(() => button('Capture 30 seconds').click());
   expect(button('Capturing…').disabled).toBe(true);
   act(() => useAtlasInstance.setState({ atlas: next as unknown as Atlas }));

@@ -41,6 +41,58 @@ describe('glyph program variants', () => {
     vi.unstubAllGlobals();
   });
 
+  it('issues all base links before first-use finalization and shares the base glyph', () => {
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    const pending = Array.from({ length: 4 }, () => ({
+      ready: () => false,
+      finish: vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>),
+      cancel: vi.fn(),
+    }));
+    let index = 0;
+    vi.mocked(prepareProgram).mockImplementation(() => pending[index++]!);
+    const programs = createPrograms(context);
+    expect(prepareProgram).toHaveBeenCalledTimes(4);
+    expect(pending.every((p) => p.finish.mock.calls.length === 0)).toBe(true);
+    expect(programs.cell).toBe(programs.cell);
+    expect(pending[2]!.finish).toHaveBeenCalledOnce();
+    expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
+    expect(pending[0]!.finish).toHaveBeenCalledOnce();
+    deletePrograms(context, programs);
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
+    expect(pending[1]!.cancel).toHaveBeenCalledOnce();
+    expect(pending[3]!.cancel).toHaveBeenCalledOnce();
+  });
+  it('cancels unused links and cleans partial construction without finalization', () => {
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    const links: {
+      ready: () => boolean;
+      finish: ReturnType<typeof vi.fn<() => ReturnType<typeof createProgram>>>;
+      cancel: ReturnType<typeof vi.fn<() => void>>;
+    }[] = [];
+    vi.mocked(prepareProgram).mockImplementation(() => {
+      const link = {
+        ready: () => false,
+        finish: vi.fn<() => ReturnType<typeof createProgram>>(),
+        cancel: vi.fn<() => void>(),
+      };
+      links.push(link);
+      return link;
+    });
+    const programs = createPrograms(context);
+    deletePrograms(context, programs);
+    expect(
+      links.every((p) => p.cancel.mock.calls.length === 1 && p.finish.mock.calls.length === 0),
+    ).toBe(true);
+    expect(gl.deleteProgram).not.toHaveBeenCalled();
+    vi.mocked(prepareProgram)
+      .mockImplementationOnce(() => links[0]!)
+      .mockImplementationOnce(() => {
+        throw new Error('allocation');
+      });
+    expect(() => createPrograms(context)).toThrow('allocation');
+    expect(links[0]!.cancel).toHaveBeenCalledTimes(2);
+  });
+
   it('warms folklore only when eligible and deletes an unused prepared program once', () => {
     const programs = createPrograms(context);
     prewarmGlyphPrograms(context, programs, () => true, false, false, false, false);
@@ -58,10 +110,10 @@ describe('glyph program variants', () => {
   });
 
   it('cancels pending folklore links on ineligibility, context loss and disposal', () => {
-    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const pending = { ready: () => false, finish: vi.fn(), cancel: vi.fn() };
     vi.mocked(prepareProgram).mockReturnValue(pending);
     const programs = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     prewarmGlyphPrograms(context, programs, () => true, false, false, false, true);
     vi.advanceTimersByTime(100);
     expect(programs.glyphWarmup?.pending?.key).toBe(16);
@@ -122,7 +174,6 @@ describe('glyph program variants', () => {
   });
 
   it('reuses an unfinished parallel link when input arrives and cancels the next link on disposal', () => {
-    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const pending = {
       ready: vi.fn(() => false),
       finish: vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>),
@@ -130,6 +181,7 @@ describe('glyph program variants', () => {
     };
     vi.mocked(prepareProgram).mockReturnValue(pending);
     const programs = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     prewarmGlyphPrograms(context, programs, () => true);
     vi.advanceTimersByTime(200);
     expect(prepareProgram).toHaveBeenCalledTimes(1);
@@ -202,9 +254,10 @@ describe('glyph program variants', () => {
   it('creates a fresh minimal variant after context recreation', () => {
     const before = createPrograms(context);
     glyphProgram(context, before, true, true);
+    const oldGlyph = before.glyph;
     deletePrograms(context, before);
     const after = createPrograms(context);
-    expect(after.glyph).not.toBe(before.glyph);
+    expect(after.glyph).not.toBe(oldGlyph);
     expect(after.glyphVariants?.size).toBe(1);
     expect(glyphProgram(context, after, false, false)).toBe(after.glyph);
   });
@@ -248,10 +301,10 @@ describe('glyph program variants', () => {
   });
 
   it('cancels a pending seasonal link when its season leaves and on teardown', () => {
-    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const pending = { ready: () => false, finish: vi.fn(), cancel: vi.fn() };
     vi.mocked(prepareProgram).mockReturnValue(pending);
     const programs = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     prewarmGlyphPrograms(context, programs, () => true, false, false, true);
     vi.advanceTimersByTime(100);
     expect(programs.glyphWarmup?.pending?.key).toBe(8);
@@ -267,13 +320,13 @@ describe('glyph program variants', () => {
   });
 
   it('publishes completed parallel variants once and retains demand compilation after a warmup failure', () => {
-    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     vi.mocked(prepareProgram).mockImplementation(() => ({
       ready: () => true,
       finish: () => ({ program: {} }) as ReturnType<typeof createProgram>,
       cancel: vi.fn(),
     }));
     const programs = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     prewarmGlyphPrograms(context, programs, () => true);
     vi.advanceTimersByTime(700);
     expect(programs.glyphVariants?.size).toBe(4);
@@ -281,7 +334,9 @@ describe('glyph program variants', () => {
     glyphProgram(context, programs, true, true);
     expect(createProgram).toHaveBeenCalledTimes(4);
     deletePrograms(context, programs);
+    gl.getExtension.mockReturnValue(null);
     const failed = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const cancel = vi.fn();
     vi.mocked(prepareProgram).mockReturnValue({
       ready: () => true,

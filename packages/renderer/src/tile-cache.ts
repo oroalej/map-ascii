@@ -167,12 +167,12 @@ export class TileCache {
     const missing: TileId[] = [];
     for (const tile of view) {
       const key = tileKey(tile);
-      if (meshes.has(key)) {
+      if (meshes.get(key)) {
         out.set(key, tile);
         continue;
       }
-      if (this.mayRequest(key)) missing.push(tile);
-      const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
+      if (!meshes.has(key) && this.mayRequest(key)) missing.push(tile);
+      const ancestor = findAncestor(tile, minZoom, (k) => !!meshes.get(k));
       if (ancestor) {
         out.set(tileKey(ancestor), ancestor);
         continue;
@@ -180,7 +180,7 @@ export class TileCache {
       for (let dy = 0; dy < 2; dy++) {
         for (let dx = 0; dx < 2; dx++) {
           const child = { z: tile.z + 1, x: tile.x * 2 + dx, y: tile.y * 2 + dy };
-          if (meshes.has(tileKey(child))) out.set(tileKey(child), child);
+          if (meshes.get(tileKey(child))) out.set(tileKey(child), child);
         }
       }
     }
@@ -190,10 +190,16 @@ export class TileCache {
     return [...out.values()].sort((a, b) => a.z - b.z);
   }
 
+  /** Request coarse coverage independently of fine-tile arrival, so it can draw first. */
+  regionTilesForView(camera: CameraState, size: Size): TileId[] {
+    if (!this.header || this.suspended) return [];
+    return this.regionTilesFor(viewTiles(camera, size, this.header));
+  }
+
   /**
    * Tiles whose region-only features to draw under the view's tiles: each view tile's
    * ancestor at `REGION_TILE_MAX_ZOOM` (or the tile itself when it is that coarse), else, while
-   * that one loads, its nearest loaded ancestor.
+   * that one loads, its nearest loaded ancestor or loaded children holding region features.
    */
   regionTilesFor(tiles: readonly TileId[]): TileId[] {
     const { header, meshes } = this;
@@ -210,7 +216,16 @@ export class TileCache {
       }
       if (!meshes.has(key) && this.mayRequest(key)) missing.set(key, region);
       const fallback = findAncestor(region, header.minZoom, loaded);
-      if (fallback) out.set(tileKey(fallback), fallback);
+      if (fallback) {
+        out.set(tileKey(fallback), fallback);
+        continue;
+      }
+      if (region.z < REGION_TILE_MAX_ZOOM)
+        for (let dy = 0; dy < 2; dy++)
+          for (let dx = 0; dx < 2; dx++) {
+            const child = { z: region.z + 1, x: region.x * 2 + dx, y: region.y * 2 + dy };
+            if (loaded(tileKey(child))) out.set(tileKey(child), child);
+          }
     }
     this.source.want([...missing.values()], 'region');
     return [...out.values()].sort((a, b) => a.z - b.z);
