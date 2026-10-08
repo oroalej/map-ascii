@@ -30,7 +30,7 @@ it('keeps cursor-on human physics identical with the observer enabled and disabl
         19,
         undefined,
         undefined,
-        { rain: 0, minutes: 1080 },
+        { rain: 0, minutes: i < 10 ? 1080 : 720, sunAltitude: 70 },
         1,
         1.8,
         1,
@@ -42,6 +42,29 @@ it('keeps cursor-on human physics identical with the observer enabled and disabl
 });
 
 afterEach(() => vi.restoreAllMocks());
+it('resets borrowed cursor shade flags between observations and actor roles', () => {
+  const { life, human, car } = pedestrianWorld(-40);
+  life.movers.splice(0, life.movers.length, human);
+  const read = life as unknown as {
+    emojiObservations: (env: { rain: number }) => EmojiObservation[];
+  };
+  life.scenes.step(0.1, [], {
+    rain: 0,
+    minutes: 720,
+    sunAltitude: 70,
+    pointerRest: 2,
+    pointerPeople: new Set([human]),
+  });
+  const pooled = read.emojiObservations({ rain: 0 })[0]!;
+  expect(pooled.cursorShaded).toBe(true);
+  life.movers.splice(0, life.movers.length, car);
+  const driver = read.emojiObservations({ rain: 0 })[0]!;
+  expect(driver).toBe(pooled);
+  expect(driver.cursorShaded).toBe(false);
+  life.movers.splice(0, life.movers.length, human);
+  life.scenes.step(0.1, [], { rain: 0 });
+  expect(read.emojiObservations({ rain: 0 })[0]!.cursorShaded).toBe(false);
+});
 
 it('keeps emoji deadlines on elapsed time through slow frames without advancing movement faster', () => {
   const a = pedestrianWorld();

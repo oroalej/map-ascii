@@ -6063,6 +6063,7 @@ export class TileLife {
     input.gatherer = undefined;
     input.visit = undefined;
     input.passenger = undefined;
+    input.cursorShaded = false;
   }
   private releaseEmojiInputs() {
     for (const input of this.emojiInputs) this.clearEmojiInput(input);
@@ -6111,6 +6112,7 @@ export class TileLife {
       const admitted = eligible(m) && this.visibleMover(m, levels, crowd);
       if (!admitted && this.emoji.memory.get(m)?.clock === undefined) continue;
       const input = this.emojiInput(m, subject, admitted);
+      input.cursorShaded = subject === 'person' && this.scenes.cursorShaded(m);
       input.mover = m;
       input.figure = m.group?.[0]?.figure;
       input.vendor = undefined;
@@ -6125,6 +6127,7 @@ export class TileLife {
       const admitted = eligible(g) && (!levels || g.rank < gathererShare(g, levels) * crowd);
       if (!admitted && this.emoji.memory.get(g)?.clock === undefined) continue;
       const input = this.emojiInput(g, 'person', admitted);
+      input.cursorShaded = this.scenes.cursorShaded(g);
       input.gatherer = g;
       input.figure = g.walker.figure;
       input.held = input.arrival = input.still = input.vendor = undefined;
@@ -6133,6 +6136,7 @@ export class TileLife {
       const admitted = eligible(s) && vendorAttendance(s, levels, crowd);
       if (!admitted && this.emoji.memory.get(s)?.clock === undefined) continue;
       const input = this.emojiInput(s, 'person', admitted);
+      input.cursorShaded = this.scenes.cursorShaded(s);
       input.figure = 'adult';
       input.vendor = true;
       input.held = input.arrival = input.still = undefined;
@@ -6316,6 +6320,8 @@ export class TileLife {
       env?.diagnostics,
     );
     const momentView = pass?.momentView;
+    for (const m of this.scenes.cursorAdmissions)
+      this.pointerEvents.push({ owner: m, mood: 'relaxed' });
     this.momentHost.step(
       dt,
       momentView?.zoom ?? (!shows || shows('person') ? MOMENTS.zoom : 0),
@@ -6402,6 +6408,12 @@ export class TileLife {
       }
       if (!this.eligible[i]) continue;
       env?.diagnostics?.eligible(m, m.kind);
+      if (m.kind === 'person' && this.scenes.cursorHolding(m)) {
+        m.waiting = 0;
+        running -= Number(this.stopRun(m));
+        env?.diagnostics?.hold(m, 'pause');
+        continue;
+      }
       if (isWalker(m.kind) && this.scenes.yieldStep(m, dt, guard, walkDistance, pass?.owns))
         continue;
       const maneuver = m.vehicle && this.recoveryLeaders.get(m.line);

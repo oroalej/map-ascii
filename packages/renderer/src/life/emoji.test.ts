@@ -44,6 +44,18 @@ function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = ()
   return { observer, o, m, tile, step };
 }
 describe('read-only emoji observer', () => {
+  it('admits explicit cursor relief and suppresses heat only while classified shaded', () => {
+    const f = fixture('person', () => 0.999);
+    f.o.cursorShaded = true;
+    const env = { rain: 0, minutes: 720, sunAltitude: 70, clock: 0.1 };
+    f.observer.step(0.1, 19, env, [f.o], [], [], [], [{ owner: f.m, mood: 'relaxed' }]);
+    expect(f.observer.cue(f.m)?.mood).toBe('relaxed');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).not.toContain('hot');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).not.toContain('melting');
+    f.o.cursorShaded = false;
+    expect(ambientPool(f.o, env).map((x) => x.mood)).toContain('hot');
+    expect(ambientPool(f.o, env).map((x) => x.mood)).toContain('melting');
+  });
   it('latches cursor mosquitoes at dusk between ticks, throttles events and drops stale conditions', () => {
     const f = fixture('person', () => 0.999),
       people = new Set([f.m]);

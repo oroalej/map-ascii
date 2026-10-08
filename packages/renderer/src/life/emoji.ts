@@ -124,6 +124,7 @@ export type EmojiObservation = {
   arrival?: boolean;
   still?: boolean;
   vendor?: boolean;
+  cursorShaded?: boolean;
 };
 type Weighted = { mood: EmojiMood; weight: number };
 function selectedSeason(env: Pick<LifeEnv, 'emojiSeasons' | 'season'>) {
@@ -173,7 +174,7 @@ export function ambientPool(
   const open = m?.vehicle && ['motorcycle', 'bicycle', 'tricycle', 'jeepney'].includes(m.vehicle);
   if (
     hotAt(env.minutes, env.rain, env.sunAltitude) &&
-    ((subject === 'person' && o.visit?.state !== 'shade') ||
+    ((subject === 'person' && !o.cursorShaded && o.visit?.state !== 'shade') ||
       (subject === 'driver' && open) ||
       ((subject === 'dog' || subject === 'cat') && o.still))
   ) {
