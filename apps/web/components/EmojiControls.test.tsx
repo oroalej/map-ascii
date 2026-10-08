@@ -9,7 +9,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
-it('toggles simulated moods and explains Life, zoom and reduced motion', () => {
+it('hides unavailable moods and retains the preference across zoom and Life changes', () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   let reduced = false;
   vi.stubGlobal('matchMedia', () => ({
@@ -24,17 +24,29 @@ it('toggles simulated moods and explains Life, zoom and reduced motion', () => {
   document.body.append(container);
   const root = createRoot(container);
   act(() => root.render(createElement(EmojiControls)));
-  expect(container.textContent).toContain('Turn Life on');
+  expect(container.textContent).toBe('');
+  expect(container.querySelector('button')).toBeNull();
   act(() => {
     useLifeStore.setState({ enabled: true });
     useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 17 } });
   });
-  expect(container.textContent).toContain('Zoom to z18');
+  expect(container.textContent).toBe('');
+  expect(container.querySelector('button')).toBeNull();
   reduced = true;
   act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 19 } }));
-  expect(container.textContent).toContain('reduced motion');
+  expect(container.textContent).toBe('');
+  expect(container.querySelector('button')).toBeNull();
+  reduced = false;
+  act(() => useLifeStore.setState({ enabled: false }));
+  act(() => useLifeStore.setState({ enabled: true }));
+  expect(container.querySelector('button')).not.toBeNull();
   act(() => container.querySelector('button')!.click());
   expect(useEmojiStore.getState().enabled).toBe(false);
+  expect(container.querySelector('button')!.getAttribute('aria-pressed')).toBe('false');
+  act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 17 } }));
+  expect(container.querySelector('button')).toBeNull();
+  expect(useEmojiStore.getState().enabled).toBe(false);
+  act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 18 } }));
   expect(container.querySelector('button')!.getAttribute('aria-pressed')).toBe('false');
   act(() => root.unmount());
   container.remove();

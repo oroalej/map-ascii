@@ -25,6 +25,66 @@ import { LabelRank } from './labels';
 import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { LampState } from './life/lights';
+import { normalizeFocus } from './focus';
+
+it('dims map cells for folklore-only focus and restores the ordinary glyph program on clear', () => {
+  const setters = {
+    u_focus: vi.fn(),
+    u_focusClasses: vi.fn(),
+    u_focusLife: vi.fn(),
+  };
+  const ordinary = { program: {} as WebGLProgram, uniformSetters: setters };
+  const focused = { program: {} as WebGLProgram, uniformSetters: setters };
+  const programs = {
+    glyph: ordinary,
+    glyphVariants: new Map([
+      [0, ordinary],
+      [1, focused],
+    ]),
+    emptyVao: null,
+  } as unknown as Programs;
+  const useProgram = vi.fn();
+  const gl = Object.fromEntries(
+    ['bindFramebuffer', 'viewport', 'useProgram', 'bindVertexArray', 'drawArrays'].map((k) => [
+      k,
+      vi.fn(),
+    ]),
+  ) as unknown as GL;
+  gl.useProgram = useProgram;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (focus: ReturnType<typeof normalizeFocus>) =>
+    glyphPass(
+      gl,
+      programs,
+      { sub: {} } as CellTargets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      0,
+      false,
+      1,
+      undefined,
+      0,
+      0,
+      null,
+      focus,
+    );
+  draw(normalizeFocus({ classes: [], life: [], folklore: true }));
+  expect(useProgram).toHaveBeenLastCalledWith(focused.program);
+  expect(setters.u_focus).toHaveBeenLastCalledWith(true);
+  expect(setters.u_focusClasses).toHaveBeenLastCalledWith(new Uint32Array(2));
+  expect(setters.u_focusLife).toHaveBeenLastCalledWith(false);
+  draw(normalizeFocus(null));
+  expect(useProgram).toHaveBeenLastCalledWith(ordinary.program);
+  expect(setters.u_focus).toHaveBeenLastCalledWith(false);
+});
 
 const view: View = {
   camera: { lat: 13, lng: 123, zoom: 18 },

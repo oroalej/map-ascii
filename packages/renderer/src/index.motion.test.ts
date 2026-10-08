@@ -49,6 +49,8 @@ import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
 import type * as FolklorePassModule from './folklore-pass';
 import type { FolkloreQuad } from './folklore-pass';
+import { folklorePass } from './folklore-pass';
+import { focusPulse } from './focus';
 import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
 import { cloudCover, driftClouds, SKY, skyAnchor } from './life/sky';
@@ -262,6 +264,15 @@ vi.mock('./pacing', async (load) => ({
 
 describe('live motion preference', () => {
   it.each([1, 2])('uses uniform cloud dimming below the detail resolution at DPR %s', (dpr) => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      minZoom: 7,
+      year: 2026,
+      life: { time: 720, wind: 'storm' },
+    });
     vi.stubGlobal('devicePixelRatio', dpr);
     atlas.setQuality('high');
     const anchor = skyAnchor([-1, -1, 1, 1]);
@@ -450,15 +461,40 @@ describe('live motion preference', () => {
     draw(100);
     expect(changed).toHaveBeenCalledWith(true);
     expect(folkloreCapture.quads).toHaveLength(1);
+    atlas.setFocus({ classes: [], life: [], folklore: true });
+    draw(200);
+    const spiritDraw = () => vi.mocked(folklorePass).mock.calls.at(-1)!;
+    expect(spiritDraw()[7]!.folklore).toBe(true);
+    const firstPulse = focusPulse(spiritDraw()[8]!, !spiritDraw()[9]);
+    expect(spiritDraw()[8]).toBe(vi.mocked(glyphPass).mock.calls.at(-1)![8]);
+    draw(300);
+    expect(focusPulse(spiritDraw()[8]!, !spiritDraw()[9])).not.toBe(firstPulse);
+    atlas.setFocus({ classes: [], life: ['people'] });
+    draw(400);
+    expect([...spiritDraw()[7]!.life]).toEqual(['people']);
+    expect(spiritDraw()[7]!.folklore).toBe(false);
+    atlas.setFocus(null);
+    draw(500);
+    expect(spiritDraw()[7]).toMatchObject({ folklore: false, mask: new Uint32Array(2) });
+    expect(spiritDraw()[7]!.life.size).toBe(0);
+    const draws = vi.mocked(folklorePass).mock.calls.length;
+    visibility.watched = false;
+    visibility.changed!(false);
+    draw(600);
+    expect(vi.mocked(folklorePass)).toHaveBeenCalledTimes(draws);
+    visibility.watched = true;
+    visibility.changed!(true);
     atlas.setLife({ enabled: false });
     expect(changed).toHaveBeenLastCalledWith(false);
-    draw(200);
+    draw(700);
     expect(folkloreCapture.packet?.haunts ?? []).toEqual([]);
     atlas.setLife({ enabled: true });
-    draw(300);
+    draw(800);
     expect(changed).toHaveBeenLastCalledWith(true);
     atlas.setReducedMotion(true);
     expect(changed).toHaveBeenLastCalledWith(false);
+    draw(900);
+    expect(spiritDraw()[9]).toBe(true);
   });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
@@ -562,6 +598,18 @@ describe('live motion preference', () => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+  it('clamps an initial zoom below the default floor before and after drawing', () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 10 },
+      year: 2026,
+    });
+    expect(atlas.getCamera().zoom).toBe(15);
+    draw(100);
+    expect(atlas.getCamera().zoom).toBe(15);
   });
   it('projects current camera and CSS size before rendering, independently of DPR', () => {
     expect(atlas.project([0, 0])).toEqual([200, 150]);
@@ -1683,7 +1731,13 @@ describe('live motion preference', () => {
     atlas.setLife({ season: 'winter' });
     atlas.setCamera({ zoom: 14 });
     draw(1300);
-    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
+    expect(atlas.getCamera().zoom).toBe(15);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
     atlas.setCamera({ zoom: 19 });
     draw(1400);
     expect(

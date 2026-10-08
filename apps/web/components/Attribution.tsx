@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useUiStore } from '@/state/ui';
 import { additionalCredits, creditTokens } from '@/lib/attribution';
 import styles from './Attribution.module.css';
@@ -12,18 +12,40 @@ const NONE: readonly string[] = [];
 const HEIGHT_VAR = '--attribution-height';
 
 /**
- * Always-visible source attribution (DATA.md §6): OpenStreetMap, plus the credits the city's
- * other layers need (e.g. the DEM behind the terrain), from its meta.
+ * Permanent OpenStreetMap attribution, with other map credits one click away (DATA.md §6).
  */
 export function Attribution() {
   const credits = useUiStore((s) => s.meta?.attribution ?? NONE);
   const extra = additionalCredits(credits);
   const ref = useRef<HTMLElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const sourcesId = useId();
+  const [open, setOpen] = useState(false);
+  const expanded = open && extra.length > 0;
 
-  // The credits wrap to more lines on narrow screens, so publish the real height rather than
-  // have the panels above guess it.
+  useEffect(() => {
+    if (!expanded) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      event.preventDefault();
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [expanded]);
+
+  // Only the footer row reserves space; the Sources panel overlays the map.
   useLayoutEffect(() => {
-    const footer = ref.current;
+    const footer = rowRef.current;
     if (!footer) return;
     const root = document.documentElement.style;
     const publish = () => root.setProperty(HEIGHT_VAR, `${footer.offsetHeight}px`);
@@ -37,13 +59,31 @@ export function Attribution() {
   }, []);
 
   return (
-    <footer ref={ref} className={styles.attribution} data-speech-obstacle>
-      ©{' '}
-      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
-        OpenStreetMap contributors
-      </a>
-      {extra.length > 0 && (
+    <footer ref={ref} className={styles.attribution} data-open={expanded} data-speech-obstacle>
+      <div ref={rowRef}>
+        ©{' '}
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">
+          OpenStreetMap contributors
+        </a>
+        {extra.length > 0 && (
+          <>
+            {' · '}
+            <button
+              ref={buttonRef}
+              type="button"
+              className={styles.toggle}
+              aria-expanded={expanded}
+              aria-controls={sourcesId}
+              onClick={() => setOpen(!expanded)}
+            >
+              Sources
+            </button>
+          </>
+        )}
+      </div>
+      {expanded && (
         <div
+          id={sourcesId}
           className={styles.sources}
           role="region"
           aria-label="Additional map sources"

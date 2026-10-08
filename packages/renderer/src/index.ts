@@ -174,7 +174,13 @@ const EMPTY_LIFE_CELLS = new Uint8Array(0);
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
+export {
+  legendEntries,
+  legendGroup,
+  type LegendEntry,
+  type LegendEntryId,
+  type LegendIcon,
+} from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
@@ -1894,7 +1900,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         daylight,
         fireworkSites,
       );
-      folklorePass(gl, programs, targets, themeRes, v, labelGrid, folkloreQuads);
+      folklorePass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        labelGrid,
+        folkloreQuads,
+        focus,
+        time,
+        reducedMotion,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
