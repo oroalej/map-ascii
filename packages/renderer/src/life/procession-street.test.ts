@@ -1,3 +1,4 @@
+import { formationLayout } from './formation-layout';
 import { eventActor, identifyEventActor } from './event-actors';
 import { describe, expect, it, vi } from 'vitest';
 import { FrameProfiler } from '../profile';
@@ -5,6 +6,7 @@ import {
   eventOccurrence,
   processionFormationWidth,
   localMetricProjection,
+  processionAltarRadius,
   type StreetRoute,
   type MassRoute,
   type FluvialRoute,
@@ -22,6 +24,7 @@ import { worldTiles } from './testing/scenarios';
 import { createInlineHost } from './inline-host';
 import { createLifeWorkerApi } from './worker-api';
 import { makeCellGuard } from './cell-guard';
+import { CrowdMaskRaster } from './crowd-mask';
 import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';
 import { buildLifeGlyphs, packLife } from './draw';
 import { mapGlyphs, themes } from '../theme';
@@ -70,6 +73,51 @@ const mass: MassRoute = {
     roads: [{ line: routePoints, width_m: 8 }],
   },
 };
+it.each([0, 1, 2, 3])(
+  'admits all fixed altar actors for %s images and exposes the platform rim',
+  (images) => {
+    const at = mass.site.anchor,
+      projection = localMetricProjection(at),
+      radius = processionAltarRadius(1, images);
+    const route: MassRoute = {
+      ...mass,
+      site: {
+        ...mass.site,
+        altar: { at, radius_m: 1, images },
+        altar_ground: [
+          Array.from({ length: 33 }, (_, i) =>
+            projection.from([
+              Math.cos((i * Math.PI) / 16) * radius,
+              Math.sin((i * Math.PI) / 16) * radius,
+            ]),
+          ),
+        ],
+      },
+    };
+    const scene = new GroundProcessionScene(route);
+    expect(scene.actors.length).toBeLessThanOrEqual(300);
+    const actors = scene.agents(0.5, 0).filter((a) => a.eventRole === 'altar');
+    expect(actors).toHaveLength(13 + images);
+    expect(actors.filter((a) => a.glyph === ProcessionGlyph.andas)).toHaveLength(images);
+    const toCell = (lng: number, lat: number): [number, number] => {
+      const [x, y] = projection.to([lng, lat]);
+      return [x / 0.25 + 60, -y / 0.25 + 60];
+    };
+    const glyphs = mapGlyphs(themes.dark);
+    const pack = (withPlatform: boolean) => {
+      const out = new Uint8Array(120 * 120 * 4);
+      packLife(
+        out,
+        { cols: 120, rows: 120, cellWidth: 10, cellHeight: 18, toCell },
+        actors.filter((a) => withPlatform || a.glyph !== ProcessionGlyph.platform),
+        themes.dark,
+        (g) => glyphs.indexOf(g),
+      );
+      return out;
+    };
+    expect(pack(true)).not.toEqual(pack(false));
+  },
+);
 function ordinaryPerson(x: number, y = 2000, rank = 0): Mover {
   return {
     kind: 'person',
@@ -244,26 +292,15 @@ describe('street event simulation', () => {
     { left: 0, right: 1 },
     { left: 1, right: 2 },
     { left: 0, right: 0 },
-  ])('places spectators only on available sides: %j', (sides) => {
+  ])('keeps spectator permission without simulated stations: %j', (sides) => {
     const scene = new GroundProcessionScene({
       ...street,
       segments: street.segments.map((s) => ({ ...s, sidewalks_m: sides })),
     });
-    const spectators = scene.actors.filter((a) => a.destination);
-    const expected = sides.left && sides.right ? 2 : sides.left || sides.right ? 1 : 0;
-    expect(new Set(spectators.map((a) => Math.sign(a.off))).size).toBe(expected);
-    if (!sides.left) expect(spectators.every((a) => a.off < 0)).toBe(true);
-    if (!sides.right) expect(spectators.every((a) => a.off > 0)).toBe(true);
+    expect(scene.actors.filter((a) => a.destination)).toHaveLength(0);
     const at = (side: number) => scene.frame.from([100, side * 4.7]);
     expect(eventGroundAllows(scene.ground, [at(1)])).toBe(sides.left > 0);
     expect(eventGroundAllows(scene.ground, [at(-1)])).toBe(sides.right > 0);
-    const admitted = new Set(scene.agents(0.5, 0).map(eventActor));
-    // Rounded end caps may omit a whole footprint at an endpoint; interior sides fit.
-    expect(
-      spectators
-        .filter((a) => -a.back > 0 && -a.back < street.length_m)
-        .every((a) => admitted.has('live/default/' + a.id)),
-    ).toBe(true);
   });
   it('reconciles once per terrain, closure or resident activation and restores traffic immediately', () => {
     const { w, life } = world();
@@ -404,7 +441,7 @@ describe('street event simulation', () => {
     expect(w.visible(18, 1, center).some((a) => eventActor(a))).toBe(true);
   });
   it('caches cell permissions separately for each ground and cell', () => {
-    const permission = vi.spyOn(groundEvents, 'eventGroundAllows');
+    const permission = vi.spyOn(CrowdMaskRaster.prototype, 'mask');
     try {
       const ground = groundForRoute(street);
       const denied = { regions: ground.regions, blocked: ground.regions };
@@ -610,7 +647,7 @@ describe('street event simulation', () => {
     expect(life.eventPopulation).toBe(0);
   });
   it.each(['procession', 'parade'] as const)(
-    'admits both sidewalk crowds on one-metre %s sidewalks',
+    'keeps both one-metre %s sidewalks for the static crowd',
     (kind) => {
       const scene = new GroundProcessionScene({
         ...street,
@@ -618,19 +655,10 @@ describe('street event simulation', () => {
         formation: undefined,
         segments: street.segments.map((segment) => ({ ...segment, sidewalk_m: 1 })),
       });
-      const spectators = new Set(
-        scene.actors.filter((actor) => actor.destination).map((actor) => `test/${actor.id}`),
-      );
-      const admitted = scene
-        .agents(0.6, 0, { scope: 'test' })
-        .filter((actor) => spectators.has(eventActor(actor)!));
-      expect(admitted.length).toBeGreaterThan(spectators.size * 0.9);
-      expect(admitted.filter((actor) => actor.lat > street.route[0]![1]).length).toBeGreaterThan(
-        20,
-      );
-      expect(admitted.filter((actor) => actor.lat < street.route[0]![1]).length).toBeGreaterThan(
-        20,
-      );
+      expect(scene.actors.filter((actor) => actor.destination)).toHaveLength(0);
+      const at = (side: number) => scene.frame.from([100, side * 4.7]);
+      expect(eventGroundAllows(scene.ground, [at(1)])).toBe(true);
+      expect(eventGroundAllows(scene.ground, [at(-1)])).toBe(true);
     },
   );
   it('keeps a parade actor visible through a rounded bend and rejects ground beyond it', () => {
@@ -648,11 +676,11 @@ describe('street event simulation', () => {
       segments: Array.from({ length: 2 }, () => ({ id: 'osm:way/1', width_m: 8, sidewalk_m: 0 })),
     };
     const scene = new GroundProcessionScene(route),
-      tail = Math.max(10, ...scene.actors.map((actor) => actor.back)) + 10;
+      layout = formationLayout(route);
     for (const head of [95, 99.75, 100, 101, 105])
       expect(
         scene
-          .agents((head + tail) / (200 + tail), 0)
+          .agents((head + layout.leading) / (200 + layout.tail + layout.leading), 0)
           .some((actor) => eventActor(actor)?.endsWith('/0')),
       ).toBe(true);
     expect(eventGroundAllows(scene.ground, [frame.from([102.5, -2.5])])).toBe(true);
@@ -1216,25 +1244,46 @@ describe('street event simulation', () => {
       ).toBe(true);
     },
   );
-  it.each(['procession', 'parade'] as const)(
+  it.each(['procession', 'parade', 'mass', 'fluvial'] as const)(
     'clears moving and parked traffic across the full %s route for live and played events, then restores identities',
     (kind) => {
       for (const live of [true, false]) {
         const { w, life } = world();
-        const route: StreetRoute =
-          kind === 'parade'
-            ? {
-                ...street,
-                kind: 'parade',
-                formation: {
-                  contingents: 2,
-                  ranks: 3,
-                  band: 8,
-                  color_guard: 4,
-                  vehicles: ['car'],
-                },
-              }
-            : street;
+        // A river event closes only its owner-marked ground on land.
+        const river: FluvialRoute = {
+          id: 'river',
+          kind: 'fluvial',
+          title: { en: 'River' },
+          status: 'draft',
+          schedule: street.schedule,
+          route: street.route,
+          length_m: street.length_m,
+          crowd_ground: {
+            grounds: groundForRoute(street).regions,
+            blocked: [],
+            water: [],
+            bridges: [],
+            closure_zone: groundForRoute(street).regions,
+          },
+        };
+        const route: StreetRoute | MassRoute | FluvialRoute =
+          kind === 'fluvial'
+            ? river
+            : kind === 'mass'
+              ? { ...mass, site: { ...mass.site, closure_zone: groundForRoute(street).regions } }
+              : kind === 'parade'
+                ? {
+                    ...street,
+                    kind: 'parade',
+                    formation: {
+                      contingents: 2,
+                      ranks: 3,
+                      band: 8,
+                      color_guard: 4,
+                      vehicles: ['car'],
+                    },
+                  }
+                : street;
         w.setProcessions([route]);
         const car = (x: number, y = 2000): Mover => ({
           ...ordinaryPerson(x, y),
@@ -1298,7 +1347,8 @@ describe('street event simulation', () => {
         if (!live) {
           w.play(route.id, eventOccurrence(route.schedule, new Date('2026-06-01')));
           expect(life.movers).not.toContain(start);
-          w.step(180, undefined, 18);
+          // Past the end of the run, river holds included.
+          w.step(200, undefined, 18);
           expect(w.procession()).toBeUndefined();
           expect(life.movers).toContain(start);
           expect(life.parked).toContain(parked);
@@ -1306,6 +1356,47 @@ describe('street event simulation', () => {
       }
     },
   );
+  it('lets a running event’s people pray, wave and call out its cheers in turns', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      8,
+      1,
+      1,
+    );
+    const w = new LifeWorld(undefined, undefined, {
+      dialogue: [
+        { id: 'cheer-viva', kind: 'cheer', turns: 1, conditions: { occasions: ['procession'] } },
+        { id: 'cheer-amen', kind: 'cheer', turns: 1, conditions: { occasions: ['mass'] } },
+      ],
+    });
+    w.setProcessions([street, mass]);
+    w.sync([{ key: 'road', tile, life: b.finish() }]);
+    const life = worldTiles(w).get('road')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    w.play(street.id, eventOccurrence(street.schedule, new Date('2026-06-01')));
+    const moods = new Set<string>(),
+      said = new Set<string>();
+    for (let i = 0; i < 120; i++) {
+      w.step(0.5, undefined, 18);
+      for (const a of w.visible(18, 1, point(1500))) {
+        if (!eventActor(a)) continue;
+        if (a.emoji) moods.add(a.emoji.mood);
+        if (a.speech) said.add(a.speech.exchangeId);
+      }
+    }
+    expect(moods.size).toBeGreaterThan(0);
+    expect([...said]).toEqual(['cheer-viva']);
+    w.stop();
+    w.step(0.5, undefined, 18);
+    expect(
+      w.visible(18, 1, point(1500)).some((a) => a.speech?.exchangeId.startsWith('cheer-')),
+    ).toBe(false);
+  });
   it('reuses event time only at unchanged progress and retains exact sub-minute time', () => {
     const { w } = world();
     const timing = eventOccurrence(street.schedule, new Date('2026-06-01'));

@@ -1,6 +1,6 @@
 import type { CameraState } from '@atlas/shared';
 import type { TileId } from './tiles';
-import { project, TILE_SIZE } from './camera';
+import { project, unproject, TILE_SIZE } from './camera';
 import { EXTENT, MERCATOR_METERS } from './raster/geometry';
 
 /** Meters per CSS pixel at the camera's center. */
@@ -48,6 +48,8 @@ export function screenArea(
 /** The grid for a view, and how tiles and points map onto it. */
 export type GridPlacement = {
   grid: Grid;
+  /** Optional inverse for north-up crowd rasterization; forward-only placements omit it. */
+  fromCell?: (col: number, row: number) => [number, number];
   /** Zoom-zero world pixels to cells, without repeating geographic projection. */
   world?: readonly [number, number, number, number];
   /** Tile units → cell-grid clip space. */
@@ -71,6 +73,12 @@ export function placeGrid(
   const originCol = Math.floor(left / cellDev.w) - 1;
   const originRow = Math.floor(top / cellDev.h) - 1;
   return {
+    fromCell: (col, row) =>
+      unproject(
+        ((col + originCol) * cellDev.w) / dpr,
+        ((row + originRow) * cellDev.h) / dpr,
+        camera.zoom,
+      ),
     world: [
       (2 ** camera.zoom * dpr) / cellDev.w,
       (2 ** camera.zoom * dpr) / cellDev.h,

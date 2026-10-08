@@ -12,7 +12,7 @@ const EVENT_EDGE_STEP_M = 5;
 export function roadGraph(
   byId: ReadonlyMap<string, AtlasFeature>,
   roads: readonly AtlasFeature[],
-  config: { from?: string; to?: string },
+  config: { from?: string; to?: string; through?: readonly string[] },
   label: string,
   options: {
     event?: { allows: (road: AtlasFeature, a: SeasonalPoint, b: SeasonalPoint) => boolean };
@@ -124,6 +124,8 @@ export function roadGraph(
         }
       }
   }
+  // Ordered stops split the route into shortest legs, so a loop keeps its authored order.
+  const stops = (config.through ?? []).map((id) => endpoint(id, reachable)!);
   const to = endpoint(config.to, reachable);
   const leaves = [...nodes.values()]
     .filter((n) => n.edges.length === 1)
@@ -164,15 +166,25 @@ export function roadGraph(
   }
   const { dist, previous } = distances(root);
   let selected = edges;
+  /** Edges in traversal order, each with its entry and exit node. */
+  const path: { edge: Edge; from: Node; to: Node }[] = [];
   if (from || to) {
     const end = to ?? leaves.reduce((a, b) => (dist.get(a)! > dist.get(b)! ? a : b));
-    selected = [];
-    for (let n = end; n !== root;) {
-      const e = previous.get(n);
-      if (!e) throw new Error(`${label}: empty endpoint route`);
-      selected.push(e);
-      n = e.a === n ? e.b : e.a;
+    const legs = [root, ...stops, end];
+    for (let i = 1; i < legs.length; i++) {
+      const start = legs[i - 1]!;
+      const back = i === 1 ? previous : distances(start).previous;
+      const leg: typeof path = [];
+      for (let n = legs[i]!; n !== start;) {
+        const e = back.get(n);
+        if (!e) throw new Error(`${label}: empty endpoint route`);
+        const other = e.a === n ? e.b : e.a;
+        leg.push({ edge: e, from: other, to: n });
+        n = other;
+      }
+      path.push(...leg.reverse());
     }
+    selected = path.map((step) => step.edge);
   }
-  return { selected, dist, root, project, unproject };
+  return { selected, path, dist, root, project, unproject };
 }

@@ -165,11 +165,52 @@ describe('ProcessionScene', () => {
     expect(new Set(across.map((x) => x.toFixed(1))).size).toBeGreaterThan(PROCESSION.columns * 3);
   });
 
-  it('enters from the start and ends with the pagoda at the landing', () => {
-    expect(boats(0).find((a) => a.vehicle === 'pagoda')).toBeUndefined();
+  it('starts with the whole flotilla on the water, holds, and holds again at the landing', () => {
+    const hold = PROCESSION.holdSeconds / scene.playDuration;
+    const at = (progress: number) =>
+      boats(progress)
+        .map((a) => `${a.vehicle} ${east(a.lng).toFixed(2)}`)
+        .sort();
+    // Every boat is shown from the start, the last one at the route's start, none moving yet.
+    const first = boats(0);
+    expect(first).toHaveLength(boats(0.5).length);
+    expect(first.find((a) => a.vehicle === 'pagoda')).toBeDefined();
+    expect(Math.min(...first.map((a) => east(a.lng)))).toBeGreaterThanOrEqual(-0.5);
+    expect(Math.min(...first.map((a) => east(a.lng)))).toBeLessThan(10);
+    expect(at(hold * 0.9)).toEqual(at(0));
+    expect(at(hold * 1.5)).not.toEqual(at(0));
+    // The pagoda stops at the landing (here the route's end) and stays for the last hold.
     expect(pagodaEast(1)).toBeCloseTo(1000, 0);
-    // Nothing is drawn past the landing.
+    expect(pagodaEast(1 - hold * 0.9)).toBeCloseTo(1000, 0);
     expect(boats(1).every((a) => east(a.lng) <= 1000.5)).toBe(true);
+    // Short of the route's end, the boats ahead stretch on beyond the landing.
+    const landed = new ProcessionScene({ ...route, id: 'procession/landing', landing_m: 600 });
+    const end = landed.agents(1, 0, { crowds: false }).filter((a) => !a.line);
+    const pagoda = east(end.find((a) => a.vehicle === 'pagoda')!.lng);
+    expect(pagoda).toBeCloseTo(600, 0);
+    const voyadores = end.filter((a) => a.vehicle === 'voyador');
+    expect(voyadores).toHaveLength(PROCESSION.columns * PROCESSION.ranks);
+    expect(voyadores.every((v) => east(v.lng) > 600)).toBe(true);
+    // A departure past river kept behind it: the pagoda sets off there, followers behind.
+    const departed = new ProcessionScene({
+      ...route,
+      id: 'procession/departure',
+      departure_m: 300,
+    });
+    const setOff = departed.agents(0, 0, { crowds: false }).filter((a) => !a.line);
+    expect(east(setOff.find((a) => a.vehicle === 'pagoda')!.lng)).toBeCloseTo(300, 0);
+    const behind = setOff.filter(
+      (a) =>
+        ['baroto', 'rowboat', 'motorboat', 'sailboat'].includes(a.vehicle!) && east(a.lng) < 300,
+    );
+    expect(behind.length).toBeGreaterThanOrEqual(PROCESSION.followers - 1);
+    expect(landed.playDuration).toBe(
+      Math.max(
+        PROCESSION.playSeconds,
+        (600 - (landed as unknown as { start: number }).start) / PROCESSION.playSpeed,
+      ) +
+        2 * PROCESSION.holdSeconds,
+    );
   });
 
   it('brings a flotilla of small boats behind the pagoda', () => {
@@ -416,7 +457,8 @@ describe('LifeWorld processions', () => {
     expect(agents[0]!.vehicle).toMatch(/pagoda|voyador|banca|motorboat/);
     expect(agents.some((a) => a.vehicle === 'pagoda')).toBe(true);
     expect(regular().every((a) => a.lng < 1)).toBe(true);
-    for (let i = 0; i < 1000; i++) world.step(0.1);
+    // The rest of the run, with its holds at the start and at the landing.
+    for (let i = 0; i < 1100; i++) world.step(0.1);
     expect(world.procession()).toBeUndefined();
   });
 

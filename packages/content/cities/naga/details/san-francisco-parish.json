@@ -32,7 +32,7 @@
     }
   ],
   "status": "draft",
-  "credit": "San Francisco Parish — Geometry: © OpenStreetMap contributors (ODbL). Draft schematic detail; ground survey needed.",
+  "credit": "San Francisco Parish — Geometry: © OpenStreetMap contributors (ODbL). Schematic detail estimated from imagery; ground survey pending.",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -45,7 +45,7 @@
       "note": "Official report confirms the historical marker returned in February 2025. Keep the existing sourced roof plan. The earlier facade tread intersected the standing church and is removed. A broad tread outside the actual northwest facade conflicts with the cached full-width Peñafrancia Avenue carriageway (way 1529540512); frontage alignment needs a current reference. Unsourced facade statue pedestals remain omitted. Marker and lamp placement remains schematic. No Google Maps imagery was inspected and no timeline dates are inferred."
     },
     {
-      "title": "Draft surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     }
   ],
