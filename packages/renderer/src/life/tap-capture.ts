@@ -7,6 +7,8 @@ import { readLifeSurface, type LifeSurfaceFrame } from './surface-visibility';
 import type { Readback } from '../readback';
 import type { FolkloreQuad } from '../folklore-pass';
 import type { LifeTap } from './tap';
+import { classId } from '../classes';
+import { CellBit } from './config';
 
 export type TapCaptureFrame = LifeSurfaceFrame & {
   generation: number;
@@ -32,11 +34,6 @@ export function captureTap(
   }
   const [col, row] = pointerCell(point, f.dpr, f.grid);
   const agent = agentAt(f.owners, f.targets.cols, f.targets.rows, f.agents, [col, row]);
-  if (!agent || !describeAgent(agent)) {
-    if (current()) done(tap);
-    return;
-  }
-  const offset = (row * f.targets.cols + col) * 4;
   const sx = Math.min(
     SUB.cols - 1,
     Math.floor(((point[0] * f.dpr + f.grid.shiftX) / f.grid.cellWidth - col) * SUB.cols),
@@ -45,6 +42,27 @@ export function captureTap(
     SUB.rows - 1,
     Math.floor(((point[1] * f.dpr + f.grid.shiftY) / f.grid.cellHeight - row) * SUB.rows),
   );
+  const fixture = () => {
+    if (!tap.signal && !tap.carnival && !tap.candle) {
+      if (current()) done(tap);
+      return;
+    }
+    readLifeSurface(
+      reads,
+      attachment,
+      f.targets,
+      { col, row, sx, sy, cls: classId('life_person'), flags: CellBit.person },
+      (visible) => {
+        if (visible === undefined || !current()) return;
+        done(visible ? tap : { ...tap, signal: undefined, carnival: undefined, candle: undefined });
+      },
+    );
+  };
+  if (!agent || !describeAgent(agent)) {
+    fixture();
+    return;
+  }
+  const offset = (row * f.targets.cols + col) * 4;
   readLifeSurface(
     reads,
     attachment,
@@ -59,7 +77,8 @@ export function captureTap(
     },
     (visible) => {
       if (visible === undefined || !current()) return;
-      done({ ...tap, ...(visible && { agent: f.agents.indexOf(agent) }) });
+      if (visible) done({ ...tap, agent: f.agents.indexOf(agent) });
+      else fixture();
     },
   );
 }

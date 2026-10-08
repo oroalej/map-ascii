@@ -824,6 +824,7 @@ export function fixturePass(
   clock: number,
   repack: boolean,
   motion: FixtureMotion = { time: 0, strength: 0 },
+  signalOffsets?: import('./life/signals').SignalOffsets,
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
@@ -878,6 +879,7 @@ export function fixturePass(
       motion,
       utilityScratch,
       fixtureScratch,
+      signalOffsets,
     );
     cache = {
       packed,
@@ -904,7 +906,7 @@ export function fixturePass(
     changed = true;
     lightsChanged = true;
   } else {
-    const phases = updateFixtureSignals(cache.packed, clock);
+    const phases = updateFixtureSignals(cache.packed, clock, signalOffsets);
     changed = phases !== 0;
     lightsChanged = (phases & FixtureSignalChange.vehicle) !== 0;
   }

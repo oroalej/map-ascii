@@ -215,7 +215,7 @@ import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { DialogueMemory } from './dialogue';
-import { SignalControl } from './signals';
+import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
 import { bendAt, laneBend, LANE_BEND, type LaneTerrain } from './lane-clearance';
@@ -8639,6 +8639,44 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private signalPresses?: SignalPresses;
+  get signalOffsets(): SignalOffsets | undefined {
+    return this.signalPresses?.snapshot();
+  }
+  private tapSignal(tap: LifeTap) {
+    for (const life of this.tiles.values()) {
+      const at = lngLatToTile(life.tile, ...tap.at);
+      const signal = life.signals.signals.find((s) =>
+        tap.signal
+          ? s.seed === tap.signal.seed && s.a < 0 === tap.signal.midBlock
+          : Math.hypot(s.x - at.x, s.y - at.y) <= 1.5 * tap.cellMeters * life.perMeter,
+      );
+      if (!signal) continue;
+      const midBlock = signal.a < 0;
+      const presses = (this.signalPresses ??= new SignalPresses());
+      const before = signalState(signal.seed, this.clock, midBlock, presses.offsets);
+      if (presses.press(signal.seed, midBlock, this.clock)) {
+        let count = 0;
+        for (const tile of this.tiles.values()) {
+          tile.signals.offsets = presses.offsets;
+          tile.crossingWaits.signalOffsets = presses.offsets;
+          for (const m of tile.movers)
+            if (
+              (before.a === 'green' || before.b === 'green') &&
+              count < 4 &&
+              m.kind === 'vehicle' &&
+              this.owns(tile, m) &&
+              tile.signals.caught(m, signal.seed, midBlock, this.clock)
+            ) {
+              tile.requestEmoji(m, 'driver', 'angry', this.emojiClock);
+              count++;
+            }
+        }
+      }
+      return true;
+    }
+    return false;
+  }
   private barkUntil?: WeakMap<Mover, number>;
   tapSources?: TapSources;
   tapReceipts?: readonly TapReceipt[];
@@ -8756,7 +8794,7 @@ export class LifeWorld {
             resolveTap(tap, this.tapSources!, {
               folklore: () => false,
               agent: (target) => this.tapAgent(target, minutes, zoom, rain),
-              signal: () => false,
+              signal: (tap) => this.tapSignal(tap),
               procession: () => false,
               carnival: () => {},
               candle: () => {},
@@ -9448,6 +9486,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.signalPresses = undefined;
     this.barkUntil = undefined;
     this.tapSources?.clear();
     this.tapReceipts = undefined;
@@ -9584,6 +9623,10 @@ export class LifeWorld {
           if (this.emergencyRouter) fresh.emergencyRouter = this.emergencyRouter;
           fresh.crossingWaits.registry = this.crossingReservations;
           fresh.crossingWaits.shared = true;
+          if (this.signalPresses) {
+            fresh.signals.offsets = this.signalPresses.offsets;
+            fresh.crossingWaits.signalOffsets = this.signalPresses.offsets;
+          }
           this.tiles.set(key, fresh);
           if (saved)
             for (const m of fresh.movers)

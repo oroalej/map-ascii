@@ -19,6 +19,58 @@ import { BRAKE } from './lamps';
 import { emergencyConfig, emergencyFixture } from './testing/emergency';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+import { signalState } from './signals';
+it('transports pressed canonical signal phases equally and retains them through tile replacement', () => {
+  const builder = new LifeBuilder();
+  builder.signal({ x: 2048, y: 2048 }, 8, 90, 0, true, undefined, { seed: 0 });
+  const entry = { key: 'signal', tile: left, life: builder.finish() },
+    center = tileToLngLat(left, { x: 2048, y: 2048 });
+  const direct = new LifeWorld(),
+    api = createLifeWorkerApi(() => 0);
+  direct.enableTaps();
+  direct.sync([entry]);
+  api.init({ processions: [], tapTargets: true });
+  api.sync([entry]);
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: center[0], lat: center[1], zoom: 19 },
+      size: { width: 800, height: 600 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: { dt: 0, zoom: 19, cellMeters: 1 },
+    visible: [19, 1, center],
+  };
+  const first = runLifeFrame(direct, input);
+  expect(api.frame(input).signalOffsets).toBeUndefined();
+  input.step.taps = [
+    {
+      id: 1,
+      generation: 1,
+      frame: first.tapFrame!,
+      at: center,
+      pointer: 'touch',
+      cellMeters: 1,
+      signal: { seed: 0, midBlock: false },
+    },
+  ];
+  const result = runLifeFrame(direct, input),
+    remote = api.frame(input);
+  expect(remote.signalOffsets).toEqual(result.signalOffsets);
+  expect(remote.tapReceipts).toEqual([{ id: 1, action: 'signal' }]);
+  expect(signalState(0, remote.signalClock, false, remote.signalOffsets).a).toBe('amber');
+  input.step.taps = undefined;
+  const replacement = { ...entry, key: 'replacement' };
+  direct.sync([replacement]);
+  api.sync([replacement]);
+  expect(runLifeFrame(direct, input).signalOffsets).toEqual(result.signalOffsets);
+  expect(api.frame(input).signalOffsets).toEqual(result.signalOffsets);
+  direct.clearTiles();
+  api.clearTiles();
+  expect(runLifeFrame(direct, input).signalOffsets).toBeUndefined();
+  expect(api.frame(input).signalOffsets).toBeUndefined();
+});
 it('transports independent active folklore identically without detaching observer storage', () => {
   const t = folkloreTile(),
     entry = { key: t.key, tile: t.tile, life: t.geo },

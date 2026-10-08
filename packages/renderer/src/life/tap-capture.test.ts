@@ -67,6 +67,33 @@ it('targets touch without hover or any owner selection', () => {
   expect(f.done).toHaveBeenCalledWith(expect.objectContaining({ pointer: 'touch', agent: 0 }));
   expect(f.frame.agents[0]!.inspectionId).toBeUndefined();
 });
+it.each(['path', 'tree_crown', 'building'])(
+  'admits signal hardware only on its visible %s surface',
+  (cls) => {
+    const f = fixture();
+    f.frame.owners.fill(0);
+    const done = vi.fn();
+    captureTap(
+      [5, 5],
+      {
+        generation: 1,
+        frame: 1,
+        at: [0, 0],
+        pointer: 'touch',
+        cellMeters: 1,
+        signal: { seed: 0, midBlock: false },
+      },
+      f.frame,
+      f.reads,
+      100,
+      () => true,
+      done,
+    );
+    expect(f.reads.request).toHaveBeenCalledTimes(3);
+    f.finish(cls, cls === 'path' ? 0 : 5);
+    expect(done.mock.calls[0]![0].signal !== undefined).toBe(cls === 'path');
+  },
+);
 it.each(['tree_crown', 'building'])('a %s occluder cannot claim the agent', (cls) => {
   const f = fixture();
   f.start();

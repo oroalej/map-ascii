@@ -20,6 +20,7 @@ export type LifeTap = {
   cellMeters: number;
   agent?: number;
   folklore?: string;
+  signal?: { seed: number; midBlock: boolean };
   carnival?: { key: string; at: readonly [number, number] };
   candle?: { key: string; at: readonly [number, number] };
   firework?: boolean;

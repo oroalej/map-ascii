@@ -80,6 +80,7 @@ export type FrameView = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
+  signalOffsets?: import('./signals').SignalOffsets;
   tapFrame?: number;
   tapReceipts?: readonly TapReceipt[];
   cellGuard: LifeWorld['groundCellGuard'];
@@ -406,6 +407,7 @@ export function createWorkerHost(
                 generation,
                 procession: view?.procession,
                 signalClock: view?.signalClock ?? 0,
+                ...(view?.signalOffsets && { signalOffsets: view.signalOffsets }),
                 cellGuard: (toCell) =>
                   cellTerrain &&
                   makeCellGuard(
@@ -436,6 +438,7 @@ export function createWorkerHost(
             generation,
             procession: result.procession,
             signalClock: result.signalClock,
+            ...(result.signalOffsets && { signalOffsets: result.signalOffsets }),
             tapFrame: result.tapFrame,
             tapReceipts: result.tapReceipts,
             cellGuard: (toCell) =>
@@ -520,6 +523,7 @@ export function createWorkerHost(
         folklore: EMPTY_FOLKLORE,
         puffs: EMPTY_PUFFS,
         signalClock: view?.signalClock ?? 0,
+        ...(view?.signalOffsets && { signalOffsets: view.signalOffsets }),
         cellGuard: retained?.cellGuard ?? (() => undefined),
         procession,
       };

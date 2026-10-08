@@ -97,6 +97,7 @@ import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { TapQueue } from './life/tap';
 import { captureTap } from './life/tap-capture';
+import { tapSignalFixture } from './life/tap-fixtures';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
@@ -1446,6 +1447,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       lifeView()?.signalClock ?? 0,
       cellsDrawn,
       { time, strength: wind.strength },
+      lifeView()?.signalOffsets,
     );
     const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
     if (key !== fixturesKey) {
@@ -2121,6 +2123,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const geometry = speechGeometry;
       const capturedCamera = camera;
       const raster = target && lifeRaster(target);
+      const signal = placement && tapSignalFixture(fixtures, [at[0]!, at[1]!], placement.toCell);
       picker.click(point);
       if (!eligible || !target || !source || !raster) return;
       captureTap(
@@ -2131,6 +2134,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           at: [at[0]!, at[1]!],
           pointer: pointerType,
           cellMeters: metersPerCssPx(camera) * stepCell(schedule, step ?? 0).width,
+          ...(signal && { signal }),
         },
         {
           targets: target,

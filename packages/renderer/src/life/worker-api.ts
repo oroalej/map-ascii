@@ -55,6 +55,7 @@ export type FrameResult = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
+  signalOffsets?: import('./signals').SignalOffsets;
   tapFrame?: number;
   tapReceipts?: readonly TapReceipt[];
   terrain?: TerrainSnapshot | null;
@@ -132,6 +133,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     puffs: world.visiblePuffs,
     procession: world.procession(),
     signalClock: world.signalClock,
+    ...(world.signalOffsets && { signalOffsets: world.signalOffsets }),
     ...(world.tapSources && { tapFrame: world.tapSources.frame }),
     ...(world.tapReceipts && { tapReceipts: world.tapReceipts }),
   };

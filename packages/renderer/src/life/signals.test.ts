@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { hashString, metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { LifeBuilder, LifeLine } from './geometry';
-import { signalState } from './signals';
+import { signalState, SignalPresses, pedestrianState } from './signals';
+import { SIGNAL } from './config';
 import { TileLife, LifeWorld, type Mover } from './simulate';
 import { completeScenarioState, worldTiles } from './testing/scenarios';
 import type { JunctionTable } from './junctions';
@@ -58,6 +59,45 @@ const car = (): Mover => ({
   rank: 0,
 });
 describe('signals', () => {
+  it.each([false, true])(
+    'presses retain complete clearance and mid-block walk windows (mid-block=%s)',
+    (midBlock) => {
+      for (let clock = 0; clock < 130; clock++) {
+        const presses = new SignalPresses(),
+          before = signalState(0, clock, midBlock);
+        expect(presses.snapshot()).toBeUndefined();
+        expect(presses.press(0, midBlock, clock)).toBe(true);
+        const after = signalState(0, clock, midBlock, presses.offsets);
+        if (before.a === 'green' || before.b === 'green') {
+          expect(after.a === 'amber' || after.b === 'amber').toBe(true);
+          expect(after.left).toBe(SIGNAL.amber);
+          const end = signalState(0, clock + SIGNAL.amber, midBlock, presses.offsets);
+          expect(end).toMatchObject({ a: 'red', b: 'red', left: SIGNAL.allRed });
+          expect(pedestrianState(0, clock, midBlock, 'a', presses.offsets)).toBe('dont');
+        } else expect(after).toEqual(before);
+        expect(presses.press(0, midBlock, clock + 4.99)).toBe(false);
+        expect(presses.press(0, midBlock, clock + 5)).toBe(true);
+      }
+    },
+  );
+  it('catches only moving, stoppable vehicles before the pressed approach stop line', () => {
+    const life = new TileLife(tile, geography(), 1),
+      m = car(),
+      signal = life.signals.signals[0]!;
+    const clock = Array.from({ length: 150 }, (_, t) => t).find(
+      (t) => signalState(signal.seed, t).a === 'green',
+    )!;
+    const presses = new SignalPresses();
+    presses.press(signal.seed, false, clock);
+    life.signals.offsets = presses.offsets;
+    m.v = pm;
+    expect(life.signals.caught(m, signal.seed, false, clock)).toBe(true);
+    m.v = 0;
+    expect(life.signals.caught(m, signal.seed, false, clock)).toBe(false);
+    m.v = pm;
+    m.d = 2200;
+    expect(life.signals.caught(m, signal.seed, false, clock)).toBe(false);
+  });
   it('recognizes only explicitly tagged crossing anchors, including mapped crossings outside the old disk', () => {
     const geo = geography();
     const stripe = { x: 2048 + 15 * pm, y: 2048 };

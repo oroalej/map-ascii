@@ -13,7 +13,7 @@ import {
   type FixtureGrid,
   type StreetFixture,
 } from './fixtures';
-import { signalState } from './signals';
+import { signalState, SignalPresses } from './signals';
 import { LifeWorld } from './simulate';
 
 const grid: FixtureGrid = {
@@ -59,6 +59,38 @@ const cells = (out: Uint8Array) => {
 };
 
 describe('street fixtures', () => {
+  it('packs and updates lamps from the same pressed offset snapshot', () => {
+    const presses = new SignalPresses();
+    presses.press(signal.seed, false, 0);
+    const packed = packFixtures(
+      new Uint8Array(grid.cols * grid.rows * 4),
+      grid,
+      [signal],
+      19,
+      glyph,
+      0,
+      undefined,
+      undefined,
+      undefined,
+      presses.offsets,
+    );
+    expect(packed.signals[0]!.color).toBe(1);
+    updateFixtureSignals(packed, 3, presses.offsets);
+    expect(packed.signals[0]!.color).toBe(0);
+    const repacked = packFixtures(
+      new Uint8Array(grid.cols * grid.rows * 4),
+      grid,
+      [signal],
+      19,
+      glyph,
+      3,
+      undefined,
+      undefined,
+      undefined,
+      presses.offsets,
+    );
+    expect(repacked.texels).toEqual(packed.texels);
+  });
   it('waves cloth and its emblems without moving hardware or leaving stale cells', () => {
     const pole: StreetFixture = { ...lamp, kind: 'flagpole', flag: 'PH' };
     const packed = pack([pole], 20.5);
