@@ -8,6 +8,100 @@ import { LifeLine, LifeBuilder } from './geometry';
 import { folkloreTile, folkloreConfig, folkloreCenter, calendar } from './testing/folklore';
 import { lngLatToTile, tileToLngLat } from '../raster/geometry';
 import { activityLevels } from './config';
+import { signalState } from './signals';
+
+function signalWorld() {
+  const builder = new LifeBuilder();
+  builder.line(
+    [
+      { x: 0, y: 2048 },
+      { x: 4096, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    14,
+  );
+  builder.line(
+    [
+      { x: 2048, y: 0 },
+      { x: 2048, y: 4096 },
+    ],
+    LifeLine.roadMinor,
+    6,
+  );
+  builder.signal({ x: 2048, y: 2048 }, 8, 90, 0, true, undefined, { seed: 0 });
+  const world = new LifeWorld(undefined, undefined, { enabled: false }, false);
+  world.enableTaps();
+  world.sync([{ key: 'signal', tile: left, life: builder.finish() }]);
+  const life = world.resident('signal')!;
+  life.movers.length = 0;
+  life.gatherers.length = 0;
+  const signal = life.signals.signals[0]!;
+  const at = tileToLngLat(left, signal);
+  world.setEmojiView([19, 1, at]);
+  world.visible(19, 1, at);
+  const tap: LifeTap = {
+    id: 1,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at,
+    pointer: 'touch',
+    cellMeters: 1,
+  };
+  return { world, life, signal, tap, at };
+}
+
+it('only presses signal hardware admitted by the drawn-frame capture', () => {
+  const f = signalWorld();
+  const before = signalState(f.signal.seed, f.world.signalClock);
+  expect(before.a).toBe('green');
+  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [f.tap]);
+  expect(f.world.tapReceipts![0]!.action).not.toBe('signal');
+  expect(f.world.signalOffsets).toBeUndefined();
+  expect(signalState(f.signal.seed, f.world.signalClock)).toEqual(before);
+  f.world.visible(19, 1, f.at);
+  f.world.step(0, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+    {
+      ...f.tap,
+      id: 2,
+      frame: f.world.tapSources!.frame,
+      signal: { seed: f.signal.seed, midBlock: false },
+    },
+  ]);
+  expect(f.world.tapReceipts).toEqual([{ id: 2, action: 'signal' }]);
+  expect(signalState(f.signal.seed, f.world.signalClock, false, f.world.signalOffsets).a).toBe(
+    'amber',
+  );
+});
+it('requests anger from four stoppable drivers before the signal, excluding a driver past it', () => {
+  const f = signalWorld();
+  const drivers = Array.from({ length: 6 }, (_, i) => {
+    const x = 2048 - (25 + i * 4) * f.life.perMeter;
+    const driver = continuityMover(f.life, x);
+    driver.d = x;
+    driver.v = f.life.perMeter;
+    return driver;
+  });
+  const past = continuityMover(f.life, 2048 + 20 * f.life.perMeter);
+  past.d = past.x;
+  past.v = f.life.perMeter;
+  f.life.movers.push(past, ...drivers);
+  f.world.visible(19, 1, f.at);
+  const request = vi.spyOn(f.life, 'requestEmoji');
+  f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+    {
+      ...f.tap,
+      frame: f.world.tapSources!.frame,
+      signal: { seed: f.signal.seed, midBlock: false },
+    },
+  ]);
+  expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'signal' }]);
+  const angry = request.mock.calls.filter((call) => call[2] === 'angry');
+  expect(angry.map((call) => call[0])).toEqual(drivers.slice(0, 4));
+  expect(angry.some((call) => call[0] === past)).toBe(false);
+  expect(
+    drivers.slice(0, 4).every((driver) => f.world.emojiMemory.cue(driver)?.mood === 'angry'),
+  ).toBe(true);
+});
 it('a candle tap reaches nearby seasonal grave visitors only while their season is active', () => {
   const builder = new LifeBuilder();
   builder.grave({ x: 2000, y: 2000 }, 'grave', 1);
@@ -304,6 +398,38 @@ it.each([false, true])('consumes a closed/rainy cart without a visit or wave (ra
   expect(f.life.scenes.visits.size).toBe(0);
   expect(f.world.emojiMemory.cue(stall)?.mood).not.toBe('wave');
 });
+it.each([true, false])(
+  'an open dry cart reserves one buyer or waves when capacity is unavailable (capacity=%s)',
+  (capacity) => {
+    const f = vehicleWorld('dog');
+    const stall = {
+      x: 1800,
+      y: f.vehicle.y,
+      hx: 1,
+      hy: 0,
+      paint: 0,
+      shirt: 0,
+      side: 1 as const,
+      rank: 0,
+      open: true,
+    };
+    f.person.y = f.vehicle.y;
+    f.life.stalls.push(stall);
+    f.life.scenes.addStall(stall);
+    const site = f.life.scenes.sites.find((site) => site.stall === stall)!;
+    if (!capacity) site.capacity = 0;
+    const agents = f.world.visible(19, 1, [0, 0]);
+    const agent = agents.findIndex((a) => a.vehicle === 'cart');
+    expect(agent).toBeGreaterThanOrEqual(0);
+    f.world.step(0.01, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, undefined, [
+      { ...f.tap, frame: f.world.tapSources!.frame, agent },
+    ]);
+    expect(f.world.tapReceipts![0]!.action).toBe('agent');
+    expect(f.life.scenes.visits.size).toBe(capacity ? 1 : 0);
+    if (capacity) expect(f.life.scenes.visits.has(f.person)).toBe(true);
+    else expect(f.world.emojiMemory.cue(stall)?.mood).toBe('wave');
+  },
+);
 it('leaves tap-free physical state and visible records identical with frame targeting enabled', () => {
   const a = makeScenario('sparse', 1, true),
     b = makeScenario('sparse', 1, true);

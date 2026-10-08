@@ -10,6 +10,8 @@ import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
 import { snapshotOf } from './terrain-snapshot';
 import { folkloreConfig, folkloreTile, calendar, folkloreCenter } from './testing/folklore';
 import { emergencyConfig, emergencyFixture } from './testing/emergency';
+import { TapQueue } from './tap';
+import { SignalPresses, signalState } from './signals';
 const scenarioNeighbor = (entry: LifeTile): LifeTile[] => [
   { ...entry, key: 'neighbor', tile: { ...entry.tile, x: entry.tile.x + 1 } },
 ];
@@ -87,6 +89,79 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it.each(['play', 'stop', 'routes', 'emergency'] as const)(
+    'delivers completed taps and signal state across %s without exposing a stale targeting frame',
+    async (command) => {
+      const s = fixture();
+      const host = createWorkerHost({}, [route]);
+      host.sync(s.tiles);
+      await flush();
+      const person: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 };
+      mock.frame.mockResolvedValueOnce({ ...result(1), agents: [person], tapFrame: 12 });
+      expect(host.request(s.input)).toBe(true);
+      await flush();
+      const generation = host.latest()!.generation!;
+      const queue = new TapQueue();
+      const action = command === 'emergency' ? 'signal' : 'firework';
+      const tap = {
+        generation,
+        frame: 12,
+        at: [0, 0] as const,
+        pointer: 'touch' as const,
+        cellMeters: 1,
+        firework: action === 'firework',
+        ...(action === 'signal' && { signal: { seed: 0, midBlock: false } }),
+      };
+      queue.add(tap);
+      const batch = queue.batch(generation)!;
+      let finish!: (reply: FrameResult) => void;
+      mock.frame.mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            finish = done;
+          }),
+      );
+      expect(host.request({ ...s.input, step: { ...s.input.step, taps: batch } })).toBe(true);
+      queue.accepted(batch);
+      if (command === 'play') expect(host.play(route.id)).toBe(true);
+      else if (command === 'stop') host.stop();
+      else if (command === 'routes') host.setProcessions([]);
+      else host.setEmergency(undefined);
+      expect(host.latest()?.tapFrame).toBeUndefined();
+      const presses = new SignalPresses();
+      presses.press(0, false, 2);
+      const fresh = { ...person, lng: 1 };
+      finish({
+        ...result(2),
+        agents: [fresh],
+        tapFrame: 13,
+        tapReceipts: [{ id: batch[0]!.id, action }],
+        signalOffsets: presses.snapshot(),
+      });
+      await flush();
+      const retained = host.latest()!;
+      expect(retained.agents).toEqual([person]);
+      expect(retained.tapFrame).toBeUndefined();
+      expect(signalState(0, retained.signalClock, false, retained.signalOffsets).a).toBe('amber');
+      expect(
+        queue.consume(retained.tapReceipts, generation).map((chosen) => chosen.action),
+      ).toEqual([action]);
+      expect(queue.consume(retained.tapReceipts, generation)).toEqual([]);
+      for (let i = 0; i < 4; i++) queue.add(tap);
+      expect(queue.batch(generation)).toHaveLength(4);
+      mock.frame.mockResolvedValueOnce({
+        ...result(3),
+        agents: [fresh],
+        tapFrame: 14,
+        signalOffsets: presses.snapshot(),
+      });
+      expect(host.request(s.input)).toBe(true);
+      await flush();
+      expect(host.latest()?.agents).toEqual([fresh]);
+      expect(host.latest()?.tapFrame).toBe(14);
+      host.dispose();
+    },
+  );
   it('retains correlated receipts in cached replies and rejects busy requests without resubmitting them', async () => {
     const s = fixture();
     const host = createWorkerHost({}, []);
@@ -443,7 +518,7 @@ describe('pipelined Life host', () => {
     await flush();
     const project = (lng: number, lat: number): [number, number] => [lng * 10000, lat * 10000];
     expect(host.latest()?.cellGuard(project)).toBeTypeOf('function');
-    expect(host.latest()).toMatchObject({ agents: [], signalClock: 0, procession: undefined });
+    expect(host.latest()).toMatchObject({ agents: [], signalClock: 99, procession: undefined });
     mock.frame.mockResolvedValueOnce(result(2));
     host.request(s.input);
     await flush();
@@ -460,7 +535,7 @@ describe('pipelined Life host', () => {
     resolve({ ...result(100), terrain: null });
     await flush();
     expect(host.latest()?.cellGuard(project)).toBeUndefined();
-    expect(host.latest()?.signalClock).toBe(2);
+    expect(host.latest()?.signalClock).toBe(100);
     host.dispose();
   });
   it('discards in-flight replies after a season changes without clearing tile residency', async () => {

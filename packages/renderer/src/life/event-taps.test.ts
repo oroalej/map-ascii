@@ -1,9 +1,12 @@
 import { expect, it, vi } from 'vitest';
-import type { DialogueChoice, FluvialRoute } from '@atlas/shared';
+import type { DialogueChoice, FluvialRoute, StreetRoute } from '@atlas/shared';
 import { LifeWorld } from './simulate';
 import { EventTaps } from './event-taps';
 import { ProcessionScene } from './procession';
 import type { LifeTap } from './tap';
+import { LifeBuilder, LifeLine } from './geometry';
+import { left } from './testing/continuity';
+import { tileToLngLat, metersPerUnit } from '../raster/geometry';
 
 const route: FluvialRoute = {
   id: 'procession/test',
@@ -44,6 +47,79 @@ const choices: DialogueChoice[] = [
     turns: 1,
   },
 ];
+it.each([false, true])(
+  'targets ground procession people by stable owner (inspection=%s)',
+  (inspection) => {
+    const pm = 1 / metersPerUnit(left);
+    const start = tileToLngLat(left, { x: 1000, y: 2000 });
+    const street: StreetRoute = {
+      ...route,
+      kind: 'procession',
+      formation: undefined,
+      route: [start, tileToLngLat(left, { x: 1000 + 100 * pm, y: 2000 })],
+      length_m: 100,
+      segments: [{ id: 'osm:way/1', width_m: 14, sidewalk_m: 2 }],
+      blocked: [],
+    };
+    const builder = new LifeBuilder();
+    builder.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4096, y: 2000 },
+      ],
+      LifeLine.roadMinor,
+      14,
+      1,
+    );
+    const world = new LifeWorld(undefined, undefined, { dialogue: choices }, inspection);
+    world.enableTaps();
+    world.setProcessions([street]);
+    world.sync([{ key: 'road', tile: left, life: builder.finish() }]);
+    const life = world.resident('road')!;
+    life.movers.length = life.parked.length = life.stalls.length = life.gatherers.length = 0;
+    world.setLive(street.id, 0.5, '2026');
+    world.step(0.1, undefined, 19);
+    const agents = world.visible(19, 1, start);
+    const index = agents.findIndex((a) => a.event && a.kind === 'person' && !a.prop && !a.aboard);
+    expect(index).toBeGreaterThanOrEqual(0);
+    const selected = agents[index]!;
+    const tap: LifeTap = {
+      id: 1,
+      generation: 1,
+      frame: world.tapSources!.frame,
+      agent: index,
+      at: [selected.lng, selected.lat],
+      pointer: 'touch',
+      cellMeters: 1,
+    };
+    const firstOwner = world.tapSources!.read(tap)!.target!.owner;
+    const refreshed = world.visible(19, 1, start);
+    const nextIndex = refreshed.findIndex(
+      (a) =>
+        a.lng === selected.lng && a.lat === selected.lat && a.kind === selected.kind && a.event,
+    );
+    expect(
+      world.tapSources!.read({ frame: world.tapSources!.frame, agent: nextIndex })!.target!.owner,
+    ).toBe(firstOwner);
+    world.step(
+      0,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { minutes: 720, rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      [tap],
+    );
+    expect(world.tapReceipts).toEqual([{ id: 1, action: 'agent' }]);
+    expect(
+      world.visible(19, 1, start).filter((a) => a.speech?.exchangeId === 'hello'),
+    ).toHaveLength(1);
+  },
+);
 function eventWorld(played = false, inspection = false) {
   const world = new LifeWorld(undefined, undefined, { dialogue: choices }, inspection);
   world.enableTaps();

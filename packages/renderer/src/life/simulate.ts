@@ -8769,12 +8769,10 @@ export class LifeWorld {
     return this.signalPresses?.snapshot();
   }
   private tapSignal(tap: LifeTap) {
+    if (!tap.signal) return false;
     for (const life of this.tiles.values()) {
-      const at = lngLatToTile(life.tile, ...tap.at);
-      const signal = life.signals.signals.find((s) =>
-        tap.signal
-          ? s.seed === tap.signal.seed && s.a < 0 === tap.signal.midBlock
-          : Math.hypot(s.x - at.x, s.y - at.y) <= 1.5 * tap.cellMeters * life.perMeter,
+      const signal = life.signals.signals.find(
+        (s) => s.seed === tap.signal!.seed && s.a < 0 === tap.signal!.midBlock,
       );
       if (!signal) continue;
       const midBlock = signal.a < 0;
@@ -12824,13 +12822,13 @@ export class LifeWorld {
             .slice(0, maxAgents)
             .map((raw) => {
               const a = eventTaps ? identifyEventActor({ ...raw }, eventActor(raw)!) : raw;
-              if (eventTaps) eventTaps.attach(this.eventOwners.get(eventActor(a)!)!, a);
-              return inspection
-                ? identifyEventActor(
-                    inspection.present(this.eventOwners.get(eventActor(a)!)!, a),
-                    eventActor(a)!,
-                  )
+              const owner = this.eventOwners.get(eventActor(a)!)!;
+              eventTaps?.attach(owner, a);
+              const agent = inspection
+                ? identifyEventActor(inspection.present(owner, a), eventActor(a)!)
                 : a;
+              tapOwners?.present(owner, agent);
+              return agent;
             })
         : scene
           ? scene.agents(run.progress, this.clock, {
@@ -12848,14 +12846,7 @@ export class LifeWorld {
               }),
             })
           : [];
-    for (const agent of staged) {
-      agent.event = true;
-      const owner =
-        agent.inspectionId !== undefined
-          ? inspection?.lookup(agent.inspectionId)
-          : this.eventOwners.get(eventActor(agent) ?? '');
-      if (owner) tapOwners?.present(owner, agent);
-    }
+    for (const agent of staged) agent.event = true;
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       if (life.tapFeed && this.emojiClock >= life.tapFeed.until) life.tapFeed = undefined;

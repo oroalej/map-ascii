@@ -50,6 +50,7 @@ export function retainOrdinary(
     folklore: EMPTY_FOLKLORE,
     puffs: EMPTY_PUFFS,
     procession: undefined,
+    tapFrame: undefined,
     agents: view.agents.filter((agent) => {
       if (agent.event || agent.eventGround || agent.prop === 'event') return false;
       if (route?.kind === 'fluvial' && (agent.kind === 'boat' || agent.aboard)) return false;
@@ -400,15 +401,18 @@ export function createWorkerHost(
           }
           if (agentEpoch !== requestedAgentEpoch) {
             const cellTerrain = terrain;
-            if (view || result.terrain !== undefined)
+            if (view || result.terrain !== undefined || result.tapReceipts?.length)
               view = {
                 agents: view?.agents ?? [],
                 folklore: EMPTY_FOLKLORE,
                 puffs: EMPTY_PUFFS,
                 generation,
                 procession: view?.procession,
-                signalClock: view?.signalClock ?? 0,
-                ...(view?.signalOffsets && { signalOffsets: view.signalOffsets }),
+                signalClock: result.signalClock,
+                ...(result.signalOffsets && { signalOffsets: result.signalOffsets }),
+                // Retained agents are not the drawables for the rejected result's tapFrame.
+                tapFrame: undefined,
+                tapReceipts: result.tapReceipts,
                 cellGuard: (toCell) =>
                   cellTerrain &&
                   makeCellGuard(
@@ -497,6 +501,7 @@ export function createWorkerHost(
           ...view,
           agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
           puffs: EMPTY_PUFFS,
+          tapFrame: undefined,
         };
       if (fallback) fallback.setEmergency(data);
       else void remote.setEmergency(data).catch(fail);

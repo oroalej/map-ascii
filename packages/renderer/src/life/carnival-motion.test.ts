@@ -70,17 +70,21 @@ it('projects exact component footprints and preserves phases through pan and zoo
   const fp = carnivalFootprint(rect, projection),
     boosts = new CarnivalBoosts();
   boosts.request(rect, 10);
-  const normal = boosts.uniforms(12, projection),
-    panZoom = boosts.uniforms(12, (lng, lat) => {
-      const [x, y] = projection(lng, lat);
-      return [x * 2 + 40, y * 2 - 20];
-    });
+  const normal = boosts.uniforms(12, projection);
+  const normalAxes = [...normal.axes.slice(0, 4)],
+    normalPhase = normal.centers[2];
   expect(normal.count).toBe(1);
-  expect([...normal.axes.slice(0, 4)]).toEqual(fp.axes.map(Math.fround));
+  expect(normalAxes).toEqual(fp.axes.map(Math.fround));
+  const panZoom = boosts.uniforms(12, (lng, lat) => {
+    const [x, y] = projection(lng, lat);
+    return [x * 2 + 40, y * 2 - 20];
+  });
+  expect(panZoom.centers).toBe(normal.centers);
+  expect(panZoom.axes).toBe(normal.axes);
   expect(panZoom.centers[0]).toBe(40);
   expect(panZoom.centers[1]).toBe(-20);
-  expect(panZoom.centers[2]).toBe(normal.centers[2]);
-  expect([...panZoom.axes.slice(0, 4)]).toEqual([...normal.axes.slice(0, 4)].map((n) => n * 2));
+  expect(panZoom.centers[2]).toBe(normalPhase);
+  expect([...panZoom.axes.slice(0, 4)]).toEqual(normalAxes.map((n) => n * 2));
   expect(boosts.time(carnivalKey(shifted), 12)).toBe(12);
   expect(carnivalMotionGlsl).toContain('return time+c.z');
   expect(carnivalMotionGlsl).toContain('int(c.w+0.5)!=part');

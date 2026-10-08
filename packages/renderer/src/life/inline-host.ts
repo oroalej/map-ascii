@@ -145,6 +145,7 @@ export function createInlineHost(
           ...view,
           agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
           puffs: EMPTY_PUFFS,
+          tapFrame: undefined,
         };
       acceptedPost = undefined;
     },

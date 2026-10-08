@@ -45,6 +45,8 @@ export function carnivalContains(
   return Math.abs(u) <= 1 && Math.abs(v) <= 1 && (r.style !== 'carousel' || u * u + v * v <= 1);
 }
 export class CarnivalBoosts {
+  private readonly centers = new Float32Array(MAX_CARNIVAL_BOOSTS * 4);
+  private readonly axes = new Float32Array(MAX_CARNIVAL_BOOSTS * 4);
   private readonly rides = new Map<
     string,
     { record: SeasonalCarnivalRecord; boost: CarnivalBoost }
@@ -63,8 +65,7 @@ export class CarnivalBoosts {
     return time + (r ? carnivalExtraTime(r.boost, time) : 0);
   }
   uniforms(time: number, toCell: Project): CarnivalUniforms {
-    const centers = new Float32Array(MAX_CARNIVAL_BOOSTS * 4),
-      axes = new Float32Array(MAX_CARNIVAL_BOOSTS * 4);
+    const { centers, axes } = this;
     let count = 0;
     for (const { record, boost } of this.rides.values()) {
       const footprint = carnivalFootprint(record, toCell),
@@ -74,8 +75,12 @@ export class CarnivalBoosts {
             : record.style === 'ferris-wheel'
               ? SeasonalPart.wheelMotion
               : SeasonalPart.bumperMotion;
-      centers.set([...footprint.center, carnivalExtraTime(boost, time), part], count * 4);
-      axes.set(footprint.axes, count * 4);
+      const offset = count * 4;
+      centers[offset] = footprint.center[0];
+      centers[offset + 1] = footprint.center[1];
+      centers[offset + 2] = carnivalExtraTime(boost, time);
+      centers[offset + 3] = part;
+      axes.set(footprint.axes, offset);
       count++;
     }
     return { count, centers, axes };
