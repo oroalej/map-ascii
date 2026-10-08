@@ -819,6 +819,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     grid = next.grid;
     labelGrid = nextLabels.grid;
     labelVisibilityDirty = true;
+    // Coarse coverage can arrive and draw while the detailed view still loads.
+    tileCache.regionTilesForView(camera, cssSize());
     // Keep asking for the view's tiles (one that arrives draws the cells again).
     tileCache.tilesToDraw(camera, cssSize());
     return true;
@@ -834,6 +836,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     cellsFor = cellsKey(v, placement, labelPlacement);
     cellsTargets = targets;
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
+    const regionTiles = tileCache.regionTilesForView(camera, cssSize());
     const tiles = tileCache.tilesToDraw(camera, cssSize());
     syncLife(tiles);
     syncLamps(tiles);
@@ -851,7 +854,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return out;
     };
     // The region's own features first, from their coarser tiles (DATA.md §2 step 05).
-    const region = layer(tileCache.regionTilesFor(tiles));
+    const region = layer(regionTiles);
     crownTiles = layer(tiles);
     drawableBuffers = region.length > 0 || crownTiles.length > 0;
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });

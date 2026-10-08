@@ -190,6 +190,12 @@ export class TileCache {
     return [...out.values()].sort((a, b) => a.z - b.z);
   }
 
+  /** Request coarse coverage independently of fine-tile arrival, so it can draw first. */
+  regionTilesForView(camera: CameraState, size: Size): TileId[] {
+    if (!this.header || this.suspended) return [];
+    return this.regionTilesFor(viewTiles(camera, size, this.header));
+  }
+
   /**
    * Tiles whose region-only features to draw under the view's tiles: each view tile's
    * ancestor at `REGION_TILE_MAX_ZOOM` (or the tile itself when it is that coarse), else, while

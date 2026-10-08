@@ -188,7 +188,7 @@ vi.mock('./tile-cache', () => ({
     tilesToDraw() {
       return labelFixture.enabled && labelFixture.loaded ? [{ z: 16, x: 32768, y: 32768 }] : [];
     }
-    regionTilesFor() {
+    regionTilesForView() {
       return labelFixture.enabled && labelFixture.region ? [{ z: 11, x: 1024, y: 1024 }] : [];
     }
     residentialSitesFor(

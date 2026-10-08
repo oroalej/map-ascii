@@ -49,6 +49,32 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('requests coarse coverage before fine tiles and draws it while they load', () => {
+    const { cache, source } = setup();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    const coarse = source.request.mock.calls[0]![0];
+    expect(coarse.z).toBeLessThan(camera.zoom);
+    const coarseRequests = source.request.mock.calls.length;
+    expect(cache.tilesToDraw(camera, size)).toEqual([]);
+    expect(source.request.mock.calls[coarseRequests]![0].z).toBeGreaterThan(coarse.z);
+    source.handlers.tile(tileKey(coarse), geometry);
+    expect(cache.regionTilesForView(camera, size)).toContainEqual(coarse);
+    expect(cache.tilesToDraw(camera, size)).toContainEqual(coarse);
+    cache.suspend();
+    source.request.mockClear();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    cache.resume();
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(source.request).toHaveBeenCalled();
+  });
+
+  it('does not request coarse coverage before the archive header arrives', () => {
+    const cache = new TileCache({} as GL, 'https://example.test/x.pmtiles', vi.fn());
+    expect(cache.regionTilesForView(camera, size)).toEqual([]);
+    expect(sources[0]!.request).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     'draws a loaded grandparent through a null parent and view absence=%s',
     (absent) => {

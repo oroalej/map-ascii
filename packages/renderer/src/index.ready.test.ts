@@ -73,7 +73,7 @@ vi.mock('./tile-cache', () => ({
     tilesToDraw() {
       return fixture.view ? [{ z: 16, x: 32768, y: 32768 }] : [];
     }
-    regionTilesFor() {
+    regionTilesForView() {
       return fixture.region ? [{ z: 11, x: 1024, y: 1024 }] : [];
     }
     get(tile: { z: number }) {
