@@ -32,8 +32,8 @@ type CandidateGeometry = {
   candidates: readonly number[][];
   valid: Uint8Array;
   accepted: Uint8Array;
-  /** Every valid row by base-space bucket, for culling to the view. */
-  index: Map<number, Map<number, number[]>>;
+  /** Valid rows by base-space bucket for view culling, built on first use; long rows apart. */
+  index?: { cells: Map<number, Map<number, number[]>>; large: number[] };
 };
 const prepared = new WeakMap<readonly Fixture[], { key: string; geometry: CandidateGeometry }>();
 const BUCKET = 16;
@@ -172,16 +172,6 @@ function prepareCandidates(
       bucket.push(i);
     });
   }
-  const index = new Map<number, Map<number, number[]>>();
-  for (let i = 0; i < rows.length; i++)
-    if (valid[i])
-      buckets(base[i]!, (x, y) => {
-        let column = index.get(x);
-        if (!column) index.set(x, (column = new Map<number, number[]>()));
-        let bucket = column.get(y);
-        if (!bucket) column.set(y, (bucket = []));
-        bucket.push(i);
-      });
   return {
     rows,
     origin,
@@ -190,8 +180,33 @@ function prepareCandidates(
     valid,
     accepted: new Uint8Array(rows.length),
     spans: rows.map(() => ({ from: [0, 0], to: [0, 0] })),
-    index,
   };
+}
+/** Rows spanning more buckets than this are checked against every view. */
+const MAX_INDEXED_BUCKETS = 64;
+function cullIndex(geometry: CandidateGeometry) {
+  if (geometry.index) return geometry.index;
+  const cells = new Map<number, Map<number, number[]>>(),
+    large: number[] = [];
+  for (let i = 0; i < geometry.rows.length; i++) {
+    if (!geometry.valid[i]) continue;
+    const span = geometry.base[i]!;
+    const across =
+      (Math.abs(span.to[0] - span.from[0]) + 2 * BUCKET) / BUCKET +
+      (Math.abs(span.to[1] - span.from[1]) + 2 * BUCKET) / BUCKET;
+    if (across > MAX_INDEXED_BUCKETS) {
+      large.push(i);
+      continue;
+    }
+    buckets(span, (x, y) => {
+      let column = cells.get(x);
+      if (!column) cells.set(x, (column = new Map<number, number[]>()));
+      let bucket = column.get(y);
+      if (!bucket) column.set(y, (bucket = []));
+      bucket.push(i);
+    });
+  }
+  return (geometry.index = { cells, large });
 }
 let visitMarks = new Uint32Array(0);
 let visitMark = 0;
@@ -219,9 +234,15 @@ function visibleRows(
     y1 = Math.floor((view.rows + margin - oy) / scale / BUCKET);
   if (visitMarks.length < geometry.rows.length) visitMarks = new Uint32Array(geometry.rows.length);
   visitMark = (visitMark + 1) >>> 0 || 1;
+  const index = cullIndex(geometry);
   const found: number[] = [];
+  for (const i of index.large)
+    if (accepted[i]) {
+      visitMarks[i] = visitMark;
+      found.push(i);
+    }
   for (let x = x0; x <= x1; x++) {
-    const column = geometry.index.get(x);
+    const column = index.cells.get(x);
     if (column)
       for (let y = y0; y <= y1; y++)
         for (const i of column.get(y) ?? [])
