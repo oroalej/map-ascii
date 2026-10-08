@@ -8,9 +8,21 @@ import {
 } from '@atlas/shared';
 import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometry';
 import { WalkingGraph, type WalkPoint } from './navigation';
-import { between, random } from './random';
+import { between, random, hashString } from './random';
 import { VEHICLES } from './vehicles';
-import { isWalker, RUN, RECOVERY, usableLines, kinematicsOf, type Activity } from './config';
+import {
+  isWalker,
+  RUN,
+  RECOVERY,
+  usableLines,
+  kinematicsOf,
+  SHELTER_DEPARTURE,
+  HEAT,
+  hotAt,
+  underUmbrella,
+  umbrellaShare,
+  type Activity,
+} from './config';
 import { exposed, runPace } from './running';
 import { animalSize, memberSize } from './occupancy';
 import type { Mover, Stall } from './simulate';
@@ -41,7 +53,7 @@ export const INTERACTIONS = {
   visitChance: 0.12,
 } as const;
 type Site = WalkPoint & {
-  kind: LifeSiteKind | 'vendor' | 'rest';
+  kind: LifeSiteKind | 'vendor' | 'rest' | 'shade';
   modes: number;
   covered: boolean;
   queue: Mover[];
@@ -52,16 +64,22 @@ type Site = WalkPoint & {
   roadWidth: number;
   direction: number;
   stall?: Stall;
+  clearingShower?: number;
 };
 export type Visit = {
   site: Site;
-  state: 'approach' | 'wait' | 'purchase' | 'board' | 'aboard' | 'shelter' | 'rest' | 'return';
+  state:
+    'approach' | 'wait' | 'purchase' | 'board' | 'aboard' | 'shelter' | 'rest' | 'shade' | 'return';
   path: WalkPoint[];
   trail: WalkPoint[];
   next: number;
   time: number;
   seat: number;
   sheltering: boolean;
+  shading?: boolean;
+  shadeWindow?: number;
+  leave?: number;
+  leaveShower?: number;
   blocked: number;
   /** A completed mapped return still owns its blockage until the final pose is accepted. */
   handoffBlocked?: boolean;
@@ -109,6 +127,17 @@ const dist = (a: WalkPoint, b: WalkPoint) => Math.hypot(a.x - b.x, a.y - b.y);
 /** How far `p` lies ahead of a mover along its heading (negative: behind it). */
 const ahead = (p: WalkPoint, m: Mover) => (p.x - m.x) * m.hx + (p.y - m.y) * m.hy;
 
+/** Independent samples retain fractional ranks and never advance the scene stream. */
+export const personSample = (m: Pick<Mover, 'rank'>, epoch: number, purpose: string) =>
+  random(hashString(`${purpose}/${m.rank}/${epoch}`))();
+
+export function departureDelay(m: Mover, shower: number): number {
+  const u = personSample(m, shower, 'departure');
+  return m.group?.some((w) => underUmbrella(w, umbrellaShare(1, 0)))
+    ? between(() => u, SHELTER_DEPARTURE.umbrella)
+    : SHELTER_DEPARTURE.first + (SHELTER_DEPARTURE.last - SHELTER_DEPARTURE.first) * u * u;
+}
+
 /** Reservations and small local scenes, using the tile's existing inhabitants. */
 export class LocalScenes {
   private returningToRoute?: Mover;
@@ -131,17 +160,20 @@ export class LocalScenes {
   readonly purchaseCompletions: { mover: Mover; stall: Stall; key: object }[] = [];
   /** Bounded, frame-local entry notifications; observers cannot mutate service ownership. */
   readonly speechEvents: {
-    kind: 'purchase' | 'wait' | 'shelter' | 'arrival';
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival' | 'shade' | 'clearing';
     mover: Mover;
     visit: Visit;
     key: object;
+    shower?: number;
   }[] = [];
   private speechEvent(
-    kind: 'purchase' | 'wait' | 'shelter' | 'arrival',
+    kind: 'purchase' | 'wait' | 'shelter' | 'arrival' | 'shade' | 'clearing',
     mover: Mover,
     visit: Visit,
+    shower?: number,
   ) {
-    if (this.speechEvents.length < 8) this.speechEvents.push({ kind, mover, visit, key: {} });
+    if (this.speechEvents.length < 8)
+      this.speechEvents.push({ kind, mover, visit, key: {}, shower });
   }
   readonly visits = new Map<Mover, Visit>();
   readonly sites: Site[] = [];
@@ -149,6 +181,7 @@ export class LocalScenes {
   private readonly graph: WalkingGraph;
   private readonly rng: () => number;
   private readonly cooldown = new Map<Mover, number>();
+  private readonly shadeCooldown = new WeakSet<Mover>();
   private returnAfterInspection?: WeakSet<Mover>;
   private readonly yielding = new WeakMap<
     Mover,
@@ -166,6 +199,7 @@ export class LocalScenes {
   private readonly yieldHeld = new WeakSet<Mover>();
   private readonly stopCooldown = new Map<Mover, Site>();
   private wet = false;
+  private showers = 0;
   private rain = 0;
   private scan = 0;
   private cursor = 0;
@@ -216,6 +250,26 @@ export class LocalScenes {
     for (const stall of stalls) {
       this.addStall(stall);
       yield;
+    }
+    for (let i = 0; i < geo.perches.length; i += 2) {
+      yield;
+      const entrance = this.graph.entrance({ x: geo.perches[i]!, y: geo.perches[i + 1]! });
+      if (!entrance || !inTile(entrance)) continue;
+      const site: Site = {
+        ...entrance,
+        kind: 'shade',
+        modes: 0,
+        covered: false,
+        queue: [],
+        capacity: HEAT.treeSeats,
+        hx: 1,
+        hy: 0,
+        road: -1,
+        roadWidth: 6,
+        direction: 1,
+      };
+      yield* this.attachRoad(site, geo);
+      this.sites.push(site);
     }
   }
 
@@ -279,6 +333,7 @@ export class LocalScenes {
     this.services.delete(m);
     this.visits.delete(m);
     this.cooldown.delete(m);
+    this.shadeCooldown.delete(m);
     this.stopCooldown.delete(m);
     this.yielding.delete(m);
     this.yieldHeld.delete(m);
@@ -320,7 +375,7 @@ export class LocalScenes {
   }
 
   /** Explicit entry point also used by deterministic scene tests. */
-  reserve(m: Mover, index: number): boolean {
+  reserve(m: Mover, index: number, shading = false): boolean {
     const site = this.sites[index];
     if (
       !site ||
@@ -350,6 +405,12 @@ export class LocalScenes {
       return false;
     const path = this.route(m, point);
     if (!path || !path.every(inTile)) return false;
+    if (
+      shading &&
+      path.reduce((length, p, i) => length + (i ? dist(path[i - 1]!, p) : 0), 0) >
+        HEAT.reach * this.perMeter
+    )
+      return false;
     site.queue.push(m);
     this.visits.set(m, {
       site,
@@ -361,6 +422,7 @@ export class LocalScenes {
       seat,
       time: 0,
       sheltering: this.wet && site.covered,
+      ...(shading && { shading: true, shadeWindow: Math.floor(this.minutes / HEAT.window) }),
       blocked: 0,
     });
     m.pause = 0;
@@ -1225,6 +1287,7 @@ export class LocalScenes {
       rain?: number;
       levels?: Activity;
       minutes?: number;
+      sunAltitude?: number;
       cityLife?: Pick<CityLifeConfig, 'schedules'>;
     },
     near?: (x: number, y: number) => boolean,
@@ -1241,7 +1304,9 @@ export class LocalScenes {
     this.rain = rain;
     this.speechEvents.length = 0;
     this.purchaseCompletions.length = 0;
+    const wasWet = this.wet;
     this.wet = this.wet ? rain > INTERACTIONS.rainOff : rain >= INTERACTIONS.rainOn;
+    if (wasWet && !this.wet) this.showers++;
     const minutes = env.minutes === undefined ? -1 : Math.floor(env.minutes);
     const hoursChanged =
       minutes !== this.minutes || env.cityLife !== this.cityLife || this.hoursDirty;
@@ -1266,8 +1331,10 @@ export class LocalScenes {
     for (const [m, seconds] of this.cooldown) {
       if (inspecting === m) continue;
       if (owns && !owns(m)) continue;
-      if (seconds <= dt) this.cooldown.delete(m);
-      else this.cooldown.set(m, seconds - dt);
+      if (seconds <= dt || (this.wet && this.shadeCooldown.has(m))) {
+        this.cooldown.delete(m);
+        this.shadeCooldown.delete(m);
+      } else this.cooldown.set(m, seconds - dt);
     }
     for (const [m, visit] of this.visits) {
       if (inspecting === m) continue;
@@ -1283,9 +1350,43 @@ export class LocalScenes {
         ((env.levels && m.rank >= env.levels[m.kind]) ||
           (this.wet && (kind === 'vendor' || kind === 'rest')) ||
           (kind === 'vendor' && visit.site.stall?.open === false) ||
-          (!this.wet && visit.sheltering))
+          (!this.wet && visit.sheltering && (m.kind !== 'person' || visit.state !== 'shelter')))
       )
         this.requestReturn(m, visit);
+      if (this.wet && visit.shading && visit.state !== 'return') {
+        if (visit.site.covered) {
+          visit.sheltering = true;
+          if (visit.state === 'shade') {
+            visit.state = 'shelter';
+            this.speechEvent('shelter', m, visit);
+          }
+        } else this.requestReturn(m, visit);
+      }
+      if (visit.state !== 'return' && visit.sheltering) {
+        if (this.wet) {
+          delete visit.leave;
+          delete visit.leaveShower;
+        } else if (m.kind === 'person' && visit.state === 'shelter' && !visit.returnPending) {
+          if (visit.leave === undefined || visit.leaveShower !== this.showers) {
+            visit.leave = departureDelay(m, this.showers);
+            visit.leaveShower = this.showers;
+            if (
+              visit.site.clearingShower !== this.showers &&
+              visit.site.queue.some(
+                (other) =>
+                  other !== m &&
+                  other.kind === 'person' &&
+                  this.visits.get(other)?.state === 'shelter',
+              )
+            ) {
+              visit.site.clearingShower = this.showers;
+              this.speechEvent('clearing', m, visit, this.showers);
+            }
+          }
+          visit.leave -= dt;
+          if (visit.leave <= 0) this.requestReturn(m, visit);
+        }
+      }
       if (visit.returnPending && this.canIdle(m)) this.returning(m, visit);
       if (visit.state === 'approach' || visit.state === 'return' || visit.state === 'board') {
         const walked = m.walked ?? 0;
@@ -1308,15 +1409,37 @@ export class LocalScenes {
           m.pause = 0;
           m.lying = false;
           this.visits.delete(m);
-          this.cooldown.set(m, 20 + this.rng() * 20);
+          const cooldown = 20 + this.rng() * 20;
+          this.shadeCooldown.delete(m);
+          if (visit.shading) {
+            if (!this.wet) {
+              this.cooldown.set(
+                m,
+                between(() => personSample(m, visit.shadeWindow!, 'shade-cooldown'), HEAT.cooldown),
+              );
+              this.shadeCooldown.add(m);
+            }
+          } else this.cooldown.set(m, cooldown);
         } else if (visit.state === 'board') {
           visit.state = 'aboard';
           visit.time = 3;
           m.pause = 1;
         } else {
           const before = snapshotMover(m);
-          visit.state = visit.sheltering ? 'shelter' : visit.site.kind === 'rest' ? 'rest' : 'wait';
-          visit.time = visit.state === 'rest' ? 30 + this.rng() * 60 : 60 + this.rng() * 30;
+          visit.state = visit.sheltering
+            ? 'shelter'
+            : visit.shading
+              ? 'shade'
+              : visit.site.kind === 'rest'
+                ? 'rest'
+                : 'wait';
+          const arrival = this.rng();
+          visit.time =
+            visit.state === 'shade'
+              ? between(() => personSample(m, visit.shadeWindow!, 'shade-dwell'), HEAT.dwell)
+              : visit.state === 'rest'
+                ? 30 + arrival * 60
+                : 60 + arrival * 30;
           faceGroup(m, visit.site.hx, visit.site.hy);
           m.pause = 1;
           m.lying = m.kind === 'dog';
@@ -1324,7 +1447,7 @@ export class LocalScenes {
             restoreMover(m, before);
             this.returning(m, visit);
           }
-          if (visit.state === 'wait' || visit.state === 'shelter')
+          if (visit.state === 'wait' || visit.state === 'shelter' || visit.state === 'shade')
             this.speechEvent(visit.state, m, visit);
         }
         continue;
@@ -1490,8 +1613,8 @@ export class LocalScenes {
         // Those caught with no umbrella look further for cover, and are surer to go.
         const caught = this.caught(m);
         const reach = caught ? RUN.shelter.reach : INTERACTIONS.reach;
-        const candidates = this.sites
-          .map((site, index) => ({ site, index, d: dist(m, site) }))
+        const nearbySites = this.sites.map((site, index) => ({ site, index, d: dist(m, site) }));
+        const candidates = nearbySites
           .filter(
             ({ site, d }) =>
               (!owns || owns(site)) &&
@@ -1516,7 +1639,27 @@ export class LocalScenes {
               : INTERACTIONS.visitChance)
         ) {
           const reserved = candidates.some(({ index }) => this.reserve(m, index));
-          if (caught && candidates.length > 0 && !reserved) this.cooldown.set(m, RUN.shelter.retry);
+          if (caught && candidates.length > 0 && !reserved) {
+            this.shadeCooldown.delete(m);
+            this.cooldown.set(m, RUN.shelter.retry);
+          }
+        } else if (
+          !this.wet &&
+          m.kind === 'person' &&
+          hotAt(env.minutes, rain, env.sunAltitude) &&
+          !m.group?.some((w) => underUmbrella(w, umbrellaShare(0, env.sunAltitude!))) &&
+          personSample(m, Math.floor(minutes / HEAT.window), 'shade-pick') < HEAT.share
+        ) {
+          nearbySites
+            .filter(
+              ({ site, d }) =>
+                (!owns || owns(site)) &&
+                (site.covered || site.kind === 'shade') &&
+                d <= HEAT.reach * this.perMeter,
+            )
+            .sort((a, b) => a.d - b.d)
+            .slice(0, 3)
+            .some(({ index }) => this.reserve(m, index, true));
         }
       }
     }

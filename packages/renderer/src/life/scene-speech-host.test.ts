@@ -75,6 +75,135 @@ const order: DialogueChoice = {
   speakers: [0, 1],
 };
 describe('real local-scene adapters', () => {
+  const weather = (condition: 'heat' | 'clearing'): DialogueChoice => ({
+    id: condition,
+    kind: 'talk',
+    profile: 'weather',
+    conditions: { weather: condition },
+    speakers: [0, 1],
+    turns: 2,
+  });
+  it.each(['shade', 'stop'] as const)(
+    'admits hot shade speech at a %s site and cancels when weather or visits change',
+    (kind) => {
+      const f = fixture(weather('heat'));
+      f.site.kind = kind;
+      f.visit.state = 'shade';
+      f.visit.time = 30;
+      f.person.group!.push({ ...member, lateral: 1 });
+      f.host.step(0.1, 21, { rain: 0, minutes: 720, sunAltitude: 60 }, undefined, []);
+      expect(f.host.speech.speech(f.person)?.exchangeId).toBe('heat');
+      f.host.step(0, 21, { rain: 0, minutes: 720, sunAltitude: 40 }, undefined, []);
+      expect(f.host.speech.size).toBe(0);
+    },
+  );
+  it.each([false, true])(
+    'bounds shade speech by all participant dwells in arrival and ordinary scans (event=%s)',
+    (event) => {
+      const f = fixture(weather('heat'));
+      f.site.kind = 'shade';
+      f.visit.state = 'shade';
+      f.visit.time = 30;
+      const partner = { ...f.person, group: [{ ...member }], x: 1010 };
+      const secondVisit = { ...f.visit, time: 2 };
+      f.tile.movers.push(partner);
+      f.site.queue.push(partner);
+      f.tile.scenes.visits.set(partner, secondVisit);
+      if (event)
+        f.tile.scenes.speechEvents.push({
+          kind: 'shade',
+          mover: f.person,
+          visit: f.visit,
+          key: {},
+        });
+      const admit = vi.spyOn(f.host.speech, 'admit');
+      f.host.step(0.1, 21, { rain: 0, minutes: 720, sunAltitude: 60 }, undefined, []);
+      expect(admit.mock.calls[0]![0].remaining).toBe(2);
+      expect(f.host.speech.size).toBe(0);
+      f.tile.scenes.speechEvents.length = 0;
+      f.person.group!.push({ ...member, lateral: 1 });
+      f.tile.movers.splice(1);
+      f.site.queue.splice(1);
+      f.host.clear();
+      f.host.step(0.1, 21, { rain: 0, minutes: 720, sunAltitude: 60 }, undefined, []);
+      expect(f.host.speech.size).toBe(1); // Group members share the longer Visit.
+      f.tile.scenes.visits.set(f.person, { ...f.visit });
+      f.host.step(0, 21, { rain: 0, minutes: 720, sunAltitude: 60 }, undefined, []);
+      expect(f.host.speech.size).toBe(0);
+    },
+  );
+  it('dispatches clearing by site despite a departed invisible event mover, excluding missing and stale countdowns', () => {
+    const f = fixture(weather('clearing'));
+    f.site.kind = 'shelter';
+    f.site.covered = true;
+    f.visit.state = 'return';
+    const people = [undefined, 50, 9, 40, 25].map((leave, i) => ({
+      ...f.person,
+      x: 1100 + i * 10,
+      group: [{ ...member }],
+    }));
+    const visits = people.map((p, i) => ({
+      ...f.visit,
+      state: 'shelter' as const,
+      sheltering: true,
+      leave: [undefined, 50, 9, 40, 25][i],
+      leaveShower: i === 1 ? 0 : 1,
+    }));
+    people.forEach((p, i) => {
+      f.tile.movers.push(p);
+      f.site.queue.push(p);
+      f.tile.scenes.visits.set(p, visits[i]!);
+    });
+    const before = visits.map((v) => v.leave);
+    f.tile.scenes.speechEvents.push({
+      kind: 'clearing',
+      mover: f.person,
+      visit: f.visit,
+      key: {},
+      shower: 1,
+    });
+    const admit = vi.spyOn(f.host.speech, 'admit');
+    const near = (x: number) => x !== f.person.x;
+    f.host.step(0.1, 21, { rain: 0 }, near, []);
+    const scene = admit.mock.calls[0]![0];
+    expect(scene.speakers.map((s) => s.owner)).toEqual([people[3], people[4]]);
+    expect(scene.remaining).toBe(25);
+    expect(f.host.speech.speech(people[3]!)).toMatchObject({ exchangeId: 'clearing', line: 0 });
+    expect(visits.map((v) => v.leave)).toEqual(before);
+    f.tile.scenes.speechEvents.length = 0;
+    f.host.step(0, 21, { rain: 1 }, near, []);
+    expect(f.host.speech.size).toBe(0);
+  });
+  it.each(['short', 'shower', 'return'] as const)(
+    'refuses or cancels clearing on %s participant lifetime changes without extending stays',
+    (change) => {
+      const f = fixture(weather('clearing'));
+      f.site.kind = 'shelter';
+      f.site.covered = true;
+      f.visit.state = 'shelter';
+      f.visit.sheltering = true;
+      f.visit.leave = change === 'short' ? 2 : 20;
+      f.visit.leaveShower = 1;
+      f.person.group!.push({ ...member, lateral: 1 });
+      f.host.step(0.1, 21, { rain: 0 }, undefined, []);
+      expect(f.host.speech.size).toBe(0); // Ordinary scans never synthesize clearing.
+      f.tile.scenes.speechEvents.push({
+        kind: 'clearing',
+        mover: f.person,
+        visit: f.visit,
+        key: {},
+        shower: 1,
+      });
+      f.host.step(0.1, 21, { rain: 0 }, undefined, []);
+      expect(f.host.speech.size).toBe(change === 'short' ? 0 : 1);
+      expect(f.visit.leave).toBe(change === 'short' ? 2 : 20);
+      f.tile.scenes.speechEvents.length = 0;
+      if (change === 'shower') f.visit.leaveShower = 2;
+      if (change === 'return') f.visit.returnPending = true;
+      f.host.step(0, 21, { rain: 0 }, undefined, []);
+      expect(f.host.speech.size).toBe(0);
+    },
+  );
   const happy: DialogueChoice = {
     id: 'happy',
     kind: 'talk',

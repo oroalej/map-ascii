@@ -117,9 +117,19 @@ describe('loadCityPacks', () => {
     const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
-    expect(speech?.exchanges).toHaveLength(100);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(40);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(60);
+    expect(speech?.exchanges).toHaveLength(104);
+    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
+    expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
+    expect(
+      speech?.exchanges
+        .filter((e) => ['heat', 'clearing'].includes(e.conditions?.weather ?? ''))
+        .map((e) => [e.id, e.conditions?.weather, e.delivery]),
+    ).toEqual([
+      ['weather-heat-rest', 'heat', 'exchange'],
+      ['weather-heat-here', 'heat', 'utterance'],
+      ['weather-clearing-leave', 'clearing', 'exchange'],
+      ['weather-clearing-linger', 'clearing', 'utterance'],
+    ]);
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
@@ -145,7 +155,7 @@ describe('loadCityPacks', () => {
       farewell: 6,
       directions: 6,
       courtesy: 6,
-      weather: 8,
+      weather: 12,
       food: 8,
       school: 6,
       'daily-plans': 6,

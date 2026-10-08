@@ -7,6 +7,8 @@ import { SceneSpeech, type SceneSpeaker } from './scene-speech';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
 import { DIALOGUE_WEATHER } from '@atlas/shared';
 import { makeDialogueContext } from './dialogue';
+import { hotAt } from './config';
+import type { LocalScenes } from './interactions';
 
 export class SceneSpeechHost {
   readonly speech: SceneSpeech;
@@ -76,6 +78,7 @@ export class SceneSpeechHost {
           wind: env?.wind?.strength,
         }).context,
         easing: (env?.rain ?? 0) < this.previousRain - 0.001,
+        sunAltitude: env?.sunAltitude,
       });
       const tryAmbient = (owner: Mover | Gatherer) => {
         if (
@@ -108,7 +111,64 @@ export class SceneSpeechHost {
           MOMENTS.capacity - tile.momentHost.moments.size,
         );
       };
-      const tryScene = (m: Mover, arrival = false) => {
+      const tryClearing = (event: LocalScenes['speechEvents'][number]) => {
+        const { site } = event.visit;
+        const eligible = (m: Mover) => {
+          const v = tile.scenes.visits.get(m);
+          return (
+            m.kind === 'person' &&
+            !!m.group?.length &&
+            visible(m) &&
+            v?.site === site &&
+            v.state === 'shelter' &&
+            v.sheltering &&
+            !v.returnPending &&
+            v.leave !== undefined &&
+            Number.isFinite(v.leave) &&
+            v.leave > 0 &&
+            event.shower !== undefined &&
+            v.leaveShower === event.shower &&
+            !tile.scenes.raining &&
+            (this.sceneEnv?.rain ?? 0) <= DIALOGUE_WEATHER.easing
+          );
+        };
+        const pending = site.queue
+          .filter(eligible)
+          .sort((a, b) => tile.scenes.visits.get(b)!.leave! - tile.scenes.visits.get(a)!.leave!);
+        const m = pending[0];
+        if (!m) return;
+        const other = pending[1];
+        const speakers: SceneSpeaker[] = [{ owner: m, member: 0, figure: m.group![0]!.figure }];
+        if (m.group!.length > 1)
+          speakers.push({ owner: m, member: 1, figure: m.group![1]!.figure });
+        else if (other) speakers.push({ owner: other, member: 0, figure: other.group![0]!.figure });
+        const participants = [...new Set(speakers.map((s) => s.owner as Mover))].map((owner) => ({
+          owner,
+          visit: tile.scenes.visits.get(owner)!,
+        }));
+        this.speech.admit(
+          {
+            key: event.key,
+            speakers,
+            profiles: ['weather'],
+            context: { ...contextFor(m), sheltered: true, clearing: true },
+            remaining: Math.min(...participants.map(({ visit }) => visit.leave!)),
+            valid: () =>
+              participants.every(
+                ({ owner, visit }) =>
+                  site.queue.includes(owner) &&
+                  eligible(owner) &&
+                  tile.scenes.visits.get(owner) === visit,
+              ),
+          },
+          MOMENTS.capacity - tile.momentHost.moments.size,
+        );
+      };
+      const tryScene = (m: Mover, arrival = false, event?: LocalScenes['speechEvents'][number]) => {
+        if (event?.kind === 'clearing') {
+          tryClearing(event);
+          return;
+        }
         if (!m.group?.length || !visible(m)) return;
         const visit = tile.scenes.visits.get(m);
         const context = { ...contextFor(m), arrival };
@@ -133,7 +193,7 @@ export class SceneSpeechHost {
           );
         } else if (
           visit &&
-          (visit.state === 'wait' || visit.state === 'shelter') &&
+          (visit.state === 'wait' || visit.state === 'shelter' || visit.state === 'shade') &&
           visit.site.kind !== 'vendor'
         ) {
           const other = visit.site.queue.find(
@@ -150,9 +210,12 @@ export class SceneSpeechHost {
                 ? { owner: other, member: 0, figure: other.group![0]!.figure }
                 : undefined;
           const sheltered = visit.state === 'shelter' && visit.site.covered;
-          if (!sheltered && visit.site.kind !== 'stop' && visit.site.kind !== 'terminal') return;
+          const shaded = visit.state === 'shade';
+          if (!sheltered && !shaded && visit.site.kind !== 'stop' && visit.site.kind !== 'terminal')
+            return;
           const state = visit.state;
           const pair = second?.owner;
+          const pairVisit = pair && pair !== m ? tile.scenes.visits.get(pair) : visit;
           this.speech.admit(
             {
               key: keyFor(
@@ -160,8 +223,9 @@ export class SceneSpeechHost {
                 `${state}:${arrival ? 'arrival' : context.easing ? 'easing' : 'wait'}`,
               ),
               speakers: second ? [first, second] : [first],
-              profiles: sheltered ? ['weather'] : ['transit'],
-              context: { ...context, sheltered },
+              profiles: sheltered || shaded ? ['weather'] : ['transit'],
+              context: { ...context, sheltered, shaded },
+              remaining: shaded ? Math.min(visit.time, pairVisit?.time ?? visit.time) : undefined,
               valid: () =>
                 visible(m) &&
                 (!pair || visible(pair)) &&
@@ -169,11 +233,18 @@ export class SceneSpeechHost {
                 visit.state === state &&
                 (!pair ||
                   pair === m ||
-                  (tile.scenes.visits.get(pair)?.state === state &&
+                  (tile.scenes.visits.get(pair) === pairVisit &&
+                    pairVisit?.state === state &&
                     tile.scenes.visits.get(pair)?.site === visit.site)) &&
-                (sheltered
-                  ? (this.sceneEnv?.rain ?? 0) > DIALOGUE_WEATHER.easing
-                  : (this.sceneEnv?.rain ?? 0) < MOMENTS.rain),
+                (shaded
+                  ? hotAt(
+                      this.sceneEnv?.minutes,
+                      this.sceneEnv?.rain ?? 0,
+                      this.sceneEnv?.sunAltitude,
+                    )
+                  : sheltered
+                    ? (this.sceneEnv?.rain ?? 0) > DIALOGUE_WEATHER.easing
+                    : (this.sceneEnv?.rain ?? 0) < MOMENTS.rain),
             },
             MOMENTS.capacity - tile.momentHost.moments.size,
           );
@@ -205,7 +276,7 @@ export class SceneSpeechHost {
         if (!this.sceneBudget) break;
         sceneChecks++;
         this.sceneBudget--;
-        tryScene(event.mover, event.kind === 'arrival');
+        tryScene(event.mover, event.kind === 'arrival', event);
       }
       if (scan) {
         // Keep one check available for real service events between scan boundaries.

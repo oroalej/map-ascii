@@ -10,6 +10,8 @@ import { random } from './random';
 import type { Flock, Gatherer, LifeEnv, Mover, Stall } from './simulate';
 import type { Visit } from './interactions';
 import { exhaustKind, PUFF } from './exhaust';
+import { HEAT, hotAt, inHours } from './config';
+export { inHours } from './config';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const EMOJI = {
@@ -32,7 +34,7 @@ export const EMOJI = {
   maxCats: 6,
   stoppedSpeed: 0.3,
   cruiseFraction: 0.85,
-  hotAltitude: 45,
+  hotAltitude: HEAT.altitude,
   rainThreshold: 0.5,
   driver: {
     angryWait: 6,
@@ -51,7 +53,7 @@ export const EMOJI = {
   hours: {
     night: [1320, 390],
     coffee: [330, 540],
-    hot: [660, 870],
+    hot: HEAT.hours,
     mosquito: [1050, 1170],
     karaoke: [1140, 1380],
     churchMorning: [300, 540],
@@ -102,9 +104,6 @@ export function temperament(rank: number): Temperament {
   const t = v - Math.floor(v);
   return t < 0.5 ? 'neutral' : t < 0.7 ? 'cheerful' : t < 0.9 ? 'grumpy' : 'sleepy';
 }
-export const inHours = (minutes: number | undefined, [from, to]: readonly [number, number]) =>
-  minutes !== undefined &&
-  (to < from ? minutes >= from || minutes < to : minutes >= from && minutes < to);
 export function eveningDate(env: Pick<LifeEnv, 'date' | 'minutes'>) {
   if (!env.date || env.minutes === undefined) return;
   const d = new Date((env.date.epochDay - Number(env.minutes < EMOJI_EVENING.end)) * DAY_MS);
@@ -172,10 +171,8 @@ export function ambientPool(
     add('coffee');
   const open = m?.vehicle && ['motorcycle', 'bicycle', 'tricycle', 'jeepney'].includes(m.vehicle);
   if (
-    inHours(env.minutes, EMOJI.hours.hot) &&
-    env.rain === 0 &&
-    (env.sunAltitude ?? -90) >= EMOJI.hotAltitude &&
-    (subject === 'person' ||
+    hotAt(env.minutes, env.rain, env.sunAltitude) &&
+    ((subject === 'person' && o.visit?.state !== 'shade') ||
       (subject === 'driver' && open) ||
       ((subject === 'dog' || subject === 'cat') && o.still))
   ) {
@@ -653,6 +650,8 @@ export class EmojiObserver {
           env.rain >= EMOJI.rainThreshold
         )
           t.edges.add('rained');
+        if (!gap && o.visit?.state === 'shade' && t.visit?.state !== 'shade')
+          t.edges.add('relaxed');
         if (!gap && o.arrival && o.visit?.state === 'wait') t.edges.add('happy');
       }
       const edges = conditions & ~t.triggers;
@@ -755,6 +754,7 @@ export class EmojiObserver {
       'sleeping',
       'sleepy',
       'rained',
+      'relaxed',
       'yummy',
       'beg',
       'rushing',

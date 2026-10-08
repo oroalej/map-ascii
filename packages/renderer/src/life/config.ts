@@ -326,6 +326,29 @@ export const spawnRules: Readonly<Record<LifeLine, readonly SpawnRule[]>> = {
 export const PERSON_PAUSE = { chance: 0.04, seconds: [2, 8] as const };
 export const PERSON_TURN_CHANCE = 0.01;
 
+/** Dry midday under a high sun; an altitude rule rather than a temperature model. */
+export const HEAT = {
+  hours: [660, 870],
+  altitude: 45,
+  share: 0.25,
+  window: 10,
+  reach: 25,
+  dwell: [20, 60],
+  cooldown: [180, 300],
+  treeSeats: 2,
+} as const;
+
+/** Seconds an arrived person waits after the rain releases. */
+export const SHELTER_DEPARTURE = { umbrella: [0, 6], first: 2, last: 60 } as const;
+
+export const inHours = (minutes: number | undefined, [from, to]: readonly [number, number]) =>
+  minutes !== undefined &&
+  (to < from ? minutes >= from || minutes < to : minutes >= from && minutes < to);
+
+export function hotAt(minutes: number | undefined, rain: number, sunAltitude: number | undefined) {
+  return inHours(minutes, HEAT.hours) && rain === 0 && (sunAltitude ?? -90) >= HEAT.altitude;
+}
+
 /**
  * Street dogs (askals): they stop to sniff often (chance per second, and how long in s), turn
  * back more than people do, now and then trot at `trot.speed` m/s for `trot.seconds`, and some

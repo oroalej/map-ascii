@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { activityLevels, RUN, RECOVERY } from './config';
+import { activityLevels, RUN, RECOVERY, SHELTER_DEPARTURE, HEAT } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
-import { LocalScenes, type Visit } from './interactions';
+import { LocalScenes, departureDelay, personSample, type Visit } from './interactions';
 import { stripRing } from './terrain';
 import type { Mover, Stall, Walker } from './simulate';
 import type { WalkingGraph } from './navigation';
 import { Occupancy, memberSize, sweptBodyOverlap, type Body } from './occupancy';
+import { makeScenario, worldTiles } from './testing/scenarios';
+import { valid } from './testing/scenario-checks';
 
 const person = (x = 40, kind: Mover['kind'] = 'person'): Mover => ({
   kind,
@@ -55,7 +57,219 @@ const setup = (kind: number = 0, stalls: Stall[] = []) => {
 const run = (scene: LocalScenes, movers: Mover[], seconds: number, rain = 0) => {
   for (let t = 0; t < seconds; t += 0.1) scene.step(0.1, movers, { rain });
 };
+const shadeFixture = (covered = false) => {
+  const b = new LifeBuilder();
+  b.line(
+    [
+      { x: 0, y: 30 },
+      { x: 200, y: 30 },
+    ],
+    LifeLine.path,
+  );
+  if (covered) b.site({ x: 50, y: 30 }, 0, 7, true);
+  else b.perch({ x: 50, y: 30 });
+  const scene = new LocalScenes(b.finish(), 1, 8, []);
+  const rank = Array.from({ length: 100 }, (_, i) => i / 100).find(
+    (rank) => personSample({ rank }, 72, 'shade-pick') < HEAT.share,
+  )!;
+  const p = { ...person(), rank, group: [{ ...walker }] };
+  return { scene, p };
+};
 describe('local interaction scenes', () => {
+  it('adds tree shade after mapped sites and admits only hot walkers without a parasol', () => {
+    for (const env of [
+      { rain: 0, minutes: 720, sunAltitude: 60 },
+      { rain: 0, minutes: 540, sunAltitude: 60 },
+      { rain: 0, minutes: 720, sunAltitude: 40 },
+      { rain: 1, minutes: 720, sunAltitude: 60 },
+    ])
+      for (const umbrella of [0, 1]) {
+        const { scene, p } = shadeFixture();
+        p.group[0]!.umbrella = umbrella;
+        expect(scene.sites[0]).toMatchObject({ kind: 'shade', covered: false, capacity: 2 });
+        const rng = vi.spyOn(scene as unknown as { rng: () => number }, 'rng').mockReturnValue(0.9);
+        let arrived = false;
+        for (let frame = 0; frame < 200; frame++) {
+          scene.step(0.1, [p], env);
+          if (scene.visits.get(p)?.state === 'shade') {
+            arrived = true;
+            break;
+          }
+        }
+        expect(arrived).toBe(
+          umbrella === 1 && env.rain === 0 && env.minutes === 720 && env.sunAltitude === 60,
+        );
+        if (arrived) {
+          expect(rng).toHaveBeenCalledTimes(2); // Original search and arrival draws only.
+          expect(scene.visits.get(p)!.time).toBeCloseTo(
+            20 + 40 * personSample(p, 72, 'shade-dwell'),
+          );
+          expect(scene.speechEvents.some((e) => e.kind === 'shade')).toBe(true);
+        }
+      }
+  });
+  it('bounds the checked approach length only for shading reservations', () => {
+    const { scene, p } = shadeFixture();
+    const graph = (scene as unknown as { graph: WalkingGraph }).graph;
+    vi.spyOn(graph, 'route').mockReturnValue([
+      { x: 40, y: 30 },
+      { x: 40, y: 60 },
+      { x: 50, y: 30 },
+    ]);
+    expect(scene.reserve(p, 0, true)).toBe(false);
+    expect(scene.sites[0]!.queue).toHaveLength(0);
+    expect(scene.reserve(p, 0)).toBe(true);
+  });
+  it.each([false, true])(
+    'handles rain during shade approach and arrival (covered=%s)',
+    (covered) => {
+      for (const arrived of [false, true]) {
+        const { scene, p } = shadeFixture(covered);
+        scene.step(0, [], { rain: 0, minutes: 720 });
+        scene.reserve(p, 0, true);
+        const visit = scene.visits.get(p)!;
+        run(scene, [p], arrived ? 6 : 1);
+        expect(visit.state).toBe(arrived ? 'shade' : 'approach');
+        const before = { x: p.x, y: p.y },
+          path = visit.path;
+        scene.step(0.1, [p], { rain: 1 });
+        expect(Math.hypot(p.x - before.x, p.y - before.y)).toBeLessThanOrEqual(0.36);
+        if (covered) {
+          expect(visit.state).toBe(arrived ? 'shelter' : 'approach');
+          expect(visit.path).toBe(path);
+          expect(visit.sheltering).toBe(true);
+          if (!arrived) run(scene, [p], 6, 1);
+          expect(visit.state).toBe('shelter');
+        } else {
+          expect(visit.state).toBe('return');
+          run(scene, [p], 10, 1);
+          expect(scene.visits.has(p)).toBe(false);
+          expect((scene as unknown as { cooldown: Map<Mover, number> }).cooldown.has(p)).toBe(
+            false,
+          );
+        }
+      }
+    },
+  );
+  it('uses a long dry shade cooldown, preserving the return draw, then clears it for rain', () => {
+    const { scene, p } = shadeFixture(true);
+    scene.step(0, [], { rain: 0, minutes: 720 });
+    scene.reserve(p, 0, true);
+    const visit = scene.visits.get(p)!;
+    run(scene, [p], 6);
+    visit.time = 0;
+    const rng = vi.spyOn(scene as unknown as { rng: () => number }, 'rng');
+    for (let frame = 0; frame < 100 && scene.visits.has(p); frame++)
+      scene.step(0.1, [p], { rain: 0 });
+    expect(scene.visits.has(p)).toBe(false);
+    expect(rng).toHaveBeenCalledTimes(1);
+    const cooldown = (scene as unknown as { cooldown: Map<Mover, number> }).cooldown;
+    expect(cooldown.get(p)).toBeCloseTo(180 + 120 * personSample(p, 72, 'shade-cooldown'));
+    scene.step(0, [p], { rain: 1 });
+    expect(cooldown.has(p)).toBe(false);
+    expect(scene.reserve(p, 0)).toBe(true);
+  });
+  it('never boards a shaded visitor at a served transit stop', () => {
+    const scene = setup(),
+      p = person();
+    scene.reserve(p, 0, true);
+    run(scene, [p], 6);
+    const bus = { ...person(50, 'vehicle'), vehicle: 'bus' as const, v: 0 };
+    scene.services.set(bus, { site: scene.sites[0]!, arriving: false, time: 5, boarded: 0 });
+    scene.step(0.1, [p, bus], { rain: 0 });
+    expect(scene.visits.get(p)!.state).toBe('shade');
+    expect(scene.services.get(bus)!.boarded).toBe(0);
+  });
+  it('preserves the dry non-hot baseline scene random stream and visit trace', () => {
+    const scene = setup(),
+      p = person();
+    const rng = vi.spyOn(scene as unknown as { rng: () => number }, 'rng');
+    const trace = [];
+    for (let frame = 0; frame < 12; frame++) {
+      scene.step(1, [p], { rain: 0, minutes: 540 });
+      trace.push([
+        rng.mock.results.map((r) => r.value as number),
+        scene.visits.get(p)?.state ?? null,
+      ]);
+      rng.mockClear();
+    }
+    expect(trace).toMatchInlineSnapshot(`
+      [
+        [
+          [
+            0.187567800283432,
+          ],
+          null,
+        ],
+        [
+          [
+            0.6389096821658313,
+          ],
+          null,
+        ],
+        [
+          [
+            0.6408124042209238,
+          ],
+          null,
+        ],
+        [
+          [
+            0.8924993227701634,
+          ],
+          null,
+        ],
+        [
+          [
+            0.9745738117489964,
+          ],
+          null,
+        ],
+        [
+          [
+            0.3797166550066322,
+          ],
+          null,
+        ],
+        [
+          [
+            0.4969414749648422,
+          ],
+          null,
+        ],
+        [
+          [
+            0.4215189549140632,
+          ],
+          null,
+        ],
+        [
+          [
+            0.1928215327206999,
+          ],
+          null,
+        ],
+        [
+          [
+            0.40959873516112566,
+          ],
+          null,
+        ],
+        [
+          [
+            0.9414362271782011,
+          ],
+          null,
+        ],
+        [
+          [
+            0.3093199231661856,
+          ],
+          null,
+        ],
+      ]
+    `);
+  });
   it('finds a checked holding corridor wide enough for two intact three-person formations', () => {
     const scene = setup(),
       p = {
@@ -1064,25 +1278,35 @@ describe('local interaction scenes', () => {
       m.group = kind === 'person' ? [{ ...walker }, { ...walker, back: 2 }] : undefined;
       expect(scene.reserve(m, 0)).toBe(true);
       const visit = scene.visits.get(m)!;
+      const { world } = makeScenario('rain', 1);
+      const tile = [...worldTiles(world).values()][0]!;
+      tile.scenes = scene;
+      tile.movers.splice(0, tile.movers.length, m);
+      tile.gatherers.length = 0;
+      valid(world);
       while (m.x < 80) scene.step(0.1, [m], { rain: 1 });
       const x = m.x;
       scene.step(0.1, [m], { rain: 0 });
       expect(visit.site.queue).toHaveLength(0);
       expect(visit.returnPending).toBe(true);
       expect(visit.state).toBe('approach');
+      valid(world);
       expect(m.x).toBeGreaterThan(x);
       expect(m.hx).toBe(1);
       for (let i = 0; visit.returnPending && i < 100; i++) {
         const x = m.x;
         scene.step(0.1, [m], { rain: 0 });
+        valid(world);
         expect(m.x).toBeGreaterThan(x);
       }
       expect(visit.returnPending).toBe(false);
       expect(visit.state).toBe('return');
+      valid(world);
       expect(m.x).toBeGreaterThan(83 + (kind === 'person' ? 2.45 : kind === 'dog' ? 0.45 : 0.325));
       run(scene, [m], 60);
       expect(scene.visits.has(m)).toBe(false);
       expect(visit.site.queue).toHaveLength(0);
+      valid(world);
     }
   });
 
@@ -1341,11 +1565,126 @@ describe('local interaction scenes', () => {
     expect(dry.x - 40).toBeCloseTo(dry.speed * 0.5);
     run(scene, [caught], 6, 1);
     expect(scene.visits.get(caught)!.state).toBe('shelter');
-    run(scene, [caught], 1, 0);
+    const visit = scene.visits.get(caught)!;
+    for (
+      let frame = 0;
+      frame < (SHELTER_DEPARTURE.last + 1) * 10 && visit.state !== 'return';
+      frame++
+    )
+      scene.step(0.1, [caught], { rain: 0 });
+    expect(visit.state).toBe('return');
     const from = caught.x;
     scene.step(0.5, [caught], { rain: 0 });
     expect(scene.visits.get(caught)!.state).toBe('return');
     expect(from - caught.x).toBeCloseTo(caught.speed * 0.5);
+  });
+  it('staggered departures repeat deterministically, change order by shower and consume no RNG', () => {
+    const departures = (shower: number) => {
+      const scene = setup(2);
+      const people = [0.08, 0.23, 0.37, 0.51, 0.68, 0.89].map((rank, i) => ({
+        ...person(35),
+        rank,
+        group: [{ ...walker, umbrella: i < 2 ? 0 : 1 }],
+      }));
+      for (let n = 1; n < shower; n++) {
+        scene.step(0, [], { rain: 1 });
+        scene.step(0, [], { rain: 0 });
+      }
+      scene.step(0, [], { rain: 1 });
+      people.forEach((p) => expect(scene.reserve(p, 0)).toBe(true));
+      run(scene, people, 12, 1);
+      const visits = people.map((p) => scene.visits.get(p)!);
+      expect(visits.every((v) => v.state === 'shelter')).toBe(true);
+      const rng = vi.spyOn(scene as unknown as { rng: () => number }, 'rng');
+      const frames = Array<number>(6).fill(-1);
+      let clearing = 0;
+      for (let frame = 0; frame <= 600 && frames.includes(-1); frame++) {
+        // Stop stepping departed walkers so approach/search RNG is excluded.
+        scene.step(
+          0.1,
+          people.filter((_, i) => frames[i] === -1),
+          { rain: 0 },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          (m) => people.some((p, i) => p === m && frames[i] === -1) || m === visits[0]!.site,
+        );
+        clearing += scene.speechEvents.filter((e) => e.kind === 'clearing').length;
+        visits.forEach((v, i) => {
+          if (frames[i] === -1 && v.state === 'return') frames[i] = frame;
+        });
+      }
+      expect(rng).not.toHaveBeenCalled();
+      expect(clearing).toBe(1);
+      expect(frames.every((f) => f >= 0 && f <= 600)).toBe(true);
+      expect(new Set(frames).size).toBeGreaterThanOrEqual(4);
+      const nonCarriers = frames.slice(2).sort((a, b) => a - b);
+      expect(Math.max(...frames.slice(0, 2))).toBeLessThan((nonCarriers[1]! + nonCarriers[2]!) / 2);
+      return frames;
+    };
+    const first = departures(1);
+    expect(departures(1)).toEqual(first);
+    const order = (frames: number[]) =>
+      frames
+        .map((f, i) => ({ f, i }))
+        .sort((a, b) => a.f - b.f)
+        .map((e) => e.i);
+    expect(order(departures(2))).not.toEqual(order(first));
+  });
+  it('cancels pending countdowns on renewed rain and replaces stale inspected shower values', () => {
+    const scene = setup(2),
+      p = { ...person(), group: [walker], rank: 0.68 };
+    scene.step(0, [], { rain: 1 });
+    scene.reserve(p, 0);
+    run(scene, [p], 10, 1);
+    const visit = scene.visits.get(p)!;
+    scene.step(0.1, [p], { rain: 0 });
+    expect(visit.leaveShower).toBe(1);
+    scene.step(0.1, [p], { rain: 1 });
+    expect(visit).toMatchObject({ state: 'shelter' });
+    expect(visit.leave).toBeUndefined();
+    scene.step(0.1, [p], { rain: 0 });
+    const prior = visit.leave;
+    scene.step(
+      0.1,
+      [p],
+      { rain: 1 },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      p,
+    );
+    scene.step(
+      0.1,
+      [p],
+      { rain: 0 },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      p,
+    );
+    expect(visit.leave).toBe(prior);
+    scene.step(0.1, [p], { rain: 0 });
+    expect(visit.leaveShower).toBe(3);
+    expect(visit.leave).toBeCloseTo(departureDelay(p, 3) - 0.1);
+  });
+  it('samples bounded umbrella and non-carrier departure delays without scene state', () => {
+    for (let rank = 0; rank < 1; rank += 0.01)
+      for (const umbrella of [0, 1]) {
+        const p = { ...person(), rank, group: [{ ...walker, umbrella }] };
+        const delay = departureDelay(p, 1);
+        expect(delay).toBeGreaterThanOrEqual(umbrella === 0 ? 0 : 2);
+        expect(delay).toBeLessThanOrEqual(umbrella === 0 ? 6 : 60);
+        expect(departureDelay(p, 1)).toBe(delay);
+      }
   });
   it('runs a cancelled vendor customer back while the storm continues', () => {
     const stall: Stall = { x: 65, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
