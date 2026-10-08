@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
 import type { ProcessionRun } from './life/simulate';
-import type { FluvialRoute } from '@atlas/shared';
+import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
+import { CROP_STAGE } from './glyphs/select';
+import { activityLevels } from './life/config';
 import { LifeInspection } from './life/inspection';
 import {
   cellPass,
@@ -606,6 +608,20 @@ describe('live motion preference', () => {
         timezone: 'Asia/Manila',
       },
     };
+    const climate: ClimateConfig = {
+      wind: [],
+      default: { from: 90, strength: 'breeze' },
+      source: 'Fixture',
+      crops: {
+        rice: {
+          source: 'Fixture',
+          calendar: [
+            { from: '06-01', stage: 'transplanted' },
+            { from: '09-01', stage: 'harvested' },
+          ],
+        },
+      },
+    };
     atlas = createAtlas(canvas, {
       tilesUrl: '/test.pmtiles',
       bounds: [-1, -1, 1, 1],
@@ -616,10 +632,21 @@ describe('live motion preference', () => {
       life: { time: 1320 },
       now: () => new Date('2026-06-01T04:00:00Z'),
       processions: [event],
+      climate,
     });
     const reports: (ProcessionRun | null)[] = [];
     atlas.on('procession', (run) => reports.push(run));
     draw(10);
+    const cropInPasses = () => {
+      expect(vi.mocked(selectPass).mock.calls.at(-1)![12]).toMatchObject({
+        stage: CROP_STAGE.transplanted,
+        progress: 0,
+      });
+      expect(vi.mocked(glyphPass).mock.calls.at(-1)![18]).toEqual(
+        vi.mocked(selectPass).mock.calls.at(-1)![12],
+      );
+    };
+    cropInPasses();
     expect(requests.at(-1)?.step.weather?.minutes).toBe(1320);
     expect(atlas.playProcession(event.id)).toBe(true);
     expect(reports.at(-1)?.time).toMatchObject({ date: '2026-09-11', time: '12:00' });
@@ -628,6 +655,7 @@ describe('live motion preference', () => {
     expect(new Set(minutes).size).toBeGreaterThan(1);
     expect(requests.at(-1)?.step.weather?.minutes).toBeGreaterThanOrEqual(720);
     expect(requests.at(-1)?.step.weather?.minutes).toBeLessThan(730);
+    cropInPasses();
     expect(atlas.getLife().time).toBe(1320);
     atlas.stopProcession();
     draw(2250);
@@ -635,12 +663,69 @@ describe('live motion preference', () => {
     expect(requests.at(-1)?.step.weather?.minutes).toBe(1320);
     atlas.playProcession(event.id);
     atlas.setLife({ enabled: false });
+    draw(2300);
+    cropInPasses();
     expect(reports.at(-1)).toBeNull();
     atlas.setLife({ enabled: true });
     atlas.playProcession(event.id);
     atlas.setReducedMotion(true);
+    draw(2400);
+    cropInPasses();
+    expect(vi.mocked(selectPass).mock.calls.at(-1)![6]).toBe(0);
     expect(reports.at(-1)).toBeNull();
     expect(atlas.getLife().time).toBe(1320);
+  });
+
+  it('clears crop pass state when the city has no crop calendar', () => {
+    draw(10);
+    expect(vi.mocked(selectPass).mock.calls.at(-1)![12]).toBeNull();
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![18]).toBeNull();
+  });
+
+  it('redraws a real-city crop boundary with fixed time and sends scaled farm attendance to Life', () => {
+    atlas.destroy();
+    let date = new Date('2026-06-30T15:59:00Z');
+    const visible = vi.spyOn(LifeWorld.prototype, 'visible');
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 1900,
+      timezone: 'Asia/Manila',
+      lifeWorker: false,
+      life: { time: 480 },
+      now: () => date,
+      climate: {
+        wind: [],
+        default: { from: 90, strength: 'breeze' },
+        source: 'Fixture',
+        crops: {
+          rice: {
+            source: 'Fixture',
+            calendar: [
+              { from: '06-01', stage: 'fallow' },
+              { from: '07-01', stage: 'growing' },
+            ],
+          },
+        },
+      },
+    });
+    draw(10);
+    expect(vi.mocked(selectPass).mock.calls.at(-1)![12]?.stage).toBe(CROP_STAGE.fallow);
+    date = new Date('2026-06-30T16:01:00Z');
+    draw(1200);
+    expect(vi.mocked(selectPass).mock.calls.at(-1)![12]).toMatchObject({
+      stage: CROP_STAGE.growing,
+      progress: 0,
+    });
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![18]).toEqual(
+      vi.mocked(selectPass).mock.calls.at(-1)![12],
+    );
+    const activity = visible.mock.calls.at(-1)![1];
+    if (typeof activity === 'number') throw new Error('expected resolved activity');
+    expect(activity.places.farm).toBe(
+      activityLevels(1, { minutes: 480, weekday: 3 }).places.farm * 0.35,
+    );
   });
 
   it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', () => {

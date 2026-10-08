@@ -8,6 +8,7 @@ import {
   CANOPY,
   CanopyGlyph,
   CROP,
+  CROP_STAGE,
   CropGlyph,
   CROWN,
   CrownGlyph,
@@ -126,6 +127,40 @@ int cropVariant(ivec2 c, float gust) {
 int cropTone(ivec2 c) {
   return valueNoise(c, ${CROP.ripeScale}, ${CROP.ripeSeed}) > ${float(CROP.ripeAbove)}
     ? ${Tone.dry} : ${Tone.none};
+}
+
+${Object.entries(CROP_STAGE)
+  .filter(([, value]) => Number.isInteger(value))
+  .map(([name, value]) => `const int CROP_${name.toUpperCase()} = ${value};`)
+  .join('\n')}
+
+int cropCell(ivec2 c, float gust, int stage, float progress, float time, out int tone) {
+  float p = clamp(progress, 0.0, 1.0);
+  uint h = cellHash(c) >> 8u;
+  bool row = vmod(c.y, 2) == 0;
+  if (stage == CROP_GROWING || stage == CROP_RIPE) {
+    float eased = p * p * (3.0 - 2.0 * p);
+    float threshold = stage == CROP_GROWING
+      ? ${float(CROP.ripeAbove)} + (${float(CROP_STAGE.ripeStart)} - ${float(CROP.ripeAbove)}) * eased
+      : ${float(CROP_STAGE.ripeStart)} * (1.0 - eased);
+    tone = valueNoise(c, ${CROP.ripeScale}, ${CROP.ripeSeed}) > threshold ? ${Tone.dry} : ${Tone.none};
+    return cropVariant(c, gust);
+  }
+  if (stage == CROP_FLOODED) {
+    tone = ${Tone.light};
+    return time > 0.0 && (h + uint(floor(time * ${float(CROP_STAGE.shimmerRate)}))) % 5u == 0u ? ${CropGlyph.flat} : ${CropGlyph.water};
+  }
+  if (stage == CROP_TRANSPLANTED) {
+    bool planted = row && float(h) / 16777216.0 < ${float(CROP_STAGE.seedEvery)} + (${float(CROP_STAGE.seedEnd)} - ${float(CROP_STAGE.seedEvery)}) * p;
+    tone = planted ? ${Tone.none} : ${Tone.light};
+    return planted ? ((h & 1u) == 0u ? ${CropGlyph.seedling} : 1) : ${CropGlyph.water};
+  }
+  if (stage == CROP_HARVESTED) {
+    tone = ${Tone.dry};
+    return row && (h & 1u) == 0u ? ${CropGlyph.stubble} : ${CropGlyph.seedling};
+  }
+  tone = ${Tone.shade};
+  return (h & 1u) == 0u ? ${CropGlyph.soil} : ${CropGlyph.soilDark};
 }
 
 // Cells a crown vertex reach cells from its trunk swings in a gust, and springs back in the wake

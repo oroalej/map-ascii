@@ -15,6 +15,8 @@ import {
   type PlaceKind,
   type RuntimeSeasonConfig,
   type ZoomBand,
+  type CropNow,
+  type CropStage,
 } from '@atlas/shared';
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
 import { LifeLine } from './geometry';
@@ -643,12 +645,31 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
  * defaults, rhythm.ts), or without a clock, by the daylight alone (`activity`). Birds and bats
  * always follow the daylight; dogs keep to people's hours, but some are always out.
  */
+/** Illustrative field attendance, leaving spawn counts and carabao ownership unchanged. */
+export function cropWork(stage: CropStage, progress: number): number {
+  switch (stage) {
+    case 'fallow':
+      return 0.15;
+    case 'flooded':
+      return 0.8;
+    case 'transplanted':
+      return progress < 0.4 ? 1 : 0.5;
+    case 'growing':
+      return 0.35;
+    case 'ripe':
+      return 0.6;
+    case 'harvested':
+      return progress < 0.4 ? 1 : 0.25;
+  }
+}
+
 export function activityLevels(
   daylight: number,
   clock?: {
     minutes: number;
     weekday: number;
     life?: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined;
+    crop?: CropNow | undefined;
   },
   season?: Pick<RuntimeSeasonConfig, 'visitors' | 'congregations'>,
 ): Activity {
@@ -658,6 +679,7 @@ export function activityLevels(
   for (const kind of PLACE_KINDS) {
     places[kind] = clock ? placeShare(kind, clock, clock.life) : activity('person', daylight);
   }
+  if (clock?.crop) places.farm *= cropWork(clock.crop.stage, clock.crop.progress);
   return {
     vehicle: byRhythm('vehicle'),
     person: byRhythm('person'),

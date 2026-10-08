@@ -12,6 +12,9 @@ import {
   resolveSeason,
   eventOccurrence,
   dialogueChoices,
+  CROP_STAGES,
+  cropStageAt,
+  epochDay,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -25,6 +28,7 @@ import type {
   ProcessionRoute,
   TrafficMix,
   EmergencyData,
+  CropNow,
 } from '@atlas/shared';
 import {
   clampCamera,
@@ -38,6 +42,8 @@ import {
 } from './camera';
 import { classesIn, type RenderClass } from './classes';
 import { DEFAULT_FONT } from './glyphs/atlas';
+import { cropTint } from './glyphs/select';
+import type { CropPass } from './passes';
 import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
   cellStep,
@@ -1482,6 +1488,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let activity: Activity = activityLevels(1);
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
+  // Real-city crop state is the source for later field-agent behaviour.
+  let crop: CropNow | undefined;
+  let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
   const updateSeason = () => {
     const next = resolveCurrentSeason();
@@ -1550,6 +1559,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const nextMoon = moonlight(moment, camera.lng, camera.lat) * (1 - SKY.moonLoss * nextCover);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
+    crop = cropStageAt(options.climate?.crops, real.year, real.day - epochDay(real.year, 1, 1));
+    const stage = crop ? CROP_STAGES.indexOf(crop.stage) : -1;
+    if (
+      stage !== (cropPass?.stage ?? -1) ||
+      Math.abs((crop?.progress ?? 0) - (cropPass?.progress ?? 0)) > 0.002
+    ) {
+      cropPass = crop ? { stage, progress: crop.progress, ...cropTint(stage) } : null;
+      drawDirty = true;
+    }
     folkloreDate = {
       epochDay: local.day,
       ...(life.season !== 'auto' && options.cityLife?.seasons?.some((s) => s.id === life.season)
@@ -1575,6 +1593,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         minutes: local.minutes,
         weekday: local.weekday,
         life: options.cityLife,
+        crop,
       },
       season,
     );
@@ -1818,6 +1837,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         knobs.groundWind ? wind : { ...wind, strength: 0 },
         sun,
         knobs.shadows,
+        true,
+        cropPass,
       );
       const lifeStart = performance.now();
       drawLife(now, wind);
@@ -1855,6 +1876,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         focus,
         lifePause.time,
         folklorePacket,
+        cropPass,
       );
       drawDirty = false;
       fireworksPass(

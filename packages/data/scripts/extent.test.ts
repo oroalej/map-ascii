@@ -36,6 +36,21 @@ const collection = (features: Feature[]): FeatureCollection => ({
 });
 const emptyRegion = { osm: collection([]), derived: [] };
 
+it('drops curated farmland wholly in void only at the display stage', () => {
+  const source: AtlasFeature = {
+    type: 'Feature',
+    geometry: bboxPolygon([0.2, 2.5, 0.5, 2.8]),
+    properties: { id: 'cover:fields/area-1', class: 'farmland' },
+    tippecanoe: { layer: 'landuse', minzoom: 12, maxzoom: 16 },
+  };
+  const before = structuredClone(source);
+  expect(tileRecords([source], territory)).toEqual([]);
+  expect(source).toEqual(before);
+  expect(tileRecords([source], createTerritory(territory.regionBounds, city.geometry))).toEqual([
+    source,
+  ]);
+});
+
 it('keeps boundary point and subdivision search anchors admitted after serialization', () => {
   const boundary: Polygon = {
     type: 'Polygon',

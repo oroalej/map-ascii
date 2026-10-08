@@ -535,6 +535,6 @@ describe('fields and water in the wind', () => {
   it('draws farmland as a crop in the wind', () => {
     const tables = buildGlyphTables(themes.dark, (g) => g.codePointAt(0)! % 256);
     expect(tables.kinds[classId('farmland')]).toBe(kindCodes.crop);
-    expect(themes.dark.styles.farmland!.glyphs).toEqual(['≡', "'", '/', '\\', '~']);
+    expect(themes.dark.styles.farmland!.glyphs.slice(0, 5)).toEqual(['≡', "'", '/', '\\', '~']);
   });
 });

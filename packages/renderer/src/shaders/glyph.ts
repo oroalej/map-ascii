@@ -33,6 +33,7 @@ import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
   CROWN_LIGHT,
+  CROP_STAGE,
   EDGE_INK,
   EDGE_STATE,
   SHADOW,
@@ -79,6 +80,10 @@ uniform vec2 u_shift;
 uniform float u_height;
 uniform int u_columns;
 uniform vec3 u_colors[${MAX_CLASSES}];
+uniform int u_cropStage;
+uniform int u_farmlandClass;
+uniform vec3 u_cropTint;
+uniform vec3 u_cropWaterTint;
 uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
@@ -163,6 +168,14 @@ float cloudFactor(vec2 grid) {
 
 float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
+}
+
+vec3 cropPigment(int cls, int tone) {
+  vec3 color = u_colors[cls];
+  if (cls != u_farmlandClass || u_cropStage < 0) return color;
+  bool water = u_cropStage == ${CROP_STAGE.flooded}
+    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+  return color * (water ? u_cropWaterTint : u_cropTint);
 }
 
 vec3 daylit(vec3 color) {
@@ -682,7 +695,7 @@ void main() {
   int bgClass = int(g.a * 255.0 + 0.5);
   float night = darkness();
   // The cell's background: its fill class's color, faint (theme.ts ClassStyle.fill).
-  vec3 back = fillOf(bgClass, daylit(u_colors[bgClass]));
+  vec3 back = fillOf(bgClass, daylit(cropPigment(bgClass, bgClass == cls ? tone : ${Tone.light})));
   // A shadow darkens the ground and whatever stands in it (glyphs/select.ts SHADOW).
   float shade = shaded ? 1.0 - ${float(SHADOW.dark)} : 1.0;
   back *= shade;
@@ -801,7 +814,7 @@ void main() {
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
-  vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
+  vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(cropPigment(cls, tone)), tone, night);
   if (cls == u_crownClass) {
     vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb * 2.0 - 1.0;
     vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
@@ -862,7 +875,7 @@ void main() {
   color *= shade;
   if (u_focus) {
     color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
-    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(u_colors[cls])) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(u_colors[cls])) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
+    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }

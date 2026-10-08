@@ -29,7 +29,7 @@ pnpm data:build -- --city naga --from 03     # rerun from a step (earlier output
 
 The generated files are gitignored too. `pnpm data:publish -- --city <slug>` uploads them as a GitHub release and writes the city pack's `tiles.lock.json` (commit it); `pnpm data:fetch` downloads the locked files that are missing, checking their hashes, and runs before every web build. See [`docs/DATA.md`](../../docs/DATA.md) §9.
 
-Overpass: the public instances are tried in turn, with backoff when they are busy (HTTP 429/504). Set `OVERPASS_URL` to pin one.
+Overpass: the public instances are tried in turn, with backoff when they are busy (HTTP 429/5xx). One that answers HTTP 500 or can't be reached is skipped for the rest of the run. Set `OVERPASS_URL` to pin one.
 
 ## Tests
 

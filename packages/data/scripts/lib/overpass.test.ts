@@ -214,6 +214,76 @@ describe('overpass', () => {
     }
   });
 
+  it('retries an HTTP 500 on the next server and skips the broken one for the rest of the run', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const answer = { elements: [{ type: 'way', id: 1 }] };
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('<title>500 Internal Server Error</title>', { status: 500 }),
+      )
+      .mockResolvedValueOnce(new Response(JSON.stringify(answer)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(answer)));
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // A fresh module, so the server this test finds broken stays skipped only here.
+    vi.resetModules();
+    const { overpass } = await import('./overpass');
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+    try {
+      const file = join(dir, 'a.osm.json');
+      expect(await settle(overpass(city, file, { offline: false }))).toEqual(answer);
+      expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(answer);
+      await settle(overpass(city, join(dir, 'b.osm.json'), { offline: false }));
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(fetch.mock.calls[2]![0]).not.toBe(fetch.mock.calls[0]![0]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips a server it could not connect to for the rest of the run', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const down = Object.assign(new TypeError('fetch failed'), {
+      cause: { code: 'UND_ERR_CONNECT_TIMEOUT' },
+    });
+    const answer = { elements: [{ type: 'way', id: 1 }] };
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(down)
+      .mockResolvedValueOnce(new Response(JSON.stringify(answer)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(answer)));
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    // A fresh module, so the server this test finds down stays skipped only here.
+    vi.resetModules();
+    const { overpass } = await import('./overpass');
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+    try {
+      await settle(overpass(city, join(dir, 'a.osm.json'), { offline: false }));
+      await settle(overpass(city, join(dir, 'b.osm.json'), { offline: false }));
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(fetch.mock.calls[2]![0]).not.toBe(fetch.mock.calls[0]![0]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('fails at once on a rejected query', async () => {
+    const fetch = vi.fn().mockResolvedValue(new Response('parse error', { status: 400 }));
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+    try {
+      await expect(overpass(city, join(dir, 'a.osm.json'), { offline: false })).rejects.toThrow(
+        'Overpass HTTP 400: parse error',
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   describe('with another checkout', () => {
     const fresh: OverpassResponse = {
       elements: [{ ...boundary, type: 'relation' }],
