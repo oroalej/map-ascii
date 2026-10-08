@@ -11,7 +11,7 @@ export type InputIntents = {
   /** The mouse is over (x, y) CSS pixels from the canvas's top left, or has left (null). */
   hover: (point: [number, number] | null) => void;
   /** A click or tap at (x, y): a press and release that barely moved. */
-  tap: (point: [number, number]) => void;
+  tap: (point: [number, number], pointerType: string) => void;
 };
 
 /** A press that moves less than this (CSS px) and ends within `TAP_MS` is a tap. */
@@ -104,7 +104,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
         intents.zoom(1, fromCenter({ x, y }));
       } else {
         lastTap = { x, y, time: e.timeStamp };
-        intents.tap([x, y]);
+        intents.tap([x, y], e.pointerType);
       }
     } else if (press?.id === e.pointerId) {
       press = null;

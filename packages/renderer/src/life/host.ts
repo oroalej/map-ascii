@@ -23,6 +23,7 @@ import { eventBodySize } from './event-actors';
 import { runtimeFolklore } from './folklore-config';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './folklore';
 import { isEmergencyCraft } from './emergency';
+import type { TapReceipt } from './tap';
 let nextGeneration = 0;
 export const allocateLifeGeneration = () => ++nextGeneration;
 
@@ -79,6 +80,8 @@ export type FrameView = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
+  tapFrame?: number;
+  tapReceipts?: readonly TapReceipt[];
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
@@ -279,6 +282,7 @@ export function createWorkerHost(
       shopSchedule: options.cityLife?.schedules?.shops,
       folklore: runtimeFolklore(options.cityLife),
       itemInspection: options.itemInspection,
+      tapTargets: true,
       emojiObserver: options.emojiObserver,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
@@ -293,7 +297,14 @@ export function createWorkerHost(
       agentEpoch++;
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
-      if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
+      if (view)
+        view = {
+          ...view,
+          agents: [],
+          folklore: EMPTY_FOLKLORE,
+          tapReceipts: undefined,
+          tapFrame: undefined,
+        };
     },
     invalidateFolklore() {
       folkloreEpoch++;
@@ -369,7 +380,15 @@ export function createWorkerHost(
       const frame = ++frames;
       const posted = profiler?.time();
       void remote
-        .frame(input)
+        .frame({
+          ...input,
+          step: {
+            ...input.step,
+            ...(input.step.taps && {
+              taps: input.step.taps.filter((tap) => tap.generation === generation),
+            }),
+          },
+        })
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
           if (result.terrain !== undefined) {
@@ -417,6 +436,8 @@ export function createWorkerHost(
             generation,
             procession: result.procession,
             signalClock: result.signalClock,
+            tapFrame: result.tapFrame,
+            tapReceipts: result.tapReceipts,
             cellGuard: (toCell) =>
               cellTerrain &&
               makeCellGuard(

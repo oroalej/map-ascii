@@ -34,6 +34,7 @@ import {
 } from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
+import { TapSources, resolveTap, type LifeTap, type TapReceipt } from './tap';
 import {
   EmojiObserver,
   EmojiMemory,
@@ -8573,6 +8574,11 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  tapSources?: TapSources;
+  tapReceipts?: readonly TapReceipt[];
+  enableTaps() {
+    this.tapSources ??= new TapSources();
+  }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
     this.folklore.setConfig(config);
@@ -9255,6 +9261,8 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.tapSources?.clear();
+    this.tapReceipts = undefined;
     this.folklore.clear();
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
@@ -11188,7 +11196,23 @@ export class LifeWorld {
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
     pointer?: readonly [number, number],
+    taps?: readonly LifeTap[],
   ) {
+    this.tapReceipts =
+      taps?.length && this.tapSources
+        ? taps.slice(0, 4).map((tap) =>
+            resolveTap(tap, this.tapSources!, {
+              folklore: () => false,
+              agent: () => {},
+              signal: () => false,
+              procession: () => false,
+              carnival: () => {},
+              candle: () => {},
+              tree: () => false,
+              rice: () => false,
+            }),
+          )
+        : undefined;
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
@@ -12221,6 +12245,8 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const tapOwners = this.tapSources;
+    tapOwners?.begin();
     const diagnostics = this.profiler?.lifeDiagnostics;
     diagnostics?.beginVisible();
     this.actorSources.clear();
@@ -12235,8 +12261,14 @@ export class LifeWorld {
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
     const normalPush: (owner: object, agent: VisibleAgent) => number = inspection
-      ? (owner, agent) => out.push(inspection.present(owner, agent))
-      : (_owner, agent) => out.push(agent);
+      ? (owner, agent) => {
+          tapOwners?.present(owner, agent);
+          return out.push(inspection.present(owner, agent));
+        }
+      : (owner, agent) => {
+          tapOwners?.present(owner, agent);
+          return out.push(agent);
+        };
     const present = diagnostics
       ? (owner: object, agent: VisibleAgent) => {
           const n = normalPush(owner, agent);
@@ -12294,9 +12326,19 @@ export class LifeWorld {
               bounds,
               inspection,
               scope: this.eventScope(run),
+              ...(tapOwners && {
+                observe: (owner: object, agent: VisibleAgent) => tapOwners.present(owner, agent),
+              }),
             })
           : [];
-    for (const agent of staged) agent.event = true;
+    for (const agent of staged) {
+      agent.event = true;
+      const owner =
+        agent.inspectionId !== undefined
+          ? inspection?.lookup(agent.inspectionId)
+          : this.eventOwners.get(eventActor(agent) ?? '');
+      if (owner) tapOwners?.present(owner, agent);
+    }
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
@@ -12712,6 +12754,7 @@ export class LifeWorld {
       const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
+      tapOwners?.finish(admitted);
       return admitted;
     }
     const [cx, cy] = center;
@@ -12744,6 +12787,7 @@ export class LifeWorld {
     const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
+    tapOwners?.finish(admitted);
     return admitted;
   }
 

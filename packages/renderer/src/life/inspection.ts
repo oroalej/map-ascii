@@ -75,6 +75,11 @@ export class LifeInspection {
     if (actor.progress !== undefined) actor.heldProgress = actor.progress - actor.progressOffset;
   }
 
+  /** Read-only lookup for independent tap targeting; never changes inspection. */
+  lookup(id: number) {
+    return this.visible.find((actor) => actor.id === id)?.owner;
+  }
+
   private release(clock: number) {
     if (!this.selected) return;
     const { actor, at, effects } = this.selected;

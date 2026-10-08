@@ -1,0 +1,86 @@
+import { expect, it, vi } from 'vitest';
+import { classId } from '../classes';
+import { CellBit } from './config';
+import { captureTap, type TapCaptureFrame } from './tap-capture';
+import type { LifeTap } from './tap';
+function fixture() {
+  const callbacks: ((bytes: Uint8Array) => void)[] = [];
+  const reads = {
+    size: 0,
+    request: vi.fn((_fbo, _attachment, _rect, done: (bytes: Uint8Array) => void) => {
+      callbacks.push(done);
+    }),
+  };
+  const frame: TapCaptureFrame = {
+    targets: {
+      cols: 1,
+      rows: 1,
+      glyphFbo: {},
+      sub: { fbo: {} } as TapCaptureFrame['targets']['sub'],
+    },
+    grid: { shiftX: 0, shiftY: 0, cellWidth: 10, cellHeight: 18 },
+    dpr: 1,
+    geometry: 'one',
+    owners: new Uint32Array([1]),
+    life: new Uint8Array([0, classId('life_person'), CellBit.person, 0]),
+    agents: [{ kind: 'person', lng: 0, lat: 0, flap: 0 }],
+    labelsCover: () => false,
+    generation: 1,
+    frame: 1,
+    folklore: [],
+  };
+  const tap: Omit<LifeTap, 'id'> = {
+    generation: 1,
+    frame: 1,
+    at: [0, 0],
+    pointer: 'touch',
+    cellMeters: 1,
+  };
+  const done = vi.fn();
+  let valid = true;
+  const start = () => captureTap([5, 5], tap, frame, reads, 100, () => valid, done);
+  const finish = (cls = 'path', height = 0) =>
+    callbacks
+      .splice(0)
+      .forEach((callback, i) =>
+        callback(
+          new Uint8Array(
+            i === 0 ? [0, classId(cls), 0, 0] : [i === 1 ? classId(cls) : height, 0, 0, 0],
+          ),
+        ),
+      );
+  return {
+    frame,
+    reads,
+    done,
+    start,
+    finish,
+    invalidate: () => {
+      valid = false;
+    },
+  };
+}
+it('targets touch without hover or any owner selection', () => {
+  const f = fixture();
+  f.start();
+  f.finish();
+  expect(f.done).toHaveBeenCalledWith(expect.objectContaining({ pointer: 'touch', agent: 0 }));
+  expect(f.frame.agents[0]!.inspectionId).toBeUndefined();
+});
+it.each(['tree_crown', 'building'])('a %s occluder cannot claim the agent', (cls) => {
+  const f = fixture();
+  f.start();
+  f.finish(cls, 5);
+  expect(f.done).toHaveBeenCalledWith(expect.not.objectContaining({ agent: 0 }));
+});
+it('drops labels, stale geometry and rejected reads', () => {
+  const f = fixture();
+  f.frame.labelsCover = () => true;
+  f.start();
+  expect(f.reads.request).not.toHaveBeenCalled();
+  f.frame.labelsCover = () => false;
+  f.start();
+  f.invalidate();
+  f.finish();
+  expect(f.done).not.toHaveBeenCalled();
+});

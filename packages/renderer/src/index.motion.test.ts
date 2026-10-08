@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { createAtlas, type Atlas, type LabelInView } from './index';
 import { LifeWorld } from './life/simulate';
+import * as TapCapture from './life/tap-capture';
 import type { ProcessionRun } from './life/simulate';
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
 import { CROP_STAGE } from './glyphs/select';
@@ -241,6 +242,7 @@ vi.mock('./picking', async (load) => ({
   ...(await load<typeof PickingModule>()),
   MAX_HIGHLIGHT: 64,
   Picker: class {
+    click = vi.fn();
     constructor(_readback: unknown, _generation: unknown, reply: (result: PickResult) => void) {
       if (labelFixture.enabled) labelFixture.reply = reply;
     }
@@ -604,6 +606,35 @@ describe('live motion preference', () => {
     });
     await vi.dynamicImportSettled();
   });
+  it.each(['item', 'all'] as const)(
+    'queues a touch once and keeps picking while flights and reduced motion drop Life taps (%s)',
+    async (mode) => {
+      await usePauseMode(mode);
+      const capture = vi
+        .spyOn(TapCapture, 'captureTap')
+        .mockImplementation((_point, tap, _frame, _reads, _attachment, _current, done) =>
+          done(tap),
+        );
+      vi.mocked(lifeRaster).mockReturnValue({
+        owners: new Uint32Array(0),
+        life: new Uint8Array(0),
+        revision: 1,
+      } as NonNullable<ReturnType<typeof lifeRaster>>);
+      const step = vi.spyOn(LifeWorld.prototype, 'step');
+      draw(100);
+      input.intents!.tap([20, 20], 'touch');
+      draw(140);
+      expect(step.mock.calls.at(-1)![10]).toHaveLength(1);
+      draw(180);
+      expect(step.mock.calls.at(-1)![10]).toBeUndefined();
+      atlas.flyTo({ lng: 0.01 });
+      input.intents!.tap([20, 20], 'touch');
+      expect(capture).toHaveBeenCalledOnce();
+      atlas.setReducedMotion(true);
+      input.intents!.tap([20, 20], 'mouse');
+      expect(capture).toHaveBeenCalledOnce();
+    },
+  );
   afterEach(() => {
     atlas.destroy();
     vi.restoreAllMocks();

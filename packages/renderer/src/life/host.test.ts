@@ -87,6 +87,41 @@ const route: ProcessionRoute = {
 };
 
 describe('pipelined Life host', () => {
+  it('retains correlated receipts in cached replies and rejects busy requests without resubmitting them', async () => {
+    const s = fixture();
+    const host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    mock.frame.mockResolvedValueOnce({ ...result(1), tapFrame: 12 });
+    host.request(s.input);
+    await flush();
+    const generation = host.latest()!.generation!;
+    const input = {
+      ...s.input,
+      step: {
+        ...s.input.step,
+        taps: [
+          { id: 7, generation, frame: 12, at: [0, 0] as const, pointer: 'touch', cellMeters: 1 },
+        ],
+      },
+    };
+    let finish!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          finish = done;
+        }),
+    );
+    expect(host.request(input)).toBe(true);
+    expect(host.request(input)).toBe(false);
+    finish({ ...result(2), tapFrame: 13, tapReceipts: [{ id: 7, action: 'rice' }] });
+    await flush();
+    expect(host.latest()?.tapReceipts).toEqual([{ id: 7, action: 'rice' }]);
+    expect(host.latest()?.tapReceipts).toBe(host.latest()?.tapReceipts);
+    host.invalidateFrame();
+    expect(host.latest()?.tapReceipts).toBeUndefined();
+    host.dispose();
+  });
   it.each(['worker', 'inline', 'fallback'] as const)(
     'invalidates only folklore across settings changes in the %s host',
     async (mode) => {

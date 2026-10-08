@@ -22,6 +22,7 @@ import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
 import type { RuntimeFolklore } from './folklore-config';
 import type { FolklorePacket } from './folklore';
+import type { LifeTap, TapReceipt } from './tap';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -44,6 +45,7 @@ export type FrameInput = {
     effectCellMeters?: number;
     /** Mouse hover in longitude/latitude; absent after hover clears. */
     pointer?: readonly [number, number];
+    taps?: readonly LifeTap[];
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -53,6 +55,8 @@ export type FrameResult = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
+  tapFrame?: number;
+  tapReceipts?: readonly TapReceipt[];
   terrain?: TerrainSnapshot | null;
   profile?: ProfileSample;
 };
@@ -63,6 +67,7 @@ export type LifeInit = {
   seasons?: readonly SimulationSeason[];
   shopSchedule?: ShopSchedule;
   itemInspection?: boolean;
+  tapTargets?: boolean;
   /** Internal isolation switch; public emoji display preferences never reach it. */
   emojiObserver?: boolean;
   dialogue?: readonly DialogueChoice[];
@@ -115,6 +120,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     gust.cssCell.h / gust.cssCell.w,
     step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
     step.pointer,
+    step.taps,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
@@ -126,6 +132,8 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     puffs: world.visiblePuffs,
     procession: world.procession(),
     signalClock: world.signalClock,
+    ...(world.tapSources && { tapFrame: world.tapSources.frame }),
+    ...(world.tapReceipts && { tapReceipts: world.tapReceipts }),
   };
 }
 
@@ -155,6 +163,7 @@ export function createLifeWorkerApi(
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
       world = worldFactory(options, profiler);
+      if (options.tapTargets) world.enableTaps();
       preparation = new LifePreparation(world, profiler, preparationClock);
       configureLifeWorld(world, options);
       geometries.clear();

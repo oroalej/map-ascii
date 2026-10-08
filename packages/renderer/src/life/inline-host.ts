@@ -30,6 +30,7 @@ export function createConfiguredInlineHost(
     options.itemInspection,
     options.emojiObserver,
   );
+  world.enableTaps();
   configureLifeWorld(world, {
     processions,
     seasons: simulationSeasons(options.cityLife?.seasons),
@@ -53,7 +54,14 @@ export function createInlineHost(
   let generation = allocateLifeGeneration();
   return {
     invalidateFrame() {
-      if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
+      if (view)
+        view = {
+          ...view,
+          agents: [],
+          folklore: EMPTY_FOLKLORE,
+          tapReceipts: undefined,
+          tapFrame: undefined,
+        };
       acceptedPost = undefined;
     },
     invalidateFolklore() {
@@ -79,7 +87,19 @@ export function createInlineHost(
         spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
       );
       preparation.commit();
-      const result = runLifeFrame(world, input, profiler);
+      const result = runLifeFrame(
+        world,
+        {
+          ...input,
+          step: {
+            ...input.step,
+            ...(input.step.taps && {
+              taps: input.step.taps.filter((tap) => tap.generation === generation),
+            }),
+          },
+        },
+        profiler,
+      );
       const terrain = world.cellTerrain();
       view = {
         ...result,

@@ -95,6 +95,8 @@ import { screenArea } from './grid';
 import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
+import { TapQueue } from './life/tap';
+import { captureTap } from './life/tap-capture';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
@@ -945,6 +947,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     options.lifeWorker !== false && typeof Worker !== 'undefined'
       ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
       : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler);
+  const taps = new TapQueue();
+  let tapEpoch = 0;
+  const clearTaps = () => {
+    tapEpoch++;
+    taps.clear();
+  };
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
   const lifeView = () => lifePause.view(host.latest());
@@ -977,6 +985,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   const syncLife = (tiles: readonly TileId[]) => {
     if (!lifeActive()) {
+      clearTaps();
       clearFolklore();
       host.clearTiles();
       return;
@@ -1062,6 +1071,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const cssCell = stepCell(schedule, step ?? 0);
       const size = cssSize();
       const pointer = lifePointer(size);
+      if (flight) clearTaps();
+      const tapBatch = taps.batch(drawnLife?.generation);
       const accepted =
         !lifePause.inspecting &&
         host.request({
@@ -1092,6 +1103,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             cellMeters: metersPerCssPx(camera) * cssCell.width,
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
             ...(pointer ? { pointer } : {}),
+            ...(tapBatch && { taps: tapBatch }),
           },
           visible: [
             camera.zoom,
@@ -1103,8 +1115,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             knobs.maxAgents,
           ],
         });
-      if (accepted) lifePause.accept();
+      if (accepted) {
+        lifePause.accept();
+        taps.accepted(tapBatch);
+      }
       drawnLife = lifeView();
+      taps.consume(drawnLife?.tapReceipts, drawnLife?.generation);
       if (inspected && drawnLife?.generation !== inspected.generation) lifeHover.clear();
       agents = drawnLife?.agents ?? [];
       folklorePacket = drawnLife?.folklore ?? EMPTY_FOLKLORE;
@@ -1112,6 +1128,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       reportFolklore(folkloreQuads.length > 0);
       reportProcession();
     } else {
+      clearTaps();
       clearFolklore();
       if (!lifeShown) return;
     }
@@ -1487,6 +1504,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
+    clearTaps();
     clearFolklore();
     lifeHover.clear();
     season = next;
@@ -1643,6 +1661,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let flight: Flight | null = null;
 
   const flyTo = (target: Partial<CameraState>, opts: FlyOptions = {}) => {
+    clearTaps();
     lifeHover.pointer(null);
     const now = performance.now();
     flight = startFlight(camera, target, limits, cssSize(), {
@@ -1977,6 +1996,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    clearTaps();
     lastCloudAt = performance.now();
     clearFolklore();
     host.invalidateFrame();
@@ -2044,6 +2064,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cameraMoved = false;
   /** Move the camera; input (`batched`) tells of it once a frame, however many events came. */
   const applyCamera = (next: CameraState, batched = false) => {
+    clearTaps();
     lifeHover.pointer(null);
     speech.clear();
     emoji.clear();
@@ -2085,7 +2106,73 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
       }
     },
-    tap: (point) => picker.click(point),
+    tap: (point, pointerType) => {
+      const eligible =
+        lifeActive() &&
+        !flight &&
+        !lost &&
+        targets &&
+        drawnLife?.generation !== undefined &&
+        drawnLife.tapFrame !== undefined;
+      const target = targets;
+      const source = drawnLife;
+      const at = viewportFor(camera, cssSize()).unproject([...point]);
+      const epoch = tapEpoch;
+      const geometry = speechGeometry;
+      const capturedCamera = camera;
+      const raster = target && lifeRaster(target);
+      picker.click(point);
+      if (!eligible || !target || !source || !raster) return;
+      captureTap(
+        point,
+        {
+          generation: source.generation!,
+          frame: source.tapFrame!,
+          at: [at[0]!, at[1]!],
+          pointer: pointerType,
+          cellMeters: metersPerCssPx(camera) * stepCell(schedule, step ?? 0).width,
+        },
+        {
+          targets: target,
+          grid: {
+            shiftX: grid.shiftX,
+            shiftY: grid.shiftY,
+            cellWidth: cellDev().w,
+            cellHeight: cellDev().h,
+          },
+          dpr,
+          geometry: `${geometry}`,
+          owners: raster.owners,
+          life: raster.life,
+          agents: lifeAgents,
+          generation: source.generation!,
+          frame: source.tapFrame!,
+          folklore: folkloreQuads,
+          labelsCover: (p) =>
+            labelsCoverPoint(target, p, dpr, {
+              shiftX: labelGrid.shiftX,
+              shiftY: labelGrid.shiftY,
+              cellWidth: view().labelDev.w,
+              cellHeight: view().labelDev.h,
+            }),
+        },
+        readback,
+        gl.COLOR_ATTACHMENT0,
+        () =>
+          epoch === tapEpoch &&
+          lifeActive() &&
+          !flight &&
+          !lost &&
+          targets === target &&
+          speechGeometry === geometry &&
+          camera === capturedCamera &&
+          drawnLife?.generation === source.generation,
+        (tap) => {
+          taps.add(tap);
+          drawDirty = true;
+        },
+      );
+    },
   });
 
   return {
@@ -2133,6 +2220,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emoji.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      clearTaps();
       lastCloudAt = performance.now();
       clearFolklore();
       host.invalidateFrame();
@@ -2180,6 +2268,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
     setLife(settings) {
+      clearTaps();
       clearFolklore();
       host.invalidateFolklore();
       lifeHover.pointer(null);
