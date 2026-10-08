@@ -36,6 +36,7 @@ it.each([
     eventDenied: () => false,
     clearSeam: () => true,
     roadQueue: () => false,
+    pointerPeople: () => new Set<object>(),
   });
   internal.groundGuard = () => guard;
   const observer = observePriority(fixture);

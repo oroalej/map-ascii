@@ -1,4 +1,14 @@
 import { cellHash } from '../glyphs/select';
+import type { Ripple } from './cursor-effects';
+
+export function cursorRipple(x: number, y: number, rings: readonly Ripple[] = []) {
+  for (const [cx, cy, age] of rings) {
+    const dx = x - cx;
+    if (age >= 0 && age < 1.5 && Math.abs(Math.hypot(dx, (y - cy) * 1.8) - (0.25 + age * 3)) < 0.5)
+      return dx < 0 ? 0 : dx > 0 ? 1 : 2;
+  }
+  return null;
+}
 
 export const WATER_EFFECTS = {
   block: 8,
@@ -16,7 +26,11 @@ export function waterEffect(
   rain: number,
   fish: boolean,
   lifeTime = time,
+  rings: readonly Ripple[] = [],
+  origin: readonly [number, number] = [0, 0],
 ): number | null {
+  const ring = cursorRipple(x - origin[0], y - origin[1], rings);
+  if (ring !== null) return ring;
   const block = WATER_EFFECTS.block;
   const bx = Math.floor(x / block);
   const by = Math.floor(y / block);
@@ -43,6 +57,12 @@ export function waterEffect(
 export const waterEffectGlsl = /* glsl */ `
 int waterEffect(ivec2 cell, bool fishWater) {
   if (!u_shimmer || !u_waterDetail) return -1;
+  for (int i = 0; i < u_rippleCount; i++) {
+    vec2 d = vec2(cell) - u_ripples[i].xy;
+    float a = u_ripples[i].z;
+    if (a >= 0.0 && a < 1.5 && abs(length(d * vec2(1.0, 1.8)) - (0.25 + a * 3.0)) < 0.5)
+      return d.x < 0.0 ? 0 : d.x > 0.0 ? 1 : 2;
+  }
   ivec2 world = u_origin + cell;
   ivec2 block = ivec2(floor(vec2(world) / ${WATER_EFFECTS.block}.0));
   uint h = cellHash(block);

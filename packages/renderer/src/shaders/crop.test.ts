@@ -15,9 +15,9 @@ it('generates stage codes and selection arithmetic from the CPU constants', () =
   expect(vegetationGlsl).toContain(`: ${CropGlyph.water}`);
   expect(selectFragment).toContain('if (u_cropStage >= 0)');
   expect(selectFragment).toContain(
-    'cropCell(w, front.x, u_cropStage, u_cropProgress, u_time, tone)',
+    'cropCell(w, front.x, dir, u_cropStage, u_cropProgress, u_time, tone)',
   );
-  expect(selectFragment).toContain('v = min(cropVariant(w, front.x), u_count[cls] - 1)');
+  expect(selectFragment).toContain('v = min(cropVariant(w, front.x, dir), u_count[cls] - 1)');
   expect(selectFragment).toContain('? windLevel(front.x, front.y) : 0');
 });
 it('uses the stage/tone pigment distinction for farmland ink, background and focus fill', () => {
