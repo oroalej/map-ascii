@@ -22,7 +22,8 @@ export function useAtlasEvents() {
   useEffect(() => {
     useUiStore.setState({ lifeHover: null, hover: null });
     if (!atlas) return;
-    atlas.setSelected(useAtlasStore.getState().selectedId);
+    const mapSelection = (id: string | null) => (id?.startsWith('dish/') ? null : id);
+    atlas.setSelected(mapSelection(useAtlasStore.getState().selectedId));
     const offHover = atlas.on('hover', ({ feature, point }) => {
       const hover =
         isPickable(feature, useUiStore.getState().clickable) && point ? { feature, point } : null;
@@ -43,7 +44,7 @@ export function useAtlasEvents() {
     });
     const offSelection = useAtlasStore.subscribe((s, prev) => {
       if (s.selectedId === prev.selectedId) return;
-      atlas.setSelected(s.selectedId);
+      atlas.setSelected(mapSelection(s.selectedId));
       atlas.setHighlighted([]);
     });
     return () => {

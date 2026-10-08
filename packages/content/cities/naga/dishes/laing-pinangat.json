@@ -1,0 +1,41 @@
+{
+  "id": "dish/laing-pinangat",
+  "name": {
+    "en": "Laing and pinangat"
+  },
+  "origin": "bicol",
+  "description": {
+    "en": "Bicolano taro-leaf dishes simmered in coconut milk."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "Laing uses dried taro leaves, coconut milk and chilies."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Naga’s tourism guide describes dried-fish or shrimp versions for Lent."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2012 Molino Grill account describes Camarines Sur pinangat filled with crablets and young coconut."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Bicolano Lenten recipes",
+      "url": "https://tourism.naga.gov.ph/iconic-bicolano-lenten-recipes/"
+    },
+    {
+      "title": "Stay, Stray, Play and Feast: Molino Grill (2012)",
+      "url": "https://camsurstaystray.blogspot.com/2012/09/molino-grill-magsaysay-avenue.html",
+      "note": "Documents the former dining experience; current operation is unconfirmed."
+    }
+  ]
+}

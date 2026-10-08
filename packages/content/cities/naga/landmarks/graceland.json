@@ -1,0 +1,60 @@
+{
+  "id": "landmark/graceland",
+  "name": {
+    "en": "Graceland — Elias Angeles"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Dy family founded Graceland in a rented Elias Angeles garage."
+      },
+      "source": 0,
+      "year": 1976
+    },
+    {
+      "text": {
+        "en": "The group added a Gen. Luna hamburger store."
+      },
+      "source": 0,
+      "year": 1986
+    },
+    {
+      "text": {
+        "en": "Graceland reached its fiftieth anniversary."
+      },
+      "source": 0,
+      "year": 2026
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Graceland at 50 (2026)",
+      "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+    },
+    {
+      "title": "Naga City Guide: Pasalubong (2025)",
+      "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/4848986525",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/4848986525",
+  "known_for": ["dish/laing-pinangat", "dish/bicol-express"],
+  "signatures": [
+    {
+      "name": "Pastries",
+      "source": 1
+    }
+  ],
+  "pasalubong": [
+    {
+      "name": "Frozen pinangat, laing and Bicol express",
+      "source": 1
+    }
+  ]
+}

@@ -12,6 +12,8 @@ import {
   Event,
   Landcover,
   Landmark,
+  Dish,
+  TourStep,
   LandmarkFact,
   LandmarkArt,
   LandmarkPlan,
@@ -23,6 +25,75 @@ import {
 } from './schemas';
 
 const source = { title: 'Example source', url: 'https://example.org/' };
+
+describe('food content', () => {
+  const facts = [0, 1, 2].map((index) => ({ text: { en: `Fact ${index}` }, source: 0 }));
+  const food = {
+    id: 'landmark/cafe',
+    type: 'food',
+    name: { en: 'Cafe' },
+    certainty: 'unknown',
+    geometry: { type: 'Point', coordinates: [123, 13] },
+    sources: [source],
+    facts,
+  };
+  const dish = {
+    id: 'dish/soup',
+    name: { en: 'Soup', fil: 'Sabaw' },
+    origin: 'unknown',
+    description: { en: 'A dish' },
+    facts,
+    sources: [source],
+  };
+  it('admits sourced food Points and selectable identities without a construction date', () => {
+    expect(Landmark.parse(food).start_year).toBeUndefined();
+    expect(
+      TourStep.parse({
+        camera: { lng: 123, lat: 13, zoom: 17 },
+        duration_ms: 1000,
+        narration: { en: 'A stop' },
+        select: food.id,
+        highlight: ['osm:node/1', food.id],
+      }).select,
+    ).toBe(food.id);
+  });
+  it.each([[181, 13], [123, 91], [123], [123, 13, 1], ['123', 13]])(
+    'rejects invalid Point coordinates %j',
+    (...coordinates) => {
+      expect(
+        Landmark.safeParse({ ...food, geometry: { type: 'Point', coordinates } }).success,
+      ).toBe(false);
+    },
+  );
+  it('keeps dates out of standalone present-day locations and rejects unsupported geometry', () => {
+    expect(Landmark.safeParse({ ...food, start_year: 1983 }).success).toBe(false);
+    expect(
+      Landmark.safeParse({ ...food, geometry: { type: 'Polygon', coordinates: [] } }).success,
+    ).toBe(false);
+  });
+  it('validates declared dish languages, origins, distinct fact counts and source bounds', () => {
+    expect(contentSchemas(['fil']).Dish.parse(dish).name.fil).toBe('Sabaw');
+    expect(contentSchemas(['bcl']).Dish.safeParse(dish).success).toBe(false);
+    expect(Dish.safeParse({ ...dish, origin: 'invented' }).success).toBe(false);
+    expect(Dish.safeParse({ ...dish, facts: facts.slice(0, 2) }).success).toBe(false);
+    expect(Dish.safeParse({ ...dish, facts: [...facts, ...facts] }).success).toBe(false);
+    expect(
+      Dish.safeParse({ ...dish, facts: facts.map((fact) => ({ ...fact, source: 1 })) }).success,
+    ).toBe(false);
+  });
+  it.each(['signatures', 'pasalubong'])('validates %s text and source indices', (field) => {
+    expect(Landmark.safeParse({ ...food, [field]: [{ name: 'Soup', source: 0 }] }).success).toBe(
+      true,
+    );
+    for (const bad of [
+      { name: '', source: 0 },
+      { name: 'Soup', note: ' ', source: 0 },
+      { name: 'Soup', source: -1 },
+      { name: 'Soup', source: 1 },
+    ])
+      expect(Landmark.safeParse({ ...food, [field]: [bad] }).success).toBe(false);
+  });
+});
 
 describe('illustrative emergency configuration', () => {
   const run = { max: 1, interval_s: [150, 300], dwell_s: [20, 40] };
@@ -418,8 +489,9 @@ describe('Tour', () => {
     const ok = { ...step, select: 'osm:way/1', highlight: ['osm:way/2', 'osm:node/3'] };
     expect(Tour.safeParse({ ...tour, steps: [ok] }).success).toBe(true);
     expect(Tour.safeParse({ ...tour, steps: [{ ...step, select: 'landmark/x' }] }).success).toBe(
-      false,
+      true,
     );
+    expect(Tour.safeParse({ ...tour, steps: [{ ...step, select: 'dish/x' }] }).success).toBe(false);
   });
 
   it('keeps placeholders and unsourced steps out of verified tours', () => {

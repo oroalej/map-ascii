@@ -5,6 +5,7 @@ import type {
   RuntimeDialogueCatalog,
   ClimateConfig,
   Landmark,
+  Dish,
   LandmarkArt,
   TrafficMix,
   Tour,
@@ -22,6 +23,7 @@ import { DebugStats } from './DebugStats';
 import { HoverTooltip } from './HoverTooltip';
 import { Hud } from './Hud';
 import { LandmarkFacts } from './LandmarkFacts';
+import { DishFacts } from './DishFacts';
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 import { CueBubbles } from './CueBubbles';
@@ -54,6 +56,7 @@ export type CityAtlasProps = {
   sidewalksDerived?: boolean;
   utilitiesDerived?: boolean;
   landmarks: readonly Landmark[];
+  dishes: readonly Dish[];
   art: readonly LandmarkArt[];
   tours: readonly Tour[];
 };
@@ -71,6 +74,7 @@ export function CityAtlas({
   sidewalksDerived = true,
   utilitiesDerived = false,
   landmarks,
+  dishes,
   art,
   tours,
 }: CityAtlasProps) {
@@ -123,8 +127,10 @@ export function CityAtlas({
         city={slug}
         subdivisionLabel={subdivisionLabel}
         landmarks={landmarks}
+        dishes={dishes}
         art={art}
       />
+      <DishFacts dishes={dishes} />
       <TourPlayer />
       <Attribution />
       <DebugStats />

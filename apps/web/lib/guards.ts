@@ -255,16 +255,42 @@ export function isSearchIndexFile(v: unknown): v is SearchIndexFile {
     v.version === 1 &&
     isRecord(v.index) &&
     Array.isArray(v.entries) &&
-    v.entries.every(
-      (e) =>
-        isRecord(e) &&
-        isText(e.id) &&
-        isText(e.name) &&
-        isText(e.type) &&
-        Array.isArray(e.altNames) &&
+    v.entries.every((e) => {
+      if (
+        !isRecord(e) ||
+        !isText(e.id) ||
+        !isText(e.name) ||
+        !Array.isArray(e.altNames) ||
+        !e.altNames.every(isText)
+      )
+        return false;
+      if (e.type === 'dish')
+        return /^dish\/[a-z0-9-]+$/.test(e.id) && only(e, ['id', 'name', 'altNames', 'type']);
+      return (
+        [
+          'food',
+          'landmark',
+          'subdivision',
+          'street',
+          'school',
+          'worship',
+          'market',
+          'station',
+          'monument',
+          'place',
+        ].includes(String(e.type)) &&
         isNumber(e.lat) &&
+        Math.abs(e.lat) <= 90 &&
         isNumber(e.lng) &&
-        isNumber(e.zoomHint),
-    )
+        Math.abs(e.lng) <= 180 &&
+        isNumber(e.zoomHint) &&
+        e.zoomHint >= 0 &&
+        e.zoomHint <= 22 &&
+        (e.subdivision === undefined || isText(e.subdivision)) &&
+        (e.approximate === undefined || typeof e.approximate === 'boolean') &&
+        (e.bbox === undefined || isNumbers(e.bbox, 4)) &&
+        (e.featureIds === undefined || (Array.isArray(e.featureIds) && e.featureIds.every(isText)))
+      );
+    })
   );
 }

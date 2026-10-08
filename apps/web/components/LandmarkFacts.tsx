@@ -1,5 +1,5 @@
 'use client';
-import type { Landmark, LandmarkArt } from '@atlas/shared';
+import type { Dish, Landmark, LandmarkArt } from '@atlas/shared';
 import { useId, useMemo } from 'react';
 import { clickableLandmark } from '@/lib/landmark';
 import { useSmallScreen } from '@/lib/screen';
@@ -13,11 +13,13 @@ export function LandmarkFacts({
   city,
   subdivisionLabel,
   landmarks,
+  dishes = [],
   art,
 }: {
   city: string;
   subdivisionLabel: string;
   landmarks: readonly Landmark[];
+  dishes?: readonly Dish[];
   art: readonly LandmarkArt[];
 }) {
   const id = useAtlasStore((s) => s.selectedId),
@@ -48,6 +50,7 @@ export function LandmarkFacts({
     return null;
   const body = {
     landmark,
+    dishes,
     drawing: art.find((a) => a.osm_id === id),
     subdivisionLabel,
     details,

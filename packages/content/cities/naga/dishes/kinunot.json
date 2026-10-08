@@ -1,0 +1,36 @@
+{
+  "id": "dish/kinunot",
+  "name": {
+    "en": "Kinunot"
+  },
+  "origin": "bicol",
+  "description": {
+    "en": "Flaked fish and malunggay in coconut milk."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "The city’s recipe uses shredded stingray, malunggay and coconut milk."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The fish is simmered with vinegar and ginger."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The guide identifies shredded smoked fish as an alternative when stingray is unavailable."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Bicolano Lenten recipes",
+      "url": "https://tourism.naga.gov.ph/iconic-bicolano-lenten-recipes/"
+    }
+  ]
+}

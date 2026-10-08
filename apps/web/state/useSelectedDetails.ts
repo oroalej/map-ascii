@@ -1,6 +1,6 @@
 'use client';
 import type { FeatureInfo } from '@atlas/renderer';
-import type { SearchEntry } from '@atlas/shared';
+import type { GeographicSearchEntry } from '@atlas/shared';
 import { useEffect, useState } from 'react';
 import { loadSearch } from '@/lib/search';
 import { useAtlasInstance } from './store';
@@ -23,11 +23,11 @@ export function useSelectedDetails(city: string, id: string | null) {
   const [found, setFound] = useState<{
     id: string;
     city: string;
-    entry: SearchEntry | null;
+    entry: GeographicSearchEntry | null;
   } | null>(null);
 
   useEffect(() => {
-    if (!id || !atlas || picked?.id === id) return;
+    if (!id || id.startsWith('dish/') || !atlas || picked?.id === id) return;
     let tries = 0;
     const poll = () => {
       const info = atlas.getFeature(id);
@@ -39,11 +39,13 @@ export function useSelectedDetails(city: string, id: string | null) {
   }, [id, atlas, picked]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || id.startsWith('dish/')) return;
     let cancelled = false;
     loadSearch(city)
       .then((s) => {
-        if (!cancelled) setFound({ id, city, entry: s.entries.get(id) ?? null });
+        const entry = s.entries.get(id);
+        if (!cancelled)
+          setFound({ id, city, entry: entry && entry.type !== 'dish' ? entry : null });
       })
       .catch((error: unknown) => {
         if (!cancelled)

@@ -36,6 +36,7 @@ export default async function CityPage({ params }: Props) {
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
         landmarks={content.landmarks}
+        dishes={content.dishes}
         art={content.art}
         tours={content.tours}
       />

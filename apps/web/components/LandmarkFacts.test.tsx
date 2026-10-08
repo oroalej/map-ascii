@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { Atlas } from '@atlas/renderer';
-import type { Landmark, SearchEntry } from '@atlas/shared';
+import type { Dish, Landmark, SearchEntry } from '@atlas/shared';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -11,6 +11,8 @@ import { useAtlasEvents } from '@/state/useAtlasEvents';
 import { loadSearch, type CitySearch } from '@/lib/search';
 import MiniSearch from 'minisearch';
 import { LandmarkFacts } from './LandmarkFacts';
+import { DishFacts } from './DishFacts';
+import { goToEntry } from './SearchBox';
 import { TourPlayer } from './TourPlayer';
 import { useTourStore } from '@/state/tour';
 vi.mock('@/lib/search', () => ({ loadSearch: vi.fn() }));
@@ -29,6 +31,14 @@ const landmark: Landmark = {
 };
 const other = { ...landmark, id: 'landmark/b', osm_id: 'osm:node/2', name: { en: 'B place' } };
 let testLandmarks: Landmark[];
+const dish: Dish = {
+  id: 'dish/soup',
+  name: { en: 'Fixture soup' },
+  origin: 'contested',
+  description: { en: 'Soup description' },
+  sources: [{ title: 'Dish research', url: 'https://example.org/dish' }],
+  facts: [0, 1, 2].map((index) => ({ text: { en: `Dish fact ${index}` }, source: 0 })),
+};
 let root: Root,
   container: HTMLDivElement,
   canvas: HTMLCanvasElement,
@@ -64,7 +74,14 @@ function App() {
   useAtlasEvents();
   return (
     <>
-      <LandmarkFacts city="test" subdivisionLabel="district" landmarks={testLandmarks} art={[]} />
+      <LandmarkFacts
+        city="test"
+        subdivisionLabel="district"
+        landmarks={testLandmarks}
+        dishes={[dish]}
+        art={[]}
+      />
+      <DishFacts dishes={[dish]} />
       <TourPlayer />
     </>
   );
@@ -80,6 +97,68 @@ const flush = () => {
 const dialog = () => container.querySelector<HTMLDivElement>('[role="dialog"]');
 const clickSelection = (id = landmark.osm_id!) =>
   act(() => selectPlace(id, { origin: 'pointer', anchor: [1, 2] }));
+
+it('opens an independent food Point with dish-owned citations and optional menu sections', () => {
+  testLandmarks = [
+    {
+      ...landmark,
+      osm_id: undefined,
+      geometry: { type: 'Point', coordinates: [1, 2] },
+      type: 'food',
+      known_for: [dish.id],
+      signatures: [{ name: 'Signature soup', source: 0 }],
+      pasalubong: [{ name: 'Take-home jars', source: 0 }],
+    },
+  ];
+  clickSelection(landmark.id);
+  render();
+  flush();
+  expect(dialog()!.textContent).toContain('Known for');
+  expect(dialog()!.textContent).toContain('Pasalubong');
+  expect(dialog()!.textContent).toContain('Origin: Contested');
+  expect(dialog()!.textContent).not.toContain('Built');
+  const dishCitation = [...dialog()!.querySelectorAll('li')]
+    .find((li) => li.textContent?.startsWith('Dish fact 0'))!
+    .querySelector('sup a');
+  expect(dishCitation!.getAttribute('href')).toBe('https://example.org/dish');
+  expect(dialog()!.querySelector('sup a')!.getAttribute('href')).toBe(
+    'https://example.org/history',
+  );
+  const anchors = [...dialog()!.querySelectorAll('li[id]')].map((node) => node.id);
+  expect(new Set(anchors).size).toBe(anchors.length);
+  expect(anchors.some((id) => id.includes('dish-soup'))).toBe(true);
+});
+it.each([false, true])(
+  'opens a dish without flight or renderer polling, with focus and Close/Escape (mobile=%s)',
+  (mobile) => {
+    small = mobile;
+    render();
+    const atlas = useAtlasInstance.getState().atlas!;
+    const flyTo = vi.spyOn(atlas, 'flyTo');
+    const setSelected = vi.spyOn(atlas, 'setSelected');
+    const getFeature = vi.spyOn(atlas, 'getFeature');
+    act(() =>
+      goToEntry({ id: dish.id, name: dish.name.en, type: 'dish', altNames: [] }, 'keyboard'),
+    );
+    expect(dialog()!.textContent).toContain('Soup description');
+    expect(document.activeElement).toBe(dialog()!.querySelector('h2'));
+    expect(useUiStore.getState().factsVisible).toBe(true);
+    expect(flyTo).not.toHaveBeenCalled();
+    expect(setSelected).toHaveBeenLastCalledWith(null);
+    expect(getFeature).not.toHaveBeenCalled();
+    expect(loadSearch).not.toHaveBeenCalled();
+    expect(!!dialog()!.querySelector('[aria-label="Expand facts"]')).toBe(mobile);
+    act(() => dialog()!.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click());
+    expect(dialog()).toBeNull();
+    act(() => selectPlace(dish.id));
+    expect(dialog()!.getAttribute('aria-modal')).toBe('false');
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(dialog()).toBeNull();
+    expect(useUiStore.getState().factsVisible).toBe(false);
+  },
+);
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   frames = new Map();
@@ -156,7 +235,8 @@ beforeEach(() => {
   const atlas = {
     project: vi.fn(() => projected),
     on,
-    getFeature: () => undefined,
+    getFeature: vi.fn(() => undefined),
+    flyTo: vi.fn(),
     getCamera: () => ({ lng: 1, lat: 2, zoom: 18 }),
     setCamera: vi.fn(),
     setSelected: vi.fn(),

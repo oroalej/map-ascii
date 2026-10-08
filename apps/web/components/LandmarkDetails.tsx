@@ -1,12 +1,14 @@
 'use client';
-import type { Landmark, LandmarkArt } from '@atlas/shared';
+import type { Dish, Landmark, LandmarkArt } from '@atlas/shared';
 import type { useSelectedDetails } from '@/state/useSelectedDetails';
 import { selectPlace } from '@/state/selection';
 import { ArtView } from './ArtView';
+import { FoodDetails } from './FoodDetails';
 import styles from './LandmarkDetails.module.css';
 
 export type LandmarkDetailsProps = {
   landmark: Landmark;
+  dishes?: readonly Dish[];
   drawing: LandmarkArt | undefined;
   details: ReturnType<typeof useSelectedDetails>;
   subdivisionLabel: string;
@@ -15,6 +17,7 @@ export type LandmarkDetailsProps = {
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export function LandmarkDetails({
   landmark,
+  dishes = [],
   drawing,
   details: { feature, entry },
   subdivisionLabel,
@@ -107,6 +110,7 @@ export function LandmarkDetails({
           </li>
         ))}
       </ul>
+      <FoodDetails landmark={landmark} dishes={dishes} prefix={headingId} />
       {drawing && (
         <details className={styles.drawing}>
           <summary>Drawing</summary>

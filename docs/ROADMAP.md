@@ -81,6 +81,10 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 - ~~**(Naga)** Tilting to 60° shows the Centro skyline in ASCII.~~ Removed 2026-09-30 with orbit mode.
 - Both tours play end to end on desktop and mobile.
 
+**Completed food-tour and content extension (2026-10-08)**
+
+- [x] **(Naga)** Five verified present-day food tours: Kinalas crawl, Centro old-timers, Market breakfast, Magsaysay nights, and Pili & pasalubong. Added 19 sourced food landmarks, enriched the People's Mall, and published nine dish records with Known for, signature items, pasalubong and source citations. Independent food Points preserve shared-building identities; food search flies to places, while dish search opens facts without moving the map. Schema/content/pipeline/web checks and the related desktop food smoke passed; the remaining timeline and historical-depth phases stay separate.
+
 ## Phase 4 — Timeline v1
 
 **Tasks**
