@@ -15,6 +15,7 @@ import {
 import { EmergencyRouter } from './emergency-network';
 import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
 import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
+import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -8576,8 +8577,97 @@ type GroundTerrain = {
 };
 export class LifeWorld {
   private peddlerConfig: readonly PeddlerConfig[] = [];
+  private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
+  private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
   setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
     this.peddlerConfig = config ?? [];
+  }
+  private stepPeddlers(dt: number, zoom: number | undefined, env: LifeEnv) {
+    if (!this.peddlerConfig.length) return;
+    const retained = new Set([
+      ...this.tiles.values(),
+      ...[...this.retired.values()].map((r) => r.life),
+    ]);
+    for (const [life, population] of this.peddlers)
+      if (!retained.has(life)) {
+        population.clear();
+        this.peddlers.delete(life);
+      }
+    this.peddlerWeather = env;
+    if (zoom !== undefined && zoom < LIFE_ZOOM.person[0]) return;
+    for (const [key, life] of this.tiles) {
+      let population = this.peddlers.get(life);
+      if (!population) {
+        population = new PeddlerPopulation(
+          {
+            tile: life.tile,
+            geo: life.geo,
+            perMeter: life.perMeter,
+            seed: hashString(key),
+            held: (owner) => this.inspection?.held(owner) ?? false,
+            forget: (owner) => this.inspection?.forgetOwner(owner, this.clock),
+            safe: (from, to) => {
+              const terrain = this.groundTerrain;
+              if (!terrain?.ref) return false;
+              const frame = metricFrame(life, terrain.ref),
+                project = (body: Body): Body => ({
+                  ...body,
+                  x: frame.x + body.x * frame.scale,
+                  y: frame.y + body.y * frame.scale,
+                  length: body.length * frame.scale,
+                  width: body.width * frame.scale,
+                });
+              const start = from.map(project),
+                end = to.map(project);
+              return !start.some((body, i) =>
+                [terrain.blocked, terrain.water, terrain.seasonal, terrain.roadAccess.roads].some(
+                  (index) => index.sweptHits(body, end[i]!),
+                ),
+              );
+            },
+            ordinary: () => {
+              const bodies: Body[] = [];
+              for (const other of this.tiles.values()) {
+                const frame = metricFrame(other, life);
+                if (
+                  Math.abs(frame.x) > EXTENT / life.perMeter + 20 ||
+                  Math.abs(frame.y) > EXTENT / life.perMeter + 20
+                )
+                  continue;
+                for (const actor of [...other.movers, ...other.gatherers, ...other.stalls]) {
+                  if (!this.owns(other, actor)) continue;
+                  for (const body of other.groundBodies(actor))
+                    bodies.push({
+                      ...body,
+                      x: frame.x + body.x * frame.scale,
+                      y: frame.y + body.y * frame.scale,
+                      length: body.length * frame.scale,
+                      width: body.width * frame.scale,
+                    });
+                }
+                for (const parked of other.parked) {
+                  const spec = VEHICLES[parked.vehicle];
+                  bodies.push({
+                    x: frame.x + (parked.x / other.perMeter) * frame.scale,
+                    y: frame.y + (parked.y / other.perMeter) * frame.scale,
+                    hx: parked.hx,
+                    hy: parked.hy,
+                    length: spec.length * frame.scale,
+                    width: spec.width * frame.scale,
+                  });
+                }
+              }
+              return bodies;
+            },
+          },
+          this.peddlerConfig,
+        );
+        this.peddlers.set(life, population);
+      }
+      population.step(dt, { ...env, wet: life.scenes.raining }, life.population);
+    }
   }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
@@ -9261,6 +9351,9 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
+    this.peddlerWeather = undefined;
     this.folklore.clear();
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
@@ -11653,6 +11746,7 @@ export class LifeWorld {
     this.retainCrossingClaims();
     this.crossingReservations.resolve();
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
+    this.stepPeddlers(clamped, zoom, env);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -12714,8 +12808,36 @@ export class LifeWorld {
       return admitted;
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
+    const withPeddlers = (admitted: VisibleAgent[]) => {
+      if (!shows('person') || !this.peddlerWeather) return admitted;
+      for (const life of this.tiles.values()) {
+        const population = this.peddlers.get(life);
+        if (!population) continue;
+        for (const owner of population.owners) {
+          if (admitted.length >= maxAgents) return admitted;
+          if (!this.owns(life, { x: owner.x * life.perMeter, y: owner.y * life.perMeter }))
+            continue;
+          const agent = population.visible(owner, {
+            ...this.peddlerWeather,
+            wet: life.scenes.raining,
+          });
+          if (
+            bounds &&
+            (agent.lng < bounds[0] ||
+              agent.lng > bounds[2] ||
+              agent.lat < bounds[1] ||
+              agent.lat > bounds[3])
+          )
+            continue;
+          admitted.push(inspection ? inspection.present(owner, agent) : agent);
+        }
+      }
+      return admitted;
+    };
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
+      const result = withPeddlers(
+        this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+      );
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       return admitted;
@@ -12747,7 +12869,7 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
+    const result = withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds));
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     return admitted;
