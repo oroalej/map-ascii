@@ -6672,7 +6672,10 @@ export class TileLife {
           if (guard && !guard(m, previous)) restoreMover(m, previous);
         }
         const was = (m.run ?? 0) > 0;
-        const randomPace = this.runSpeed(m, dt, running < RUN.maxPerTile);
+        const sheltered = this.scenes.cursorSheltered(m);
+        const randomPace = sheltered
+          ? (this.stopRun(m), m.speed)
+          : this.runSpeed(m, dt, running < RUN.maxPerTile);
         const pace = dash ?? randomPace;
         running += Number((m.run ?? 0) > 0) - Number(was);
         if (pace !== undefined) speeds[i] = pace;

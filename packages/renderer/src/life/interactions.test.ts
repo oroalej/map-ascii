@@ -76,6 +76,21 @@ const shadeFixture = (covered = false) => {
   return { scene, p };
 };
 describe('local interaction scenes', () => {
+  it('treats only cursor-neighborhood people as sheltered and restores exposed rain rules', () => {
+    const scene = setup(),
+      under = person(),
+      outside = person(100);
+    under.group = [{ ...walker, umbrella: 1 }];
+    outside.group = [{ ...walker, umbrella: 1 }];
+    const env = { rain: 1, pointerPeople: new Set([under]) };
+    scene.step(0.1, [], env);
+    expect(scene.caught(under)).toBe(false);
+    expect(scene.dashPace(under)).toBeUndefined();
+    expect(scene.caught(outside)).toBe(true);
+    expect(scene.dashPace(outside)).toBeGreaterThan(outside.speed);
+    scene.step(0.1, [], { rain: 1 });
+    expect(scene.caught(under)).toBe(true);
+  });
   it('adds tree shade after mapped sites and admits only hot walkers without a parasol', () => {
     for (const env of [
       { rain: 0, minutes: 720, sunAltitude: 60 },

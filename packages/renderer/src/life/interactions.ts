@@ -201,6 +201,7 @@ export class LocalScenes {
   private wet = false;
   private showers = 0;
   private rain = 0;
+  private pointerPeople?: ReadonlySet<object>;
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
@@ -552,7 +553,13 @@ export class LocalScenes {
 
   /** Whether this person is caught in sheltering weather with no umbrella over the group. */
   caught(m: Mover): boolean {
-    return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
+    return (
+      this.wet && m.kind === 'person' && !this.cursorSheltered(m) && exposed(m.group, this.rain)
+    );
+  }
+
+  cursorSheltered(m: Mover): boolean {
+    return this.wet && m.kind === 'person' && !!this.pointerPeople?.has(m);
   }
 
   /** A caught person's dash pace, or undefined when the group stays dry. */
@@ -1302,6 +1309,7 @@ export class LocalScenes {
     this.returnSteps.clear();
     const rain = env.rain ?? 0;
     this.rain = rain;
+    this.pointerPeople = env.pointerPeople;
     this.speechEvents.length = 0;
     this.purchaseCompletions.length = 0;
     const wasWet = this.wet;
