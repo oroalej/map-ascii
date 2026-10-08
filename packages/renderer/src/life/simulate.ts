@@ -21,6 +21,7 @@ import {
   type CrossingCursor,
 } from './crossing-wait';
 import type { SimulationSeason } from './seasonal-simulation';
+import type { CursorGust } from './pointer';
 import { FolkloreObserver, type FolkloreCalendar, type FolkloreBody } from './folklore';
 import type { RuntimeFolklore } from './folklore-config';
 import { FOLKLORE } from './folklore-config';
@@ -111,6 +112,7 @@ import {
   isWalker,
   PERCH,
   BIRD_POINTER,
+  POINTER,
   BIRD_TAKEOFF,
   BIRD_FLIGHT,
   DEFAULT_ROAD_WIDTH_M,
@@ -371,6 +373,7 @@ export type WorldGroundGuard = ((
     ): boolean;
     roadQueue(life: TileLife, preview: Mover, identity: Mover): boolean;
     pedestrians(life: TileLife): PedestrianView;
+    pointerPeople(at: readonly [number, number], radiusM: number): ReadonlySet<object>;
   };
 type SeamLimit = {
   room: number;
@@ -584,6 +587,9 @@ export type Mover = {
 export type LifeEnv = {
   /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
   pointer?: { lngLat: readonly [number, number]; cellMeters: number };
+  pointerRest?: number;
+  gust?: CursorGust;
+  pointerPeople?: ReadonlySet<object>;
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -1017,6 +1023,7 @@ export class TileLife {
   readonly startled: Flock[] = [];
   readonly birdEmojiOwners = new Set<Flock>();
   private pointerInside?: WeakSet<Flock>;
+  private tilePointer?: FlockPointer;
   private readonly emojiInputs: EmojiObservation[] = [];
   private readonly emojiInputPool: Partial<EmojiObservation>[] = [];
   private readonly walkerRng: () => number;
@@ -6192,6 +6199,12 @@ export class TileLife {
   ) {
     if (dt <= 0) return;
     if (!env?.pointer) this.pointerInside = undefined;
+    this.tilePointer = undefined;
+    if (env?.pointer) {
+      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
+      Object.assign(this.flockPointer, at, { cellMeters: env.pointer.cellMeters });
+      this.tilePointer = this.flockPointer;
+    }
     this.inspected = env?.inspecting;
     this.ownership = pass?.owns;
     this.seamLimits = pass?.seams;
@@ -8043,16 +8056,9 @@ export class TileLife {
     const folklore =
       env?.folkloreDisturber &&
       lngLatToTile(this.tile, env.folkloreDisturber.lng, env.folkloreDisturber.lat);
-    let pointer: FlockPointer | undefined;
+    const pointer = this.tilePointer;
     this.birdFlightStep.dt = dt;
-    if (env?.pointer) {
-      pointer = this.flockPointer;
-      const at = lngLatToTile(this.tile, ...env.pointer.lngLat);
-      pointer.x = at.x;
-      pointer.y = at.y;
-      pointer.cellMeters = env.pointer.cellMeters;
-      this.pointerInside ??= new WeakSet();
-    }
+    if (pointer) this.pointerInside ??= new WeakSet();
     for (const flock of this.flocks) {
       if (pointer) pointer.radius = undefined;
       if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
@@ -11106,6 +11112,40 @@ export class LifeWorld {
       if (decision) this.failedYield.set(decision.priority, this.clock);
     };
     const methods = {
+      pointerPeople: (at: readonly [number, number], radiusM: number) => {
+        const found = new Set<object>();
+        if (!ref || radiusM <= 0) return found;
+        const p = lngLatToTile(ref.tile, ...at),
+          x = p.x / ref.perMeter,
+          y = p.y / ref.perMeter;
+        const polygon = [
+          [
+            { x: x - radiusM, y: y - radiusM },
+            { x: x + radiusM, y: y - radiusM },
+            { x: x + radiusM, y: y + radiusM },
+            { x: x - radiusM, y: y + radiusM },
+          ],
+        ];
+        const visit = (owner: object) => {
+          const life = owners.get(owner);
+          if (!life || !this.owns(life, owner as GroundAgent)) return;
+          // Posed group members may lie in another bin or on a neighboring tile.
+          if (
+            occupied
+              .bodies(owner)
+              .some(
+                (b) =>
+                  !!((b.kind ?? 0) & BODY_KIND.human) &&
+                  (b.x - x) ** 2 + (b.y - y) ** 2 <= radiusM ** 2,
+              ) ||
+            queryOnly?.bodies(owner).some((b) => (b.x - x) ** 2 + (b.y - y) ** 2 <= radiusM ** 2)
+          )
+            found.add(owner);
+        };
+        occupied.visitInArea(polygon, BODY_KIND.human, visit);
+        queryOnly?.visitInArea(polygon, BODY_KIND.human, visit);
+        return found;
+      },
       eventDenied: (owner: object) => eventDenials.has(owner),
       remove,
       reserveSeam,
@@ -11188,6 +11228,8 @@ export class LifeWorld {
     cellAspect = DEFAULT_CELLS.aspect,
     effectCellMeters = cellMeters,
     pointer?: readonly [number, number],
+    pointerRest?: number,
+    gust?: CursorGust,
   ) {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
@@ -11246,6 +11288,8 @@ export class LifeWorld {
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
       ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
+      ...(pointer && pointerRest !== undefined ? { pointerRest } : {}),
+      ...(pointer && gust ? { gust } : {}),
     };
     this.sampleFolklore(weather, Math.max(0, dt));
     const folklore = this.folklore.manananggal;
@@ -11266,6 +11310,7 @@ export class LifeWorld {
       shows,
     );
     const owners = [...this.tiles.values()].sort((a, b) => b.tile.z - a.tile.z);
+    if (pointer) env.pointerPeople = guard.pointerPeople(pointer, POINTER.person * cellMeters);
     const ownerAt = (source: TileLife, p: { x: number; y: number }) =>
       owners.find((life) => {
         const f = frameBetween(source.tile, life.tile);

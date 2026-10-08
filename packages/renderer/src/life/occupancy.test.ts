@@ -32,6 +32,33 @@ const nearest = (o: Occupancy, x = 0, y = 0, hx = 1, hy = 0, width = 1, range = 
     range,
   );
 
+it('visits owners once across bins, with human masks and no retained query state', () => {
+  const o = new Occupancy(),
+    group = {},
+    outside = {},
+    animal = {};
+  o.set(group, [
+    { ...box(11, 0, 30), kind: BODY_KIND.human },
+    { ...box(13, 0), kind: BODY_KIND.human },
+  ]);
+  o.set(outside, [{ ...box(60, 0), kind: BODY_KIND.human }]);
+  o.set(animal, [{ ...box(12, 0), kind: BODY_KIND.animal }]);
+  const area = [
+    [
+      { x: 10, y: -5 },
+      { x: 25, y: -5 },
+      { x: 25, y: 5 },
+      { x: 10, y: 5 },
+    ],
+  ];
+  const visited: object[] = [];
+  o.visitInArea(area, BODY_KIND.human, (owner) => visited.push(owner));
+  expect(visited).toEqual([group]);
+  o.delete(group);
+  o.visitInArea(area, BODY_KIND.human, (owner) => visited.push(owner));
+  expect(visited).toEqual([group]);
+});
+
 describe('pedestrian occupancy queries', () => {
   const human = (x: number, y: number): Body => ({ ...box(x, y, 1, 1), kind: BODY_KIND.human });
   it('preserves corner-derived bin membership at rotated and degenerate boundary positions', () => {

@@ -19,6 +19,36 @@ import { BRAKE } from './lamps';
 import { emergencyConfig, emergencyFixture } from './testing/emergency';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+
+it('transports optional pointer rest and geographic gust without inventing absent inputs', () => {
+  const world = new LifeWorld(),
+    step = vi.spyOn(world, 'step');
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: 0, lat: 0, zoom: 18 },
+      size: { width: 800, height: 600 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: {
+      dt: 0.1,
+      zoom: 18,
+      bounds: undefined,
+      wind: undefined,
+      weather: undefined,
+      cellMeters: 1,
+    },
+    visible: [18, 1, [0, 0]],
+  };
+  runLifeFrame(world, input);
+  expect(step.mock.calls[0]!.slice(9)).toEqual([undefined, undefined, undefined]);
+  input.step.pointer = [0, 0];
+  input.step.pointerRest = 2;
+  input.step.gust = { lngLat: [0, 0], dir: [0, 1], strength: 0.8, radiusM: 8 };
+  runLifeFrame(world, structuredClone(input));
+  expect(step.mock.calls[1]!.slice(9)).toEqual([input.step.pointer, 2, input.step.gust]);
+});
 it('transports independent active folklore identically without detaching observer storage', () => {
   const t = folkloreTile(),
     entry = { key: t.key, tile: t.tile, life: t.geo },

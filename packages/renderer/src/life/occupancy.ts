@@ -423,6 +423,34 @@ export class Occupancy {
       owners.clear();
     }
   }
+  /** Visit each matching owner once. Bodies and callback are borrowed for this call only. */
+  visitInArea(
+    polygon: Polygon,
+    kindMask: number,
+    visit: (owner: object, body: Readonly<Body>) => void,
+  ) {
+    const owners = this.queryNeighbors;
+    owners.clear();
+    try {
+      const points = polygon.length === 1 ? polygon[0]! : polygon.flat();
+      if (!points.length) return;
+      for (const key of binKeys(points, 0, this.scratchKeys))
+        for (const owner of this.bins.get(key) ?? [])
+          if (this.entries.get(owner)!.mask & kindMask) owners.add(owner);
+      for (const owner of owners) {
+        const body = this.entries
+          .get(owner)!
+          .bodies.find(
+            (b) =>
+              !!((b.kind ?? BODY_KIND.fixed) & kindMask) &&
+              bodyHitsPolygon(b, polygon, bodyCorners(b, this.corners)),
+          );
+        if (body) visit(owner, body);
+      }
+    } finally {
+      owners.clear();
+    }
+  }
   /** Visit matching footprints, never expose owners or retain callback/body references. */
   someInArea(
     polygon: Polygon,

@@ -44,6 +44,8 @@ export type FrameInput = {
     effectCellMeters?: number;
     /** Mouse hover in longitude/latitude; absent after hover clears. */
     pointer?: readonly [number, number];
+    pointerRest?: Step[10];
+    gust?: Step[11];
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -115,6 +117,8 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     gust.cssCell.h / gust.cssCell.w,
     step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
     step.pointer,
+    step.pointerRest,
+    step.gust,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
