@@ -6745,7 +6745,7 @@ export class TileLife {
         const before = { ...m },
           old = m.boatShift ?? 0;
         const side = p ? (p.x - m.x) * -m.hy + (p.y - m.y) * m.hx : 0;
-        const target = close ? -(side >= 0 ? 1 : -1) * Math.min(3, p!.cellMeters * 2) : 0;
+        const target = close ? -(side >= 0 ? 1 : -1) * Math.min(3, p.cellMeters * 2) : 0;
         const shift = old + Math.sign(target - old) * Math.min(Math.abs(target - old), dt * 1.5);
         if (shift !== old) {
           m.boatShift = shift;

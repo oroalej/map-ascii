@@ -247,7 +247,9 @@ it.each(['bird', 'cat', 'dog'] as const)(
     hover.update(frame, 0);
     finish();
     hover.update(frame, 1);
-    expect(emit.mock.calls.at(-1)?.[0]?.label).toContain('(simulated)');
+    expect(emit.mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ label: expect.stringContaining('(simulated)') }),
+    );
     frame.agents = [{ ...frame.agents[0]!, lng: 1, flap: 1 }];
     hover.update(frame, 16);
     expect(inspect).not.toHaveBeenCalled();
