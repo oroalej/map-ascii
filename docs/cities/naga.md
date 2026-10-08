@@ -298,3 +298,33 @@ Illustrative seasonal simulation. Candle placement, fallback memorial sites, fam
 Sources: [Naga’s October 17, 2022 preparation report](https://www2.naga.gov.ph/undas-sa-syudad-nin-naga-pig-aandaman-na/) supports November 1–2 cemetery visitation, especially at Naga City Public Cemetery. [Naga’s October 31, 2022 Pista nin mga Kalag post](https://www2.naga.gov.ph/pista-nin-mga-kalag-and-why-nov-2-is-a-working-holiday/) supports the local dates and cemetery observance; its holiday classification applies to 2022. [PNA’s 2020 Undas article](https://www.pna.gov.ph/articles/1117601) provides general Philippine context for pre-pandemic October 31 vigils, families, candles, flowers, vendors and hearing Mass; pandemic restrictions are historical context. None establishes Naga-specific hours, counts or church schedules.
 
 Verification backlog: verify actual Mass schedules and church selection, cemetery visiting hours, vendor locations and surveyed placements. Existing representative marker geometry is incomplete; retain the explicit markerless fallback caveat until a better inventory exists.
+
+## Street peddlers
+
+Seven illustrative walking trades use the city-local clock. Exact hours and shares below are authored settings, not a Naga trade survey. Generic Philippine trade sources support recognizable goods, calls and broad morning/day/night patterns. [Naga livelihood research](https://philjournalsci.dost.gov.ph/publication/regular-issues/next-issue/116-vol-151-no-6a-december-2022-part-a/1733-street-vendors-livelihood-vulnerability-to-typhoons-in-naga-city-philippines) supports weather vulnerability, not the numeric shares.
+
+| Goods | Prop | Hours | Base / rain / heat / gust share |
+| --- | --- | --- | --- |
+| taho | `pole-buckets` | 05:00–11:00 | 1 / 0.5 / 0.6 / 0.5 |
+| balut | `basket` | 18:00–02:00 | 1 / 0.5 / 0.7 / 0.5 |
+| sorbetes | `box-cart` | 10:00–17:00 | 0.5 / 0 / 1 / 0.3 |
+| bote-dyaryo | `flatbed-cart` | 09:00–16:00 | 0.7 / 0 / 0.5 / 0.4 |
+| fishball | `fry-cart` | 14:00–22:00 | 0.7 / 0.3 / 1 / 0.5 |
+| kakanin | `head-tray` | 06:00–10:00, 14:00–17:00 | 0.7 / 0.3 / 0.5 / 0.4 |
+| takatak | `chest-tray` | 07:00–20:00 | 0.8 / 0.5 / 0.6 / 0.5 |
+
+Balut and fishball carry night lamps. Sorbetes rings a bell, carries a parasol and uses the pack’s cool mood override. Takatak stays within 160 m of decoded jeepney terminals and sells candy only as a conservative simulation choice: [Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/) regulates tobacco retail permits and locations; no blanket ban on all ambulant tobacco sale is claimed. Its mapped terminal walking coverage is available in the pinned archive.
+
+The [dialogue review](../../packages/content/cities/naga/dialogue-review.md) lists 21 new original utterances (14 plain, four weather, two hover, one leaving) with Bikol, English and Tagalog. The full catalog is 125/140, leaving 15 slots. Native-speaker review has not occurred.
+
+Trade sources:
+
+- taho: [How is taho made—and where?](https://lifestyle.inquirer.net/208164/how-is-taho-made-and-where/).
+- balut: [The authentic balut: history, culture, and economy of a Philippine food icon](https://doi.org/10.1186/s42779-019-0020-8).
+- sorbetes: [Dirty Ice Cream gets a Make Over](https://www.philstar.com/other-sections/starweek-magazine/2008/04/06/54243/dirty-ice-cream-gets-make-over/amp/).
+- bote-dyaryo: [Nestlé Philippines waste segregation guide](https://www.nestle.com.ph/sites/g/files/pydnoa366/files/2021-06/Solid%20Waste%20Management%20-%20Guide%20for%20Teens%202.5.pdf).
+- fishball: [Eating your way through Manila's mobile street food vendors](https://afn.netlify.app/en/articles/guide--eating-your-way-through-manila-s-mobile-street-food-vendo/).
+- kakanin: [Bicol DA assorted kakanin procurement](https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf).
+- takatak: [Takatak: Sa Kahon ng Paglimot, Sa Laylayan ng Pag-usad](https://newsroom-pacesetter.medium.com/takatak-sa-kahon-ng-paglimot-sa-laylayan-ng-pag-usad-b8207d62d1a8); [Naga Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/).
+
+For owner review in `pnpm dev`: `/naga?lat=13.618281&lng=123.190863&z=19` at 09:00 has decoded walking-route peddlers; `/naga?lat=13.619164&lng=123.192118&z=19` has a terminal-constrained takatak candidate. These coordinates were checked through the simulation, without screenshots or visual claims.
