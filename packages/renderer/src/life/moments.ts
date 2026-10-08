@@ -12,7 +12,8 @@ import type { PersonPose } from './people';
 import { between, random } from './random';
 import { DialogueSelector, makeDialogueContext, type DialogueMemory } from './dialogue';
 
-export type MomentKind = DialogueChoice['kind'];
+/** Moments run between nearby people; event cheers (`cheer`) belong to running events. */
+export type MomentKind = Exclude<DialogueChoice['kind'], 'cheer'>;
 export const MOMENTS = {
   zoom: SPEECH_ZOOM,
   rain: DIALOGUE_WEATHER.rain,

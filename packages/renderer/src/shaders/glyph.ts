@@ -72,6 +72,7 @@ export function glyphFragmentFor({ focus = true, effectClocks = true, seasonal =
 precision highp float;
 precision highp int;
 precision highp sampler2D;
+precision highp usampler2D;
 
 uniform sampler2D u_glyphs;
 uniform sampler2D u_atlas;
@@ -107,6 +108,8 @@ uniform vec2 u_buntingWindDir;
 ${focus ? 'uniform bool u_focus;\nuniform bool u_focusLife;' : 'const bool u_focus = false;\nconst bool u_focusLife = false;'}
 uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
+uniform highp usampler2D u_crowdMask;
+uniform bool u_hasCrowdMask;
 uniform sampler2D u_effectClocks;
 ${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectClocks = false;'}
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
@@ -766,7 +769,15 @@ void main() {
     back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
   }
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
-  if (lifeAllowed(life, cls, cell, subAt)) {
+  bool crowdCell=false,crowdInk=false;
+  if(u_hasCrowdMask) {
+    uvec4 a=texelFetch(u_crowdMask,ivec2(cell.x*2,cell.y),0),b=texelFetch(u_crowdMask,ivec2(cell.x*2+1,cell.y),0);
+    crowdCell=any(notEqual(a,uvec4(0u)))||any(notEqual(b,uvec4(0u)));
+    ivec2 sampleAt=clamp(ivec2(vec2(inCell)/u_cell*16.0),ivec2(0),ivec2(15));
+    int bit=sampleAt.y*16+sampleAt.x,word=bit>>5;
+    uint value=word<4?a[word]:b[word-4];crowdInk=(value&(1u<<uint(bit&31)))!=0u;
+  }
+  if (crowdCell ? crowdInk : lifeAllowed(life, cls, cell, subAt)) {
     int lifeGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
     ivec2 slot = ivec2(lifeGlyph % u_columns, lifeGlyph / u_columns) * ivec2(u_cell);
     float coverage = texelFetch(u_atlas, slot + inCell, 0).r;

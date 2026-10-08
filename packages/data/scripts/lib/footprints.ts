@@ -4,6 +4,16 @@ import type { MultiPolygon } from 'geojson';
 import { localFrame as frame } from './geo';
 
 type MultiPoly = ReturnType<typeof union>;
+/** Share only the balanced sweep; callers keep their own projection and rounding. */
+export function balancedUnion(groups: MultiPoly[]): MultiPoly {
+  while (groups.length > 1) {
+    const next: MultiPoly[] = [];
+    for (let i = 0; i < groups.length; i += 2)
+      next.push(i + 1 < groups.length ? union(groups[i]!, groups[i + 1]!) : groups[i]!);
+    groups = next;
+  }
+  return groups[0] ?? [];
+}
 
 function strokePieces(points: LngLat[], width: number): LngLat[][][] {
   const half = width / 2;
@@ -47,19 +57,14 @@ export function seatingFootprint(
     pieces.push(...strokePieces(points.slice(span.start, span.end + 1), span.width_m));
   // A balanced union avoids thousands of near-coincident edges in one sweep.
   // Round local coordinates to micrometers before clipping (far below tile precision).
-  let merged: MultiPoly[] = pieces.map((piece) => [
+  const groups: MultiPoly[] = pieces.map((piece) => [
     piece.map((ring) =>
       ring.map(([x, y]) => [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6] as LngLat),
     ),
   ]);
-  while (merged.length > 1) {
-    const next: MultiPoly[] = [];
-    for (let i = 0; i < merged.length; i += 2)
-      next.push(i + 1 < merged.length ? union(merged[i]!, merged[i + 1]!) : merged[i]!);
-    merged = next;
-  }
+  const merged = balancedUnion(groups);
   return {
     type: 'MultiPolygon',
-    coordinates: merged[0]!.map((p) => p.map((r) => r.map((p) => f.toLngLat(p)))),
+    coordinates: merged.map((p) => p.map((r) => r.map((p) => f.toLngLat(p)))),
   };
 }

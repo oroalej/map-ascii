@@ -66,6 +66,21 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         return tex;
       };
       const blank = texture(cols, rows, new Uint8Array(cols * rows * 4));
+      const crowdMask = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, crowdMask);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA32UI,
+        1,
+        1,
+        0,
+        gl.RGBA_INTEGER,
+        gl.UNSIGNED_INT,
+        new Uint32Array(4),
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       const program = (vertex: string, fragment: string) => {
         const p = gl.createProgram();
         for (const [type, source] of [
@@ -102,9 +117,16 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
           const info = gl.getActiveUniform(p, i)!;
           const loc = gl.getUniformLocation(p, info.name);
           const value = values[info.name.replace(/\[0\]$/, '')];
-          if (info.type === gl.SAMPLER_2D) {
+          if (info.type === gl.SAMPLER_2D || info.type === gl.UNSIGNED_INT_SAMPLER_2D) {
             gl.activeTexture(gl.TEXTURE0 + unit);
-            gl.bindTexture(gl.TEXTURE_2D, value instanceof WebGLTexture ? value : blank);
+            gl.bindTexture(
+              gl.TEXTURE_2D,
+              value instanceof WebGLTexture
+                ? value
+                : info.type === gl.UNSIGNED_INT_SAMPLER_2D
+                  ? crowdMask
+                  : blank,
+            );
             gl.uniform1i(loc, unit++);
           } else if (value !== undefined) {
             const a = typeof value === 'number' ? [value] : (value as number[]);
@@ -119,6 +141,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             else gl.uniform1iv(loc, a);
           }
         }
+        gl.uniform1i(gl.getUniformLocation(p, 'u_hasCrowdMask'), 0);
       };
       const raster = (w: number, h: number) => {
         const textures = [texture(w, h), texture(w, h), texture(w, h)];

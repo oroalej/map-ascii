@@ -13,6 +13,7 @@
 import {
   nthWeekdayDay,
   PROCESSION_DEFAULTS,
+  PROCESSION_LIMITS,
   type FluvialRoute,
   type ProcessionSchedule,
 } from '@atlas/shared';
@@ -30,27 +31,40 @@ export const PROCESSION = {
    * taking at least `playSeconds`.
    */
   playSpeed: 10,
-  eventActors: 300,
-  eventSpectators: 90,
+  eventActors: PROCESSION_LIMITS.actors,
+  throng: {
+    streamLength: 300,
+    stream: 0.9,
+    tail: 0.6,
+    verge: 0.7,
+    /** Procession spectators far ahead, and those left once it has passed by `gather` m. */
+    waiting: 0.35,
+    passed: 0.15,
+    gather: 300,
+    mass: 0.95,
+    bank: 0.9,
+    uniforms: [3, 4, 5, 6, 7, 8, 9, 10] as const,
+  },
   mass: { queueSpread: 0.15, arrivalEnd: 0.25, disperseStart: 0.75 },
   street: {
-    bearerStart: 1,
-    bearerGap: 1.2,
-    marshalLead: 8,
-    marshalGap: 3,
-    devoteeStart: 10,
-    rankGap: 2,
+    crowdTail: 500,
+    leading: 3,
+    andasGap: 4,
+    imageGap: 8,
+    marshalGap: 8,
+    devoteeGap: 8,
     guardGap: 8,
     bandGap: 5,
     contingentGap: 6,
     vehicleGap: 6,
     tailPadding: 10,
-    headMargin: 15,
-    spectatorInset: 0.8,
-    spectatorMargin: 0.01,
-    spectatorSpacing: 5,
   },
   playSeconds: 180,
+  /**
+   * A river procession shows its whole formation on the water from the start and holds it
+   * this long, s of a replay, before moving off; at the landing it holds as long again.
+   */
+  holdSeconds: 5,
   columns: PROCESSION_DEFAULTS.fluvial.columns,
   ranks: PROCESSION_DEFAULTS.fluvial.ranks,
   /** Escorts ahead of the formation, and small boats following the pagoda. */
@@ -60,7 +74,7 @@ export const PROCESSION = {
   /** Poles along the pagoda's sides, leaning out: how many, and how long seen from above, m. */
   poles: 10,
   poleLength: 4.5,
-  followers: 14,
+  followers: PROCESSION_DEFAULTS.fluvial.followers,
   /** Between ranks and between columns of voyadores, m (columns close up where it's narrow). */
   rankGap: 19,
   columnGap: 5,
@@ -220,6 +234,7 @@ export function routePolyline(points: readonly Point[]) {
         Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]),
     );
   return {
+    points,
     along,
     at(distance: number) {
       const s = Math.max(0, Math.min(along.at(-1)!, distance));
@@ -265,6 +280,11 @@ export class ProcessionScene {
   private readonly formation: { columns: number; ranks: number };
   /** The pagoda's lag behind the lead, as a share of the run. */
   private readonly pagodaLag: number;
+  /** Where the pagoda sets off (its whole flotilla on the water) and stops, m along the route. */
+  private readonly start: number;
+  private readonly landing: number;
+  /** The share of the run held still at each end. */
+  private readonly hold: number;
 
   constructor(readonly route: FluvialRoute) {
     const [lng0, lat0] = route.route[0]!;
@@ -347,7 +367,7 @@ export class ProcessionScene {
     }
     // A flotilla of small boats follows the pagoda, three abreast.
     const small: CraftType[] = ['baroto', 'rowboat', 'motorboat', 'sailboat'];
-    const followers = PROCESSION.followers;
+    const followers = this.route.formation?.followers ?? PROCESSION_DEFAULTS.fluvial.followers;
     for (let i = 0; i < followers; i++) {
       const row = Math.floor(i / 3);
       const vehicle =
@@ -363,10 +383,21 @@ export class ProcessionScene {
       });
     }
 
-    const count = Math.floor(this.length * PROCESSION.crowdPerMeter);
+    // The pagoda sets off at the departure with its followers stretched behind it (without
+    // one, the flotilla's last boat starts at the route's start), and stops at the landing
+    // with the boats ahead of it stretched beyond.
+    this.landing = Math.min(this.length, Math.max(0, route.landing_m ?? this.length));
+    this.start = Math.min(
+      this.landing,
+      route.departure_m ??
+        Math.max(0, ...this.boats.map((b) => VEHICLES[b.vehicle].length / 2 - b.along)),
+    );
+    this.hold = PROCESSION.holdSeconds / this.playDuration;
+
+    const count = Math.floor(this.landing * PROCESSION.crowdPerMeter);
     for (const side of [-1, 1]) {
       for (let i = 0; i < count; i++) {
-        const s = rng() * this.length;
+        const s = rng() * this.landing;
         const back = between(rng, ...PROCESSION.crowdDepth);
         const rank = rng();
         const candle = rng() < PROCESSION.candles;
@@ -393,22 +424,11 @@ export class ProcessionScene {
     }
   }
 
-  /** How long playing it takes, s (`PROCESSION.playSpeed`). */
+  /** How long playing it takes, s (`PROCESSION.playSpeed`), holds at both ends included. */
   get playDuration() {
-    return Math.max(
-      PROCESSION.playSeconds,
-      (this.length + this.formationLength()) / PROCESSION.playSpeed,
-    );
-  }
-
-  /** From the pagoda's center to the lead voyador's bow, m. */
-  private formationLength() {
     return (
-      VEHICLES.pagoda.length / 2 +
-      6 +
-      (this.formation.ranks - 1) * PROCESSION.rankGap +
-      VEHICLES.voyador.length +
-      6
+      Math.max(PROCESSION.playSeconds, (this.landing - this.start) / PROCESSION.playSpeed) +
+      2 * PROCESSION.holdSeconds
     );
   }
 
@@ -443,14 +463,17 @@ export class ProcessionScene {
     return (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
   }
 
-  /** The distance along the route of something `lag` behind the lead, `progress` into the run. */
+  /**
+   * Where the pagoda would be, m along the route, for something `lag` behind the lead,
+   * `progress` into the run: still at the start and at the landing during the holds.
+   */
   private travelled(progress: number, lag: number) {
-    const lead = this.formationLength();
-    const u = Math.min(1, Math.max(0, progress)) * (1 + this.pagodaLag) - lag;
-    return -lead + profileAt(this.profile, u) * (this.length + lead);
+    const moving = Math.min(1, Math.max(0, (progress - this.hold) / (1 - 2 * this.hold)));
+    const u = moving * (1 + this.pagodaLag) - lag;
+    return this.start + profileAt(this.profile, u) * (this.landing - this.start);
   }
 
-  /** The pagoda's distance along the route at `progress` (0–1): from before the start to the landing. */
+  /** The pagoda's distance along the route at `progress` (0–1): from the start to the landing. */
   pagodaAt(progress: number) {
     return this.travelled(progress, this.pagodaLag);
   }
@@ -679,7 +702,7 @@ export class ProcessionScene {
         );
     }
     if (crowds) {
-      const landing = this.length;
+      const landing = this.landing;
       for (const p of this.people) {
         const near =
           Math.abs(p.s - pagoda) < PROCESSION.crowdNear ||

@@ -134,6 +134,7 @@ import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
 import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
+import { createThrongPool } from './life/throng-pool';
 import { deferredHost } from './life/deferred-host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
@@ -271,6 +272,11 @@ export type AtlasOptions = {
   profiling?: boolean;
   /** Run Life in a worker when available; false selects the synchronous in-process path. */
   lifeWorker?: boolean;
+  /**
+   * Prepare event crowd ground in a pool of workers when available; false prepares it on the
+   * main thread within a per-frame budget.
+   */
+  crowdWorkers?: boolean;
   /**
    * Which features respond to the pointer: hovering highlights them, and the `hover` and `click`
    * events report them. Anything else is treated as nothing. Default: every feature.
@@ -591,6 +597,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let cellsFor: string | null = null;
   let cellsTargets: CellTargets | undefined;
   let drawDirty = true;
+  let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
   let lastInput = -Infinity;
@@ -1152,7 +1159,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       if (!lifeShown) return;
     }
     // Nothing out, and the texture already empty: nothing to upload.
-    if (agents.length === 0 && !lifeShown) {
+    const acceptedCrowd = lifeActive() ? drawnLife?.throngRun : undefined;
+    const crowdEvent = acceptedCrowd && processions.find((p) => p.id === acceptedCrowd.id);
+    if (agents.length === 0 && !crowdEvent && !lifeShown) {
       agentsDrawn = 0;
       lifeAgents = agents;
       return;
@@ -1162,6 +1171,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       (emojiEnabled && camera.zoom >= EMOJI_ZOOM);
     if (trackSpeech && speechSpeakers.members.length !== targets.cols * targets.rows)
       speechSpeakers.members = new Uint8Array(targets.cols * targets.rows);
+    const guardLife = drawnLife;
+    if (crowdEvent && !crowdPool && options.crowdWorkers !== false && typeof Worker !== 'undefined')
+      crowdPool = createThrongPool(() => {
+        drawDirty = true;
+      });
     agentsDrawn = lifePass(
       gl,
       targets,
@@ -1174,11 +1188,21 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       profiler,
       drawnLife?.cellGuard(placement.toCell),
       focus.life,
-      itemInspection ? drawnLife?.agents : lifePause.inspecting ? drawnLife : undefined,
+      drawnLife,
       trackSpeech ? speechSpeakers : undefined,
       drawnLife?.puffs,
+      crowdEvent && acceptedCrowd
+        ? {
+            event: crowdEvent,
+            progress: acceptedCrowd.progress,
+            quality: knobs.throng,
+            clock: drawnLife?.signalClock,
+            guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
+            pool: crowdPool,
+          }
+        : undefined,
     );
-    lifeShown = agents.length > 0;
+    lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;
   };
   const reportCues = (kind: 'speech' | 'emoji', now: number) => {
@@ -1520,12 +1544,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crop: CropNow | undefined;
   let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
+  /** The event last started with `playProcession`, until stopped (its run may still be pending). */
+  let played: string | undefined;
   const updateSeason = () => {
     const next = resolveCurrentSeason();
     if (next === season) return;
     clearFolklore();
     lifeHover.clear();
     season = next;
+    // A replay belongs to its season: showing another season ends it.
+    const run = lifeView()?.procession;
+    const replayed = processions.find((p) => p.id === (run && !run.live ? run.id : played));
+    if (replayed?.season && replayed.season !== season?.id) {
+      played = undefined;
+      host.stop();
+      reportProcession();
+    }
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
     seasonSnapshot = seasonState();
     warmSeasonalPrograms();
@@ -2272,6 +2306,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     setProcessions(routes) {
       clearFolklore();
       processions = routes;
+      played = undefined;
       host.setProcessions(routes);
       lifeHover.clear();
       livePause.reset();
@@ -2287,6 +2322,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const route = processions.find((p) => p.id === id);
       if (!route || !lifeActive() || !host.play(id, eventOccurrence(route.schedule, now())))
         return false;
+      played = id;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       reportProcession();
@@ -2294,6 +2330,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return true;
     },
     stopProcession() {
+      played = undefined;
       lifeHover.pointer(null);
       lastSun = -Infinity;
       host.stop();
@@ -2321,6 +2358,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      crowdPool?.destroy();
       names.clear();
       lifeHover.pointer(null);
       speech.clear();

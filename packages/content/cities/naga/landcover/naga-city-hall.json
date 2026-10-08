@@ -197,7 +197,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga City Hall — Owner-supplied overhead reference (Google Maps), date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga City Hall — Owner-supplied overhead reference (Google Maps), date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -211,7 +211,7 @@
     },
     {
       "title": "Owner-supplied overhead reference, seven-site adjustment",
-      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are draft estimates; bitmaps are ignored evidence and not shipped. "
+      "note": "Supplied image inspected 2026-10-02; capture and imagery dates unknown. Manual registration to cached mapped geometry. Trees, widths and low landscape dimensions are estimates; bitmaps are ignored evidence and not shipped. "
     }
   ]
 }

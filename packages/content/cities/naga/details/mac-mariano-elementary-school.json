@@ -208,7 +208,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied landscaped grounds references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied landscaped grounds references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -217,7 +217,7 @@
     },
     {
       "title": "Owner-supplied five landscaped grounds references",
-      "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative draft landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
+      "note": "Inspected 2026-10-02. Visible foliage groups, open lawns, small planting beds and connected courtyard approaches guide source-relative landscaping. Standing mapped roofs and full road/path widths govern clearances where image orientation differs. Counts, sizes, positions and heights are undated estimates; no species, survey, ownership extension or historical date inferred. Reference bitmaps remain ignored evidence."
     }
   ]
 }

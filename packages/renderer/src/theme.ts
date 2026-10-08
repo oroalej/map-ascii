@@ -593,8 +593,10 @@ export function mapGlyphs(theme: Theme): string[] {
     ...PUFF_GLYPHS,
     ...CANDLE_GLYPHS,
     ...PEDESTRIAN_GLYPHS,
-    ...PROCESSION_GLYPHS,
+    // Keep main's four original fiesta props and folklore indices stable.
+    ...PROCESSION_GLYPHS.slice(0, 4),
     ...FOLKLORE_GLYPHS,
+    ...PROCESSION_GLYPHS.slice(4),
   ];
   for (const g of extras) set.add(g);
   return [...set];

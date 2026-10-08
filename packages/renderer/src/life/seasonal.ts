@@ -462,7 +462,7 @@ export function packSeasonalFixtures(
 ): SeasonalVisibility {
   const visibility: SeasonalVisibility = { lanterns: false, bunting: false };
   const rows = bandVisibility(SEASON_ZOOM.bunting, zoom)
-    ? selectBuntingRows(fixtures, grid)
+    ? selectBuntingRows(fixtures, grid, grid)
     : undefined;
   const write = (
     x: number,

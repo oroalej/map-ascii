@@ -958,6 +958,20 @@ describe('packLife lines', () => {
         [5.6, 5.5],
       ]),
     ).toHaveLength(0);
+    // A cell long, yet within one cell (a slant across it, or out and back).
+    expect(
+      draw([
+        [5.1, 5.1],
+        [5.9, 5.9],
+      ]),
+    ).toHaveLength(0);
+    expect(
+      draw([
+        [5.1, 5.5],
+        [5.9, 5.5],
+        [5.1, 5.5],
+      ]),
+    ).toHaveLength(0);
   });
 
   it('is one cell thick: one cell per column along a shallow slant, one per row along a steep one', () => {

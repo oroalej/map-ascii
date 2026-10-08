@@ -4,7 +4,7 @@ import {
   type BuntingCorridor,
   type SeasonConfig,
   type SeasonalPoint,
-  type SeasonalBuntingRecord,
+  type SeasonalBuntingRunRecord,
 } from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
 import { lines } from './road-geometry';
@@ -23,55 +23,59 @@ function bakeCorridor(features: readonly AtlasFeature[], season: string, config:
       throw new Error(`Season ${season}, corridor ${config.id}: missing road ${id}`);
     return f;
   });
-  const { selected, dist, unproject } = roadGraph(
+  const { selected, dist } = roadGraph(
     byId,
     roads,
     config,
     `Season ${season}, corridor ${config.id}`,
   );
-  const records = new Map<string, SeasonalBuntingRecord>();
+  // One run per edge: decoding expands its evenly spaced curb-to-curb rows.
+  const records = new Map<string, SeasonalBuntingRunRecord>();
+  // Branches leaving one node would each hang a row on it; the first edge keeps it.
+  const nodeRows = new Set<string>();
+  let rows = 0;
   for (const e of selected.slice().sort((a, b) => a.id.localeCompare(b.id))) {
     const a = dist.get(e.a)! <= dist.get(e.b)! ? e.a : e.b,
       b = a === e.a ? e.b : e.a;
-    const start = dist.get(a)!,
-      nx = -(b.xy[1] - a.xy[1]) / e.length,
-      ny = (b.xy[0] - a.xy[0]) / e.length;
-    for (
-      let d = Math.ceil((start - 1e-7) / config.spacing_m) * config.spacing_m;
-      d < start + e.length - 1e-7;
-      d += config.spacing_m
-    ) {
-      const u = Math.max(0, (d - start) / e.length),
-        x = a.xy[0] + (b.xy[0] - a.xy[0]) * u,
-        y = a.xy[1] + (b.xy[1] - a.xy[1]) * u;
-      const at = unproject([x, y]),
-        id = `season:${season}/${config.id}/${pointKey(at)}`;
-      const reach = e.width / 2 + 0.5;
-      records.set(id, {
-        version: 1,
-        kind: 'bunting',
-        id,
-        season,
-        corridor: config.id,
-        road: e.road,
-        from: unproject([x - nx * reach, y - ny * reach]),
-        to: unproject([x + nx * reach, y + ny * reach]),
-        segment: [a.at, b.at],
-        seed: utilitySeed(id),
-      });
-      if (records.size > 20000)
-        throw new Error(`Season ${season}, corridor ${config.id}: too many rows`);
+    const start = dist.get(a)!;
+    let first = Math.ceil((start - 1e-7) / config.spacing_m) * config.spacing_m;
+    if (Math.abs(first - start) <= 1e-7) {
+      if (nodeRows.has(a.key)) first += config.spacing_m;
+      else nodeRows.add(a.key);
     }
+    const count = Math.max(0, Math.ceil((start + e.length - 1e-7 - first) / config.spacing_m));
+    if (!count) continue;
+    const id = `season:${season}/${config.id}/${pointKey(a.at)}/${pointKey(b.at)}`;
+    records.set(id, {
+      version: 1,
+      kind: 'bunting-run',
+      id,
+      season,
+      corridor: config.id,
+      road: e.road,
+      segment: [a.at, b.at],
+      start_m: Math.round(Math.max(0, first - start) * 1000) / 1000,
+      spacing_m: config.spacing_m,
+      count,
+      reach_m: e.width / 2 + 0.5,
+      seed: utilitySeed(id),
+    });
+    rows += count;
+    if (rows > 20000) throw new Error(`Season ${season}, corridor ${config.id}: too many rows`);
   }
   if (!records.size) throw new Error(`Season ${season}, corridor ${config.id}: no bunting rows`);
-  return { records: [...records.values()], meters: selected.reduce((n, e) => n + e.length, 0) };
+  return {
+    records: [...records.values()],
+    rows,
+    meters: selected.reduce((n, e) => n + e.length, 0),
+  };
 }
 
 export function generateSeasonalBunting(
   features: readonly AtlasFeature[],
   seasons?: readonly SeasonConfig[],
 ) {
-  const records: SeasonalBuntingRecord[] = [],
+  const records: SeasonalBuntingRunRecord[] = [],
     stats: { season: string; corridor: string; ways: number; meters: number; rows: number }[] = [];
   for (const season of seasons ?? [])
     for (const corridor of season.bunting?.corridors ?? []) {
@@ -82,7 +86,7 @@ export function generateSeasonalBunting(
         corridor: corridor.id,
         ways: corridor.ways.length,
         meters: Math.round(baked.meters),
-        rows: baked.records.length,
+        rows: baked.rows,
       });
     }
   records.sort((a, b) => a.id.localeCompare(b.id));
