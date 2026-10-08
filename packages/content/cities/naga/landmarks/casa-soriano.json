@@ -1,0 +1,48 @@
+{
+  "id": "landmark/casa-soriano",
+  "name": {
+    "en": "Casa Soriano Family Heirloom Cuisine"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The city tourism directory dates its opening to March 2015."
+      },
+      "source": 0,
+      "year": 2015
+    },
+    {
+      "text": {
+        "en": "The restaurant is in Concepcion Grande."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "It serves Filipino, Bicolano and Spanish food from recipes handed down in the Soriano family."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Casa Soriano",
+      "url": "https://tourism.naga.gov.ph/tr-establishments/casa-soriano/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/4948310625",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/4948310625",
+  "signatures": [
+    {
+      "name": "Soriano family recipes",
+      "source": 0,
+      "note": "Filipino, Bicolano and Spanish cooking"
+    }
+  ]
+}

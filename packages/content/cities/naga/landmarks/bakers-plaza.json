@@ -1,0 +1,47 @@
+{
+  "id": "landmark/bakers-plaza",
+  "name": {
+    "en": "Baker’s Plaza"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Graceland group launched Baker’s Plaza."
+      },
+      "source": 0,
+      "year": 1993
+    },
+    {
+      "text": {
+        "en": "Its anniversary account calls it Naga’s first specialty bakeshop."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The bakery’s range includes cakes and croissants."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Graceland at 50 (2026)",
+      "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/6388208585",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/6388208585",
+  "signatures": [
+    {
+      "name": "Cakes and croissants",
+      "source": 0
+    }
+  ]
+}

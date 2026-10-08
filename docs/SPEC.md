@@ -343,3 +343,5 @@ The HUD cycles Quality through Auto (default), High, and Low, remembering the ch
 - Live data such as traffic or weather
 - Routing or directions
 - Any backend
+
+Food places are searchable geographic landmarks. Dish results open a sourced, non-modal facts panel without moving the camera; `sel=dish/<slug>` restores it. Food landmarks can show signature items, linked dish origins and facts, and sourced pasalubong tips. Dish facts cite their own sources.

@@ -1,0 +1,59 @@
+{
+  "id": "landmark/didicks-kina-log",
+  "name": {
+    "en": "Didick’s Kina-Log"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The city tourism directory locates the kinalasan at Zone 1, Km. 10, Carolina."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its special kinalas adds chicharon, egg and special meat."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The menu also includes turones, paksiw and dinuguan."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Didick’s Kina-Log",
+      "url": "https://tourism.naga.gov.ph/tr-establishments/didicks-kina-log-kinalas-log-log/",
+      "note": "Undated anniversary text does not establish an opening year."
+    },
+    {
+      "title": "Restaurant Guru: location",
+      "url": "https://restaurantguru.com/Didicks-Kina-log-Naga",
+      "note": "Approximate business coordinate from listing metadata, checked against the published street/subdivision address; no entrance or footprint precision implied."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.2616047, 13.6630448]
+  },
+  "known_for": ["dish/kinalas"],
+  "signatures": [
+    {
+      "name": "Special kinalas",
+      "source": 0
+    },
+    {
+      "name": "Turones",
+      "source": 0
+    },
+    {
+      "name": "Paksiw and dinuguan",
+      "source": 0
+    }
+  ]
+}

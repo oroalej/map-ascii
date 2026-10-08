@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
+import { loadCityPacks } from '@atlas/content';
 import { CityArt, Landmark, Tour } from '@atlas/shared/schemas';
 import fixture from './__fixtures__/ui-payloads.json';
 import { isCityArt, isCityLandmarks, isCityTours } from './guards';
@@ -23,4 +24,19 @@ it('rejects malformed facts, steps, art colors, palettes and row dimensions', ()
     { ...piece, variants: [{ rows: [], colors: [] }] },
   ])
     expect(isCityArt({ pieces: [bad] })).toBe(false);
+});
+
+const tourInputs = import.meta.glob('../../../packages/content/cities/*/tours/*.json');
+it('accepts all city tours after deferred loading, including independent food selections', async () => {
+  expect(Object.keys(tourInputs).length).toBeGreaterThan(0);
+  const { packs, errors } = await loadCityPacks();
+  expect(errors).toEqual([]);
+  for (const pack of packs) {
+    expect(isCityTours(pack.content.tours)).toBe(true);
+    expect(isCityLandmarks(pack.content.landmarks)).toBe(true);
+  }
+  for (const id of ['dish/kinalas', 'landmark/', 'landmark/Bad', 'invalid']) {
+    const tour = { ...fixture.tours[0], steps: [{ ...fixture.tours[0]!.steps[0], select: id }] };
+    expect(isCityTours([tour])).toBe(false);
+  }
 });

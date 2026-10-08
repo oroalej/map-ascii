@@ -66,6 +66,40 @@ for (const city of cities) {
 
     test.describe('with map data', () => {
       test.skip(!city.hasMeta, 'no generated tiles; run pnpm data:build');
+      test('food search opens Known for facts', async ({ page }) => {
+        test.skip(!city.food || !city.foodDish, 'no linked food and dish in this pack');
+        await page.setViewportSize({ width: 800, height: 600 });
+        await page.emulateMedia({ reducedMotion: 'reduce' });
+        const food = city.food!,
+          dish = city.foodDish!;
+        await page.goto(`/${city.slug}?z=17.5`);
+        await mapReady(page);
+        const input = page.getByRole('combobox', { name: 'Search places' });
+        await input.fill(dish.name.en);
+        await page.getByRole('option').filter({ hasText: food.name.en }).first().click();
+        const facts = page.getByRole('dialog', { name: food.name.en, exact: true });
+        await expect(facts).toBeVisible();
+        await expect(facts.getByRole('heading', { name: 'Known for', exact: true })).toBeVisible();
+        await expect(facts.getByText(dish.facts[0]!.text.en, { exact: false })).toBeVisible();
+        await expect.poll(() => query(page).sel).toBe(food.osm_id ?? food.id);
+        expect(city.foodAnchor).toBeDefined();
+        await expect.poll(() => query(page).lat).toBe(String(city.foodAnchor!.lat));
+        await expect.poll(() => query(page).lng).toBe(String(city.foodAnchor!.lng));
+        await facts.getByRole('button', { name: 'Close', exact: true }).click();
+        await input.fill(dish.name.en);
+        await input.focus();
+        const camera = { lat: query(page).lat, lng: query(page).lng, z: query(page).z };
+        await page.getByRole('option', { name: dish.name.en, exact: true }).click();
+        const dishFacts = page.getByRole('dialog', { name: dish.name.en, exact: true });
+        await expect(dishFacts).toBeVisible();
+        await expect(dishFacts.getByText(dish.description.en, { exact: true })).toBeVisible();
+        await expect(
+          dishFacts.getByRole('heading', { name: 'Sources', exact: true }),
+        ).toBeVisible();
+        await expect.poll(() => query(page).sel).toBe(dish.id);
+        expect({ lat: query(page).lat, lng: query(page).lng, z: query(page).z }).toEqual(camera);
+        await expect(page.getByRole('link', { name: 'OpenStreetMap contributors' })).toBeVisible();
+      });
       test('previews seasonal decorations and keeps the URL unchanged', async ({ page }) => {
         test.skip(!city.seasons.length, 'no festive calendar in this pack');
         // Bound animated software-WebGL work, as in the Life smoke, while keeping desktop UI.

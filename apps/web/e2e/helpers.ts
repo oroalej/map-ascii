@@ -1,6 +1,6 @@
 /** Shared by the e2e specs: the registered cities, and checks that the map is drawing. */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { type SearchIndexFile, type CityLifeConfig } from '@atlas/shared';
+import { type SearchIndexFile, type CityLifeConfig, type Landmark, type Dish } from '@atlas/shared';
 import {
   RuntimeCityLifeSchema,
   Procession as ProcessionSchema,
@@ -30,11 +30,13 @@ export const cities = readdirSync(citiesDir)
           ),
         ) as SearchIndexFile)
       : null;
-    const smokePlace = search?.entries.find(
-      (entry) =>
-        entry.type === 'landmark' &&
-        (entry.name === city.smoke_landmark || entry.altNames.includes(city.smoke_landmark)),
-    );
+    const smokePlace = search?.entries
+      .filter((entry) => entry.type !== 'dish')
+      .find(
+        (entry) =>
+          entry.type === 'landmark' &&
+          (entry.name === city.smoke_landmark || entry.altNames.includes(city.smoke_landmark)),
+      );
     if (hasMeta && !smokePlace) {
       throw new Error(`${slug}: no landmark search entry for "${city.smoke_landmark}"`);
     }
@@ -52,7 +54,7 @@ export const cities = readdirSync(citiesDir)
           )
       : [];
     const cemeteryAnchor = cemeteryIds.flatMap(
-      (id) => search?.entries.filter((e) => e.id === id) ?? [],
+      (id) => search?.entries.filter((e) => e.type !== 'dish').filter((e) => e.id === id) ?? [],
     )[0];
     if (runtimeLife?.folklore?.ghosts.sites.includes('cemetery') && hasMeta && !cemeteryAnchor)
       throw new Error(`${slug}: folklore needs a mapped cemetery smoke anchor`);
@@ -77,6 +79,35 @@ export const cities = readdirSync(citiesDir)
           .sort()
           .map((file) => JSON.parse(readFileSync(new URL(file, toursDir), 'utf8')) as TourFile)
       : [];
+    const landmarksDir = new URL(`${slug}/landmarks/`, citiesDir);
+    const dishesDir = new URL(`${slug}/dishes/`, citiesDir);
+    const foodRecords: Landmark[] = existsSync(landmarksDir)
+      ? readdirSync(landmarksDir)
+          .filter((file) => file.endsWith('.json'))
+          .sort()
+          .map((file) => JSON.parse(readFileSync(new URL(file, landmarksDir), 'utf8')) as Landmark)
+          .filter(
+            (landmark) =>
+              landmark.type === 'food' && !!landmark.facts && !!landmark.known_for?.length,
+          )
+      : [];
+    const dishes: Dish[] = existsSync(dishesDir)
+      ? readdirSync(dishesDir)
+          .filter((file) => file.endsWith('.json'))
+          .sort()
+          .map((file) => JSON.parse(readFileSync(new URL(file, dishesDir), 'utf8')) as Dish)
+      : [];
+    const food = foodRecords.find((landmark) =>
+      landmark.known_for?.some(
+        (id) =>
+          dishes.some((dish) => dish.id === id) &&
+          foodRecords.filter((other) => other.known_for?.includes(id)).length <= 5,
+      ),
+    );
+    const foodDish = dishes.find((dish) => food?.known_for?.includes(dish.id));
+    const foodAnchor = search?.entries
+      .filter((entry) => entry.type !== 'dish')
+      .find((entry) => entry.id === (food?.osm_id ?? food?.id));
     return {
       slug,
       folklore: !!runtimeLife?.folklore,
@@ -87,6 +118,9 @@ export const cities = readdirSync(citiesDir)
       smokePlace,
       hasMeta,
       tours,
+      food,
+      foodDish,
+      foodAnchor,
       processions,
       generatedProcessions,
       seasons: runtimeLife?.seasons ?? [],

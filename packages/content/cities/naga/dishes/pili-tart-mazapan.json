@@ -1,0 +1,37 @@
+{
+  "id": "dish/pili-tart-mazapan",
+  "name": {
+    "en": "Pili tart and mazapan"
+  },
+  "origin": "regional",
+  "description": {
+    "en": "Pili-nut sweets carried home from Bicol."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "Pili confections and pastries are a regional pasalubong tradition."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Pili tart production launched J. Emmanuel’s backyard business in 1997."
+      },
+      "source": 0,
+      "year": 1997
+    },
+    {
+      "text": {
+        "en": "The region’s range also includes mazapan, chocolate-coated nuts and other pili sweets."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Pili pasalubong (2024)",
+      "url": "https://dateline-ibalon.com/2024/07/pili-nut-the-chosen-pasalubong-from-bikol/"
+    }
+  ]
+}

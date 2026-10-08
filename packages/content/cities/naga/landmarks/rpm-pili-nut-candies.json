@@ -1,0 +1,75 @@
+{
+  "id": "landmark/rpm-pili-nut-candies",
+  "name": {
+    "en": "RPM Pili Nut Candies (RPMiranda)"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "Naga’s tourism directory lists RPMiranda Pili Nuts Pasalubong at 71-B Panelo Building, Elias Angeles Street, Barangay Dinaga."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2024 pasalubong guide describes its roasted, salted and honey-glazed pili nuts, alongside crispy pili honey."
+      },
+      "source": 1,
+      "year": 2024
+    },
+    {
+      "text": {
+        "en": "The same guide lists pili and yema tarts, bonbon, polvoron and turones de pili, plus coco jam with pili nuts."
+      },
+      "source": 1,
+      "year": 2024
+    },
+    {
+      "text": {
+        "en": "The city directory also lists puto seko, banana chips and sampaloc candy among its delicacies."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "City of Naga tourism: RPMiranda Pili Nuts Pasalubong",
+      "url": "https://tourism.naga.gov.ph/tr-establishments/rb-miranda-pilinut-pasalubong/"
+    },
+    {
+      "title": "Uma: Pasalubong centers (2024)",
+      "url": "https://umahotel.ph/pasalubong-centers-in-naga-city/",
+      "note": "Published February 1, 2024; product lists document the guide, not guaranteed current stock."
+    },
+    {
+      "title": "Restaurant Guru: RPM Pilinut location",
+      "url": "https://restaurantguru.com/RPM-Pilinut-Naga",
+      "note": "Published map coordinates (13.62215700, 123.18517200) checked on 2026-10-08; Elias Angeles address agrees with the city directory. Approximate business Point only; precise footprint and entrance unconfirmed. Directory category is not used as evidence."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.185172, 13.622157]
+  },
+  "known_for": ["dish/pili-tart-mazapan"],
+  "pasalubong": [
+    {
+      "name": "Roasted, salted and honey-glazed pili nuts",
+      "source": 1
+    },
+    {
+      "name": "Pili and yema tarts",
+      "source": 1
+    },
+    {
+      "name": "Bonbon, polvoron and turones de pili",
+      "source": 1
+    },
+    {
+      "name": "Coco jam with pili nuts",
+      "source": 1
+    }
+  ]
+}

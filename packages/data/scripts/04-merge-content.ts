@@ -1,7 +1,9 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import { SubdivisionAreas } from '@atlas/shared/schemas';
+import { Landmark, SubdivisionAreas } from '@atlas/shared/schemas';
+import type { SubdivisionArea } from '@atlas/shared';
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
@@ -18,19 +20,61 @@ import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 import { writeDetailLayouts } from './lib/detail-layout';
 import { Territory, inTerritory, removeVoid } from './lib/territory';
+import { shopAnchor } from './lib/frontage';
 
 /**
  * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
- * Fails if a landmark's feature isn't in the data, or if a landmark has only standalone
- * geometry (supported from Phase 5).
+ * Present-day food tenants can have independent Point identities; historical standalone
+ * geometry remains outside this merge.
  */
-export function mergeContent(features: AtlasFeature[], content: ContentBundle): AtlasFeature[] {
-  const standalone = content.landmarks.filter((l) => !l.osm_id).map((l) => l.id);
-  if (standalone.length > 0) {
-    throw new Error(`Standalone landmark geometry is not supported yet: ${standalone.join(', ')}`);
+export function mergeContent(
+  features: AtlasFeature[],
+  content: ContentBundle,
+  placement?: { territory: Territory; subdivisions: readonly SubdivisionArea[] },
+): AtlasFeature[] {
+  const byOsmId = new Map<string, ContentBundle['landmarks'][number]>();
+  const points: AtlasFeature[] = [];
+  for (const raw of content.landmarks) {
+    const landmark = Landmark.parse(raw);
+    if (landmark.osm_id) {
+      if (byOsmId.has(landmark.osm_id))
+        throw new Error(`Duplicate landmark osm_id: ${landmark.osm_id}`);
+      byOsmId.set(landmark.osm_id, landmark);
+      continue;
+    }
+    if (landmark.type !== 'food' || landmark.geometry?.type !== 'Point')
+      throw new Error(`Standalone landmark geometry is not supported yet: ${landmark.id}`);
+    if (!placement) throw new Error(`Point landmark ${landmark.id} requires territory admission`);
+    const [lng, lat] = landmark.geometry.coordinates as [number, number];
+    if (!inTerritory(lng, lat, placement.territory))
+      throw new Error(`Point landmark ${landmark.id} is outside the territory`);
+    if (features.some((f) => f.properties.id === landmark.id))
+      throw new Error(`Duplicate feature identity: ${landmark.id}`);
+    const area = placement.subdivisions.find(
+      (a) =>
+        (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
+        booleanPointInPolygon(
+          [lng, lat],
+          a.geometry as Parameters<typeof booleanPointInPolygon>[1],
+        ),
+    );
+    const feature: AtlasFeature = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: {
+        id: landmark.id,
+        class: 'furniture',
+        variant: 'shop_food',
+        name: landmark.name.en,
+        landmark: true,
+        landmark_id: landmark.id,
+        ...(area && { subdivision: area.name, subdivision_approx: area.approximate }),
+      },
+      tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
+    };
+    Object.assign(feature.properties, shopAnchor(feature));
+    points.push(feature);
   }
-
-  const byOsmId = new Map(content.landmarks.map((l) => [l.osm_id!, l]));
   const joined = new Set<string>();
   for (const feature of features) {
     const landmark = byOsmId.get(feature.properties.id);
@@ -50,14 +94,15 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     }
   }
 
-  const missing = content.landmarks.filter((l) => !joined.has(l.id));
+  const missing = content.landmarks.filter((l) => l.osm_id && !joined.has(l.id));
   if (missing.length > 0) {
     const list = missing.map((l) => `${l.id} (${l.osm_id})`).join(', ');
     throw new Error(`Landmarks not found in the OSM data (outside the detail bbox?): ${list}`);
   }
 
-  for (const feature of features) addLabelAnchor(feature);
-  return features;
+  const merged = [...features, ...points];
+  for (const feature of merged) addLabelAnchor(feature);
+  return merged;
 }
 
 /**
@@ -120,6 +165,7 @@ export const step: Step = {
     features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
     const cameraProblems = checkTourCameras(content.tours, territory);
     if (cameraProblems.length > 0)
       throw new Error(`Tours don't match the data:\n  ${cameraProblems.join('\n  ')}`);
@@ -129,7 +175,11 @@ export const step: Step = {
     }
     const merged = applyLandcoverTreeOverrides(
       mergeTraffic(
-        mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+        mergeLifeSites(
+          mergeContent(features, content, { territory, subdivisions }),
+          city.life?.sites,
+          regionBounds,
+        ),
         city.life?.signals,
         city.streets,
         (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
@@ -140,7 +190,6 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
     // Standing detail parts and approaches reserve their ground before representative
     // burial rows are placed, including memorials added inside a mapped cemetery.
     const detail = mergeSiteDetails(

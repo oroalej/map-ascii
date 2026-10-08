@@ -15,6 +15,7 @@ type LoadState = { status: 'idle' | 'loading' | 'error' } | { status: 'ready'; d
 export function goToEntry(entry: SearchEntry, origin: SelectionOrigin) {
   const atlas = useAtlasInstance.getState().atlas;
   selectPlace(entry.id, { origin });
+  if (entry.type === 'dish') return;
   if (!atlas) return;
   atlas.setHighlighted(entry.featureIds ?? []);
   atlas.flyTo({ lat: entry.lat, lng: entry.lng, zoom: entry.zoomHint });
@@ -145,7 +146,7 @@ export function SearchBox({ city, subdivisionLabel }: { city: string; subdivisio
                     onClick={() => choose(entry, 'pointer')}
                   >
                     <span className={styles.name}>{entry.name}</span>
-                    {entry.subdivision && (
+                    {entry.type !== 'dish' && entry.subdivision && (
                       <span className={styles.where}>
                         {entry.approximate ? '≈ ' : ''}
                         {entry.subdivision}

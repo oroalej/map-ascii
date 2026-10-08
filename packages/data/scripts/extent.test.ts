@@ -4,7 +4,7 @@ import { type SeasonalRecord, type SubdivisionArea } from '@atlas/shared';
 import { CityProcessions, Procession } from '@atlas/shared/schemas';
 import { normalize, type AtlasFeature } from './03-normalize';
 import { tileRecords, yearRange } from './05-tiles';
-import { buildSearchIndex, searchEntries } from './06-search-index';
+import { buildSearchIndex, searchEntries as allSearchEntries } from './06-search-index';
 import { quantizeGroundRoutes, validateRouteTerritory } from './07-processions';
 import { routeProcessions } from './lib/procession';
 import {
@@ -31,6 +31,8 @@ const collection = (features: Feature[]): FeatureCollection => ({
   features,
 });
 const emptyRegion = { osm: collection([]), derived: [] };
+const searchEntries = (...args: Parameters<typeof allSearchEntries>) =>
+  allSearchEntries(...args).filter((entry) => entry.type !== 'dish');
 
 it('drops curated farmland wholly in void only at the display stage', () => {
   const source: AtlasFeature = {
@@ -83,7 +85,7 @@ it('keeps boundary point and subdivision search anchors admitted after serializa
       geometry: { type: 'Polygon', coordinates: bboxPolygon([0.4, 1.2, 0.6, 1.4]).coordinates },
     },
   ];
-  const content = { landmarks: [] } as unknown as ContentBundle;
+  const content = { landmarks: [], dishes: [] } as unknown as ContentBundle;
   const entries = searchEntries(features, areas, content, t);
   expect(entries.map((e) => e.id)).toEqual(['boundary', 'ward']);
   expect(entries.every((e) => inTerritory(e.lng, e.lat, t))).toBe(true);
@@ -145,7 +147,7 @@ it('preserves complete normalization inputs, cuts only tile records and repairs 
   expect(full).toEqual(before);
   const flagless = createTerritory([0, 0, 4, 4], city.geometry);
   expect(displayFeatures(full, flagless)).toEqual(full);
-  const content = { landmarks: [] } as unknown as ContentBundle;
+  const content = { landmarks: [], dishes: [] } as unknown as ContentBundle;
   const entries = searchEntries(displayFeatures(full, territory), [], content).filter((e) =>
     inTerritory(e.lng, e.lat, territory),
   );
@@ -274,7 +276,7 @@ it('keeps reachable anchors when retained components extend beyond the camera re
       ],
     ],
   });
-  const content = { landmarks: [] } as unknown as ContentBundle;
+  const content = { landmarks: [], dishes: [] } as unknown as ContentBundle;
   expect(searchEntries(displayed, [], content, territory).map((e) => e.id)).toEqual(
     sources.map((f) => f.properties.id),
   );

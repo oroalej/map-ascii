@@ -1,0 +1,36 @@
+{
+  "id": "dish/pan-bonete",
+  "name": {
+    "en": "Pan bonete"
+  },
+  "origin": "unknown",
+  "description": {
+    "en": "A soft, bonnet-shaped bread associated with Casa Moderna."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "Its name describes the roll’s bonnet shape."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2009 visitor recommends it hot, with noodles or ice cream."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "That visit records an afternoon bake that had sold out by 4 PM."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Mole on My Sole: Casa Moderna (2009)",
+      "url": "https://www.moleonmysole.com/2009/04/casa-moderna-bakeshop-naga-city.html"
+    }
+  ]
+}
