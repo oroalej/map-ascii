@@ -1,0 +1,211 @@
+{
+  "landmarks": [
+    {
+      "id": "landmark/abcede-elementary-school",
+      "osm_id": "osm:way/881063054",
+      "name": { "en": "Dr. Domingo G. Abcede Elementary School" },
+      "type": "school",
+      "certainty": "unknown",
+      "sources": [
+        {
+          "title": "OpenStreetMap standing geometry",
+          "url": "https://www.openstreetmap.org/way/881063054",
+          "note": "ODbL. Existing footprints, boundaries, roads, mapped trees and identities retained."
+        },
+        {
+          "title": "Owner-supplied memorial and school enhancement references",
+          "note": "Inspected 2026-10-02. School reference supports edge crowns, small planting patches, open grass and connected courtyard approaches. Exact photograph/source roof alignment remains uncertain; all additions stay within the distinct mapped school boundary. Positions, dimensions and heights are draft estimates; image dates and species unknown. Source-clear fits preserve standing mapped facilities instead of shifting them to the imagery. No reference bitmap ships with the app; no historical dates inferred."
+        }
+      ]
+    }
+  ],
+  "tours": [
+    {
+      "id": "tour/heritage-centro-walk",
+      "title": { "en": "Heritage Centro walk" },
+      "description": {
+        "en": "The plazas, the churches, and the old commercial streets of the Centro, ending with a view across its rooftops."
+      },
+      "status": "draft",
+      "steps": [
+        {
+          "camera": { "lat": 13.6255, "lng": 123.1862, "zoom": 16 },
+          "duration_ms": 6000,
+          "narration": {
+            "en": "TODO(verify) The Centro, Naga's historic core, between the Naga River and the Cathedral."
+          }
+        },
+        {
+          "camera": { "lat": 13.6245, "lng": 123.1859, "zoom": 18.2 },
+          "duration_ms": 8000,
+          "narration": {
+            "en": "TODO(verify) Plaza Quince Martires, named for fifteen Bicolanos executed during the Philippine Revolution. Its monument stands at the center."
+          },
+          "select": "osm:way/201276957",
+          "sources": [
+            {
+              "title": "OpenStreetMap: Plaza Quince Martires",
+              "url": "https://www.openstreetmap.org/way/201276957"
+            }
+          ]
+        },
+        {
+          "camera": { "lat": 13.6234, "lng": 123.1849, "zoom": 18.2 },
+          "duration_ms": 7000,
+          "narration": { "en": "TODO(verify) Plaza Rizal, with its monument to José Rizal." },
+          "select": "osm:way/201276956",
+          "sources": [
+            {
+              "title": "OpenStreetMap: Plaza Rizal",
+              "url": "https://www.openstreetmap.org/way/201276956"
+            }
+          ]
+        },
+        {
+          "camera": { "lat": 13.624, "lng": 123.1851, "zoom": 18.4 },
+          "duration_ms": 6000,
+          "narration": {
+            "en": "TODO(verify) Plaza Quezon, between the two, the city's main gathering place."
+          },
+          "select": "osm:way/201276958",
+          "sources": [
+            {
+              "title": "OpenStreetMap: Plaza Quezon",
+              "url": "https://www.openstreetmap.org/way/201276958"
+            }
+          ]
+        },
+        {
+          "camera": { "lat": 13.6245, "lng": 123.1863, "zoom": 18.2 },
+          "duration_ms": 7000,
+          "narration": {
+            "en": "TODO(verify) San Francisco Parish, the Parish of St. Francis of Assisi, facing the plazas."
+          },
+          "select": "osm:way/23662997",
+          "sources": [
+            {
+              "title": "OpenStreetMap: Parish of St. Francis of Assisi",
+              "url": "https://www.openstreetmap.org/way/23662997"
+            }
+          ]
+        },
+        {
+          "camera": { "lat": 13.6262, "lng": 123.1862, "zoom": 16.8 },
+          "duration_ms": 8000,
+          "narration": {
+            "en": "TODO(verify) General Luna, P. Burgos, and Elias Angeles streets: the old commercial streets of the Centro."
+          },
+          "highlight": [
+            "osm:way/1553212757",
+            "osm:way/1373537377",
+            "osm:way/1053485826",
+            "osm:way/596568242",
+            "osm:way/596568240",
+            "osm:way/724187423",
+            "osm:way/596568229",
+            "osm:way/30518290",
+            "osm:way/30518288",
+            "osm:way/23520861",
+            "osm:way/755073153",
+            "osm:way/1553212754",
+            "osm:way/596568234",
+            "osm:way/596568241",
+            "osm:way/596568238",
+            "osm:way/596568237",
+            "osm:way/724187422",
+            "osm:way/1560123986",
+            "osm:way/1553212756",
+            "osm:way/1553212755",
+            "osm:way/1529540510",
+            "osm:way/936923544",
+            "osm:way/596568243",
+            "osm:way/1553218896",
+            "osm:way/1553218895",
+            "osm:way/596568239",
+            "osm:way/23520905"
+          ]
+        },
+        {
+          "camera": { "lat": 13.6283, "lng": 123.1873, "zoom": 17.8 },
+          "duration_ms": 8000,
+          "narration": {
+            "en": "TODO(verify) The Naga Metropolitan Cathedral, seat of the Archdiocese of Caceres, with its belfries at the front."
+          },
+          "select": "osm:way/23666715",
+          "sources": [
+            {
+              "title": "OpenStreetMap: Naga Metropolitan Cathedral",
+              "url": "https://www.openstreetmap.org/way/23666715"
+            }
+          ]
+        },
+        {
+          "camera": { "lat": 13.6262, "lng": 123.1866, "zoom": 16 },
+          "fly_ms": 5000,
+          "duration_ms": 9000,
+          "narration": {
+            "en": "TODO(verify) The Centro from above: the plazas to the south, the Cathedral to the north."
+          }
+        }
+      ]
+    }
+  ],
+  "art": {
+    "pieces": [
+      {
+        "id": "art/archbishops-residence",
+        "osm_id": "osm:way/23664929",
+        "title": "Archbishop's Residence (Archdiocese of Cáceres)",
+        "status": "draft",
+        "priority": 6,
+        "bbox": [123.1876156, 13.6272662, 123.188013, 13.6276402],
+        "anchor": [123.1878284, 13.627455],
+        "palette": { "w": "wall", "r": "roof", "l": "glass", "g": "gold", "f": "foliage" },
+        "variants": [
+          {
+            "rows": ["▄▀▄  ▄  ▄▀▄", "▐▒▌▄▀◆▀▄▐▒▌", "▐▒▒▒║▒║▒▒▒▌", "▀▀▀▀▀▀▀▀▀▀▀"],
+            "colors": ["rrr  r  rrr", "wlwrrgrrwlw", "wlllwlwlllw", "rrrrrrrrrrr"]
+          },
+          {
+            "rows": [
+              " ▄▀▀▀▄         ▄▀▀▀▄ ",
+              " █▒▒▒█  ▄▀▀▀▄  █▒▒▒█ ",
+              " █▀▀▀█▄▀  ◆  ▀▄█▀▀▀█ ",
+              " █▒▒▒█▒▒║▒ ▒║▒▒█▒▒▒█ ",
+              " █▒▒▒█▒▒║ ▒ ║▒▒█▒▒▒█ ",
+              "♣♣♣♣♣♣♣♣▀▀▀▀▀♣♣♣♣♣♣♣♣"
+            ],
+            "colors": [
+              " rrrrr         rrrrr ",
+              " wlllw  rrrrr  wlllw ",
+              " wrrrwrr  g  rrwrrrw ",
+              " wlllwllwl lwllwlllw ",
+              " wlllwllw l wllwlllw ",
+              "ffffffffrrrrrffffffff"
+            ]
+          },
+          {
+            "rows": [
+              "  ▄▄▀▀▀▀▀▄▄                   ▄▄▀▀▀▀▀▄▄  ",
+              " █ ╭╮ ╭╮ ╭╮█▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄█╭╮ ╭╮ ╭╮ █ ",
+              " █ │▒ │▒ │▒█ ╭─╮ ▄▄▀◆▀▄▄ ╭─╮ █▒│ ▒│ ▒│ █ ",
+              " █╫┼╫┼╫┼╫┼╫█ │▒│▀▀▀▀▀▀▀▀▀│▒│ █╫┼╫┼╫┼╫┼╫█ ",
+              " █ ▒▒ ▒▒ ▒▒█ ▒▒▒ ║  ▒  ║ ▒▒▒ █▒▒ ▒▒ ▒▒ █ ",
+              " █ ▒▒ ▒▒ ▒▒█ ▒▒▒ ║ ▒▒▒ ║ ▒▒▒ █▒▒ ▒▒ ▒▒ █ ",
+              "♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣▀▀▀▀▀▀▀♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣♣"
+            ],
+            "colors": [
+              "  rrrrrrrrr                   rrrrrrrrr  ",
+              " w ww ww wwwrrrrrrrrrrrrrrrrrwww ww ww w ",
+              " w wl wl wlw www rrrgrrr www wlw lw lw w ",
+              " wwwwwwwwwww wlwrrrrrrrrrwlw wwwwwwwwwww ",
+              " w ll ll llw lll w  l  w lll wll ll ll w ",
+              " w ll ll llw lll w lll w lll wll ll ll w ",
+              "ffffffffffffffffrrrrrrrffffffffffffffffff"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

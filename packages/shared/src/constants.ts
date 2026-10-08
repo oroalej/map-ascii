@@ -166,3 +166,17 @@ export const TODO_VERIFY = 'TODO(verify)';
 
 /** Split a string into characters (code points), so box-drawing and emoji-free art counts right. */
 export const artChars = (row: string): string[] => [...row];
+
+const range = (from: number, to: number) =>
+  Array.from({ length: to - from + 1 }, (_, i) => String.fromCodePoint(from + i));
+
+/**
+ * Characters landmark art may use: printable ASCII, the box-drawing and block-element ranges,
+ * and a few symbols. The renderer's glyph atlas includes all of them.
+ */
+export const ART_CHARACTERS: ReadonlySet<string> = new Set([
+  ...range(0x20, 0x7e),
+  ...range(0x2500, 0x257f),
+  ...range(0x2580, 0x259f),
+  ...'◆◇▲△▼▽○●◦•·†‡¶°∩≡≈♣♠♦☼',
+]);

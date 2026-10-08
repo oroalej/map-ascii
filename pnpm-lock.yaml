@@ -53,6 +53,9 @@ importers:
       '@atlas/shared':
         specifier: workspace:^
         version: link:../../packages/shared
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       minisearch:
         specifier: ^7.2.0
         version: 7.2.0

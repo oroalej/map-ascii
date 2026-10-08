@@ -515,6 +515,11 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(byId.get('osm:way/104')).not.toHaveProperty('label_lng');
   });
 
+  it('writes the validated lazy UI arrays', async () => {
+    expect(await readJson(join(ctx.outDir, 'fixture.landmarks.json'))).toEqual(content.landmarks);
+    expect(await readJson(join(ctx.outDir, 'fixture.tours.json'))).toEqual(content.tours);
+  });
+
   it('writes the city landmark art, placed on its features', async () => {
     const art = await readJson<CityArt>(join(ctx.outDir, 'fixture.art.json'));
     expect(art.pieces).toHaveLength(1);

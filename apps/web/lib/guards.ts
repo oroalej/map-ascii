@@ -12,6 +12,11 @@ import {
   TIME_ZONE_PATTERN,
   OSM_ID_PATTERN,
   TODO_VERIFY,
+  artChars,
+  ART_CHARACTERS,
+  type Landmark,
+  type Tour,
+  type CityArt,
   type CameraState,
   type CityMeta,
   type CityProcessions,
@@ -28,6 +33,161 @@ const isNumbers = (v: unknown, length: number): v is number[] =>
   Array.isArray(v) && v.length === length && v.every(isNumber);
 const isLocalized = (v: unknown): v is Record<string, string> & { en: string } =>
   isRecord(v) && isText(v.en) && Object.values(v).every(isText);
+
+const sources = (v: unknown) =>
+  Array.isArray(v) &&
+  v.length > 0 &&
+  v.every(
+    (s) =>
+      isRecord(s) &&
+      isText(s.title) &&
+      (s.url === undefined || isText(s.url)) &&
+      (s.note === undefined || typeof s.note === 'string'),
+  );
+const optional = (v: unknown, check: (value: unknown) => boolean) => v === undefined || check(v);
+const osmId = (v: unknown) => isText(v) && OSM_ID_PATTERN.test(v);
+const year = (v: unknown) => isNumber(v) && Number.isInteger(v);
+
+/** Step 04 emits the validated landmark array, retaining sources and fact indices. */
+export function isCityLandmarks(v: unknown): v is Landmark[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (l) =>
+        isRecord(l) &&
+        isText(l.id) &&
+        l.id.startsWith('landmark/') &&
+        isLocalized(l.name) &&
+        isText(l.type) &&
+        ['exact', 'circa', 'unknown'].includes(String(l.certainty)) &&
+        sources(l.sources) &&
+        optional(l.osm_id, osmId) &&
+        (l.osm_id !== undefined ||
+          (isRecord(l.geometry) &&
+            isText(l.geometry.type) &&
+            Array.isArray(l.geometry.coordinates))) &&
+        optional(l.start_year, year) &&
+        optional(l.end_year, year) &&
+        optional(l.story, isLocalized) &&
+        optional(
+          l.photos,
+          (p) =>
+            Array.isArray(p) &&
+            p.every(
+              (x) =>
+                isRecord(x) &&
+                isText(x.src) &&
+                isText(x.credit) &&
+                isText(x.license) &&
+                optional(x.year, year) &&
+                optional(x.caption, (c) => typeof c === 'string'),
+            ),
+        ) &&
+        optional(
+          l.facts,
+          (f) =>
+            Array.isArray(f) &&
+            f.length >= 3 &&
+            f.length <= 5 &&
+            f.every(
+              (x) =>
+                isRecord(x) &&
+                isLocalized(x.text) &&
+                integer(x.source, 0, (l.sources as unknown[]).length - 1) &&
+                optional(x.year, year) &&
+                optional(x.certainty, (c) => ['exact', 'circa'].includes(String(c))),
+            ),
+        ),
+    )
+  );
+}
+
+export function isCityTours(v: unknown): v is Tour[] {
+  return (
+    Array.isArray(v) &&
+    v.every(
+      (t) =>
+        isRecord(t) &&
+        isText(t.id) &&
+        t.id.startsWith('tour/') &&
+        isLocalized(t.title) &&
+        optional(t.description, isLocalized) &&
+        ['draft', 'verified'].includes(String(t.status)) &&
+        Array.isArray(t.steps) &&
+        t.steps.length > 0 &&
+        t.steps.every(
+          (s) =>
+            isRecord(s) &&
+            isCamera(s.camera) &&
+            integer(s.duration_ms, 1, Number.MAX_SAFE_INTEGER) &&
+            optional(s.fly_ms, (n) => integer(n, 1, 15000)) &&
+            isLocalized(s.narration) &&
+            optional(s.year, year) &&
+            optional(s.select, osmId) &&
+            optional(s.highlight, (h) => Array.isArray(h) && h.length <= 64 && h.every(osmId)) &&
+            optional(s.audio, isText) &&
+            optional(s.sources, sources) &&
+            (t.status !== 'verified' ||
+              (sources(s.sources) &&
+                Object.values(s.narration).every((text) => !text.includes(TODO_VERIFY)))),
+        ),
+    )
+  );
+}
+
+/** Art uses the placed CityArt object, rather than editorial LandmarkArt records. */
+export function isCityArt(v: unknown): v is CityArt {
+  const roles = new Set(['stone', 'wall', 'roof', 'wood', 'gold', 'glass', 'foliage', 'accent']);
+  return (
+    isRecord(v) &&
+    Array.isArray(v.pieces) &&
+    v.pieces.every((p) => {
+      if (
+        !isRecord(p) ||
+        !isText(p.id) ||
+        !osmId(p.osm_id) ||
+        !isText(p.title) ||
+        !['draft', 'verified'].includes(String(p.status)) ||
+        !integer(p.priority, 0, 100) ||
+        !isNumbers(p.bbox, 4) ||
+        !point(p.anchor) ||
+        !isRecord(p.palette) ||
+        !Object.entries(p.palette).every(
+          ([key, role]) => artChars(key).length === 1 && roles.has(String(role)),
+        ) ||
+        !Array.isArray(p.variants) ||
+        !p.variants.length
+      )
+        return false;
+      const palette = p.palette;
+      return p.variants.every((variant) => {
+        if (
+          !isRecord(variant) ||
+          !Array.isArray(variant.rows) ||
+          !variant.rows.length ||
+          !variant.rows.every((row) => typeof row === 'string') ||
+          !Array.isArray(variant.colors) ||
+          variant.colors.length !== variant.rows.length ||
+          !variant.colors.every((row) => typeof row === 'string')
+        )
+          return false;
+        const width = artChars(variant.rows[0] as string).length;
+        return (
+          width > 0 &&
+          variant.rows.every(
+            (row) =>
+              artChars(row).length === width && artChars(row).every((c) => ART_CHARACTERS.has(c)),
+          ) &&
+          variant.colors.every(
+            (row) =>
+              artChars(row).length === width &&
+              artChars(row).every((key) => key === ' ' || Object.hasOwn(palette, key)),
+          )
+        );
+      });
+    })
+  );
+}
 
 function isCamera(v: unknown): v is CameraState {
   if (!isRecord(v)) return false;

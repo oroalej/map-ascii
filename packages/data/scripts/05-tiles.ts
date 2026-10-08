@@ -126,7 +126,7 @@ export const step: Step = {
 
     await mkdir(outDir, { recursive: true });
     await copyFile(pmtiles, join(outDir, `${city.slug}.pmtiles`));
-    await writeJson(join(outDir, `${city.slug}.meta.json`), meta, true);
+    await writeJson(join(outDir, `${city.slug}.meta.json`), meta);
     await publishDetailLayouts(ctx, layouts);
     // Validated here, as meta is above, because the browser only checks its shape (lib/guards.ts).
     const areas = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
