@@ -14,7 +14,7 @@ import {
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
 import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
-import type { PeddlerConfig } from '@atlas/shared';
+import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -8480,6 +8480,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  peddler?: { id: string; label: string; prop: PeddlerProp; parasol: number; lamp: number };
   beacon?: Beacon;
   /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
   mappedPersonMover?: boolean;

@@ -15,7 +15,8 @@ import { Paint } from './vehicles';
 import { UMBRELLA_MOTION } from './config';
 
 /** Walking or seated people, a child, an umbrella, or a paddler with their paddle. */
-export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated';
+export type CarrierFigure = 'pole-buckets' | 'basket' | 'head-tray' | 'chest-tray';
+export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated' | CarrierFigure;
 export type PersonPose = 'attentive' | 'gesture';
 
 /**
@@ -46,6 +47,10 @@ export const FIGURE_SIZE_M: Readonly<Record<PersonFigure, number>> = {
   umbrella: 1,
   // A paddler with their paddle reaching out over the water.
   rower: 1.2,
+  'pole-buckets': 1.6,
+  basket: 0.9,
+  'head-tray': 1,
+  'chest-tray': 0.9,
 };
 
 /** A one-cell figure's width, as a share of the cell's (`figureFit`). */
@@ -308,9 +313,33 @@ const SEATED: Readonly<Record<number, readonly string[]>> = {
   20: doubled(SEATED_10),
 };
 
+// Carrier props are stamped masters only: coarse views retain the existing adult glyphs.
+// prettier-ignore
+const CARRIERS: Record<CarrierFigure, readonly string[]> = {
+  'pole-buckets': ['..........', '..........', '.ooo..ooo.', '.o#o..o#o.', '.ooo##ooo.', '....oo....', '...####...', '...####...', '....##....', '..........'],
+  basket: ['..........', '..........', '....oo....', '...####...', '..######..', '...###ooo.', '...###o#o.', '....##ooo.', '....##....', '..........'],
+  'head-tray': ['..........', '..oooooo..', '.oo####oo.', '.o######o.', '.oo####oo.', '..oooooo..', '..######..', '...####...', '....##....', '..........'],
+  'chest-tray': ['..........', '..........', '....oo....', '...####...', '..######..', '...oooo...', '...o##o...', '...oooo...', '....##....', '..........'],
+};
+const carrierMasters = (figure: CarrierFigure) => ({
+  10: CARRIERS[figure],
+  20: doubled(CARRIERS[figure]),
+});
+export const isCarrier = (figure: PersonFigure): figure is CarrierFigure => figure in CARRIERS;
+
 export const FIGURE_MASTERS: Readonly<
   Record<PersonFigure, Readonly<Record<number, readonly string[]>>>
-> = { adult: ADULT, child: CHILD, umbrella: UMBRELLA, rower: ROWER, seated: SEATED };
+> = {
+  adult: ADULT,
+  child: CHILD,
+  umbrella: UMBRELLA,
+  rower: ROWER,
+  seated: SEATED,
+  'pole-buckets': carrierMasters('pole-buckets'),
+  basket: carrierMasters('basket'),
+  'head-tray': carrierMasters('head-tray'),
+  'chest-tray': carrierMasters('chest-tray'),
+};
 
 /** Each figure's master sizes, smallest first. */
 const sizesOf = (figure: PersonFigure) =>
@@ -323,6 +352,10 @@ const MASTER_SIZES: Readonly<Record<PersonFigure, readonly number[]>> = {
   umbrella: sizesOf('umbrella'),
   rower: sizesOf('rower'),
   seated: sizesOf('seated'),
+  'pole-buckets': sizesOf('pole-buckets'),
+  basket: sizesOf('basket'),
+  'head-tray': sizesOf('head-tray'),
+  'chest-tray': sizesOf('chest-tray'),
 };
 
 /**
@@ -441,6 +474,7 @@ export function figureGlyph(
   pose?: PersonPose,
   stage?: 0 | 1,
 ): string {
+  if (isCarrier(figure)) figure = 'adult';
   return byKey.get(keyOf({ figure, across, frame, ...at, stroke, heading, pose, stage }))!;
 }
 

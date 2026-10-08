@@ -16,7 +16,7 @@ import {
   MIN_FIGURE_PX,
   type FigureGlyph,
 } from '../life/people';
-import { STALL_GLYPH } from '../life/vehicles';
+import { PEDDLER_GLYPHS, STALL_GLYPH, VEHICLES, planPart } from '../life/vehicles';
 import { CANDLE_GLYPHS, SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 import { FOLKLORE_GLYPHS } from '../life/folklore-glyphs';
@@ -419,7 +419,18 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === PED_STOP || glyph === PED_WALK) drawPedestrian(slot, glyph === PED_WALK);
   else if (glyph === STALL_GLYPH) drawStall(slot);
-  else if (
+  else if ((PEDDLER_GLYPHS as readonly string[]).includes(glyph)) {
+    const craft = (['box-cart', 'fry-cart', 'flatbed-cart'] as const)[
+      PEDDLER_GLYPHS.indexOf(glyph as (typeof PEDDLER_GLYPHS)[number])
+    ]!;
+    for (let y = 0; y < slot.h; y++)
+      for (let x = 0; x < slot.w; x++) {
+        const u = (x - slot.w * 0.1) / (slot.w * 0.8),
+          v = (y - (slot.h - slot.w * 0.7) / 2) / (slot.w * 0.7);
+        if (u >= 0 && u <= 1 && v >= 0 && v <= 1 && planPart(VEHICLES[craft], u, v) !== null)
+          fill(slot, x, y, x + 1, y + 1);
+      }
+  } else if (
     (SEASONAL_GLYPHS as readonly string[]).includes(glyph) ||
     (CANDLE_GLYPHS as readonly string[]).includes(glyph)
   )
