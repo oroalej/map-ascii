@@ -17,7 +17,7 @@ import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import type { LifeViewContext } from './births';
 import { EMPTY_PUFFS } from './exhaust';
-import { groundsForRoutes, routeRings } from './ground-events';
+import { groundsForRoutes, trafficRings } from './ground-events';
 import { PolygonIndex } from './occupancy';
 import { eventBodySize } from './event-actors';
 import { runtimeFolklore } from './folklore-config';
@@ -32,11 +32,14 @@ export function retainOrdinary(
   route?: ProcessionRoute,
 ): FrameView | undefined {
   if (!view) return;
-  const street = route?.kind === 'procession' || route?.kind === 'parade' ? route : undefined;
-  const projection = street && localMetricProjection(street.route[0]!);
+  const rings = route ? trafficRings(route) : [];
+  const projection =
+    route &&
+    rings.length > 0 &&
+    localMetricProjection(route.kind === 'mass' ? route.site.location : route.route[0]!);
   const closure = projection && new PolygonIndex();
-  if (closure && street && projection)
-    for (const ring of routeRings(street))
+  if (closure && projection)
+    for (const ring of rings)
       closure.add([
         ring.map((point) => {
           const [x, y] = projection.to(point);
@@ -48,6 +51,7 @@ export function retainOrdinary(
     folklore: EMPTY_FOLKLORE,
     puffs: EMPTY_PUFFS,
     procession: undefined,
+    throngRun: undefined,
     agents: view.agents.filter((agent) => {
       if (agent.event || agent.eventGround || agent.prop === 'event') return false;
       if (route?.kind === 'fluvial' && (agent.kind === 'boat' || agent.aboard)) return false;
@@ -78,6 +82,8 @@ export type FrameView = {
   agents: VisibleAgent[];
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
+  /** Run and terrain accepted together; HUD may display a newer optimistic command. */
+  throngRun?: ProcessionRun;
   signalClock: number;
   cellGuard: LifeWorld['groundCellGuard'];
 };
@@ -293,7 +299,7 @@ export function createWorkerHost(
       agentEpoch++;
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
-      if (view) view = { ...view, agents: [], folklore: EMPTY_FOLKLORE };
+      if (view) view = { ...view, agents: [], throngRun: undefined, folklore: EMPTY_FOLKLORE };
     },
     invalidateFolklore() {
       folkloreEpoch++;
@@ -351,6 +357,7 @@ export function createWorkerHost(
         view = {
           ...view,
           agents: [],
+          throngRun: undefined,
           folklore: EMPTY_FOLKLORE,
           puffs: EMPTY_PUFFS,
           cellGuard: () => undefined,
@@ -387,7 +394,7 @@ export function createWorkerHost(
                 generation,
                 procession: view?.procession,
                 signalClock: view?.signalClock ?? 0,
-                cellGuard: (toCell) =>
+                cellGuard: (toCell, terrainOnly) =>
                   cellTerrain &&
                   makeCellGuard(
                     cellTerrain.ref,
@@ -396,6 +403,8 @@ export function createWorkerHost(
                     toCell,
                     eventGrounds,
                     cellTerrain.blocked,
+                    cellTerrain.hardBlocked,
+                    terrainOnly,
                   ),
               };
             return;
@@ -416,8 +425,9 @@ export function createWorkerHost(
             puffs: result.puffs,
             generation,
             procession: result.procession,
+            throngRun: result.procession,
             signalClock: result.signalClock,
-            cellGuard: (toCell) =>
+            cellGuard: (toCell, terrainOnly) =>
               cellTerrain &&
               makeCellGuard(
                 cellTerrain.ref,
@@ -426,6 +436,8 @@ export function createWorkerHost(
                 toCell,
                 eventGrounds,
                 cellTerrain.blocked,
+                cellTerrain.hardBlocked,
+                terrainOnly,
               ),
           };
           if (result.profile) profiler?.merge(result.profile);
@@ -457,6 +469,13 @@ export function createWorkerHost(
     },
     setLive(id, progress, occurrence) {
       if (disposed) return;
+      if (!played && (live.id !== id || live.occurrence !== occurrence)) {
+        agentEpoch++;
+        view = retainOrdinary(
+          view,
+          processions.find((route) => route.id === id),
+        );
+      }
       live = { id, progress, occurrence };
       if (fallback) fallback.setLive(id, progress, occurrence);
       else void remote.setLive(id, progress, occurrence).catch(fail);

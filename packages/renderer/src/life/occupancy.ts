@@ -752,6 +752,11 @@ export class FrozenPolygonIndex {
   private readonly tested = new Set<number>();
   constructor(private readonly flat: FlatPolygonIndex) {}
 
+  /** The transferred bins themselves, for passing on to another worker. */
+  toFlat(): FlatPolygonIndex {
+    return this.flat;
+  }
+
   private polygon(id: number): Polygon {
     const cached = this.polygons[id];
     if (cached) return cached;

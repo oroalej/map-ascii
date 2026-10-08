@@ -137,7 +137,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga City Civic Center — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga City Civic Center — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -147,7 +147,7 @@
     {
       "title": "Independent facility reference",
       "url": "https://tourism.naga.gov.ph/attractions/naga-city-civic-center/",
-      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Mapped pool water and the existing draft rim/deck are retained. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
+      "note": "Official facilities description supports sports grounds and mapped museum/skate/tennis facilities. Museo forecourt, mapped monuments and national flagpole are retained. Mapped pool water and the existing rim/deck are retained. Existing OSM trees are not duplicated. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
     },
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",
@@ -155,11 +155,11 @@
     },
     {
       "title": "Owner correction: restrained Civic Center canopy",
-      "note": "Latest owner ASCII view shows excessive coverage. Crown diameters reduced about 45 percent; redundant estimated trunks thinned with 11-metre spacing. All mapped tree ids/positions/heights, pool, courts, museum and monuments retained. Earlier dense foliage masks are superseded; dimensions remain draft."
+      "note": "Latest owner ASCII view shows excessive coverage. Crown diameters reduced about 45 percent; redundant estimated trunks thinned with 11-metre spacing. All mapped tree ids/positions/heights, pool, courts, museum and monuments retained. Earlier dense foliage masks are superseded; dimensions remain schematic."
     },
     {
       "title": "Owner-supplied Civic red-crown/yellow-frontage annotation",
-      "note": "Inspected 2026-10-02. Only red-circled existing crowns are enlarged to estimated 17–18 m. Trunk positions and mapped heights remain; canopy overhang into the street is explicitly requested. Three spaced crowns supplement the yellow northeast frontage. Other reduced crowns and all sports/standing facilities remain. Draft pool-registered placement; image date unknown."
+      "note": "Inspected 2026-10-02. Only red-circled existing crowns are enlarged to estimated 17–18 m. Trunk positions and mapped heights remain; canopy overhang into the street is explicitly requested. Three spaced crowns supplement the yellow northeast frontage. Other reduced crowns and all sports/standing facilities remain. Registered pool placement; image date unknown."
     }
   ],
   "tree_overrides": [

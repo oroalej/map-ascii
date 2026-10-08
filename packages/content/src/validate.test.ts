@@ -117,8 +117,9 @@ describe('loadCityPacks', () => {
     const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
-    expect(speech?.exchanges).toHaveLength(104);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
+    expect(speech?.exchanges).toHaveLength(110);
+    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(48);
+    expect(speech?.exchanges.filter((e) => e.kind === 'cheer')).toHaveLength(6);
     expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
     expect(
       speech?.exchanges
@@ -133,7 +134,8 @@ describe('loadCityPacks', () => {
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
-      counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
+      // Event cheers carry no scene profile.
+      if (e.kind !== 'cheer') counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
       const script = e.lines
         .map((line) =>
           line

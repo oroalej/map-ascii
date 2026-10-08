@@ -8,6 +8,8 @@ import {
   seasonalAccessRing,
   type SeasonConfig,
   type SeasonalRecord,
+  type SeasonalBuntingRunRecord,
+  expandBuntingRun,
   type SeasonalDisplayRecord,
   type SeasonalPoint,
 } from '@atlas/shared';
@@ -643,7 +645,19 @@ export function generateSeasonalInstallations(
 }
 
 /** Full display envelopes retain neighboring tile coverage, while payload coordinates stay exact. */
-export function seasonalRecordGeometry(r: SeasonalRecord): Geometry {
+export function seasonalRecordGeometry(r: SeasonalRecord | SeasonalBuntingRunRecord): Geometry {
+  if (r.kind === 'bunting-run') {
+    // The parallel rows' envelope: every tile a row reaches carries the run.
+    const rows = expandBuntingRun(r),
+      first = rows[0]!,
+      last = rows.at(-1)!;
+    // One row has no area: tiles would drop its polygon.
+    if (rows.length === 1) return { type: 'LineString', coordinates: [first.from, first.to] };
+    return {
+      type: 'Polygon',
+      coordinates: [[first.from, last.from, last.to, first.to, first.from]],
+    };
+  }
   if (r.kind === 'access-path') return { type: 'Polygon', coordinates: [seasonalAccessRing(r)] };
   if (r.kind === 'bunting' || r.kind === 'light-string')
     return { type: 'LineString', coordinates: [r.from, r.to] };

@@ -119,6 +119,12 @@ export type CellTargets = {
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
   lifeTex: WebGLTexture;
+  /** Always a valid integer sampler, even while inactive. */
+  crowdMaskTex: WebGLTexture;
+  crowdMaskCols: number;
+  crowdMaskRows: number;
+  crowdMaskActive?: boolean;
+  crowdMaskBand?: readonly [number, number];
   /** Lazy RG32F per-item candle clock tokens; never a render attachment. */
   effectClockTex?: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
@@ -229,6 +235,15 @@ export function createCellTargets(
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
   const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const crowdMaskTex = createTexture(
+    gl,
+    gl.RGBA32UI,
+    gl.RGBA_INTEGER,
+    1,
+    1,
+    new Uint32Array(4),
+    gl.UNSIGNED_INT,
+  );
   const lightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -254,6 +269,10 @@ export function createCellTargets(
     glyphTex,
     overlayTex,
     lifeTex,
+    crowdMaskTex,
+    crowdMaskCols: 1,
+    crowdMaskRows: 1,
+    crowdMaskActive: false,
     lightTex,
     fixtureTex,
     signalLightTex,
@@ -268,6 +287,7 @@ export function createCellTargets(
 
 export function deleteCellTargets(gl: GL, t: CellTargets) {
   if (t.effectClockTex) gl.deleteTexture(t.effectClockTex);
+  gl.deleteTexture(t.crowdMaskTex);
   for (const tex of [
     t.classTex,
     t.attrTex,
@@ -311,6 +331,49 @@ export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lifeTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** Eight words per cell encode conservative 16×16 permitted crowd coverage. */
+export function uploadCrowdMask(
+  gl: GL,
+  t: CellTargets,
+  values?: Uint32Array,
+  band: readonly [number, number] = [0, t.rows],
+) {
+  t.crowdMaskActive = !!values;
+  if (!values) return;
+  gl.bindTexture(gl.TEXTURE_2D, t.crowdMaskTex);
+  if (t.crowdMaskCols !== t.cols * 2 || t.crowdMaskRows !== t.rows) {
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA32UI,
+      t.cols * 2,
+      t.rows,
+      0,
+      gl.RGBA_INTEGER,
+      gl.UNSIGNED_INT,
+      values,
+    );
+    t.crowdMaskCols = t.cols * 2;
+    t.crowdMaskRows = t.rows;
+  } else {
+    // Inactive frames retain GPU coverage. Reactivation clears those old rows too.
+    const first = Math.min(band[0], t.crowdMaskBand?.[0] ?? band[0]);
+    const end = Math.max(band[1], t.crowdMaskBand?.[1] ?? band[1]);
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      first,
+      t.crowdMaskCols,
+      end - first,
+      gl.RGBA_INTEGER,
+      gl.UNSIGNED_INT,
+      values.subarray(first * t.cols * 8, end * t.cols * 8),
+    );
+  }
+  t.crowdMaskBand = band;
 }
 
 /** Replace the streetlights' contents (RGBA8 texels from passes.ts `lightPass`). */

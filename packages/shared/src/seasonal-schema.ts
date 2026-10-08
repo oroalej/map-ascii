@@ -1,4 +1,4 @@
-import type { SeasonalRecord } from './seasons';
+import type { SeasonalBuntingRunRecord, SeasonalRecord } from './seasons';
 import { z } from 'zod';
 import { CARNIVAL_STYLES, type CarnivalComponent } from './seasonal-record';
 import { MercatorPosition as point, OsmId as feature, OsmWayId as way } from './schema-primitives';
@@ -53,6 +53,25 @@ export const SeasonalBuntingRecordSchema = z
     (v) => v.segment[0][0] !== v.segment[1][0] || v.segment[0][1] !== v.segment[1][1],
     'empty source segment',
   );
+export const SeasonalBuntingRunSchema = z
+  .strictObject({
+    version: z.literal(1),
+    kind: z.literal('bunting-run'),
+    id: z.string().min(1),
+    season: z.string().min(1),
+    corridor: z.string().min(1),
+    road: way,
+    segment: z.tuple([point, point]),
+    start_m: z.number().min(0).max(80),
+    spacing_m: z.number().min(3).max(80),
+    count: z.int().min(1).max(10000),
+    reach_m: z.number().min(0.5).max(40),
+    seed: z.int().min(0).max(0xffffffff),
+  })
+  .refine(
+    (v) => v.segment[0][0] !== v.segment[1][0] || v.segment[0][1] !== v.segment[1][1],
+    'empty source segment',
+  ) satisfies z.ZodType<SeasonalBuntingRunRecord>;
 
 const installation = {
   version: z.literal(1),
@@ -96,3 +115,5 @@ export const SeasonalRecordSchema = z.union([
     })
     .refine((v) => v.from[0] !== v.to[0] || v.from[1] !== v.to[1], 'empty light string'),
 ]) satisfies z.ZodType<SeasonalRecord>;
+/** What the seasonal tile layer carries: any seasonal record, or a bunting run. */
+export const SeasonalTileRecordSchema = z.union([SeasonalRecordSchema, SeasonalBuntingRunSchema]);

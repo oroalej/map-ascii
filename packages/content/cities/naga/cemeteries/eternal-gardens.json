@@ -1889,7 +1889,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Basilica cemeteries: owner-supplied Google Maps overhead / ground references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Draft estimates; imagery dates unknown.",
+  "credit": "Basilica cemeteries: owner-supplied Google Maps overhead / ground references; © Google and imagery providers. Geometry: © OpenStreetMap contributors (ODbL). Estimates; imagery dates unknown.",
   "sources": [
     {
       "title": "OpenStreetMap cemetery extent, drives and mapped facilities",
@@ -1898,7 +1898,7 @@
     },
     {
       "title": "Owner-supplied seven-image cemetery correction",
-      "note": "Inspected 2026-10-02. Wide overhead registered to the Basilica pavilion, Santo Niño circular shelter and Eternal Gardens octagonal building. Burial beds separately traced on the two Santo Niño river peninsulas and Eternal Gardens lawns. Ground/closeup images corroborate flush plaques, raised slabs and dense mausoleum/crypt roofs; their exact subsections are not georeferenced. Row counts, dimensions, heights and positions are representative draft estimates, not a burial inventory or cadastral survey. Image/capture dates unknown; no timeline dates or individual burials inferred. Trees/roads/buildings interrupt rows; whole plots outside the source boundary or on mapped obstacles are omitted. No reference bitmap ships with the app."
+      "note": "Inspected 2026-10-02. Wide overhead registered to the Basilica pavilion, Santo Niño circular shelter and Eternal Gardens octagonal building. Burial beds separately traced on the two Santo Niño river peninsulas and Eternal Gardens lawns. Ground/closeup images corroborate flush plaques, raised slabs and dense mausoleum/crypt roofs; their exact subsections are not georeferenced. Row counts, dimensions, heights and positions are representative estimates, not a burial inventory or cadastral survey. Image/capture dates unknown; no timeline dates or individual burials inferred. Trees/roads/buildings interrupt rows; whole plots outside the source boundary or on mapped obstacles are omitted. No reference bitmap ships with the app."
     }
   ]
 }

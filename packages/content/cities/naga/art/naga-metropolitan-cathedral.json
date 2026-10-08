@@ -80,12 +80,12 @@
     "w": "wall",
     "d": "wood"
   },
-  "status": "draft",
+  "status": "verified",
   "sources": [
     {
       "title": "Wikimedia Commons: CATHEDRAL.jpg",
       "url": "https://commons.wikimedia.org/wiki/File:CATHEDRAL.jpg",
-      "note": "Front façade: grey two-level façade, central pediment with clock and cupola, hexagonal belfries on both ends."
+      "note": "Facade checked against Dilindin’s front photograph dated 2018-09-22, CC BY-SA 4.0: twin hexagonal belfries and caps, central clock pediment, cupola and cross, paired columns and arched entrance. The three ASCII scales simplify these features; they are not measured elevations."
     },
     {
       "title": "Wikipedia: Naga Metropolitan Cathedral",

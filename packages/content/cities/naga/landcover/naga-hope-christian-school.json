@@ -362,7 +362,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga Hope Christian School — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga Hope Christian School — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -372,7 +372,7 @@
     {
       "title": "Independent facility reference",
       "url": "https://www.nagahope.edu.ph/facilities.php",
-      "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. The earlier schematic pavilion placement was removed after the supplied overhead reference showed the sports layout. The photograph still supports a small draft outdoor study bench; its exact placement needs a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
+      "note": "Official pavilion photograph shows a covered outdoor study area, stone benches, planting and mature trees. The earlier schematic pavilion placement was removed after the supplied overhead reference showed the sports layout. The photograph still supports a small outdoor study bench; its exact placement needs a ground survey. Canteen and classrooms remain their mapped footprints. No speculative lamps or flagpoles added. All added positions, counts, widths and heights are schematic estimates fitted to OSM, not surveyed geometry. The later owner-supplied overhead reference supersedes the earlier unregistered placement. No timeline dates are inferred."
     },
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",
@@ -380,7 +380,7 @@
     },
     {
       "title": "Owner correction: sparse classroom planting",
-      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are draft estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Seventeen overlapping northern crowns replaced by four dispersed five-metre-high crowns; three small crowns occupy the marked strip between courts. Southern oval planting retained."
+      "note": "Owner annotated ASCII placement correction, inspected 2026-10-02. Image/capture date unknown. Positions, dimensions and heights are estimates; no historical dates or surveyed inventory inferred. Reference bitmaps are not shipped. Seventeen overlapping northern crowns replaced by four dispersed five-metre-high crowns; three small crowns occupy the marked strip between courts. Southern oval planting retained."
     }
   ]
 }

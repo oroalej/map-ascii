@@ -4,52 +4,143 @@
     "en": "Peñafrancia fluvial procession"
   },
   "story": {
-    "en": "TODO(verify): The image leaves Danlugan ni Ina on a pagoda barge and follows the Naga River toward the Peñafrancia Basilica. Danlugan departure and the concluding Mass are sourced; the river path, formation and 210-minute duration are illustrative. The simulation retains the original usual-afternoon window 15:00–18:30 and following 18:30 Mass by owner choice. The updated 2026 advisory instead moved boarding/start to 21:00 and estimated Mass at 23:00; this is not the final actual 2026 schedule."
+    "en": "OSM places this reconstructed route from Danlugan ni Ina through Panganiban, Colgante and Magsaysay bridges to Dagsaan near the Basilica. This sequence is inferred; the eyewitness source records passage under Colgante. The 16:00–18:00 replay, 120 follower boats, 16 escorts and riverside crowds are illustrative; spectators pack both banks and the Panganiban, Colgante and Magsaysay bridges the boats pass under, thickest around Magsaysay Bridge, and fill the Dagsaan landing, Balatas-Cararayan Road beside it and Basilica Loop's west leg toward the Basilica, closed to cars, as the project owner asked on 2026-10-08. The pagoda sets off beside Danlugan ni Ina with its followers stretched back beyond the General Luna bridge, which holds spectators, and stops where the landing footway meets the river, the voyadores stretched on beyond it. About 1.5 million attended in 2024; river conditions moved the 2026 departure to 21:00."
   },
-  "status": "draft",
+  "status": "verified",
   "kind": "fluvial",
   "route": {
     "from": "osm:node/6791580317",
-    "to": "osm:way/23670362"
+    "to": "osm:way/1203053284",
+    "before_m": 400,
+    "beyond_m": 300
   },
   "schedule": {
     "month": 9,
     "weekday": 6,
     "nth": 3,
     "offset_days": 0,
-    "start": "15:00",
-    "duration_min": 210,
+    "start": "16:00",
+    "duration_min": 120,
     "timezone": "Asia/Manila"
   },
+  "crowd_rings": [
+    [
+      [123.1985539, 13.6333796],
+      [123.1986464, 13.6332288],
+      [123.1986996, 13.6330508],
+      [123.1986357, 13.6330177],
+      [123.1986361, 13.633017],
+      [123.1986226, 13.6330082],
+      [123.1986105, 13.6329907],
+      [123.1986063, 13.6329701],
+      [123.1986105, 13.6329495],
+      [123.1986226, 13.632932],
+      [123.1986406, 13.6329203],
+      [123.1986618, 13.6329162],
+      [123.198683, 13.6329203],
+      [123.1986875, 13.6329232],
+      [123.1986879, 13.6329225],
+      [123.1988562, 13.6330097],
+      [123.1990099, 13.6330767],
+      [123.1990104, 13.6330753],
+      [123.1990109, 13.6330754],
+      [123.1990109, 13.6330751],
+      [123.1990105, 13.6330749],
+      [123.1990226, 13.6330407],
+      [123.1991606, 13.6326481],
+      [123.1991606, 13.6326481],
+      [123.1992854, 13.632293],
+      [123.1992858, 13.6322931],
+      [123.1992864, 13.6322903],
+      [123.1992964, 13.6322757],
+      [123.1993114, 13.632266],
+      [123.1993291, 13.6322626],
+      [123.1993468, 13.632266],
+      [123.1993618, 13.6322757],
+      [123.1993718, 13.6322903],
+      [123.1993753, 13.6323075],
+      [123.1993724, 13.6323219],
+      [123.1993728, 13.632322],
+      [123.199248, 13.6326771],
+      [123.1992476, 13.632677],
+      [123.1992476, 13.632677],
+      [123.199248, 13.6326771],
+      [123.19911, 13.6330697],
+      [123.1991096, 13.6330696],
+      [123.1991096, 13.6330696],
+      [123.19911, 13.6330698],
+      [123.199098, 13.6331039],
+      [123.1990954, 13.6331113],
+      [123.1991437, 13.6331291],
+      [123.1991435, 13.6331293],
+      [123.1991452, 13.6331297],
+      [123.1991632, 13.6331414],
+      [123.1991752, 13.6331588],
+      [123.1991794, 13.6331795],
+      [123.1991752, 13.6332001],
+      [123.1991632, 13.6332176],
+      [123.1991452, 13.6332293],
+      [123.199124, 13.6332334],
+      [123.1991044, 13.6332296],
+      [123.1991043, 13.6332299],
+      [123.1990149, 13.6331969],
+      [123.199015, 13.6331966],
+      [123.1990134, 13.6331963],
+      [123.199012, 13.6331954],
+      [123.1990119, 13.6331957],
+      [123.1988941, 13.6331443],
+      [123.1988518, 13.6332891],
+      [123.1987902, 13.6333896],
+      [123.1987696, 13.6335163],
+      [123.1986053, 13.6335062],
+      [123.1985539, 13.6334158],
+      [123.1985539, 13.6333796]
+    ]
+  ],
+  "crowd_focus": [{ "near": "osm:way/30518281", "radius_m": 150, "reach_m": 25 }],
   "season": "penafrancia-fiesta",
   "label": {
     "en": "Fluvial"
   },
   "sources": [
     {
-      "title": "Naga City Tourism: 2026 civic and religious events schedule",
-      "url": "https://tourism.naga.gov.ph/penafrancia-fiesta-major-civic-and-religious-events-schedule-for-2026/",
-      "note": "Original 2026 published dates, start times and named endpoints. Paths, durations, formations and crowd density are illustrative TODO(verify). Annual recurrence follows the fiesta calendar rather than asserting every future schedule."
+      "title": "Naga Tourism: fluvial route advisory",
+      "url": "https://tourism.naga.gov.ph/traffic-advisory-2026-penafrancia-festival-fluvial-procession/",
+      "note": "Cathedral to Danlugan ni Ina, the river and the Basilica. River geometry comes from OSM; the rendered flotilla and spectators are illustrative."
     },
     {
       "title": "Naga Tourism: updated 2026 fluvial schedule",
       "url": "https://tourism.naga.gov.ph/public-advisory-updated-schedule-for-the-fluvial-procession/",
-      "note": "The later 2026 advisory moved boarding/start to 21:00 and estimated concluding Mass at 23:00. This simulation retains the owner-selected usual afternoon window 15:00–18:30 and inherited 18:30 Basilica Mass from the original listings; it does not depict the final actual 2026 schedule. TODO(verify)."
+      "note": "River conditions moved the 2026 departure to 21:00; ninety minutes on the water was estimated. The annual 16:00–18:00 replay is illustrative."
     },
     {
-      "title": "City of Naga: 2022 fluvial procession",
-      "url": "https://www2.naga.gov.ph/fluvial-procession-highlights-festival/",
-      "note": "Cathedral-to-Danlugan foot procession after afternoon Mass, then fluvial procession and a concluding Mass. Supports Danlugan departure; river path, 210-minute window and formation are illustrative TODO(verify)."
+      "title": "Naga Tourism: 2024 fluvial gathering",
+      "url": "https://tourism.naga.gov.ph/fluvial-procession-draws-1-5-million-devotees/",
+      "note": "Reports 1.5 million devotees and a concluding Pontifical Mass at the Basilica. Flotilla and crowds are illustrative."
     },
     {
-      "title": "Archdiocese of Caceres: Peñafrancia calendar",
-      "url": "https://www.archdioceseofcaceres.org/caceresevents",
-      "note": "Original 2026 listing: Cathedral Mass after Traslación, Basilica Mass at 18:30. The inherited numerical arrival times and 90-minute Mass durations are illustrative TODO(verify)."
+      "title": "Naga Ordinance 582, section 2(23)",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord1977-582.pdf",
+      "note": "Connects Santonja Street to Colgante Bridge. Matching this location to OSM way 23540251 is a geographic inference."
     },
     {
-      "title": "OpenStreetMap: event anchors and grounds",
-      "url": "https://www.openstreetmap.org/node/6791580317",
-      "note": "Mapped anchors: osm:node/6791580317, osm:way/23670362. River endpoints are snapped within 300 m to mapped waterways. The river route, bank crowds, formation and density are illustrative TODO(verify), not surveyed festival arrangements."
+      "title": "Dennis T. Marpuri: Colgante eyewitness account",
+      "url": "https://dateline-ibalon.com/2026/01/padamlagan-an-eyewitness-account-of-the-colgante-bridge-tragedy-dennis-t-marpuri-with-movie-review/",
+      "note": "January 2026 account associates former Colgante Street with present Santoja Street; corroborates the mapped bridge alias."
+    },
+    {
+      "title": "Naga Tourism: 2026 Dagsaan landing",
+      "url": "https://tourism.naga.gov.ph/1-2-million-strong-historic-nighttime-fluvial-procession-illuminates-naga-river/",
+      "note": "September 20, 2026: Dagsaan landing near the Basilica, about 1.2 million spectators. The night schedule differs from the illustrative afternoon replay."
+    },
+    {
+      "title": "Project owner: Dagsaan landing crowd annotation",
+      "url": "https://www.openstreetmap.org/way/1203053284",
+      "note": "Project owner annotated atlas image, 2026-10-08: crowd on the landing ground by footway 1203053284, about 50 m of Balatas-Cararayan Road beside it and Basilica Loop's west leg to Basilica Road, which close to cars during the replay. Rings fitted to the annotation and OSM road geometry; placement is approximate."
     }
-  ]
+  ],
+  "formation": {
+    "escorts": 16,
+    "followers": 120
+  }
 }
