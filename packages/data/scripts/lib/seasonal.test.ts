@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { SeasonConfig, SeasonalPoint } from '@atlas/shared';
+import { expandBuntingRun, type SeasonConfig, type SeasonalPoint } from '@atlas/shared';
 import type { AtlasFeature } from '../03-normalize';
 import { generateSeasonalBunting } from './seasonal';
 const mx = 111320 * Math.cos((13 * Math.PI) / 180);
@@ -23,6 +23,9 @@ const season = (ways = ['osm:way/1', 'osm:way/2'], ends = {}): SeasonConfig => (
     corridors: [{ id: 'route', ways, spacing_m: 6, style: 'red-yellow-rectangles', ...ends }],
   },
 });
+/** Shipped runs, decoded into their hanging rows. */
+const rows = (result: ReturnType<typeof generateSeasonalBunting>) =>
+  result.records.flatMap(expandBuntingRun);
 const center = (r: { from: SeasonalPoint; to: SeasonalPoint }) => [
   ((r.from[0] + r.to[0]) / 2 - 123) * mx,
   ((r.from[1] + r.to[1]) / 2 - 13) * 111320,
@@ -35,10 +38,12 @@ it.each([3, 6])(
     const s = season();
     s.bunting!.corridors![0]!.spacing_m = spacing;
     const result = generateSeasonalBunting(features, [s]);
-    const positions = result.records.map(center).sort((a, b) => a[0]! + a[1]! - b[0]! - b[1]!);
+    const positions = rows(result)
+      .map(center)
+      .sort((a, b) => a[0]! + a[1]! - b[0]! - b[1]!);
     expect(positions).toHaveLength(24 / spacing);
     for (const [i, p] of positions.entries()) expect(p[0]! + p[1]!).toBeCloseTo(i * spacing, 2);
-    for (const r of result.records) {
+    for (const r of rows(result)) {
       expect(Math.hypot((r.to[0] - r.from[0]) * mx, (r.to[1] - r.from[1]) * 111320)).toBeCloseTo(
         9,
         2,
@@ -71,8 +76,12 @@ it('clips both frontages and retains exact endpoints and separate season identit
   ];
   const s = season(['osm:way/1'], { from: 'osm:node/3', to: 'osm:node/4' });
   const a = generateSeasonalBunting(features, [s]);
-  expect(a.records.map(center).map((p) => Math.round(p[0]!))).toEqual([5, 11, 17]);
-  for (const r of a.records) {
+  expect(
+    rows(a)
+      .map(center)
+      .map((p) => Math.round(p[0]!)),
+  ).toEqual([5, 11, 17]);
+  for (const r of rows(a)) {
     expect((r.segment[0][0] - 123) * mx).toBeCloseTo(5, 4);
     expect((r.segment[1][0] - 123) * mx).toBeCloseTo(23, 4);
   }
@@ -80,8 +89,8 @@ it('clips both frontages and retains exact endpoints and separate season identit
   expect(b.records.every((r) => !a.records.some((v) => v.id === r.id))).toBe(true);
   s.bunting!.corridors![0]!.spacing_m = 3;
   expect(
-    generateSeasonalBunting(features, [s])
-      .records.map(center)
+    rows(generateSeasonalBunting(features, [s]))
+      .map(center)
       .map((p) => Math.round(p[0]!)),
   ).toEqual([5, 8, 11, 14, 17, 20]);
 });
@@ -93,7 +102,19 @@ it('covers divided terminal branches without duplicating shared junction rows', 
   expect(new Set(result.records.map((r) => r.road))).toEqual(
     new Set(['osm:way/1', 'osm:way/2', 'osm:way/3']),
   );
-  expect(new Set(result.records.map((r) => r.id)).size).toBe(result.records.length);
+  const hung = rows(result);
+  expect(new Set(hung.map((r) => r.id)).size).toBe(hung.length);
+  expect(
+    new Set(
+      hung.map((r) =>
+        center(r)
+          .map((v) => v.toFixed(3))
+          .join(),
+      ),
+    ).size,
+  ).toBe(hung.length);
+  // One record per edge carries all of its rows.
+  expect(result.records.length).toBeLessThan(hung.length);
 });
 it('rejects missing/non-road/region-only targets, disconnected routes and wrong frontages', () => {
   const a = road(1, [at(0), at(10)]),

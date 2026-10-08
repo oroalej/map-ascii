@@ -11,9 +11,10 @@ export function identifyEventActor<T extends VisibleAgent>(agent: T, id: string)
   return agent;
 }
 /** Raw physical dimensions; permission probes add their own padding. */
-export const eventBodySize = (agent: Pick<VisibleAgent, 'vehicle' | 'glyph'>) =>
-  agent.vehicle
+export const eventBodySize = (agent: Pick<VisibleAgent, 'vehicle' | 'glyph' | 'eventFootprint'>) =>
+  agent.eventFootprint ??
+  (agent.vehicle
     ? VEHICLES[agent.vehicle]
     : agent.glyph === ProcessionGlyph.andas
       ? PROCESSION_GEOMETRY.andas
-      : PROCESSION_GEOMETRY.person;
+      : PROCESSION_GEOMETRY.person);

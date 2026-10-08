@@ -7,6 +7,7 @@ import type { LifeTap } from './tap';
 import { LifeBuilder, LifeLine } from './geometry';
 import { left } from './testing/continuity';
 import { tileToLngLat, metersPerUnit } from '../raster/geometry';
+import * as EventCues from './event-cues';
 
 const route: FluvialRoute = {
   id: 'procession/test',
@@ -120,8 +121,12 @@ it.each([false, true])(
     ).toHaveLength(1);
   },
 );
-function eventWorld(played = false, inspection = false) {
-  const world = new LifeWorld(undefined, undefined, { dialogue: choices }, inspection);
+function eventWorld(
+  played = false,
+  inspection = false,
+  catalog: readonly DialogueChoice[] = choices,
+) {
+  const world = new LifeWorld(undefined, undefined, { dialogue: catalog }, inspection);
   world.enableTaps();
   world.setProcessions([route]);
   if (played) {
@@ -141,6 +146,40 @@ function eventWorld(played = false, inspection = false) {
   };
   return { world, tap, agents };
 }
+it('reuses the sourced pack cheer and preserves requested speech over ambient event cues', () => {
+  const catalog: DialogueChoice[] = [
+    ...choices.filter((choice) => choice.profile !== 'procession-cheer'),
+    {
+      id: 'pack-cheer',
+      kind: 'cheer',
+      conditions: { occasions: ['procession', 'fluvial'] },
+      delivery: 'utterance',
+      speakers: [0],
+      turns: 1,
+    },
+  ];
+  const cues = vi.spyOn(EventCues, 'assignEventCues').mockImplementation((agents) => {
+    for (const agent of agents)
+      if (agent.kind === 'person' && !agent.aboard && !agent.prop)
+        agent.speech = { id: 'ambient', exchangeId: 'background', line: 0 };
+  });
+  try {
+    const f = eventWorld(false, false, catalog);
+    f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
+    const visible = f.world.visible(19, 1, [0, 0]);
+    expect(visible.filter((agent) => agent.speech?.exchangeId === 'pack-cheer')).toHaveLength(1);
+    const requestedEmoji = visible.filter((agent) => agent.emoji?.id.startsWith('emoji:'));
+    expect(requestedEmoji.length).toBeGreaterThan(0);
+    expect(requestedEmoji.every((agent) => !agent.speech)).toBe(true);
+    expect(visible.some((agent) => agent.speech?.exchangeId === 'background')).toBe(true);
+    expect(catalog.find((choice) => choice.id === 'pack-cheer')).toMatchObject({
+      kind: 'cheer',
+      conditions: { occasions: ['procession', 'fluvial'] },
+    });
+  } finally {
+    cues.mockRestore();
+  }
+});
 it.each([false, true])(
   'cheers through stable owners without physical movers (played=%s)',
   (played) => {
@@ -165,7 +204,7 @@ it.each([false, true])(
     const visible = f.world.visible(19, 1, [0, 0]);
     expect(visible.filter((a) => a.speech?.exchangeId === 'cheer')).toHaveLength(1);
     expect(visible.filter((a) => a.emoji?.mood === 'festive').length).toBeGreaterThan(0);
-    expect(visible.filter((a) => a.emoji).length).toBeLessThanOrEqual(4);
+    expect(visible.filter((a) => a.emoji?.id.startsWith('emoji:')).length).toBeLessThanOrEqual(4);
     expect(f.world.size).toBe(0);
     expect(f.world.visible(19, 1, [0, 0]).filter((a) => a.speech)).toHaveLength(1);
     react.mockRestore();
@@ -175,7 +214,11 @@ it('clears event presentation on occurrence replacement and removal', () => {
   const f = eventWorld();
   f.world.step(0, undefined, 19, undefined, undefined, undefined, 1, 1.8, 1, undefined, [f.tap]);
   f.world.setLive(route.id, 0.5, '2027');
-  expect(f.world.visible(19, 1, [0, 0]).some((a) => a.emoji || a.speech)).toBe(false);
+  expect(
+    f.world
+      .visible(19, 1, [0, 0])
+      .some((a) => a.emoji?.id.startsWith('emoji:') || a.speech?.id.startsWith('scene:')),
+  ).toBe(false);
   f.world.setLive(undefined);
   expect(f.world.visible(19, 1, [0, 0]).some((a) => a.event)).toBe(false);
 });

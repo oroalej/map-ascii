@@ -2661,21 +2661,157 @@
       "delivery": "utterance"
     },
     {
-      "id": "procession-cheer-viva",
-      "kind": "talk",
-      "profile": "procession-cheer",
-      "delivery": "utterance",
-      "speakers": [0],
+      "id": "cheer-viva-la-virgen",
+      "kind": "cheer",
       "lines": [
-        { "bcl": "Viva la Virgen!", "en": "Long live the Virgin!", "fil": "Mabuhay ang Birhen!" }
+        {
+          "bcl": "Viva la Virgen!",
+          "en": "Long live the Virgin!",
+          "fil": "Mabuhay ang Birhen!"
+        }
       ],
       "sources": [
         {
-          "title": "The historic and original home of Ina — City of Naga (2022)",
-          "url": "https://www2.naga.gov.ph/the-historic-and-original-home-of-ina-penafrancia-shrine/",
-          "note": "The city article records this traditional Spanish procession chant. Translations are illustrative; this single utterance is requested only by a tap near the procession."
+          "title": "Radio Veritas Asia: The Peñafrancia Festival, Asia's Biggest Marian Gathering (2025)",
+          "url": "https://www.rvasia.org/asian-news/penafrancia-festival-asias-biggest-marian-gathering",
+          "note": "Traslación crowds chant \"¡Viva la Virgen!\"; riverbank crowds at the fluvial procession wave white handkerchiefs, pray the rosary and shout \"Viva la Virgen! Viva el Divino Rostro!\". Which simulated people call out, and when, is illustrative."
+        },
+        {
+          "title": "Catholics & Cultures: Peñafrancia Festival & Divino Rostro (2016)",
+          "url": "https://www.catholicsandcultures.org/node/876",
+          "note": "From the shores people set off fireworks and shout \"viva la Virgen\" while the boats paddle by; Traslación crowds wear \"Viva la Virgen\" headbands."
+        },
+        {
+          "title": "Inquirer: In Naga City, 'Ina' devotees buck health protocols as Peñafrancia festival returns (2022)",
+          "url": "https://newsinfo.inquirer.net/1661594/in-naga-city-ina-devotees-buck-health-protocols-as-penafrancia-festival-returns",
+          "note": "Ina, as most Bicol folk call the Virgin; the Traslación ends amid joyful cries of \"Viva La Virgen!\"."
         }
-      ]
+      ],
+      "conditions": {
+        "occasions": ["procession", "fluvial"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
+    },
+    {
+      "id": "cheer-viva-divino-rostro",
+      "kind": "cheer",
+      "lines": [
+        {
+          "bcl": "Viva el Divino Rostro!",
+          "en": "Long live the Holy Face!",
+          "fil": "Mabuhay ang Divino Rostro!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Radio Veritas Asia: The Peñafrancia Festival, Asia's Biggest Marian Gathering (2025)",
+          "url": "https://www.rvasia.org/asian-news/penafrancia-festival-asias-biggest-marian-gathering",
+          "note": "Traslación crowds chant \"¡Viva la Virgen!\"; riverbank crowds at the fluvial procession wave white handkerchiefs, pray the rosary and shout \"Viva la Virgen! Viva el Divino Rostro!\". Which simulated people call out, and when, is illustrative."
+        }
+      ],
+      "conditions": {
+        "occasions": ["procession", "fluvial"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
+    },
+    {
+      "id": "cheer-yaon-na-si-ina",
+      "kind": "cheer",
+      "lines": [
+        {
+          "bcl": "Yaon na si Ina!",
+          "en": "Here comes Ina!",
+          "fil": "Nandiyan na si Ina!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar: yaon (there is, here comes), si/an (person and topic markers), magayon (beautiful). Event calls are original lines built from this vocabulary."
+        },
+        {
+          "title": "Inquirer: In Naga City, 'Ina' devotees buck health protocols as Peñafrancia festival returns (2022)",
+          "url": "https://newsinfo.inquirer.net/1661594/in-naga-city-ina-devotees-buck-health-protocols-as-penafrancia-festival-returns",
+          "note": "Ina, as most Bicol folk call the Virgin; the Traslación ends amid joyful cries of \"Viva La Virgen!\"."
+        }
+      ],
+      "conditions": {
+        "occasions": ["procession", "fluvial"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
+    },
+    {
+      "id": "cheer-yaon-na-parada",
+      "kind": "cheer",
+      "lines": [
+        {
+          "bcl": "Yaon na an parada!",
+          "en": "Here comes the parade!",
+          "fil": "Nandiyan na ang parada!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar: yaon (there is, here comes), si/an (person and topic markers), magayon (beautiful). Event calls are original lines built from this vocabulary."
+        }
+      ],
+      "conditions": {
+        "occasions": ["parade"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
+    },
+    {
+      "id": "cheer-magayon-banda",
+      "kind": "cheer",
+      "lines": [
+        {
+          "bcl": "Magayon an banda!",
+          "en": "What a lovely band!",
+          "fil": "Ang ganda ng banda!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Jon Epstein, Peace Corps (1967)",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Naga/Legazpi grammar: yaon (there is, here comes), si/an (person and topic markers), magayon (beautiful). Event calls are original lines built from this vocabulary."
+        }
+      ],
+      "conditions": {
+        "occasions": ["parade"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
+    },
+    {
+      "id": "cheer-amen",
+      "kind": "cheer",
+      "lines": [
+        {
+          "bcl": "Amen.",
+          "en": "Amen.",
+          "fil": "Amen."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Daily Tribune: 2026 Traslación",
+          "url": "https://tribune.net.ph/2026/09/11/traslacion-procession-draws-over-800000-devotees-to-naga-city-as-opinions-clash-over-no-liquor-ban-decision",
+          "note": "Holy Mass follows the images' arrival. \"Amen\" is the congregation's liturgical response in Bikol, English and Tagalog Masses alike; who says it, and when, is illustrative."
+        }
+      ],
+      "conditions": {
+        "occasions": ["mass"]
+      },
+      "delivery": "utterance",
+      "speakers": [0]
     }
   ]
 }

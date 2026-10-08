@@ -110,7 +110,7 @@
   "seating": [],
   "lamps": [],
   "status": "draft",
-  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Draft, undated estimates.",
+  "credit": "Owner-supplied campus and roadside references; © Google and imagery providers where shown. Geometry: © OpenStreetMap contributors (ODbL). Schematic, undated estimates.",
   "sources": [
     {
       "title": "OpenStreetMap standing geometry",
@@ -119,7 +119,7 @@
     },
     {
       "title": "Owner-supplied additional roadside and campus references",
-      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support draft additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
+      "note": "Inspected 2026-10-02. Marked foliage groups, edge planting and open courtyard/lawn connections support additions. Standing mapped roofs and full road/path widths govern clearance; image orientation and source-footprint alignment are uncertain. Counts, dimensions, positions and heights are illustrative and undated; no species, survey or construction date inferred. Reference bitmaps remain ignored evidence."
     }
   ]
 }

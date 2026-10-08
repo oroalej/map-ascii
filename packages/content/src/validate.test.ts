@@ -120,13 +120,14 @@ describe('loadCityPacks', () => {
     const tapOnly = speech!.exchanges.filter((e) =>
       ['transit-call', 'procession-cheer'].includes(e.profile!),
     );
-    const ordinary = speech!.exchanges.filter((e) => !tapOnly.includes(e));
+    const ordinary = speech!.exchanges.filter((e) => !tapOnly.includes(e) && e.kind !== 'cheer');
     expect(ordinary).toHaveLength(104);
     expect(ordinary.filter((e) => e.delivery === 'utterance')).toHaveLength(42);
     expect(ordinary.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
-    expect(tapOnly.map((e) => [e.profile, e.delivery, e.speakers])).toEqual([
-      ['procession-cheer', 'utterance', [0]],
-    ]);
+    expect(tapOnly).toEqual([]);
+    expect(speech!.exchanges).toHaveLength(110);
+    expect(speech!.exchanges.filter((e) => e.kind === 'cheer')).toHaveLength(6);
+    expect(speech!.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(48);
     expect(speech!.exchanges.length).toBeLessThanOrEqual(120);
     expect(
       speech?.exchanges
@@ -141,7 +142,8 @@ describe('loadCityPacks', () => {
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
-      if (!tapOnly.includes(e)) counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
+      if (!tapOnly.includes(e) && e.kind !== 'cheer')
+        counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
       const script = e.lines
         .map((line) =>
           line

@@ -134,7 +134,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga Parochial School — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga Parochial School — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "roof_overrides": [
     {
       "osm_id": "osm:relation/16253275",

@@ -19,7 +19,25 @@ export class EventTaps {
     memory: EmojiMemory,
     emojiEnabled: boolean,
   ) {
-    this.speech = new SceneSpeech(0, options?.dialogue ?? [], options?.periods, options?.memory);
+    const choices = options?.dialogue ?? [];
+    // A pack's first procession cheer supplies the requested chant as well as ambient events.
+    // Adapt it only in this tap-only host, retaining its authored id and spoken text.
+    const cheer = choices.some((choice) => choice.profile === 'procession-cheer')
+      ? undefined
+      : choices.find(
+          (choice) =>
+            choice.kind === 'cheer' && choice.conditions?.occasions?.includes('procession'),
+        );
+    this.speech = new SceneSpeech(
+      0,
+      choices.map((choice) =>
+        choice === cheer
+          ? { ...choice, kind: 'talk', profile: 'procession-cheer', conditions: undefined }
+          : choice,
+      ),
+      options?.periods,
+      options?.memory,
+    );
     this.emoji = new EmojiObserver(0, 1, { memory, enabled: emojiEnabled });
   }
   private remember(owner: object, clock: number) {
@@ -104,8 +122,13 @@ export class EventTaps {
   attach(owner: object, agent: VisibleAgent) {
     const speech = this.speech.speech(owner),
       emoji = this.emoji.cue(owner);
-    if (speech) agent.speech = speech;
-    else if (emoji) agent.emoji = emoji;
+    if (speech) {
+      agent.speech = speech;
+      delete agent.emoji;
+    } else if (emoji) {
+      agent.emoji = emoji;
+      delete agent.speech;
+    }
   }
   clear() {
     this.speech.clear();

@@ -67,7 +67,7 @@ import {
   eventBridgeAllows,
   eventGroundBounds,
   groundsForRoutes,
-  routeRings,
+  trafficRings,
 } from './ground-events';
 import { eventTime, type EventTiming, type EventTime } from '@atlas/shared';
 import type { SpeechCue } from './moments';
@@ -217,6 +217,7 @@ import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
+import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
 import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
@@ -8686,6 +8687,9 @@ export type VisibleAgent = {
   /** A transient airborne ball, packed before the ordinary person figure dispatch. */
   prop?: 'ball' | 'event';
   eventGround?: string;
+  eventRole?: 'altar' | 'seated';
+  eventFootprint?: { length: number; width: number };
+  eventScenery?: boolean;
   glyph?: string;
   /** Cars of a train are admitted together under the visible-agent cap. */
   consist?: object;
@@ -8755,6 +8759,7 @@ type GroundTerrain = {
   key: string;
   seasonalKey: string;
   blocked: PolygonIndex;
+  hardBlocked: PolygonIndex;
   vehicleBlocked: PolygonIndex;
   seasonal: PolygonIndex;
   water: PolygonIndex;
@@ -9609,6 +9614,7 @@ export class LifeWorld {
       origin: string;
       laneBounds: readonly [number, number, number, number];
       blocked: Polygon[];
+      hardBlocked: Polygon[];
       vehicleBlocked: Polygon[];
       water: Polygon[];
       trees: Polygon[];
@@ -9712,10 +9718,12 @@ export class LifeWorld {
   };
   private eventOwners = new Map<string, object>();
   private eventGrounds = groundsForRoutes([]);
+  /** Event cheer exchange ids by event kind, from the dialogue catalog. */
+  private cheers?: ReturnType<typeof eventCheers>;
   private trafficClosureCache?: {
-    scene: GroundProcessionScene;
+    scene: GroundProcessionScene | ProcessionScene;
     terrain: GroundTerrain;
-    index: PolygonIndex;
+    index: PolygonIndex | undefined;
   };
   private readonly reconciledActors = new WeakMap<
     TileLife,
@@ -10218,6 +10226,10 @@ export class LifeWorld {
     const ref = lives[0];
     const config = this.seasonalConfig;
     const seasonalKey = this.physicalSeasonKey(lives, config);
+    const blocked = new PolygonIndex();
+    const hasSeating = lives.some((life) =>
+      life.geo.areas?.some((area) => area.kind === 'blocked' && !area.water && area.seating),
+    );
     const terrain: GroundTerrain = {
       key: this.terrainKey(
         entries.map(([key]) => key),
@@ -10225,7 +10237,8 @@ export class LifeWorld {
       ),
       seasonalKey,
       ref,
-      blocked: new PolygonIndex(),
+      blocked,
+      hardBlocked: hasSeating ? new PolygonIndex() : blocked,
       vehicleBlocked: new PolygonIndex(),
       seasonal: new PolygonIndex(),
       water: new PolygonIndex(),
@@ -10251,6 +10264,7 @@ export class LifeWorld {
           origin: key,
           laneBounds: [Infinity, Infinity, -Infinity, -Infinity],
           blocked: [],
+          hardBlocked: [],
           vehicleBlocked: [],
           water: [],
           trees: [],
@@ -10263,9 +10277,19 @@ export class LifeWorld {
             })),
           );
         for (const a of life.geo.areas ?? []) {
-          if (a.kind === 'parking-exclusion') cached.trees.push(metric(a.rings));
-          if (a.kind === 'blocked') (a.water ? cached.water : cached.blocked).push(metric(a.rings));
-          if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(metric(a.rings));
+          if (
+            a.kind !== 'parking-exclusion' &&
+            a.kind !== 'blocked' &&
+            a.kind !== 'vehicle-blocked'
+          )
+            continue;
+          const polygon = metric(a.rings);
+          if (a.kind === 'parking-exclusion') cached.trees.push(polygon);
+          if (a.kind === 'blocked') {
+            (a.water ? cached.water : cached.blocked).push(polygon);
+            if (!a.water && !a.seating) cached.hardBlocked.push(polygon);
+          }
+          if (a.kind === 'vehicle-blocked') cached.vehicleBlocked.push(polygon);
         }
         const bounds = [Infinity, Infinity, -Infinity, -Infinity];
         for (const polygons of [cached.blocked, cached.vehicleBlocked])
@@ -10309,6 +10333,7 @@ export class LifeWorld {
                   y: at.y / ref.perMeter + Math.sin((i * Math.PI) / 8) * radius,
                 }));
           yield* terrain.blocked.addSteps([ring]);
+          if (terrain.hardBlocked !== terrain.blocked) yield* terrain.hardBlocked.addSteps([ring]);
           yield* terrain.seasonal.addSteps([ring]);
           yield* terrain.trees.addSteps([ring]);
         }
@@ -10320,6 +10345,8 @@ export class LifeWorld {
     for (const life of lives) {
       const cached = this.metricTerrain.get(life)!;
       for (const polygon of cached.blocked) yield* terrain.blocked.addSteps(polygon);
+      if (terrain.hardBlocked !== terrain.blocked)
+        for (const polygon of cached.hardBlocked) yield* terrain.hardBlocked.addSteps(polygon);
       for (const polygon of cached.vehicleBlocked) yield* terrain.vehicleBlocked.addSteps(polygon);
       for (const polygon of cached.water) yield* terrain.water.addSteps(polygon);
     }
@@ -10393,6 +10420,7 @@ export class LifeWorld {
     }
     // Serialization buffers are prepared privately too; the worker transfers them once.
     yield* terrain.blocked.toFlatSteps();
+    if (terrain.hardBlocked !== terrain.blocked) yield* terrain.hardBlocked.toFlatSteps();
     yield* terrain.roadAccess.roads.toFlatSteps();
     yield* terrain.roadAccess.forbidden.toFlatSteps();
     yield* terrain.trees.toFlatSteps();
@@ -10527,19 +10555,21 @@ export class LifeWorld {
       (this.live && this.live.progress >= 0 && this.live.progress < 1 ? this.live.id : undefined);
     const scene = id && this.scenes.get(id);
     const terrain = this.groundTerrain;
-    if (!(scene instanceof GroundProcessionScene) || scene.route.kind === 'mass' || !terrain?.ref) {
+    if (!scene || !terrain?.ref) {
       this.trafficClosureCache = undefined;
       return undefined;
     }
+    // Checked for every agent: rings are built once per scene and terrain, none included.
     if (this.trafficClosureCache?.scene === scene && this.trafficClosureCache.terrain === terrain)
       return this.trafficClosureCache.index;
-    const index = new PolygonIndex(),
+    const rings = trafficRings(scene.route),
       ref = terrain.ref;
+    const index = rings.length ? new PolygonIndex() : undefined;
     const metric = ([lng, lat]: [number, number]) => {
       const q = lngLatToTile(ref.tile, lng, lat);
       return { x: q.x / ref.perMeter, y: q.y / ref.perMeter };
     };
-    for (const ring of routeRings(scene.route)) index.add([ring.map(metric)]);
+    for (const ring of rings) index!.add([ring.map(metric)]);
     this.trafficClosureCache = { scene, terrain, index };
     return index;
   }
@@ -11015,14 +11045,14 @@ export class LifeWorld {
           body.kind = agent.vehicle ? BODY_KIND.vehicle : BODY_KIND.human;
           out.length = 1;
           if (
-            admission.conflicts(token, out) > 0 ||
-            arrivals?.conflicts(token, out) ||
-            blocked.hits(out) ||
+            (!agent.eventScenery &&
+              (admission.conflicts(token, out) > 0 || arrivals?.conflicts(token, out))) ||
+            (agent.eventRole ? this.groundTerrain!.hardBlocked : blocked).hits(out) ||
             (water.hits(out) && !bridgeAllows(body))
           )
             continue;
-          cached.actors.push({ token, body, owner });
-          arrivals?.set(token, out);
+          if (!agent.eventScenery) cached.actors.push({ token, body, owner });
+          if (!agent.eventScenery) arrivals?.set(token, out);
           owner.eventPopulation++;
           this.eventAgents.push(agent);
         }
@@ -11664,6 +11694,7 @@ export class LifeWorld {
       version: terrain,
       events: this.eventGrounds,
       blocked: terrain.blocked,
+      hardBlocked: terrain.hardBlocked,
       ref: { tile: ref.tile, perMeter: ref.perMeter },
       forbidden: terrain.roadAccess.forbidden,
       roads: terrain.roadAccess.roads,
@@ -11672,7 +11703,7 @@ export class LifeWorld {
   }
 
   /** Whole ASCII cells must obey the same ground rules, even when wider than a figure. */
-  groundCellGuard(toCell: (lng: number, lat: number) => [number, number]) {
+  groundCellGuard(toCell: (lng: number, lat: number) => [number, number], terrainOnly = false) {
     const ref = this.groundTerrain?.ref;
     const terrain = this.groundTerrain;
     if (!ref || !terrain) return undefined;
@@ -11683,6 +11714,8 @@ export class LifeWorld {
       toCell,
       this.eventGrounds,
       terrain.blocked,
+      terrain.hardBlocked,
+      terrainOnly,
     );
   }
 
@@ -12823,7 +12856,6 @@ export class LifeWorld {
             .map((raw) => {
               const a = eventTaps ? identifyEventActor({ ...raw }, eventActor(raw)!) : raw;
               const owner = this.eventOwners.get(eventActor(a)!)!;
-              eventTaps?.attach(owner, a);
               const agent = inspection
                 ? identifyEventActor(inspection.present(owner, a), eventActor(a)!)
                 : a;
@@ -12840,13 +12872,28 @@ export class LifeWorld {
               scope: this.eventScope(run),
               ...(tapOwners && {
                 observe: (owner: object, agent: VisibleAgent) => {
-                  eventTaps?.attach(owner, agent);
                   tapOwners.present(owner, agent);
                 },
               }),
             })
           : [];
     for (const agent of staged) agent.event = true;
+    // A few of the event's people pray, wave or call out its cheers, in turns.
+    if (scene && staged.length) {
+      this.cheers ??= eventCheers(
+        this.momentOptions?.enabled === false ? undefined : this.momentOptions?.dialogue,
+      );
+      assignEventCues(staged, scene.route.kind, this.clock, {
+        cheers: this.cheers[scene.route.kind],
+        emoji: this.emojiObserver,
+      });
+    }
+    // Explicit reactions take precedence over the running event's background cues.
+    if (eventTaps && tapOwners)
+      for (const agent of staged) {
+        const owner = tapOwners.owner(agent);
+        if (owner) eventTaps.attach(owner, agent);
+      }
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
       if (life.tapFeed && this.emojiClock >= life.tapFeed.until) life.tapFeed = undefined;

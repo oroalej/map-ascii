@@ -44,6 +44,10 @@ export class TapSources {
   present(owner: object, agent: VisibleAgent) {
     this.owners.set(agent, owner);
   }
+  /** Read an owner registered for this draw without selecting or holding it. */
+  owner(agent: VisibleAgent) {
+    return this.owners.get(agent);
+  }
   finish(agents: readonly VisibleAgent[]) {
     const targets = agents.map((agent) => {
       const owner = this.owners.get(agent);

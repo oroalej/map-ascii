@@ -169,7 +169,7 @@
     }
   ],
   "status": "draft",
-  "credit": "Naga City Civic Center — Owner-supplied overhead reference (Google Maps), capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "credit": "Naga City Civic Center — Owner-supplied overhead reference (Google Maps), capture date unknown; geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
   "sources": [
     {
       "title": "OpenStreetMap: site and surrounding features",
@@ -182,13 +182,13 @@
       "note": "Official facilities description documents a pool and sports grounds. The direct OSM API query now confirms the current mapped swimming-pool footprint, omitted by the old fetch query. Existing trees, Pet Park, parking, tennis/skate facilities and monuments are preserved. No construction date is inferred from OSM edit timestamps."
     },
     {
-      "title": "Draft surface placement audit",
+      "title": "Surface placement audit",
       "note": "Explicit paving overrides coarse ground fills only. Footprints are clipped to existing grounds and exclude mapped standing buildings and full-width carriageways. This geometry cleanup does not establish an otherwise unverified facility or current layout."
     },
     {
       "title": "OpenStreetMap: Civic Center Swimming Pool",
       "url": "https://www.openstreetmap.org/way/222976574",
-      "note": "Current footprint retrieved from the primary OSM API on 2026-10-01 and ingested through the data pipeline. Water uses the mapped polygon unchanged. A 0.45 m stone rim and deck extending 2.5 m from the pool edge are draft width/height estimates, clipped to the Civic Center grounds and clear of standing buildings. This establishes mapped location and shape, not a surveyed deck extent or construction date. The later owner-supplied overhead reference supports crown refinements; pool geometry remains mapped OSM."
+      "note": "Current footprint retrieved from the primary OSM API on 2026-10-01 and ingested through the data pipeline. Water uses the mapped polygon unchanged. A 0.45 m stone rim and deck extending 2.5 m from the pool edge are width/height estimates, clipped to the Civic Center grounds and clear of standing buildings. This establishes mapped location and shape, not a surveyed deck extent or construction date. The later owner-supplied overhead reference supports crown refinements; pool geometry remains mapped OSM."
     },
     {
       "title": "Owner-supplied overhead reference, five-site adjustment",

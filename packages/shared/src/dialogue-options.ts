@@ -58,7 +58,7 @@ export const dialogueChoices = (
   }));
 
 export const dialogueDelivery = (entry: Pick<DialogueChoice, 'kind' | 'delivery'>) =>
-  entry.delivery ?? (entry.kind === 'look' ? 'utterance' : 'exchange');
+  entry.delivery ?? (entry.kind === 'look' || entry.kind === 'cheer' ? 'utterance' : 'exchange');
 
 export function greetingPeriod(
   minutes: number,

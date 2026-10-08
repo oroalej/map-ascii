@@ -1,17 +1,17 @@
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
-import { mkdtemp, rm, appendFile, copyFile } from 'node:fs/promises';
+import { mkdtemp, rm, appendFile, mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
 import { OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
-import { Procession, SiteDetail } from '@atlas/shared/schemas';
+import { CityProcessions, Procession, SiteDetail } from '@atlas/shared/schemas';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
 import { step as normalize, type AtlasFeature } from './03-normalize';
 import { checkTourCameras, checkTours, step as mergeContent } from './04-merge-content';
-import { buildMeta, tileRecords, step as tileStep } from './05-tiles';
+import { buildMeta, writeMetadata, tileRecords, step as tileStep } from './05-tiles';
 import { step as searchStep } from './06-search-index';
 import { step as processionStep } from './07-processions';
 import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
@@ -121,6 +121,99 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('writes normal-step metadata without touching an existing archive', async () => {
+    await mkdir(ctx.outDir, { recursive: true });
+    const archive = join(ctx.outDir, `${city.slug}.pmtiles`);
+    await writeFile(archive, 'archive sentinel');
+    const creditedContent: ContentBundle = {
+      ...content,
+      plans: content.plans.map((plan) => ({ ...plan, credit: 'Fixture plan survey' })),
+      details: [
+        SiteDetail.parse({
+          id: 'detail/fixture-credits',
+          osm_id: 'osm:way/105',
+          title: 'Fixture plaza',
+          surface: 'paving',
+          status: 'draft',
+          credit: 'Fixture detail survey',
+          sources: [{ title: 'Fixture detail survey' }],
+        }),
+      ],
+      processions: [
+        {
+          id: 'procession/fixture-mass',
+          title: { en: 'Fixture Mass' },
+          story: { en: 'Illustrative fixture event.' },
+          kind: 'mass',
+          status: 'draft',
+          site: 'osm:way/105',
+          grounds: ['osm:way/105'],
+          radius_m: 100,
+          schedule: {
+            month: 9,
+            weekday: 6,
+            nth: 3,
+            offset_days: 0,
+            start: '18:00',
+            duration_min: 60,
+            timezone: 'Asia/Manila',
+          },
+          sources: [{ title: 'Fixture festival account', url: 'https://example.test/festival' }],
+        },
+      ],
+    };
+    const creditedContext = { ...ctx, content: creditedContent };
+    const metadata = await writeMetadata(creditedContext, 2026);
+    expect(metadata).toMatchObject({ slug: 'fixture', yearRange: [1890, 2026] });
+    expect(metadata.attribution).toEqual([
+      OSM_ATTRIBUTION,
+      'Fixture imagery',
+      'Fixture detail survey',
+      'Fixture plan survey',
+    ]);
+    expect(await readJson(join(ctx.outDir, `${city.slug}.meta.json`))).toEqual(metadata);
+    await processionStep.run(creditedContext);
+    const events = CityProcessions.parse(
+      await readJson(join(ctx.outDir, `${city.slug}.processions.json`)),
+    );
+    expect(events.processions[0]?.sources).toEqual([
+      { title: 'Fixture festival account', url: 'https://example.test/festival' },
+    ]);
+    expect(await readFile(archive, 'utf8')).toBe('archive sentinel');
+  });
+  it('derives metadata years from territory survivors instead of excluded older features', async () => {
+    const buildDir = await mkdtemp(join(tmpdir(), 'atlas-metadata-territory-'));
+    const local = { ...ctx, buildDir, outDir: join(buildDir, 'out') };
+    try {
+      await copyFile(join(ctx.buildDir, files.geography), join(buildDir, files.geography));
+      await writeJson(
+        join(buildDir, files.territory),
+        createTerritory(
+          [-0.1, -0.1, 0.1, 0.1],
+          bboxPolygon([0, 0, 0.01, 0.01]),
+          [-0.005, -0.005, 0.005, 0.005],
+        ),
+      );
+      const records: AtlasFeature[] = [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.05, 0.005] },
+          properties: { id: 'void', class: 'monument', start_year: 1800 },
+          tippecanoe: { layer: 'poi', minzoom: 13, maxzoom: 16 },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [0.005, 0.005] },
+          properties: { id: 'survivor', class: 'monument', start_year: 1950 },
+          tippecanoe: { layer: 'poi', minzoom: 13, maxzoom: 16 },
+        },
+      ];
+      await writeFeatures(join(buildDir, files.merged), records);
+      expect((await writeMetadata(local, 2026)).yearRange).toEqual([1950, 2026]);
+    } finally {
+      await rm(buildDir, { recursive: true, force: true });
+    }
+  });
   it('reports shortened routing before rejecting emitted procession geography', async () => {
     const buildDir = await mkdtemp(join(tmpdir(), 'atlas-procession-warning-'));
     const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
