@@ -72,7 +72,7 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
 });
-it('passes the draft rice disclosure to the legend and restores the absent-calendar label', async () => {
+it('passes the illustrative rice disclosure to the legend and restores the absent-calendar label', async () => {
   const instance = renderer();
   useAtlasInstance.setState({ atlas: instance.atlas });
   const climate = {
@@ -81,7 +81,6 @@ it('passes the draft rice disclosure to the legend and restores the absent-calen
     source: 'Fixture',
     crops: {
       rice: {
-        status: 'draft' as const,
         calendar: [
           { from: '01-01', stage: 'fallow' as const },
           { from: '06-01', stage: 'growing' as const },

@@ -4,7 +4,7 @@ import { epochDay } from './seasons';
 import { Climate, CropCalendarSchema } from './schemas';
 
 const rice = (calendar: CropCalendarEntry[]): ClimateConfig['crops'] => ({
-  rice: { status: 'draft', calendar, source: 'Synthetic calendar' },
+  rice: { calendar, source: 'Synthetic calendar' },
 });
 const day = (year: number, month: number, date: number) =>
   epochDay(year, month, date) - epochDay(year, 1, 1);

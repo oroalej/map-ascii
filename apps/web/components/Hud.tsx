@@ -183,7 +183,7 @@ function LegendControls({
         season,
         emoji,
         folklore,
-        cropCalendarDraft: climate?.crops?.rice?.status === 'draft',
+        riceCalendar: Boolean(climate?.crops?.rice),
       }),
     [
       theme,

@@ -8,9 +8,9 @@ import { themes } from './theme';
 import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
-it('discloses draft rice stages while retaining farmland identity and focus', () => {
+it('discloses configured illustrative rice stages while retaining farmland identity and focus', () => {
   const regular = legendEntries('dark', 18, ['farmland']).find((e) => e.id === 'class:farmland')!;
-  const draft = legendEntries('dark', 18, ['farmland'], { cropCalendarDraft: true }).find(
+  const draft = legendEntries('dark', 18, ['farmland'], { riceCalendar: true }).find(
     (e) => e.id === regular.id,
   )!;
   expect(regular.label).toBe('Farmland');

@@ -18,7 +18,6 @@ export type CropStage = (typeof CROP_STAGES)[number];
 /** A city-calendar stage beginning on canonical MM-DD, until the next entry. */
 export type CropCalendarEntry = { from: string; stage: CropStage };
 export type CropCalendar = {
-  status: 'draft' | 'verified';
   calendar: CropCalendarEntry[];
   source: string;
   notes?: string;

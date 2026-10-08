@@ -162,7 +162,7 @@ City {                           // cities/<slug>/city.json
     default: { from: number; strength: WindStrength };
     source: string;
     crops?: { rice?: {
-      status: 'draft' | 'verified'; source: string; notes?: string;
+      source: string; notes?: string;
       calendar: { from: string; stage: 'fallow' | 'flooded' | 'transplanted' | 'growing' | 'ripe' | 'harvested' }[];
     } }; // canonical real MM-DD, unique starts, at least two; February 29 skipped outside leap years
   };
@@ -584,4 +584,4 @@ The pipeline analyzes collinearity at 0.3 m without changing the footprint. Cand
 
 Renderer defaults: absent roof shape becomes hipped; `flat`, `gabled`, `hipped` and `pyramidal` have explicit behavior; any other explicit shape falls back to gabled. These are illustrative inferences, not historical or surveyed facts. Landmark plan `at` anchors require a standing building; point monuments retain `offset_m`. Optional plan `credit` strings are deduplicated into city metadata attribution. Reference URLs and estimate qualifications remain in `sources`.
 
-Rice-stage calendars are optional and carry their own sources. They follow the real city date, with stage progress across actual adjacent calendar years. Draft rice assumptions require visible legend disclosure. Curated farmland uses the existing landuse layer/zoom band and receives ordinary farm places. Derivations must retain source permission, identifiers, acquisition dates, exclusions and territory checks; attribution alone does not license imagery extraction. Remove or subtract curated overlaps when OSM gains farmland: current merge warnings do not automatically replace those areas.
+Rice-stage calendars are optional and carry their own sources. They follow the real city date, with stage progress across actual adjacent calendar years. Configured rice calendars are disclosed as illustrative in the farmland legend, without verification status metadata. Curated farmland uses the existing landuse layer/zoom band and receives ordinary farm places. Derivations must retain source permission, identifiers, acquisition dates, exclusions and territory checks; attribution alone does not license imagery extraction. Remove or subtract curated overlaps when OSM gains farmland: current merge warnings do not automatically replace those areas.

@@ -480,7 +480,6 @@ describe('live motion preference', () => {
       source: 'Fixture',
       crops: {
         rice: {
-          status: 'draft',
           source: 'Fixture',
           calendar: [
             { from: '06-01', stage: 'transplanted' },
@@ -568,7 +567,6 @@ describe('live motion preference', () => {
         source: 'Fixture',
         crops: {
           rice: {
-            status: 'draft',
             source: 'Fixture',
             calendar: [
               { from: '06-01', stage: 'fallow' },

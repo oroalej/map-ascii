@@ -1193,7 +1193,6 @@ const PrevailingWindSchema = z.strictObject({
 
 export const CropCalendarSchema = z
   .strictObject({
-    status: z.enum(['draft', 'verified']),
     calendar: z
       .array(
         z.strictObject({
