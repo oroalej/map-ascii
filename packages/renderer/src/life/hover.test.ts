@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { classId } from '../classes';
-import type { HoverFrame } from './hover';
+import type { HoverFrame, LifeHover } from './hover';
 import { LifeHoverController } from './hover';
 import { lifeVisibleOnSurface } from './surface-visibility';
 import { CellBit } from './config';
@@ -58,7 +58,7 @@ function fixture() {
       requests.push({ rect, done, retire });
     },
   };
-  const emit = vi.fn();
+  const emit = vi.fn<(value: LifeHover) => void>();
   const inspect = vi.fn();
   const inspectItem = vi.fn();
   const hover = new LifeHoverController(reads, 100, emit, inspect, inspectItem);
@@ -247,9 +247,7 @@ it.each(['bird', 'cat', 'dog'] as const)(
     hover.update(frame, 0);
     finish();
     hover.update(frame, 1);
-    expect(emit.mock.calls.at(-1)?.[0]).toEqual(
-      expect.objectContaining({ label: expect.stringContaining('(simulated)') }),
-    );
+    expect(emit.mock.calls.at(-1)?.[0]?.label).toContain('(simulated)');
     frame.agents = [{ ...frame.agents[0]!, lng: 1, flap: 1 }];
     hover.update(frame, 16);
     expect(inspect).not.toHaveBeenCalled();
