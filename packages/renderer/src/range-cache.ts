@@ -2,6 +2,7 @@ import { EtagMismatch, FetchSource, type RangeResponse, type Source } from 'pmti
 
 const CACHE = 'atlas-pmtiles-ranges-v1';
 const epochs = new Map<string, number>();
+const retentions = new Map<string, { generation: number; promise: Promise<void> }>();
 let mutations = Promise.resolve();
 const mutate = <T>(action: () => Promise<T>): Promise<T> => {
   const next = mutations.then(action);
@@ -25,6 +26,7 @@ export function archiveSource(url: string): Source {
 }
 
 export class RangeCacheSource implements Source {
+  private reloadInvalidation: Promise<void> | undefined;
   constructor(private readonly source: FetchSource) {}
   getKey() {
     return this.source.getKey();
@@ -45,6 +47,7 @@ export class RangeCacheSource implements Source {
   private async invalidate(cache?: Cache) {
     const url = this.getKey();
     epochs.set(url, epoch(url) + 1);
+    retentions.delete(url);
     if (!cache) return;
     try {
       await mutate(async () => {
@@ -59,9 +62,23 @@ export class RangeCacheSource implements Source {
       /* Storage failure must not prevent pmtiles' reload. */
     }
   }
+  private reload(cache?: Cache) {
+    return (this.reloadInvalidation ??= this.invalidate(cache));
+  }
+  /** Retention is once per pin/session and never delays bytes on the read path. */
+  private retain(cache: Cache, generation: number) {
+    const url = this.getKey();
+    if (retentions.get(url)?.generation === generation) return;
+    const retained = { generation, promise: Promise.resolve() };
+    retained.promise = mutate(async () => {
+      if (generation === epoch(url)) await this.touch(cache);
+    }).catch(() => {
+      if (retentions.get(url) === retained) retentions.delete(url);
+    });
+    retentions.set(url, retained);
+  }
   private async touch(cache: Cache) {
     const url = new URL(this.getKey());
-    await cache.put(this.key(), new Response(String(Date.now())));
     const versions: { archive: string; at: number }[] = [];
     const keys = await cache.keys();
     for (const key of keys) {
@@ -75,15 +92,20 @@ export class RangeCacheSource implements Source {
         continue;
       const other = new URL(archive);
       if (other.origin !== url.origin || other.pathname !== url.pathname) continue;
-      versions.push({ archive, at: Number(await (await cache.match(key))?.text()) });
+      const at = Number(await (await cache.match(key))?.text());
+      versions.push({ archive, at: Number.isFinite(at) ? at : 0 });
     }
-    // The current pin wins timestamp ties and the newest previously used pin is retained.
-    versions.sort(
-      (a, b) =>
-        Number(b.archive === this.getKey()) - Number(a.archive === this.getKey()) || b.at - a.at,
-    );
-    const stale = new Set(versions.slice(2).map(({ archive }) => archive));
-    for (const archive of stale) epochs.set(archive, epoch(archive) + 1);
+    // Persist order even when the clock is fixed or several visits share one millisecond.
+    const at = Math.max(Date.now(), ...versions.map((version) => version.at + 1));
+    await cache.put(this.key(), new Response(String(at)));
+    const ordered = versions.filter((version) => version.archive !== this.getKey());
+    ordered.push({ archive: this.getKey(), at });
+    ordered.sort((a, b) => b.at - a.at);
+    const stale = new Set(ordered.slice(2).map(({ archive }) => archive));
+    for (const archive of stale) {
+      epochs.set(archive, epoch(archive) + 1);
+      retentions.delete(archive);
+    }
     for (const key of keys)
       if (
         new URL(key.url).pathname === '/__atlas_range_cache__' &&
@@ -100,7 +122,8 @@ export class RangeCacheSource implements Source {
     abort(signal);
     const cache = await this.storage();
     abort(signal);
-    if (this.source.mustReload) await this.invalidate(cache);
+    if (this.source.mustReload) await this.reload(cache);
+    else this.reloadInvalidation = undefined;
     const generation = epoch(this.getKey());
     let stored: Response | undefined;
     if (cache && !this.source.mustReload) {
@@ -115,7 +138,7 @@ export class RangeCacheSource implements Source {
       const cachedEtag = stored.headers.get('etag') ?? undefined;
       if (etag && cachedEtag && etag !== cachedEtag) {
         this.source.mustReload = true;
-        await this.invalidate(cache);
+        await this.reload(cache);
         throw new EtagMismatch('Stored PMTiles range has a different ETag');
       }
       let data: ArrayBuffer | undefined;
@@ -126,11 +149,7 @@ export class RangeCacheSource implements Source {
       }
       abort(signal);
       if (data && generation === epoch(this.getKey())) {
-        try {
-          await mutate(() => this.touch(cache!));
-        } catch {
-          /* Best effort retention. */
-        }
+        this.retain(cache!, generation);
         abort(signal);
         return {
           data,
@@ -144,24 +163,25 @@ export class RangeCacheSource implements Source {
     try {
       response = await this.source.getBytes(offset, length, signal, etag);
     } catch (error) {
-      if (error instanceof EtagMismatch) await this.invalidate(cache);
+      if (error instanceof EtagMismatch) {
+        this.source.mustReload = true;
+        await this.reload(cache);
+      }
       throw error;
     }
     abort(signal);
     if (cache && !this.source.mustReload) {
-      try {
-        await mutate(async () => {
-          if (generation !== epoch(this.getKey()) || signal?.aborted) return;
-          const headers = new Headers();
-          if (response.etag) headers.set('etag', response.etag);
-          if (response.cacheControl) headers.set('cache-control', response.cacheControl);
-          if (response.expires) headers.set('expires', response.expires);
-          await cache.put(this.key(offset, length), new Response(response.data, { headers }));
-          await this.touch(cache);
-        });
-      } catch {
+      void mutate(async () => {
+        if (generation !== epoch(this.getKey()) || signal?.aborted) return;
+        const headers = new Headers();
+        if (response.etag) headers.set('etag', response.etag);
+        if (response.cacheControl) headers.set('cache-control', response.cacheControl);
+        if (response.expires) headers.set('expires', response.expires);
+        await cache.put(this.key(offset, length), new Response(response.data, { headers }));
+        if (generation === epoch(this.getKey()) && !signal?.aborted) this.retain(cache, generation);
+      }).catch(() => {
         /* Quota or storage failure cannot break map loading. */
-      }
+      });
     }
     abort(signal);
     return response;
