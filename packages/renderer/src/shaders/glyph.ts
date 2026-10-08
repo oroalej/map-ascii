@@ -88,6 +88,8 @@ uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
 uniform float u_time;
+uniform vec3 u_ripples[4];
+uniform int u_rippleCount;
 uniform float u_lifeTime;
 uniform vec3 u_haunts[8];
 uniform int u_hauntCount;

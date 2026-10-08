@@ -390,6 +390,7 @@ export type StepPass = {
   owns?: (p: { x: number; y: number }) => boolean;
   seams?: ReadonlyMap<Mover, SeamLimit>;
   momentView?: { zoom: number; cellWidth: number; cellAspect: number };
+  boatGuard?: (m: Mover, before?: Mover) => boolean;
   recoveredLines?: Set<number>;
   recoveryAttempts?: ReadonlySet<Mover>;
   recoveredNow?: ReadonlySet<Mover>;
@@ -495,6 +496,8 @@ export type Mover = {
   grooming?: boolean;
   /** Cursor-owned pet episode; absent in ordinary wandering. */
   pointerDog?: 'follow' | 'sit';
+  /** Accepted lateral boat displacement in metres; absent in legacy runs. */
+  boatShift?: number;
   kind: Exclude<AgentKind, 'bird'>;
   line: number;
   /** The vertex it last passed (an index into the tile's `coords` pairs). */
@@ -2199,6 +2202,7 @@ export class TileLife {
   /** How far right of its line's center a mover keeps, m: a vehicle's lane, else 0. */
   offsetOf(m: Mover, identity = m): number {
     if (isWalker(m.kind)) return this.scenes.walkingOffset(m, identity);
+    if (m.kind === 'boat') return m.boatShift ?? 0;
     if (m.kind !== 'vehicle' || !m.vehicle) return 0;
     const spec = VEHICLES[m.vehicle];
     const road = this.roadWidth(m.line);
@@ -6365,7 +6369,13 @@ export class TileLife {
     const rejected = (reason: ContinuityRejection) => {
       terrainRejected ||= reason === 'terrain';
     };
-    const fitsGround: GroundGuard = guard ?? this.standaloneGround;
+    const physicalGuard = guard ?? this.standaloneGround;
+    const fitsGround: GroundGuard = pass?.boatGuard
+      ? (owner, before, reserve, reject) =>
+          'kind' in owner && owner.kind === 'boat' && owner.boatShift !== undefined
+            ? pass.boatGuard!(owner, before as Mover | undefined)
+            : physicalGuard(owner, before, reserve, reject)
+      : physicalGuard;
     let livePedestrians = pass?.pedestrians;
 
     // Scene visitors drop runs; other frozen runners keep their timer. Resumed runs share
@@ -6685,6 +6695,30 @@ export class TileLife {
         if (m.kind === 'person' && speeds[i]! > 0 && this.trafficTooClose(m, speeds[i]! * dt))
           speeds[i] = 0;
       }
+      if (m.kind === 'boat' && (this.tilePointer || m.boatShift !== undefined)) {
+        const p = this.tilePointer,
+          pose = this.pose(m);
+        const close =
+          p &&
+          (pose.x - p.x) ** 2 + (pose.y - p.y) ** 2 <
+            (POINTER.boat * p.cellMeters * this.perMeter) ** 2;
+        const before = { ...m },
+          old = m.boatShift ?? 0;
+        const side = p ? (p.x - m.x) * -m.hy + (p.y - m.y) * m.hx : 0;
+        const target = close ? -(side >= 0 ? 1 : -1) * Math.min(3, p!.cellMeters * 2) : 0;
+        const shift = old + Math.sign(target - old) * Math.min(Math.abs(target - old), dt * 1.5);
+        if (shift !== old) {
+          m.boatShift = shift;
+          if (!pass?.boatGuard?.(m, before)) {
+            if (before.boatShift === undefined) delete m.boatShift;
+            else m.boatShift = old;
+          } else if (Math.abs(shift) < 1e-9) delete m.boatShift;
+        }
+        if (close) {
+          speeds[i] = Math.min(speeds[i]!, this.perMeter);
+          this.caps[i] = Math.min(this.caps[i]!, this.perMeter);
+        }
+      }
       if (m.vehicle) {
         this.motionStats.steps++;
         const seam = pass?.seams?.get(m);
@@ -6772,7 +6806,13 @@ export class TileLife {
           );
       }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
-      if (m.vehicle && (!guard || m.kind !== 'vehicle') && !m.maneuver && !m.latYaw) {
+      if (
+        m.vehicle &&
+        (!guard || m.kind !== 'vehicle') &&
+        !m.maneuver &&
+        !m.latYaw &&
+        m.boatShift === undefined
+      ) {
         m.v =
           distance === 0 && m.v === 0 ? 0 : this.advance(m, distance, true, this.enteredExits) / dt;
         m.waiting = 0;
@@ -11712,6 +11752,7 @@ export class LifeWorld {
         ),
         {
           crossingGuard: true,
+          boatGuard: (m, before) => this.boatSweep(tile, m, before),
           pedestrians: guard.pedestrians(tile),
           junctions: this.junctions,
           trains,
@@ -11866,6 +11907,52 @@ export class LifeWorld {
   }
 
   /** Connected running routes share an arrival clock, including duplicated buffered lines. */
+  /** Cursor detours require proven complete water coverage at every swept pose. */
+  private boatSweep(life: TileLife, mover: Mover, before = mover) {
+    const terrain = this.groundTerrain;
+    if (!terrain || !terrain.water.polygons.length) return false;
+    const o = terrain.origins.get(life)!;
+    const a = life.pose(before),
+      b = life.pose(mover);
+    const steps = Math.max(
+      1,
+      Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / life.perMeter / 0.3),
+      Math.ceil(Math.hypot(b.hx - a.hx, b.hy - a.hy) * 12),
+    );
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps,
+        hx = a.hx + (b.hx - a.hx) * t,
+        hy = a.hy + (b.hy - a.hy) * t;
+      const norm = Math.hypot(hx, hy) || 1;
+      const sample = {
+        ...mover,
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        hx: hx / norm,
+        hy: hy / norm,
+      };
+      delete sample.boatShift; // The sample coordinates already contain the accepted offset.
+      const bodies = life
+        .groundBodies(sample)
+        .map((body) => ({
+          ...body,
+          x: o.x + body.x * o.scale,
+          y: o.y + body.y * o.scale,
+          length: body.length * o.scale,
+          width: body.width * o.scale,
+        }));
+      if (
+        terrain.blocked.hits(bodies) ||
+        bodies.some(
+          (body) => !terrain.water.polygons.some((polygon) => bodyInside(body, polygon)),
+        ) ||
+        !this.boatRoom(life, sample, mover, [])
+      )
+        return false;
+    }
+    return true;
+  }
+
   private boatRoom(
     target: TileLife,
     preview: Mover,

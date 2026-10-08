@@ -1,3 +1,4 @@
+import type { Ripple } from './life/cursor-effects';
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
 import type { cropTint } from './glyphs/select';
@@ -782,6 +783,7 @@ export function effectClockPass(gl: GL, targets: CellTargets) {
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
 export type Weather = {
+  ripples?: readonly Ripple[];
   rain: number;
   wind: WindNow | null;
   fish?: boolean;
@@ -1009,6 +1011,8 @@ export function glyphPass(
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,
+    u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
+    u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
     u_lifeTime: lifeTime,
     ...hauntUniforms(

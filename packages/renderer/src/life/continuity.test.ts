@@ -16,6 +16,22 @@ import { trainLimits } from './train-motion';
 import { withoutDecorations } from '../../scripts/decorations';
 
 const entry = continuityTile(parent);
+it('rebases an active boat shift during zoom adoption without adding pointer-free properties', () => {
+  const a = continuityTile(parent, LifeLine.river),
+    b = continuityTile(left, LifeLine.river);
+  const source = new TileLife(parent, a.life, 1),
+    target = new TileLife(left, b.life, 1);
+  const boat = continuityMover(source, 1000, 'boat');
+  const ordinary = target.projectFrom(boat, source)!;
+  expect(ordinary).not.toHaveProperty('boatShift');
+  boat.boatShift = 1.5;
+  const projected = target.projectFrom(boat, source)!;
+  const old = tileToLngLat(parent, source.pose(boat)),
+    next = tileToLngLat(left, target.pose(projected));
+  expect(next[0]).toBeCloseTo(old[0], 9);
+  expect(next[1]).toBeCloseTo(old[1], 9);
+  expect(projected.boatShift).toBeCloseTo(1.5);
+});
 function fixture(kind: LifeLine = LifeLine.roadMajor) {
   const source = continuityTile(parent, kind);
   const world = new LifeWorld({ road_major: { car: 1 } });

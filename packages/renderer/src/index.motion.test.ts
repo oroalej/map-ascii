@@ -1042,6 +1042,25 @@ describe('live motion preference', () => {
     draw(200);
   };
 
+  it('projects cursor rings locally and clears them with mouse hover and Life', async () => {
+    await usePauseMode('item');
+    draw(100);
+    input.intents!.hover([120, 90]);
+    draw(150);
+    input.intents!.hover([140, 90]);
+    draw(200);
+    const rings = vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples!;
+    expect(rings).toHaveLength(2);
+    expect(rings.every(([x, y]) => Math.abs(x) < 200 && Math.abs(y) < 200)).toBe(true);
+    input.intents!.hover(null);
+    draw(250);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
+    input.intents!.hover([120, 90]);
+    draw(300);
+    atlas.setLife({ enabled: false });
+    draw(350);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
+  });
   it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', async () => {
     const frames: FrameInput[] = [];
     const createInline = InlineHosts.createConfiguredInlineHost;
