@@ -1,13 +1,13 @@
 {
   "repo": "oroalej/map-ascii",
-  "tag": "tiles-naga-20261008-1622",
+  "tag": "tiles-naga-20261008-1709",
   "files": {
     "naga.art.json": "6fd6654028eb101715ee8111c42abe3126f046cfb3a6bc980300c191f19dce32",
-    "naga.detail-layouts.json": "9ea2c490c161353298e9064910029b0a14cb0e3c7e2e6e7d0f39d6fb65e4c4ba",
+    "naga.detail-layouts.json": "770bf88f8b2e7ce12953f9fb45b7df5877109bbbc735697731ef70d625f24f85",
     "naga.emergency.json": "fe5c9662160b2326ab3d2b3ca5811d26823ad6ad2c624578ce581a3a82876fc3",
     "naga.landmarks.json": "93a51d755bdad1cbe7289a782c20aa7245b818ed669e979ff37d8db71bd4d9e9",
     "naga.meta.json": "707f258e8e4c8a2681d14214f3304f75f7d33c5cbae4d37584dc0a275c7ec92e",
-    "naga.pmtiles": "1fa9628a79ec28f58adf470aa56df5d338d171be5b8dc89dacdff2e84d9495b8",
+    "naga.pmtiles": "2cc168b13cb9b6608af7d8c6f21dd33130c4b8700da012302efa0884d467cb83",
     "naga.processions.json": "a9783ceca2f920f11dcd5c51996f4cc29f65564d62a80682944cc9a4a2f500e0",
     "naga.search-index.json": "ddaa4b63a87867929c6206c5b3836fc362c31cb09c7969da8818b4bfb2d5708c",
     "naga.subdivisions.json": "336612c33ed160ab37f5fdd8c0d066b5e38e16ac2aad83d514a98da23bfe0f22",
