@@ -8639,7 +8639,18 @@ export class LifeWorld {
       if (mover) return { life, mover };
     }
   }
-  private tapAgent(target: TapTarget) {
+  private tapAgent(target: TapTarget, minutes = 720, zoom = 19) {
+    if (target.agent.kind === 'person' && !target.agent.vehicle && zoom >= MOMENTS.zoom) {
+      for (const life of this.tiles.values()) {
+        const person =
+          life.movers.find((m) => m === target.owner && m.kind === 'person') ??
+          life.gatherers.find((g) => g === target.owner);
+        if (!person) continue;
+        if (life.momentHost.sceneHost.request(person, this.emojiClock, minutes))
+          life.requestEmoji(person, 'person', 'wave', this.emojiClock, 2.5, 0, 8);
+        return;
+      }
+    }
     const owned = this.tapOwner(target.owner);
     if (!owned) return;
     const { life, mover } = owned;
@@ -8678,13 +8689,13 @@ export class LifeWorld {
       if (++count >= 8) break;
     }
   }
-  private resolveTaps(taps: readonly LifeTap[] | undefined) {
+  private resolveTaps(taps: readonly LifeTap[] | undefined, minutes = 720, zoom = 19) {
     this.tapReceipts =
       taps?.length && this.tapSources
         ? taps.slice(0, 4).map((tap) =>
             resolveTap(tap, this.tapSources!, {
               folklore: () => false,
-              agent: (target) => this.tapAgent(target),
+              agent: (target) => this.tapAgent(target, minutes, zoom),
               signal: () => false,
               procession: () => false,
               carnival: () => {},
@@ -11324,14 +11335,14 @@ export class LifeWorld {
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
-      this.resolveTaps(taps);
+      this.resolveTaps(taps, weather?.minutes, zoom);
       this.sampleFolklore(weather, 0);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
-    this.resolveTaps(taps);
+    this.resolveTaps(taps, weather?.minutes, zoom);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.folklore.clear();

@@ -25,7 +25,7 @@ export type MomentOptions = {
 };
 export class MomentHost {
   readonly moments: Moments<Owner>;
-  private readonly sceneHost: SceneSpeechHost;
+  readonly sceneHost: SceneSpeechHost;
   get scenes() {
     return this.sceneHost.speech;
   }
