@@ -8639,7 +8639,25 @@ export class LifeWorld {
       if (mover) return { life, mover };
     }
   }
-  private tapAgent(target: TapTarget, minutes = 720, zoom = 19) {
+  private tapAgent(target: TapTarget, minutes = 720, zoom = 19, rain = 0) {
+    if (target.agent.vehicle === 'cart') {
+      for (const life of this.tiles.values()) {
+        const stall = [...life.allStalls()].find((s) => s === target.owner);
+        if (!stall) continue;
+        if (stall.open === false || rain >= MOMENTS.rain) return;
+        const visible = new Set(
+          this.tapSources?.latest().flatMap((t) => (t ? [t.owner] : [])) ?? [],
+        );
+        if (
+          !life.scenes.purchase(
+            stall,
+            life.movers.filter((m) => visible.has(m) && this.owns(life, m)),
+          )
+        )
+          life.requestEmoji(stall, 'person', 'wave', this.emojiClock);
+        return;
+      }
+    }
     if (target.agent.kind === 'person' && !target.agent.vehicle && zoom >= MOMENTS.zoom) {
       for (const life of this.tiles.values()) {
         const person =
@@ -8689,13 +8707,13 @@ export class LifeWorld {
       if (++count >= 8) break;
     }
   }
-  private resolveTaps(taps: readonly LifeTap[] | undefined, minutes = 720, zoom = 19) {
+  private resolveTaps(taps: readonly LifeTap[] | undefined, minutes = 720, zoom = 19, rain = 0) {
     this.tapReceipts =
       taps?.length && this.tapSources
         ? taps.slice(0, 4).map((tap) =>
             resolveTap(tap, this.tapSources!, {
               folklore: () => false,
-              agent: (target) => this.tapAgent(target, minutes, zoom),
+              agent: (target) => this.tapAgent(target, minutes, zoom, rain),
               signal: () => false,
               procession: () => false,
               carnival: () => {},
@@ -11335,14 +11353,14 @@ export class LifeWorld {
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
-      this.resolveTaps(taps, weather?.minutes, zoom);
+      this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
       this.sampleFolklore(weather, 0);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
-    this.resolveTaps(taps, weather?.minutes, zoom);
+    this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
     this.pruneRetired();
     if (!this.tiles.size) {
       this.folklore.clear();

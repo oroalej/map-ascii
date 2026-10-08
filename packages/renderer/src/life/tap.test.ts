@@ -66,6 +66,42 @@ it('resolves a coach to its consist, but renders the requested horn only on the 
   expect(cues[0]!.vehicle).toBe('locomotive');
   expect(cues[0]!.emoji?.mood).toBe('honk');
 });
+it.each([false, true])('consumes a closed/rainy cart without a visit or wave (rain=%s)', (rain) => {
+  const f = vehicleWorld();
+  const stall = {
+    x: 1800,
+    y: f.vehicle.y,
+    hx: 1,
+    hy: 0,
+    paint: 0,
+    shirt: 0,
+    side: 1 as const,
+    rank: 0,
+    open: true,
+  };
+  f.life.stalls.push(stall);
+  f.life.scenes.addStall(stall);
+  const agents = f.world.visible(19, 1, [0, 0]);
+  const agent = agents.findIndex((a) => a.vehicle === 'cart');
+  expect(agent).toBeGreaterThanOrEqual(0);
+  stall.open = rain;
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: rain ? 1 : 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+  );
+  expect(f.world.tapReceipts![0]!.action).toBe('agent');
+  expect(f.life.scenes.visits.size).toBe(0);
+  expect(f.world.emojiMemory.cue(stall)?.mood).not.toBe('wave');
+});
 it('leaves tap-free physical state and visible records identical with frame targeting enabled', () => {
   const a = makeScenario('sparse', 1, true),
     b = makeScenario('sparse', 1, true);
