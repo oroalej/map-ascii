@@ -1,7 +1,8 @@
 import { expect, it } from 'vitest';
 import { addPet, petPointer } from './testing/pet-pointer';
 import { continuityTile, right, continuityMover } from './testing/continuity';
-import { LifeLine } from './geometry';
+import { LifeBuilder, LifeLine } from './geometry';
+import { LifeWorld } from './simulate';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { left } from './testing/continuity';
 
@@ -83,5 +84,38 @@ it.each(['off-path', 'dead-end'] as const)(
     expect(f.pet.pointerDog).toBeUndefined();
     expect(f.pet.momentFacing).toBeUndefined();
     expect(f.pet.x).not.toBe(x);
+  },
+);
+
+it.each(['junction', 'bend'] as const)(
+  'continues past the closest point toward a reachable cursor through a %s',
+  (route) => {
+    const pm = 1 / metersPerUnit(left),
+      b = new LifeBuilder(),
+      corner = { x: 2000 + 4 * pm, y: 2000 },
+      end = { x: corner.x, y: 2000 - 10 * pm };
+    b.line([{ x: -100, y: 2000 }, corner, ...(route === 'bend' ? [end] : [])], LifeLine.path);
+    if (route === 'junction') b.line([corner, end], LifeLine.path);
+    const world = new LifeWorld(),
+      entry = { key: 'corner', tile: left, life: b.finish() };
+    world.sync([entry]);
+    const life = world.resident(entry.key)!,
+      dog = continuityMover(life, 2000, 'dog');
+    life.movers.length = life.parked.length = life.gatherers.length = life.stalls.length = 0;
+    life.flocks.length = life.scenes.sites.length = 0;
+    dog.speed = 0.6 * pm;
+    dog.v = undefined;
+    life.movers.push(dog);
+    const pointer = tileToLngLat(left, { x: 2000 + 3 * pm, y: 2000 - 6 * pm });
+    world.setEmojiView([19, 1, pointer]);
+    let happy = false;
+    for (let i = 0; i < 100; i++) {
+      world.step(0.1, undefined, 19, undefined, undefined, { rain: 0 }, 1, 1.8, 1, pointer);
+      happy ||= life.emoji.cue(dog)?.mood === 'happy';
+    }
+    expect(dog.y).toBeLessThan(2000 - 4.5 * pm);
+    expect(dog.pointerDog).toBe('sit');
+    expect(life.roadTerrain.access.allows(life.groundBodies(dog))).toBe(true);
+    expect(happy).toBe(true);
   },
 );

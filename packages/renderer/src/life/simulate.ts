@@ -7941,23 +7941,25 @@ export class TileLife {
       tolerance = Math.max(0.5 * this.perMeter, speed * dt),
       along = dx * m.hx + dy * m.hy,
       to = m.from + m.dir;
-    const atEnd =
-      this.segment(m.from, to) - m.d <= tolerance &&
-      (to === this.first(m.line) || to === this.last(m.line));
-    const blockedEnd =
-      atEnd &&
-      !this.exitOptions(m, to).some((code) => {
-        const exit = this.directedExit(code, to),
-          next = exit.vertex + exit.dir,
-          c = this.geo.coords;
-        return (
-          (pointer.x - c[to * 2]!) * (c[next * 2]! - c[exit.vertex * 2]!) +
-            (pointer.y - c[to * 2 + 1]!) * (c[next * 2 + 1]! - c[exit.vertex * 2 + 1]!) >
-          0
-        );
-      });
+    const lineEnd = to === this.first(m.line) || to === this.last(m.line);
+    const toward = (from: number, next: number) => {
+      const c = this.geo.coords;
+      return (
+        (pointer.x - c[to * 2]!) * (c[next * 2]! - c[from * 2]!) +
+          (pointer.y - c[to * 2 + 1]!) * (c[next * 2 + 1]! - c[from * 2 + 1]!) >
+        0
+      );
+    };
+    const onward = lineEnd
+      ? this.exitOptions(m, to).some((code) => {
+          const exit = this.directedExit(code, to),
+            next = exit.vertex + exit.dir;
+          return toward(exit.vertex, next);
+        })
+      : toward(to, to + m.dir);
+    const blockedEnd = lineEnd && this.segment(m.from, to) - m.d <= tolerance && !onward;
     const arrived = distance <= POINTER.sit * pointer.cellMeters * this.perMeter;
-    if ((arrived || Math.abs(along) <= tolerance || blockedEnd) && this.canIdle(m)) {
+    if ((arrived || (Math.abs(along) <= tolerance && !onward) || blockedEnd) && this.canIdle(m)) {
       const before = snapshotMover(m);
       if (distance > 1e-9) m.momentFacing = { hx: dx / distance, hy: dy / distance };
       if (guard(m, before)) {
@@ -7973,7 +7975,7 @@ export class TileLife {
     m.pointerDog = 'follow';
     m.pause = 0;
     m.momentFacing = undefined;
-    if (dx * m.hx + dy * m.hy < 0) {
+    if (along < 0 && !onward) {
       const before = snapshotMover(m);
       this.turnBack(m);
       this.advance(m, 0, false);
