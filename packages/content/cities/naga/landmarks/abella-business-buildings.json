@@ -1,0 +1,66 @@
+{
+  "id": "landmark/abella-business-buildings",
+  "osm_id": "osm:way/23674415",
+  "name": { "en": "Abella Business Buildings" },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap Abella business row representative footprint",
+      "url": "https://www.openstreetmap.org/way/23674415",
+      "note": "ODbL. Existing street-front building footprint containing the frozen Jollibee General Luna point (node/4844972823), retained unchanged as the row's representative. Edit dates are not construction dates. Generated subdivision: Dinaga. No construction year is assigned."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the structures of the rows of Abella business buildings on General Luna Street for preservation and restoration. One independently identified member represents the row; adjacent unverified roofs receive no heritage identity."
+    },
+    {
+      "title": "Naga City CLUP 2016–2030 ecological profile, pages 60–61",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2022/07/CLUP-2016-30-Ecological-Profile.pdf",
+      "note": "Official city plan identifies Abella Building among the existing historical sites of the proposed Ciudad de Nueva Caceres heritage district. Figure 3.30 locates it on General Luna Street. The proposed district map is a locator and historical inventory, not a footprint or construction date. Inspected October 8, 2026."
+    },
+    {
+      "title": "Jollibee: Naga General Luna store directory",
+      "url": "https://order.jollibee.com/en/ph/stores/jollibee-naga-gen-luna",
+      "note": "Official business locator names Abella Building, General Luna Street as this restaurant's address. Its Santa Cruz locality conflicts with the frozen geographic subdivision and Coca-Cola's Dinaga address; subdivision is derived from the pipeline. Address inspected October 8, 2026 and matched to the visible restaurant sign, not used to infer an age."
+    },
+    {
+      "title": "Coca-Cola Philippines: Epic Music Promo participating stores (2024)",
+      "url": "https://www.coca-cola.com/content/dam/onexp/ph/en/legal/terms-and-conditions-epic-music-promo/epic-music-promo-2024-list-of-stores.pdf",
+      "note": "Primary participating-business list independently gives Naga Gen Luna at Abella Building, General Luna Street, Dinaga, Naga City. Inspected October 8, 2026. This is an address check, not a historical construction source."
+    },
+    {
+      "title": "Google Street View: Abella row's Jollibee frontage",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=IFwkgHmTPxKSOlV3cRmVZQ&heading=100&pitch=-15",
+      "note": "August 2025 panorama at 13.622564543, 123.184376838, inspected in memory October 8, 2026. Jollibee occupies the left part of a continuous two-storey white facade with ground-floor arches, upper rectangular windows, pilasters and decorative parapet. The store address and official heritage map identify this surviving row. Appearance alone supplies no family identity or date. No bitmap saved or distributed."
+    },
+    {
+      "title": "Google Maps satellite: General Luna business row",
+      "url": "https://www.google.com/maps/@13.622512,123.184511,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected in memory October 8, 2026 with frozen building/street geometry. The street-front member containing the named Jollibee point is way/23674415; adjoining east-side units continue the row. Their ownership and full historical extent are not independently verified, so none is named or attached by proximity. Imagery date is unknown; no bitmap ships."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Abella business buildings on General Luna Street were listed for preservation and restoration by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The city's 2016–2030 land-use plan includes Abella Building among the surviving historical sites of the proposed Ciudad de Nueva Caceres heritage district."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Jollibee's official store directory locates its General Luna restaurant in Abella Building, giving this member of the row a current commercial use."
+      },
+      "source": 3
+    }
+  ]
+}

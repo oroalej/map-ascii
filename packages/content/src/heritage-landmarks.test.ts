@@ -9,7 +9,7 @@ const landmarks = Object.values(records).map((record) => Landmark.parse(record))
 const heritage = landmarks.filter((landmark) => landmark.type === 'heritage');
 const ordinance = 'https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/';
 
-// Each scope identity has its own disposition; unresolved corners never borrow a nearby roof.
+// Unfinished research is tracked explicitly; accounting for scope does not satisfy full coverage.
 const sites = [
   'almeda-ancestral-house',
   'roco-ancestral-house',
@@ -36,39 +36,38 @@ const sites = [
   'contreras-adjacent-property-ruins',
 ] as const;
 
-const omitted: Partial<Record<(typeof sites)[number], string>> = {
-  'almeda-ancestral-house':
-    'Abella Street is supported, but the proposed coordinate is from an AI-assisted directory. Canopy obscures the candidate roof; no independently identified surviving footprint.',
-  'roco-ancestral-house':
-    'The ordinance and 2009 blog identify Barlin Street and a wooden house, but the photograph cannot be tied to one current OSM lot.',
+const pending: Partial<Record<(typeof sites)[number], string>> = {
   'old-provincial-jail':
-    'The sources identify the two-building complex behind PhilamLife; neither the published map nor inspected imagery resolves a separate surviving jail footprint.',
+    'Complex map, 1935 aerial, 2025 proposed plan and current frontage do not resolve the surviving jail/Cuartel to a separate georeferenced OSM outline; one proposed candidate is modern SJ Complex.',
   'administracion-de-correo':
-    'The source identifies the right-hand 1826 building, but the facade inscription cannot be matched to a distinct surviving OSM footprint; the complex alone is insufficient.',
-  'lorenzo-house': 'Barlin Street only; no family marker or lot-specific imagery match found.',
-  'badiola-house': 'Barlin Street only; no family marker or lot-specific imagery match found.',
-  'amanse-house': 'Barlin Street only; no family marker or lot-specific imagery match found.',
+    'The 1826 inscription account and Cuartel/Almacenes proposed-plan names need reconciliation with a current facade and distinct surviving OSM outline; the complex alone is insufficient.',
+  'lorenzo-house':
+    'Ordinance, registry searches and Barlin imagery provide no named facade or exact surviving family lot.',
+  'badiola-house':
+    'Alumni place Harong pub in Badiolas Barlin home, but its connection to the documented Sa Harong/Our House/Hillary/Jikka property remains unverified.',
+  'amanse-house':
+    'The official newsletter mentions Patricio Amanse without locating his family house; no named facade or exact surviving lot is resolved.',
   'barlin-dimasalang-corner-house':
-    'The named intersection has several building footprints; no evidence resolves the surviving listed house to one corner.',
+    'Current imagery shows old houses on opposite corners, including Jikka to the east; the unnamed listed corner cannot be chosen by appearance or elimination.',
   'abella-paz-stone-structure':
     'Elias Angeles and Paz identifies an intersection, but no source/photo establishes which corner footprint is the surviving Abella structure.',
   'elias-angeles-dimasalang-corner-house':
     'Several corner footprints remain plausible; no surviving-house identity or marker verified.',
-  'abella-business-buildings':
-    'No identifiable surviving row or representative building on General Luna verified; modern commercial roofs are insufficient.',
   'de-la-rosa-buildings':
     'Calle Caceres is named, but no surviving De la Rosa building or row footprint is independently identified.',
   'villafrancia-house':
-    'The 2009 photograph shows VILLAFRANCIA 1927, but no exact Peñafrancia Avenue lot or surviving OSM footprint is resolved.',
+    'Named 2009/2011 facade references and sparse current/historical panoramas leave the exact surviving lot unresolved; the Flickr coarse public pin is not reliable footprint evidence.',
   'house-beside-villafrancia':
     'The Villafrancia parent lot is unresolved, so its unspecified neighboring house cannot be identified.',
   'ocampo-house': 'Peñafrancia Avenue only; no family marker or exact surviving lot verified.',
-  'jordana-house': 'Peñafrancia Avenue only; no family marker or exact surviving lot verified.',
-  'yllana-house': 'Liboton Street only; no exact surviving Yllana footprint verified.',
+  'jordana-house':
+    'The official Jordana Street naming, 1969 cadastral neighbor notice and Camarines Lumber compound lead do not identify the surviving ancestral house outline.',
+  'yllana-house':
+    'The primary 2016 stockholder address 252 Liboton is a locator without a named facade or proof of the surviving historic footprint.',
   'villa-ignacio-house':
-    'Liboton Street only; no exact surviving Villa Ignacio footprint verified.',
+    'A WWII recollection locates an Ignacio house in Liboton; its separately mentioned Jacob-corner house is not a valid substitute. The exact surviving lot remains unverified.',
   'dy-liacco-ancestral-house':
-    'J. Hernandez Avenue only; no exact surviving Dy-Liacco footprint verified.',
+    'Primary family recollections describe the Igualdad home opposite the old jail/capitol, but do not resolve a current matched facade or exact OSM lot; Tabuco family addresses are distinct.',
   'pantranco-stone-fence':
     'The ordinance identifies a fence, with no verified surviving building host; standalone wall geometry is excluded.',
   'contreras-property-ruins':
@@ -78,12 +77,12 @@ const omitted: Partial<Record<(typeof sites)[number], string>> = {
 };
 
 describe('Naga heritage scope', () => {
-  it('accounts for each requested site and conditional ruin with exactly one disposition', () => {
+  it('accounts for each requested site and conditional ruin as implemented or unfinished', () => {
     const added = heritage.map((landmark) => landmark.id.replace('landmark/', ''));
-    expect([...added, ...Object.keys(omitted)].sort()).toEqual([...sites].sort());
+    expect([...added, ...Object.keys(pending)].sort()).toEqual([...sites].sort());
     for (const site of sites) {
-      expect(Number(added.includes(site)) + Number(site in omitted)).toBe(1);
-      if (site in omitted) expect(omitted[site]!.length).toBeGreaterThan(30);
+      expect(Number(added.includes(site)) + Number(site in pending)).toBe(1);
+      if (site in pending) expect(pending[site]!.length).toBeGreaterThan(30);
     }
   });
 
@@ -110,5 +109,31 @@ describe('Naga heritage scope', () => {
     expect(arch.start_year).toBeUndefined();
     expect(arch.sources[0]!.note).toContain('it is not the historic mansion');
     expect(arch.facts).toHaveLength(4);
+  });
+
+  it('keeps the surviving Roco house on its independently identified Barlin footprint', () => {
+    const roco = heritage.find((landmark) => landmark.id === 'landmark/roco-ancestral-house')!;
+    expect(roco.osm_id).toBe('osm:way/23668511');
+    expect(roco.start_year).toBeUndefined();
+    expect(roco.facts).toHaveLength(3);
+    expect(roco.sources.some((source) => source.url?.includes('Dec_2025.jpg'))).toBe(true);
+  });
+
+  it('keeps Almeda undated while construction sources conflict', () => {
+    const almeda = heritage.find((landmark) => landmark.id === 'landmark/almeda-ancestral-house')!;
+    expect(almeda.osm_id).toBe('osm:way/23664606');
+    expect(almeda.start_year).toBeUndefined();
+    expect(almeda.facts).toHaveLength(5);
+    expect(almeda.sources.some((source) => source.url?.includes('NLP00VM052mcd'))).toBe(true);
+    expect(almeda.sources.some((source) => source.note?.includes('1938'))).toBe(true);
+    expect(almeda.sources.some((source) => source.note?.includes('1941'))).toBe(true);
+  });
+
+  it('attaches one independently identified representative of the Abella business row', () => {
+    const row = heritage.find((landmark) => landmark.id === 'landmark/abella-business-buildings')!;
+    expect(row.osm_id).toBe('osm:way/23674415');
+    expect(row.start_year).toBeUndefined();
+    expect(row.sources.some((source) => source.url?.includes('jollibee-naga-gen-luna'))).toBe(true);
+    expect(row.sources[0]!.note).toContain('representative');
   });
 });

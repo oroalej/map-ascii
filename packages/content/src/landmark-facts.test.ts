@@ -6,10 +6,12 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for thirteen Naga landmarks, including the heritage arch and museum statue', () => {
+it('curates facts for sixteen Naga landmarks, including heritage sites and the museum statue', () => {
   const clickable = Object.values(landmarks).filter((landmark) => landmark.facts);
   expect(clickable.map((landmark) => landmark.id).sort()).toEqual(
     [
+      'abella-business-buildings',
+      'almeda-ancestral-house',
       'ateneo-de-naga-university',
       'immaculate-conception-parish',
       'jesse-robredo-monument',
@@ -21,6 +23,7 @@ it('curates facts for thirteen Naga landmarks, including the heritage arch and m
       'people-power-monument',
       'plaza-quince-martires',
       'plaza-rizal',
+      'roco-ancestral-house',
       'san-francisco-parish',
       'universidad-de-santa-isabel',
     ].map((slug) => `landmark/${slug}`),

@@ -1,0 +1,80 @@
+{
+  "id": "landmark/almeda-ancestral-house",
+  "osm_id": "osm:way/23664606",
+  "name": { "en": "Almeda Ancestral House" },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap Almeda house footprint",
+      "url": "https://www.openstreetmap.org/way/23664606",
+      "note": "ODbL. Existing elongated building footprint south of Abella Street retained unchanged. Edit dates are not construction dates. Generated subdivision: Abella. Conflicting historical construction years are not assigned to the landmark."
+    },
+    {
+      "title": "Owner request: Almeda heritage house on Abella Street",
+      "note": "October 8, 2026 task request explicitly includes this house, which is not named in Ordinance No. 2003-003. Family identity and survival are independently supported by the sources and facade comparison below."
+    },
+    {
+      "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf",
+      "note": "Official CEPPIO newsletter, James Z. Carpio's tourist-spots feature. Attributes the Almeda ancestral house to Dominador and Josefa Almeda and gives 1938. This conflicts with 1941 in the named video and Ateneo magazine mirror; neither year is adopted. Inspected October 8, 2026."
+    },
+    {
+      "title": "CCP Encyclopedia of Philippine Art: Bicol (1994), architecture section",
+      "url": "https://nlpdl.nlp.gov.ph/CC01/monographs/1994/NLP00VM052mcd/v1/v7.pdf",
+      "note": "National Library-hosted CCP volume, PDF pages 12–13. Identifies the Almeda residence along Abella Street and records its porch arch, staircase carving, narra walls, movable partitions, named stair steps, glass French windows and cooling vents. These are the encyclopedia's architectural descriptions, not a claim of present interior access. Inspected October 8, 2026."
+    },
+    {
+      "title": "Kuya Nong PH: Almeda Ancestral House, Naga City Tour Vlog Part 2 (2023)",
+      "url": "https://www.youtube.com/watch?v=YY84keTKygU",
+      "note": "Named firsthand video reference. Published thumbnail shows ALMEDA lettering in an iron gate and a distinctive white house with horizontal wall bands, square-grid transoms, a raised porch, arched stair opening and a higher balcony tier with white balusters. Its 1941 title conflicts with the official newsletter's 1938; no year is inferred. Thumbnail inspected in memory October 8, 2026; no bitmap saved or distributed."
+    },
+    {
+      "title": "Google Street View: surviving Almeda facade on Abella Street",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=vTwDinRdpOz_kkIW1AS-AA&heading=220&pitch=0",
+      "note": "August 2025 panorama at 13.622970248, 123.182238247, inspected in memory October 8, 2026. The distinctive wall bands, square-grid transoms, raised porch, arched stair opening and higher white-baluster balcony match the named video. The house is south of this road segment on way/23664606. The exterior street gate differs from the thumbnail; current family lettering is not claimed. Capture dates are not construction dates. No bitmap saved or distributed."
+    },
+    {
+      "title": "Google Maps satellite: Almeda house lot on Abella Street",
+      "url": "https://www.google.com/maps/@13.622743,123.182041,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected in memory October 8, 2026 alongside the frozen OSM outline and street panorama. The elongated dark hipped roof and smaller northern roof tier match way/23664606 in the tree-covered lot south of Abella Street. Imagery date is unknown; no age or construction date is inferred and no bitmap ships."
+    },
+    {
+      "title": "Ateneo Blue & Gold (2011), page 24, public text mirror",
+      "url": "https://studylib.net/doc/8701844/jose-rizal---home---ateneo-de-naga-university",
+      "note": "Mirror of the institutional student magazine distinguishes the Abella Street ancestral house from the separate Tigaon rest house. Its 1941 construction date conflicts with the city's 1938 account. Original institutional PDF has not been located; no historical fact or construction year is adopted from this mirror."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The city's 75th-anniversary newsletter attributes the ancestral house to Dominador and Josefa Almeda."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The CCP encyclopedia describes an iron arch over the wide porch, with its curling motif repeated in wood above the grand staircase."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The CCP encyclopedia records polished narra walls and movable partitions that make the spacious interior light and airy."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The front stairway is described in the CCP encyclopedia as bearing family members' names on its steps."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The CCP encyclopedia describes glass-panelled French windows upstairs and vents above the exterior arches for cooling."
+      },
+      "source": 3
+    }
+  ]
+}
