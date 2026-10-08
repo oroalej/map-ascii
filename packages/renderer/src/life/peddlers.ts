@@ -95,6 +95,7 @@ type Route = {
   line: number;
   exitA: boolean;
   exitB: boolean;
+  exitDistance: number;
   site?: Point;
 };
 type Leg = { route: Route; from: number; to: number };
@@ -314,7 +315,7 @@ export class PeddlerPopulation {
           const envelope = turnaroundBody(config.prop, point);
           if (this.obstacles.hits([envelope]) || !this.context.safe([envelope], [envelope])) return;
         }
-        routes.push({ a, b, hx, hy, length, line, site, exitA, exitB });
+        routes.push({ a, b, hx, hy, length, line, site, exitA, exitB, exitDistance: Infinity });
         return;
       }
       if (depth >= 12 || length < 2) return;
@@ -358,6 +359,44 @@ export class PeddlerPopulation {
         }
       }
     }
+    // Cache a breadth-first distance in route transitions to a real/permitted exit.
+    // Match the movement join tolerance without merging distinct endpoint positions.
+    const neighbors = routes.map(() => new Set<number>()),
+      buckets = new Map<string, { point: Point; route: number }[]>(),
+      join = 0.02;
+    routes.forEach((route, index) => {
+      for (const point of [route.a, route.b]) {
+        const x = Math.floor(point.x / join),
+          y = Math.floor(point.y / join);
+        for (let dx = -1; dx <= 1; dx++)
+          for (let dy = -1; dy <= 1; dy++)
+            for (const other of buckets.get(`${x + dx}:${y + dy}`) ?? [])
+              if (
+                other.route !== index &&
+                Math.hypot(point.x - other.point.x, point.y - other.point.y) < join
+              ) {
+                neighbors[index]!.add(other.route);
+                neighbors[other.route]!.add(index);
+              }
+        const key = `${x}:${y}`,
+          entries = buckets.get(key) ?? [];
+        entries.push({ point, route: index });
+        buckets.set(key, entries);
+      }
+    });
+    const queue: number[] = [];
+    routes.forEach((route, index) => {
+      if (route.exitA || route.exitB) {
+        route.exitDistance = 0;
+        queue.push(index);
+      }
+    });
+    for (let read = 0; read < queue.length; read++)
+      for (const index of neighbors[queue[read]!]!)
+        if (routes[index]!.exitDistance === Infinity) {
+          routes[index]!.exitDistance = routes[queue[read]!]!.exitDistance + 1;
+          queue.push(index);
+        }
     this.routes.set(config, routes);
     return routes;
   }
@@ -742,7 +781,6 @@ export class PeddlerPopulation {
         continue;
       }
       const next = this.routesFor(owner.config).flatMap((route) => {
-        if (owner.leaving && route.line !== owner.route.line) return [];
         const atA = Math.hypot(route.a.x - owner.x, route.a.y - owner.y) < 0.02,
           atB = Math.hypot(route.b.x - owner.x, route.b.y - owner.y) < 0.02;
         if (!atA && !atB) return [];
@@ -750,9 +788,36 @@ export class PeddlerPopulation {
         return this.fits(owner, owner, route.hx * dir, route.hy * dir) ? [{ route, dir }] : [];
       });
       if (next.length) {
-        const onward = owner.leaving ? next.filter(({ route }) => route !== owner.route) : next;
-        const choices = onward.length ? onward : next;
+        const nearer = owner.leaving
+            ? next.filter(
+                ({ route }) =>
+                  route.exitDistance < owner.route.exitDistance ||
+                  (owner.route.exitDistance === 0 &&
+                    route.exitDistance === 0 &&
+                    route !== owner.route),
+              )
+            : next,
+          best = owner.leaving
+            ? nearer.reduce(
+                (distance, { route }) => Math.min(distance, route.exitDistance),
+                Infinity,
+              )
+            : 0,
+          choices = owner.leaving
+            ? nearer.length
+              ? nearer.filter(({ route }) => route.exitDistance === best)
+              : next.filter(({ route }) => route === owner.route)
+            : next;
+        if (!choices.length) {
+          owner.transitionWait = 2;
+          continue;
+        }
         const chosen = choices[Math.floor(owner.rng() * choices.length)]!;
+        if (owner.leaving && (chosen.dir === 1 ? chosen.route.exitA : chosen.route.exitB)) {
+          this.remove(slot);
+          count--;
+          continue;
+        }
         owner.route = chosen.route;
         owner.dir = chosen.dir;
         owner.distance = chosen.dir === 1 ? 0 : chosen.route.length;

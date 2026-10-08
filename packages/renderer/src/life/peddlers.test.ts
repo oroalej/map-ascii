@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { peddlerBodies, peddlerShare, peddlerWindow } from './peddlers';
+import { peddlerBodies, peddlerShare, peddlerWindow, type PeddlerOwner } from './peddlers';
 import { MAX_TILE_AGENTS } from './config';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type LifeEnv } from './simulate';
@@ -136,6 +136,82 @@ describe('isolated peddler population', () => {
     none.step(1, peddlerWeather, 0);
     expect(none.owners).toHaveLength(0);
   });
+  it.each(['hours', 'storm'] as const)(
+    'leaves an exitless connected line through a reachable real exit after %s',
+    (reason) => {
+      const b = new LifeBuilder(),
+        pm = peddlerPM,
+        junction = { x: 1000 + 40 * pm, y: 1500 },
+        start = { x: 1000, y: 1500 };
+      b.line([start, junction], LifeLine.path, 4);
+      b.line(
+        [{ x: junction.x, y: 1500 - 40 * pm }, junction, { x: junction.x, y: 1500 + 40 * pm }],
+        LifeLine.path,
+        4,
+      );
+      const geo = b.finish(),
+        square = (y: number) => [
+          [
+            { x: junction.x - 4 * pm, y: y - 4 * pm },
+            { x: junction.x + 4 * pm, y: y - 4 * pm },
+            { x: junction.x + 4 * pm, y: y + 4 * pm },
+            { x: junction.x - 4 * pm, y: y + 4 * pm },
+            { x: junction.x - 4 * pm, y: y - 4 * pm },
+          ],
+        ];
+      geo.areas = [
+        { kind: 'carriageway', rings: square(1500 - 40 * pm) },
+        { kind: 'carriageway', rings: square(1500 + 40 * pm) },
+      ];
+      const config = { ...peddlerConfig, perTile: 1 as const },
+        { population, blocked } = peddlerFixture([config], geo);
+      population.step(0, peddlerWeather, 0);
+      const routes = (
+          population as unknown as {
+            routesFor(config: typeof peddlerConfig): PeddlerOwner['route'][];
+          }
+        ).routesFor(config),
+        exitless = routes.filter((route) => route.line === 1),
+        route = exitless[0]!,
+        owner = population.owners[0]!;
+      expect(exitless.length).toBeGreaterThan(0);
+      expect(
+        exitless.every(
+          (route) => !route.exitA && !route.exitB && Number.isFinite(route.exitDistance),
+        ),
+      ).toBe(true);
+      Object.assign(owner, {
+        route,
+        x: (route.a.x + route.b.x) / 2,
+        y: (route.a.y + route.b.y) / 2,
+        distance: route.length / 2,
+        dir: 1,
+        hx: route.hx,
+        hy: route.hy,
+        nextCall: 1e6,
+      });
+      const env =
+        reason === 'hours'
+          ? { ...peddlerWeather, minutes: 660 }
+          : { ...peddlerWeather, windPreset: 'storm' as const };
+      population.step(0.1, env, 0);
+      expect(population.owners).toContain(owner);
+      for (let i = 0; i < 200 && population.owners.length; i++) {
+        population.step(1, env, 0);
+        expect(blocked.hits(peddlerBodies(owner.config.prop, owner, owner.hx, owner.hy))).toBe(
+          false,
+        );
+      }
+      expect(population.owners).toHaveLength(0);
+      expect(
+        Math.min(
+          ...[start, junction].map((exit) =>
+            Math.hypot(owner.x - exit.x / pm, owner.y - exit.y / pm),
+          ),
+        ),
+      ).toBeLessThan(0.02);
+    },
+  );
   it('reverses at an unobstructed dead end and retries a temporary turn obstruction after waiting', () => {
     for (const obstructed of [false, true]) {
       const b = new LifeBuilder(),
