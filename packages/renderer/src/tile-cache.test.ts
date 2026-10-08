@@ -75,6 +75,22 @@ describe('TileCache', () => {
     expect(sources[0]!.request).not.toHaveBeenCalled();
   });
 
+  it('keeps loaded region children visible while a zoomed-out tile loads', () => {
+    const { cache, source } = setup();
+    cache.regionTilesForView(camera, size);
+    const child = source.request.mock.calls[0]![0];
+    expect(child.z).toBe(11);
+    const absentChild = { ...child, x: child.x ^ 1 };
+    source.handlers.tile(tileKey(child), geometry);
+    source.handlers.tile(tileKey(absentChild), null);
+    source.request.mockClear();
+    const zoomedOut = { ...camera, zoom: 10.5 };
+    expect(cache.regionTilesForView(zoomedOut, size)).toContainEqual(child);
+    expect(cache.regionTilesForView(zoomedOut, size)).not.toContainEqual(absentChild);
+    expect(source.request.mock.calls.every(([tile]) => tile.z === 10)).toBe(true);
+    expect(cache.tilesToDraw(zoomedOut, size)).toContainEqual(child);
+  });
+
   it.each([false, true])(
     'draws a loaded grandparent through a null parent and view absence=%s',
     (absent) => {
