@@ -73,6 +73,15 @@ describe('routeProcessions', () => {
       procession({ from: 'osm:node/13', to: 'osm:node/11', beyond_m: 20 }),
     ]).routes[0]!;
     expect(short.length_m).toBe(Math.round(0.0004 * 111_320 + 20));
+    // River kept behind the departure for the followers, upstream of a westward route.
+    const behind = routeProcessions(features, [
+      procession({ from: 'osm:node/11', to: 'osm:node/10', before_m: 30, beyond_m: 10 }),
+    ]).routes[0]!;
+    if (behind.kind !== 'fluvial') throw Error();
+    expect(behind.departure_m).toBe(30);
+    expect(behind.route[0]![0]).toBeCloseTo(0.0025 + 30 / 111_320, 6);
+    expect(behind.landing_m).toBe(Math.round(30 + 0.0023 * 111_320));
+    expect(behind.route.every(([, y]) => Math.abs(y) < 1e-6)).toBe(true);
   });
   it('resolves a following Mass first, retaining a nonzero offset and carrying midnight', () => {
     const parent = {

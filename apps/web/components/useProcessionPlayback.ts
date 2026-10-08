@@ -1,6 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
+import { eventStart } from '@atlas/shared';
 import { prefersReducedMotion, subscribeReducedMotion } from '@/lib/motion';
 import { useLifeStore } from '@/state/life';
 import { useAtlasInstance } from '@/state/store';
@@ -22,7 +23,7 @@ export function useProcessionPlayback() {
     play: (id: string) => {
       const event = processions.find((p) => p.id === id);
       if (!available || !atlas || !event || !atlas.playProcession(id)) return;
-      const [lng, lat] = event.kind === 'mass' ? event.site.anchor : event.route[0]!;
+      const [lng, lat] = eventStart(event);
       atlas.flyTo({ lng, lat, zoom: Math.max(17.5, atlas.getCamera().zoom) });
     },
   };

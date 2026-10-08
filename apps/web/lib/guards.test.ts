@@ -201,6 +201,12 @@ describe('browser shape guards agree with the schemas', () => {
       ['400', false],
     ] as const)
       agrees({ ...fluvial, landing_m }, valid);
+    // ...and set off past a stretch of river kept behind it for its followers.
+    for (const [departure_m, valid] of [
+      [400, true],
+      [-1, false],
+    ] as const)
+      agrees({ ...fluvial, departure_m }, valid);
     // A river event's owner-marked ground closes to traffic.
     for (const [closure_zone, valid] of [
       [rings, true],

@@ -383,12 +383,14 @@ export class ProcessionScene {
       });
     }
 
-    // The flotilla's last boat starts on the water at the route's start; the pagoda stops at
-    // the landing with the boats ahead of it stretched beyond.
+    // The pagoda sets off at the departure with its followers stretched behind it (without
+    // one, the flotilla's last boat starts at the route's start), and stops at the landing
+    // with the boats ahead of it stretched beyond.
     this.landing = Math.min(this.length, Math.max(0, route.landing_m ?? this.length));
     this.start = Math.min(
       this.landing,
-      Math.max(0, ...this.boats.map((b) => VEHICLES[b.vehicle].length / 2 - b.along)),
+      route.departure_m ??
+        Math.max(0, ...this.boats.map((b) => VEHICLES[b.vehicle].length / 2 - b.along)),
     );
     this.hold = PROCESSION.holdSeconds / this.playDuration;
 

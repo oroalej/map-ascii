@@ -2,7 +2,7 @@
 import { nthWeekdayDay, epochDay } from './seasons';
 import { localDateParts } from './clock';
 import { PROCESSION_LIMITS } from './constants';
-import type { Procession, ProcessionSchedule } from './schemas';
+import type { Procession, ProcessionRoute, ProcessionSchedule } from './schemas';
 
 export class ProcessionScheduleError extends Error {
   constructor(
@@ -115,4 +115,25 @@ export function eventTime(timing: EventTiming, progress: number): EventTime {
     date: `${p.year}-${pad(p.month)}-${pad(p.date)}`,
     time: `${pad(p.hour)}:${pad(p.minute)}`,
   };
+}
+
+/**
+ * Where an event begins on the map: a Mass's gathering anchor, a river procession's departure
+ * (where the pagoda sets off, past the river kept behind it), else the route's first point.
+ */
+export function eventStart(route: ProcessionRoute): [number, number] {
+  if (route.kind === 'mass') return route.site.anchor;
+  const points = route.route;
+  let left = route.kind === 'fluvial' ? (route.departure_m ?? 0) : 0;
+  for (let i = 1; i < points.length && left > 0; i++) {
+    const [a, b] = [points[i - 1]!, points[i]!];
+    const kx = 111_320 * Math.cos((a[1] * Math.PI) / 180);
+    const step = Math.hypot((b[0] - a[0]) * kx, (b[1] - a[1]) * 110_540);
+    if (step >= left) {
+      const t = left / step;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    left -= step;
+  }
+  return left > 0 ? points.at(-1)! : points[0]!;
 }

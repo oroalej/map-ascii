@@ -214,11 +214,13 @@ export function isCityProcessions(v: unknown): v is CityProcessions {
           ...base,
           'route',
           'length_m',
+          'departure_m',
           'landing_m',
           'banks',
           'formation',
           'crowd_ground',
         ]) &&
+        (p.departure_m === undefined || (isNumber(p.departure_m) && p.departure_m > 0)) &&
         (p.landing_m === undefined || (isNumber(p.landing_m) && p.landing_m > 0)) &&
         (p.crowd_ground === undefined ||
           (isRecord(p.crowd_ground) &&

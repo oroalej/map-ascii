@@ -455,35 +455,49 @@ export function routeProcessions(
       return s;
     };
     const end = snap(toLngLat, p.route.to);
+    const start = p.route.from ? snap(find(p.route.from), p.route.from) : undefined;
     let path: Point[] | undefined;
-    if (p.route.from) {
-      path = graph.between(snap(find(p.route.from), p.route.from), end);
+    if (start) {
+      path = graph.between(start, end);
       if (!path) throw new Error(`${p.id}: no river joins ${p.route.from} and ${p.route.to}`);
     } else {
       path = graph.upstream(end, p.route.upstream_m!);
     }
-    let length = 0;
-    for (let i = 1; i < path.length; i++) length += distance(path[i - 1]!, path[i]!);
-    // The pagoda stops at `to`; the river beyond it holds the boats ahead of it.
-    const landing = p.route.beyond_m ? length : undefined;
-    const ashore = resample(path, ROUTE_STEP_M).length;
-    if (p.route.beyond_m) {
-      const onward = graph.onward(end, path.at(-2) ?? path[0]!, p.route.beyond_m);
-      for (let i = 1; i < onward.length; i++) length += distance(onward[i - 1]!, onward[i]!);
-      path = [...path, ...onward.slice(1)];
-    }
-    path = resample(path, ROUTE_STEP_M);
-    const banks = measureBanks(path, waterNear(waterAreas, graph.project.to, path));
+    const span = (line: readonly Point[]) =>
+      line.reduce((sum, q, i) => (i ? sum + distance(line[i - 1]!, q) : 0), 0);
+    let length = span(path);
     if (p.route.upstream_m && length < p.route.upstream_m - 1) {
       warnings.push(
         `${p.id}: the river ends ${Math.round(length)} m upstream, short of ${p.route.upstream_m} m`,
       );
     }
+    // The pagoda sets off at `from`; the river behind it holds the boats following it.
+    let departure: number | undefined;
+    if (start && p.route.before_m && path.length > 1) {
+      const behind = graph.onward(start, path[1]!, p.route.before_m).reverse();
+      const back = span(behind);
+      if (back > 0) {
+        path = [...behind.slice(0, -1), ...path];
+        length += back;
+        departure = back;
+      }
+    }
+    // The pagoda stops at `to`; the river beyond it holds the boats ahead of it.
+    const landing = p.route.beyond_m ? length : undefined;
+    const ashore = resample(path, ROUTE_STEP_M).length;
+    if (p.route.beyond_m) {
+      const onward = graph.onward(end, path.at(-2) ?? path[0]!, p.route.beyond_m);
+      length += span(onward);
+      path = [...path, ...onward.slice(1)];
+    }
+    path = resample(path, ROUTE_STEP_M);
+    const banks = measureBanks(path, waterNear(waterAreas, graph.project.to, path));
     routes.push({
       ...metadata,
       kind: p.kind,
       route: path.map((m) => graph.project.from(m).map((v) => Math.round(v * 1e7) / 1e7) as Point),
       length_m: Math.round(length),
+      ...(departure !== undefined && { departure_m: Math.round(departure) }),
       ...(landing !== undefined && { landing_m: Math.round(landing) }),
       ...(banks && {
         // Spectators line the river up to the landing.

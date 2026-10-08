@@ -191,6 +191,19 @@ describe('ProcessionScene', () => {
     const voyadores = end.filter((a) => a.vehicle === 'voyador');
     expect(voyadores).toHaveLength(PROCESSION.columns * PROCESSION.ranks);
     expect(voyadores.every((v) => east(v.lng) > 600)).toBe(true);
+    // A departure past river kept behind it: the pagoda sets off there, followers behind.
+    const departed = new ProcessionScene({
+      ...route,
+      id: 'procession/departure',
+      departure_m: 300,
+    });
+    const setOff = departed.agents(0, 0, { crowds: false }).filter((a) => !a.line);
+    expect(east(setOff.find((a) => a.vehicle === 'pagoda')!.lng)).toBeCloseTo(300, 0);
+    const behind = setOff.filter(
+      (a) =>
+        ['baroto', 'rowboat', 'motorboat', 'sailboat'].includes(a.vehicle!) && east(a.lng) < 300,
+    );
+    expect(behind.length).toBeGreaterThanOrEqual(PROCESSION.followers - 1);
     expect(landed.playDuration).toBe(
       Math.max(
         PROCESSION.playSeconds,

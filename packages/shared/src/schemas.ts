@@ -1003,6 +1003,8 @@ export function contentSchemas(languages?: readonly string[]) {
             upstream_m: z.number().positive().max(20_000).optional(),
             /** River kept past `to` (the landing) for the boats ahead of the pagoda, m. */
             beyond_m: z.number().positive().max(2_000).optional(),
+            /** River kept behind `from` (the departure) for the boats following the pagoda, m. */
+            before_m: z.number().positive().max(2_000).optional(),
           })
           .refine((r) => (r.from === undefined) !== (r.upstream_m === undefined), {
             message: 'give exactly one of from and upstream_m',
@@ -1178,6 +1180,8 @@ export const CityProcessions = z.object({
           kind: z.literal('fluvial'),
           /** Where the pagoda stops, m along the route; the river beyond it holds the boats ahead. */
           landing_m: z.number().positive().optional(),
+          /** Where the pagoda sets off, m along the route; the river behind it holds its followers. */
+          departure_m: z.number().positive().optional(),
           crowd_ground: CrowdGround.optional(),
           banks: z.array(z.tuple([z.number().min(0), z.number().min(0)])).optional(),
           formation: ProcessionFormation.optional(),
