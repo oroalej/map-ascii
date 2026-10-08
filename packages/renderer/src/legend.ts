@@ -256,6 +256,7 @@ export function legendEntries(
     folklore = false,
     lights = false,
     sidewalksDerived = true,
+    riceCalendar = false,
     fixtures,
     season,
   }: {
@@ -264,6 +265,7 @@ export function legendEntries(
     folklore?: boolean;
     lights?: boolean;
     sidewalksDerived?: boolean;
+    riceCalendar?: boolean;
     fixtures?: Pick<
       FixtureVisibility,
       'streetlights' | 'trafficSignals' | 'pedestrianSignals' | 'seasonal'
@@ -285,7 +287,10 @@ export function legendEntries(
     const canonical = classAliases[cls] ?? cls;
     const group = lifeGroups[cls];
     const id: LegendEntryId = group ? `life:${group}` : `class:${canonical}`;
-    const label = CLASS_LABELS[canonical];
+    const label =
+      canonical === 'farmland' && riceCalendar
+        ? 'Farmland (illustrative rice stages)'
+        : CLASS_LABELS[canonical];
     const glyphs = sample(style);
     const existing = byId.get(id);
     if (existing) {

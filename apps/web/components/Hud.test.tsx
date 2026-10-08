@@ -72,6 +72,39 @@ beforeEach(() => {
   document.body.append(container);
   root = createRoot(container);
 });
+it('passes the illustrative rice disclosure to the legend and restores the absent-calendar label', async () => {
+  const instance = renderer();
+  useAtlasInstance.setState({ atlas: instance.atlas });
+  const climate = {
+    wind: [],
+    default: { from: 90, strength: 'breeze' as const },
+    source: 'Fixture',
+    crops: {
+      rice: {
+        calendar: [
+          { from: '01-01', stage: 'fallow' as const },
+          { from: '06-01', stage: 'growing' as const },
+        ],
+        source: 'Fixture',
+      },
+    },
+  };
+  await act(async () => {
+    root.render(createElement(Hud, { city: 'test', subdivisionLabel: 'district', climate }));
+    await Promise.resolve();
+  });
+  act(() => instance.emit('classeschange', ['farmland']));
+  expect(labels().some((label) => label?.includes('Farmland (illustrative rice stages)'))).toBe(
+    true,
+  );
+  await act(async () => {
+    root.render(createElement(Hud, { city: 'test', subdivisionLabel: 'district' }));
+    await Promise.resolve();
+  });
+  expect(labels().some((label) => label?.includes('illustrative rice'))).toBe(false);
+  expect(labels().some((label) => label?.includes('Farmland'))).toBe(true);
+});
+
 it('keeps seasonal buttons in one row, preserves captions across seasons and restores the viewer clock', async () => {
   const instance = renderer(),
     stop = vi.fn(),

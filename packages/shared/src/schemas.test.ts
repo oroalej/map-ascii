@@ -696,6 +696,15 @@ describe('Landcover', () => {
     expect(onlyTrees.areas).toEqual([]);
   });
 
+  it('accepts sourced draft farmland without a tree kind', () => {
+    expect(Landcover.parse({ ...pack, areas: [{ ring, cover: 'farmland' }] }).areas[0]!.cover).toBe(
+      'farmland',
+    );
+    expect(
+      Landcover.safeParse({ ...pack, areas: [{ ring, cover: 'farmland', kind: 'palm' }] }).success,
+    ).toBe(false);
+  });
+
   it('needs something to draw, sources, and a credit', () => {
     expect(Landcover.safeParse({ ...pack, trees: [], rows: [], areas: [] }).success).toBe(false);
     expect(Landcover.safeParse({ ...pack, sources: [] }).success).toBe(false);
