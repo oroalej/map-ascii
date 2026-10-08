@@ -719,6 +719,8 @@ export function contentSchemas(languages?: readonly string[]) {
       id: z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>'),
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
+      /** OSM feature that curated `geometry` supersedes, e.g. one outline mapped over two ruins. */
+      replaces: OsmId.optional(),
       name: text,
       type: LandmarkType,
       start_year: Year.optional(),
@@ -736,6 +738,14 @@ export function contentSchemas(languages?: readonly string[]) {
     .refine((v) => v.osm_id !== undefined || v.geometry !== undefined, {
       message: 'a landmark needs either osm_id or geometry',
       path: ['osm_id'],
+    })
+    .refine((v) => v.osm_id === undefined || v.geometry === undefined, {
+      message: 'a landmark has either osm_id or geometry, not both',
+      path: ['geometry'],
+    })
+    .refine((v) => v.replaces === undefined || v.geometry !== undefined, {
+      message: 'replaces requires curated geometry',
+      path: ['replaces'],
     })
     .superRefine((landmark, ctx) => {
       landmark.facts?.forEach((fact, index) => {

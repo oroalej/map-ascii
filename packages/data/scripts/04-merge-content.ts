@@ -20,17 +20,56 @@ import { writeDetailLayouts } from './lib/detail-layout';
 import { Territory, inTerritory, removeVoid } from './lib/territory';
 
 /**
- * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
- * Fails if a landmark's feature isn't in the data, or if a landmark has only standalone
- * geometry (supported from Phase 5).
+ * Swap each OSM building that curated landmark outlines `replace` for those outlines, in place.
+ * An outline inherits the replaced building's normalized properties and tile layer, so it is
+ * drawn, roofed and lit like any other building; its feature id is the landmark id.
+ */
+function replaceWithCuratedOutlines(
+  features: AtlasFeature[],
+  landmarks: ContentBundle['landmarks'],
+) {
+  const curated = landmarks.filter((l) => l.geometry);
+  if (curated.length === 0) return;
+  const loose = curated.filter((l) => !l.replaces).map((l) => l.id);
+  if (loose.length > 0) {
+    throw new Error(`Standalone landmark geometry is not supported yet: ${loose.join(', ')}`);
+  }
+  const attached = new Set(landmarks.map((l) => l.osm_id));
+  const targets = new Map<string, AtlasFeature>();
+  for (const landmark of curated) {
+    const target = landmark.replaces!;
+    if (landmark.geometry!.type !== 'Polygon')
+      throw new Error(`Curated landmark outline is not a Polygon: ${landmark.id}`);
+    if (attached.has(target))
+      throw new Error(`Replaced feature ${target} also hosts a landmark (${landmark.id})`);
+    const feature = features.find((f) => f.properties.id === target);
+    if (!feature || feature.properties.class !== 'building' || feature.geometry.type !== 'Polygon')
+      throw new Error(`Replaced feature is not a building polygon in the data: ${target}`);
+    targets.set(target, feature);
+  }
+  for (let i = features.length - 1; i >= 0; i--) {
+    if (targets.has(features[i]!.properties.id)) features.splice(i, 1);
+  }
+  for (const landmark of curated) {
+    const { properties, tippecanoe } = targets.get(landmark.replaces!)!;
+    const { name: _name, osm_name: _osmName, ...inherited } = properties;
+    features.push({
+      type: 'Feature',
+      geometry: landmark.geometry as AtlasFeature['geometry'],
+      properties: { ...inherited, id: landmark.id },
+      tippecanoe: { ...tippecanoe },
+    });
+  }
+}
+
+/**
+ * Join curated landmarks onto features: by `osm_id`, or as curated outlines replacing an OSM
+ * building. Curated names and dates win over OSM's. Fails if a landmark's feature isn't in the
+ * data, or if a landmark has standalone geometry that replaces nothing (supported from Phase 5).
  */
 export function mergeContent(features: AtlasFeature[], content: ContentBundle): AtlasFeature[] {
-  const standalone = content.landmarks.filter((l) => !l.osm_id).map((l) => l.id);
-  if (standalone.length > 0) {
-    throw new Error(`Standalone landmark geometry is not supported yet: ${standalone.join(', ')}`);
-  }
-
-  const byOsmId = new Map(content.landmarks.map((l) => [l.osm_id!, l]));
+  replaceWithCuratedOutlines(features, content.landmarks);
+  const byOsmId = new Map(content.landmarks.map((l) => [l.osm_id ?? l.id, l]));
   const joined = new Set<string>();
   for (const feature of features) {
     const landmark = byOsmId.get(feature.properties.id);
@@ -41,6 +80,10 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     p.landmark_id = landmark.id;
     if (landmark.type === 'heritage') p.heritage = true;
     else delete p.heritage;
+    // Curated landmarks (with facts) and heritage sites draw the ◆ and join the Landmark legend;
+    // other records only carry site details and keep their own class marker.
+    if (landmark.facts || landmark.type === 'heritage') p.notable = true;
+    else delete p.notable;
     if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;
     if (landmark.start_year !== undefined || landmark.end_year !== undefined) {

@@ -243,6 +243,15 @@ describe('Landmark', () => {
     expect(Landmark.safeParse(rest).success).toBe(false);
   });
 
+  it('lets curated geometry replace an OSM feature, but not alongside an osm_id', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces }).success).toBe(true);
+    expect(Landmark.safeParse({ ...landmark, replaces }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, geometry }).success).toBe(false);
+  });
+
   it('requires at least one source', () => {
     expect(Landmark.safeParse({ ...landmark, sources: [] }).success).toBe(false);
   });
