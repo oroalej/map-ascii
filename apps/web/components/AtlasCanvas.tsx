@@ -131,6 +131,7 @@ function useCityMeta(slug: string): MetaState {
 
 export function AtlasCanvas({
   slug,
+  tilesVersion,
   name,
   subdivisionLabel,
   traffic,
@@ -142,6 +143,7 @@ export function AtlasCanvas({
 }: {
   utilitiesDerived?: boolean;
   slug: string;
+  tilesVersion?: string | undefined;
   name: string;
   subdivisionLabel: string;
   traffic?: TrafficMix | undefined;
@@ -216,6 +218,7 @@ export function AtlasCanvas({
       quality,
       utilities: { derive: utilitiesDerived },
       tilesUrl: `/tiles/${slug}.pmtiles`,
+      tilesVersion,
       theme: store.theme,
       cells: cellSchedule(window.matchMedia(SMALL_SCREEN).matches),
       bounds: meta.regionBounds,
@@ -267,7 +270,18 @@ export function AtlasCanvas({
       useAtlasInstance.setState({ atlas: null, canvas: null });
       atlas.destroy();
     };
-  }, [supported, meta, slug, traffic, climate, timezone, cityLife, dialogue, utilitiesDerived]);
+  }, [
+    supported,
+    meta,
+    slug,
+    tilesVersion,
+    traffic,
+    climate,
+    timezone,
+    cityLife,
+    dialogue,
+    utilitiesDerived,
+  ]);
 
   if (!supported) {
     return (

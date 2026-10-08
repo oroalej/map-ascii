@@ -49,6 +49,34 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it.each([false, true])(
+    'draws a loaded grandparent through a null parent and view absence=%s',
+    (absent) => {
+      const { cache, source } = setup();
+      cache.tilesToDraw(camera, size);
+      const tile = source.request.mock.calls[0]![0];
+      const parent = { z: tile.z - 1, x: Math.floor(tile.x / 2), y: Math.floor(tile.y / 2) };
+      const grandparent = { z: tile.z - 2, x: Math.floor(tile.x / 4), y: Math.floor(tile.y / 4) };
+      source.handlers.tile(tileKey(parent), null);
+      source.handlers.tile(tileKey(grandparent), geometry);
+      if (absent) source.handlers.tile(tileKey(tile), null);
+      source.request.mockClear();
+      expect(cache.tilesToDraw(camera, size)).toContainEqual(grandparent);
+      expect(cache.tilesToDraw(camera, size)).not.toContainEqual(parent);
+      expect(cache.tilesToDraw(camera, size)).not.toContainEqual(tile);
+      expect(
+        source.request.mock.calls.some(([requested]) => tileKey(requested) === tileKey(tile)),
+      ).toBe(!absent);
+    },
+  );
+  it('excludes null children from fallback', () => {
+    const { cache, source } = setup();
+    cache.tilesToDraw(camera, size);
+    const tile = source.request.mock.calls[0]![0];
+    const child = { z: tile.z + 1, x: tile.x * 2, y: tile.y * 2 };
+    source.handlers.tile(tileKey(child), null);
+    expect(cache.tilesToDraw(camera, size)).not.toContainEqual(child);
+  });
   it('backfills detailed tiles loaded before activation and remembers computed-empty sites', () => {
     const { cache, source } = setup();
     const tile = { z: 16, x: 55193, y: 30261 };

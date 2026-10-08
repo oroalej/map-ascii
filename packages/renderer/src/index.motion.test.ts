@@ -1,6 +1,21 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
-import { createAtlas, type Atlas, type LabelInView } from './index';
+import {
+  createAtlas as createRenderer,
+  type Atlas,
+  type LabelInView,
+  type AtlasOptions,
+} from './index';
+
+// Motion fixtures explicitly start active Life; startup deferral is covered in index.ready.test.
+function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
+  const atlas = createRenderer(canvas, options);
+  if (options.life?.enabled !== false && !options.reducedMotion) {
+    atlas.setLife({ enabled: false });
+    atlas.setLife({ enabled: true });
+  }
+  return atlas;
+}
 import { LifeWorld } from './life/simulate';
 import type { ProcessionRun } from './life/simulate';
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';

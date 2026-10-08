@@ -102,6 +102,7 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
         root.render(
           createElement(AtlasCanvas, {
             slug: 'fixture',
+            tilesVersion: '1234abcd',
             name: 'Fixture',
             subdivisionLabel: 'district',
             cityLife,
@@ -109,6 +110,7 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
         );
         await Promise.resolve();
       });
+      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       if (mode === 'zoom-floor') {
         expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ initialCamera: { zoom: 10 } });
@@ -136,6 +138,7 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
       });
       expect(atlas.setProcessions).toHaveBeenLastCalledWith(routes);
       expect(useUiStore.getState().processions).toEqual(routes);
+      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       expect(atlas.destroy).not.toHaveBeenCalled();
       if (mode !== 'absent' && mode !== 'zero') {
@@ -149,6 +152,7 @@ it.each(['absent', 'zero', 'late', '404', 'malformed', 'zoom-floor'] as const)(
         expect(atlas.setEmergency).toHaveBeenLastCalledWith(
           mode === 'late' || mode === 'zoom-floor' ? emergencyFixture : undefined,
         );
+        expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
         expect(mock.createAtlas).toHaveBeenCalledTimes(1);
       }
     } finally {

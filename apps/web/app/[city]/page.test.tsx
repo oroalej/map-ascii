@@ -12,11 +12,16 @@ import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity } from '@/lib/cities';
 import CityPage from './page';
 
+vi.mock('@/lib/tiles-version', () => ({ tilesVersion: vi.fn(() => Promise.resolve('1234abcd')) }));
 vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
 type PageElement = ReactElement<{
-  children: ReactElement<{ dialogue?: RuntimeDialogueCatalog; cityLife?: RuntimeCityLife }>;
+  children: ReactElement<{
+    dialogue?: RuntimeDialogueCatalog;
+    cityLife?: RuntimeCityLife;
+    tilesVersion?: string;
+  }>;
 }>;
 
 describe('city page client boundary', () => {
@@ -27,6 +32,7 @@ describe('city page client boundary', () => {
       const page = (await CityPage({
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
+      expect(page.props.children.props.tilesVersion).toBe('1234abcd');
       const life = page.props.children.props.cityLife;
       expect(life).toEqual(pack.city.life ? runtimeCityLife(pack.city.life) : undefined);
       for (const season of life?.seasons ?? []) {

@@ -5,6 +5,7 @@
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { PMTiles } from 'pmtiles';
+import { archiveSource } from './range-cache';
 import {
   buildTileGeometry,
   buildResidentialSites,
@@ -34,7 +35,7 @@ async function handle(request: WorkerRequest) {
     memorials = request.memorials === true;
     folklore = request.folklore === true;
     fireworksActive = fireworks && request.fireworksActive === true;
-    archive = new PMTiles(request.url);
+    archive = new PMTiles(archiveSource(request.url));
     const h = await archive.getHeader();
     maxZoom = h.maxZoom;
     scope.postMessage({

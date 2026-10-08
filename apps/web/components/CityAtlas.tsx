@@ -38,6 +38,7 @@ const AtlasCanvas = dynamic(() => loadCanvas().then((m) => m.AtlasCanvas), {
 
 export type CityAtlasProps = {
   slug: string;
+  tilesVersion?: string | undefined;
   name: string;
   /** The city's local word for a subdivision, e.g. "barangay". */
   subdivisionLabel: string;
@@ -61,6 +62,7 @@ export type CityAtlasProps = {
 /** One city's atlas: the map and everything around it, with the view mirrored in the URL. */
 export function CityAtlas({
   slug,
+  tilesVersion,
   name,
   subdivisionLabel,
   traffic,
@@ -97,6 +99,7 @@ export function CityAtlas({
       <PlacesInView />
       <AtlasCanvas
         slug={slug}
+        tilesVersion={tilesVersion}
         name={name}
         subdivisionLabel={subdivisionLabel}
         traffic={traffic}

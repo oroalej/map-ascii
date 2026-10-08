@@ -7,6 +7,7 @@ import { create } from 'zustand';
  * renderer said about the selected feature when it was picked.
  */
 export type UiState = {
+  ready: boolean;
   /** Pack landmark IDs with facts; these are distinct from selected OSM feature IDs. */
   clickable: ReadonlySet<string>;
   /** Monotonic operation counter, advanced even when the selected feature ID stays the same. */
@@ -35,6 +36,7 @@ export type UiState = {
 };
 
 export const useUiStore = create<UiState>()(() => ({
+  ready: false,
   clickable: new Set(),
   selectionSequence: 0,
   selection: null,

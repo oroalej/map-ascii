@@ -167,12 +167,12 @@ export class TileCache {
     const missing: TileId[] = [];
     for (const tile of view) {
       const key = tileKey(tile);
-      if (meshes.has(key)) {
+      if (meshes.get(key)) {
         out.set(key, tile);
         continue;
       }
-      if (this.mayRequest(key)) missing.push(tile);
-      const ancestor = findAncestor(tile, minZoom, (k) => meshes.has(k));
+      if (!meshes.has(key) && this.mayRequest(key)) missing.push(tile);
+      const ancestor = findAncestor(tile, minZoom, (k) => !!meshes.get(k));
       if (ancestor) {
         out.set(tileKey(ancestor), ancestor);
         continue;
@@ -180,7 +180,7 @@ export class TileCache {
       for (let dy = 0; dy < 2; dy++) {
         for (let dx = 0; dx < 2; dx++) {
           const child = { z: tile.z + 1, x: tile.x * 2 + dx, y: tile.y * 2 + dy };
-          if (meshes.has(tileKey(child))) out.set(tileKey(child), child);
+          if (meshes.get(tileKey(child))) out.set(tileKey(child), child);
         }
       }
     }
