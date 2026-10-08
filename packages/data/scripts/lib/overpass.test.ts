@@ -269,6 +269,36 @@ describe('overpass', () => {
     }
   });
 
+  it('moves on to the server after a skipped one, not past it', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const busy = () => Promise.resolve(new Response('busy', { status: 504 }));
+    const fetch = vi.fn<typeof globalThis.fetch>(busy);
+    vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.resetModules();
+    const { overpass } = await import('./overpass');
+    const dir = await mkdtemp(join(tmpdir(), 'atlas-overpass-'));
+    try {
+      // Busy servers are not skipped, so this shows the order the servers are tried in.
+      await expect(
+        settle(overpass(city, join(dir, 'a.osm.json'), { offline: false })),
+      ).rejects.toThrow('HTTP 504');
+      const order = fetch.mock.calls.map((call) => call[0]);
+      fetch.mockClear();
+      const down = Object.assign(new TypeError('fetch failed'), {
+        cause: { code: 'UND_ERR_CONNECT_TIMEOUT' },
+      });
+      fetch.mockRejectedValueOnce(down).mockImplementation(busy);
+      await expect(
+        settle(overpass(city, join(dir, 'b.osm.json'), { offline: false })),
+      ).rejects.toThrow('HTTP 504');
+      expect(fetch.mock.calls[1]![0]).toBe(order[1]);
+      expect(fetch.mock.calls.slice(1).map((call) => call[0])).not.toContain(order[0]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('fails at once on a rejected query', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response('parse error', { status: 400 }));
     vi.stubGlobal('fetch', fetch);
