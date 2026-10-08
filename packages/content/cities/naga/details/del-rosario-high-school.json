@@ -7,111 +7,191 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.23954650977, 13.61848217556],
-        [123.23953910559, 13.61846204334],
-        [123.23951992088, 13.61847450827],
-        [123.23951790235, 13.61847571082],
-        [123.23951579115, 13.61847675616],
-        [123.23943321271, 13.61851373281],
-        [123.23943461881, 13.61852357545],
-        [123.23954650977, 13.61848217556]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-2",
-      "ring": [
-        [123.23951652457, 13.61840637023],
-        [123.23945414792, 13.61832400144],
-        [123.23949062921, 13.61842319528],
-        [123.23951652457, 13.61840637023]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-4",
-      "ring": [
-        [123.23908980067, 13.61858867975],
-        [123.23908992262, 13.61858911073],
-        [123.23908995613, 13.61858955873],
-        [123.23908989904, 13.61859000447],
-        [123.23908975354, 13.61859043081],
-        [123.23908952524, 13.61859082135],
-        [123.23908922291, 13.61859116109],
-        [123.23908885817, 13.61859143696],
-        [123.23908844505, 13.61859163834],
-        [123.23904431378, 13.61860806443],
-        [123.23905637511, 13.61864085961],
-        [123.23928568023, 13.61857010624],
-        [123.23928326203, 13.61856910474],
-        [123.23928067626, 13.61856772884],
-        [123.23927823422, 13.61856610827],
-        [123.23927597099, 13.61856426554],
-        [123.23927390752, 13.61856221938],
-        [123.23927205466, 13.61855997963],
-        [123.23927044158, 13.61855758154],
-        [123.23926907581, 13.61855503753],
-        [123.23926797172, 13.6185523715],
-        [123.23926714435, 13.61854962158],
-        [123.23926659725, 13.6185468018],
-        [123.23926633699, 13.61854393907],
-        [123.23926636687, 13.61854106975],
-        [123.23926668599, 13.61853821708],
-        [123.23926729013, 13.61853541282],
-        [123.23926817689, 13.61853267121],
-        [123.2392693343, 13.61853003141],
-        [123.23927075001, 13.61852751834],
-        [123.23927241745, 13.61852514495],
-        [123.23927431042, 13.61852294859],
-        [123.23927641885, 13.6185209399],
-        [123.23927872338, 13.61851913914],
-        [123.23928119085, 13.6185175714],
-        [123.23928377926, 13.61851625884],
-        [123.23911958945, 13.61857315832],
-        [123.23911914575, 13.61857326586],
-        [123.23911891115, 13.61857328809],
-        [123.23911845442, 13.61857326588],
-        [123.23911822767, 13.61857322208],
-        [123.23911800217, 13.61857315541],
-        [123.23911758891, 13.6185729651],
-        [123.23911721453, 13.6185726949],
-        [123.23911690491, 13.6185723619],
-        [123.23911666804, 13.61857197661],
-        [123.23911586206, 13.61856981739],
-        [123.23908616007, 13.6185794538],
-        [123.23908980067, 13.61858867975]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true,
-      "holes": [
         [
-          [123.23907598731, 13.61860455456],
-          [123.2390760153, 13.61860449714],
-          [123.23913793693, 13.61858304041],
-          [123.23913798268, 13.61858307016],
-          [123.23914505522, 13.61860230639],
-          [123.23914502458, 13.61860235088],
-          [123.23908310295, 13.61862380761],
-          [123.23908305721, 13.61862377786],
-          [123.23907598731, 13.61860455456]
+          123.23888331637,
+          13.61870969603
+        ],
+        [
+          123.23927393292,
+          13.61856224457
+        ],
+        [
+          123.23927044158,
+          13.61855758154
+        ],
+        [
+          123.2392679732,
+          13.61855237566
+        ],
+        [
+          123.23926659725,
+          13.6185468018
+        ],
+        [
+          123.23926636661,
+          13.61854107415
+        ],
+        [
+          123.23926729013,
+          13.61853541282
+        ],
+        [
+          123.23926933232,
+          13.61853003537
+        ],
+        [
+          123.23927241472,
+          13.61852514847
+        ],
+        [
+          123.23927574037,
+          13.61852158618
+        ],
+        [
+          123.23908887845,
+          13.61858634268
+        ],
+        [
+          123.23908993885,
+          13.61858978296
+        ],
+        [
+          123.23908952262,
+          13.61859082495
+        ],
+        [
+          123.23908844295,
+          13.61859163918
+        ],
+        [
+          123.23888694295,
+          13.61866663918
+        ],
+        [
+          123.2388853579,
+          13.61866667413
+        ],
+        [
+          123.23888410745,
+          13.61866572347
+        ],
+        [
+          123.23888114217,
+          13.61865833313
+        ],
+        [
+          123.23886631588,
+          13.61866347114
+        ],
+        [
+          123.23888331637,
+          13.61870969603
         ]
-      ]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
     }
   ],
   "walks": [
     {
+      "id": "link-1-1",
+      "line": [
+        [
+          123.23926046977,
+          13.61854523651
+        ],
+        [
+          123.23915282335,
+          13.61857694204
+        ],
+        [
+          123.23903540017,
+          13.61861763473
+        ]
+      ],
+      "width_m": 1.2
+    },
+    {
       "id": "frontage-to-classroom",
       "line": [
-        [123.23947359596, 13.61835953334],
-        [123.23949369393, 13.61841418037]
+        [
+          123.23926135349,
+          13.61855096913
+        ],
+        [
+          123.23888909166,
+          13.618672092
+        ],
+        [
+          123.23888843743,
+          13.61867229467
+        ],
+        [
+          123.23888770768,
+          13.61867242782
+        ],
+        [
+          123.23888721119,
+          13.61867251038
+        ],
+        [
+          123.23888639821,
+          13.61867257765
+        ],
+        [
+          123.23888558237,
+          13.61867256718
+        ],
+        [
+          123.23888432098,
+          13.61867242553
+        ],
+        [
+          123.23888374652,
+          13.61867229922
+        ],
+        [
+          123.23888318755,
+          13.61867211884
+        ],
+        [
+          123.23888264944,
+          13.61867188614
+        ],
+        [
+          123.2388815404,
+          13.61867125981
+        ],
+        [
+          123.2388808808,
+          13.61867079306
+        ],
+        [
+          123.23888027143,
+          13.61867026573
+        ],
+        [
+          123.23887948501,
+          13.61866945332
+        ],
+        [
+          123.23887910148,
+          13.61866895206
+        ],
+        [
+          123.23887877525,
+          13.61866841385
+        ],
+        [
+          123.23887851005,
+          13.61866784485
+        ],
+        [
+          123.23887766447,
+          13.61866573743
+        ]
       ],
       "width_m": 1.2
     }
@@ -127,7 +207,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Northern green patch bordered by broad crowns, south/west/east canopy chains and courtyard-side plants; exposed north-of-classroom apron links remain open. The northern greenery stops at the separate elementary parent and crop boundary; no surveyed extent or hedge inferred. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Independent excluded check errors: 2.64 m, 3.26 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): The upper smooth green opening is low cover but falls outside the complete preserved source parent under the unchanged registration; that omission remains a parcel limit, not a claim of no grass. Add only exposed lower/west grass pockets inside the parent, excluding raised tree crowns, roofs and hard apron. Remaining mixed foliage/shadows are ambiguous draft observations. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The image covers the parcel's north half only; the southern half is beyond its frame and is left as mapped. The packed-earth yard along the north side of the two classroom blocks (the mapped service road continues along its east part) is hardscape. Lawn covers the open ground south of the classroom blocks and the strip west of the west block; crowns stand along the west edge and in the south lawn, and canopy fills the south-east corner beside the maroon roof. Registration: global affine; independent check errors 2.64 m, 3.26 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

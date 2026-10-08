@@ -7,51 +7,54 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.2681104269, 13.63247635836],
-        [123.26812428815, 13.63248662052],
-        [123.26813993513, 13.63249900326],
-        [123.26825385713, 13.63259250115],
-        [123.26833678319, 13.63266099883],
-        [123.26833679336, 13.63266105539],
-        [123.26833658142, 13.63266134466],
-        [123.26838247716, 13.63269496389],
-        [123.26839757632, 13.63267438212],
-        [123.26837950269, 13.63266055822],
-        [123.26837949019, 13.63266050234],
-        [123.26838228582, 13.63265709453],
-        [123.26837848687, 13.63265431176],
-        [123.26838174237, 13.63264909735],
-        [123.2683918476, 13.63262655989],
-        [123.26840357511, 13.63262441938],
-        [123.26844688601, 13.63255409666],
-        [123.26844694346, 13.6325540831],
-        [123.26846162629, 13.63256107369],
-        [123.26851948773, 13.63245429996],
-        [123.26847218679, 13.63241971124],
-        [123.26844201209, 13.63247539367],
-        [123.26844194536, 13.63247540999],
-        [123.26843149369, 13.63244091736],
-        [123.2684301849, 13.63242870578],
-        [123.26843387835, 13.63240633361],
-        [123.26834648926, 13.63235695908],
-        [123.26829427547, 13.6323270261],
-        [123.26829425688, 13.63232698402],
-        [123.26829496194, 13.63232172051],
-        [123.26829500957, 13.63232035711],
-        [123.26829479034, 13.63231901184],
-        [123.26829431228, 13.63231773149],
-        [123.2682935928, 13.63231656264],
-        [123.26829265657, 13.63231554618],
-        [123.26826104275, 13.63228720028],
-        [123.26826035949, 13.63228665749],
-        [123.26814796426, 13.63220778616],
-        [123.26814026364, 13.63221999989],
-        [123.26825139719, 13.63229798587],
-        [123.26827989382, 13.63232354953],
-        [123.26827988353, 13.63232362574],
-        [123.26827984933, 13.63232365158],
-        [123.26822016062, 13.63233379893],
-        [123.2681104269, 13.63247635836]
+        [
+          123.26813332861,
+          13.63249200901
+        ],
+        [
+          123.26829664825,
+          13.63263478828
+        ],
+        [
+          123.26829025104,
+          13.63264357672
+        ],
+        [
+          123.2684242997,
+          13.63274176909
+        ],
+        [
+          123.26844894503,
+          13.63271412059
+        ],
+        [
+          123.2683115442,
+          13.6326134926
+        ],
+        [
+          123.2683156834,
+          13.63260578288
+        ],
+        [
+          123.26817785991,
+          13.63248563487
+        ],
+        [
+          123.26815578972,
+          13.63246676219
+        ],
+        [
+          123.26813325689,
+          13.63244902407
+        ],
+        [
+          123.26811361761,
+          13.6324759639
+        ],
+        [
+          123.26813332861,
+          13.63249200901
+        ]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -63,41 +66,36 @@
     {
       "id": "link-1-1",
       "line": [
-        [123.26814899907, 13.63221732107],
-        [123.26825605865, 13.63229244821],
-        [123.26828767511, 13.63232079648],
-        [123.2682824443, 13.63235984621],
-        [123.26842131359, 13.63245490051],
-        [123.26843166014, 13.63251881361],
-        [123.268385464, 13.63261382637]
+        [
+          123.26843279561,
+          13.63272332008
+        ],
+        [
+          123.26830433315,
+          13.63262430392
+        ],
+        [
+          123.26813517089,
+          13.63247022675
+        ]
       ],
       "width_m": 1.2
     },
     {
       "id": "frontage-to-classroom",
       "line": [
-        [123.26814970132, 13.63221620723],
-        [123.26825491451, 13.63229325196],
-        [123.2682554725, 13.63229369534],
-        [123.26828396914, 13.63231925901],
-        [123.26828437189, 13.63231965658],
-        [123.26828473376, 13.63232008969],
-        [123.26828505144, 13.63232055439],
-        [123.26828532204, 13.63232104644],
-        [123.26828554308, 13.63232156133],
-        [123.26828571255, 13.63232209438],
-        [123.26828582889, 13.63232264071],
-        [123.26828589105, 13.63232319534],
-        [123.26828589846, 13.6323237532],
-        [123.26828585104, 13.63232430921],
-        [123.26828573647, 13.63232494495],
-        [123.26828557668, 13.63232549196],
-        [123.26828536289, 13.63232602128],
-        [123.26828509714, 13.63232652788],
-        [123.26828478195, 13.63232700696],
-        [123.2682844203, 13.63232745396],
-        [123.26828401562, 13.63232786467],
-        [123.2681188056, 13.63247522116]
+        [
+          123.26842343369,
+          13.6327338228
+        ],
+        [
+          123.2681373469,
+          13.63248766798
+        ],
+        [
+          123.26812172342,
+          13.63247494544
+        ]
       ],
       "width_m": 1.2
     }
@@ -113,7 +111,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. NHS northwest roof kept separate from ES; crown belt south of NHS roof and around its exposed forecourt, small green island and narrow entry links. Parent boundary cuts through shared canopy: trunks are allocated to their own site. No hedge distinguishable from mature crowns. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/881093803 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 2.14 m, 1.17 m, 8.29 m, 8.23 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): Small dry/green low-turf fringe adjoining the existing north forecourt grass. Retain the raised green island as planting and the shared mature crowns; no ground is inferred beneath opaque foliage. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Shares one owner image with San Isidro Elementary. Dense canopy covers the campus south and west of the yard; the bare dirt yard north-east stays bare; patchy low green cover (grass) with small crowns lies along the north-east edge. The beige apron under the north roof is hardscape, and the link west to the white-roofed block crosses the open north strip (inferred where the frame structure hides it). Registration: continuous triangulated image registration; independent check errors 2.14 m, 1.17 m, 8.29 m, 8.23 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

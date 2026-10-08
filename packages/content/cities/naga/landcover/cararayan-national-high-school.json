@@ -3,210 +3,494 @@
   "title": "Cararayan National High School grounds",
   "trees": [
     {
-      "at": [123.23773146193, 13.62992756321],
-      "crown_m": 7.0,
+      "at": [
+        123.23776040671,
+        13.63001806045
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [
+        123.23783316675,
+        13.63001602715
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.2379112835,
+        13.6300070605
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23797833985,
+        13.63000217163
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23805668793,
+        13.62999973092
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [
+        123.23812362862,
+        13.62999157908
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23819068497,
+        13.62998669022
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23825747144,
+        13.62997418776
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23832452779,
+        13.62996929889
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [
+        123.23839158414,
+        13.62996441002
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23845864049,
+        13.62995952115
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23852569685,
+        13.62995463228
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.2377330425,
+        13.62987829477
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [
+        123.23773689558,
+        13.62982894284
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.23781281234,
+        13.62959986224
+      ],
+      "kind": "palm",
+      "crown_m": 3.9,
+      "height_m": 6.2
+    },
+    {
+      "at": [
+        123.23796195418,
+        13.62953991776
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [
+        123.23817237157,
+        13.62947005353
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [
+        123.2382076723,
+        13.62945439426
+      ],
+      "crown_m": 2.7,
+      "height_m": 4
+    },
+    {
+      "at": [
+        123.23841400386,
+        13.62933248551
+      ],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [
+        123.23846294672,
+        13.62929075089
+      ],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [
+        123.23858676605,
+        13.62937018562
+      ],
+      "crown_m": 7.3,
       "height_m": 8.4
     },
     {
-      "at": [123.23771432674, 13.6298555844],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.2386183202,
+        13.62927281215
+      ],
+      "crown_m": 6.1,
+      "height_m": 7.0
     },
     {
-      "at": [123.23769714788, 13.62978215145],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23769575776,
+        13.62928439516
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
     },
     {
-      "at": [123.23768695562, 13.62971497912],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.2377517067,
+        13.62927774004
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
     },
     {
-      "at": [123.23777504456, 13.63003541519],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23781876785,
+        13.62926976312
+      ],
+      "crown_m": 4.2,
+      "height_m": 4.8
     },
     {
-      "at": [123.23793055418, 13.63001982328],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.237885829,
+        13.62926178621
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
     },
     {
-      "at": [123.23800211801, 13.63000916178],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.2381193793,
+        13.62923400543
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
     },
     {
-      "at": [123.23804142604, 13.6299485012],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23816402208,
+        13.62922869517
+      ],
+      "crown_m": 3.6,
+      "height_m": 4.1
     },
     {
-      "at": [123.23803645346, 13.62987144057],
-      "crown_m": 10.0,
-      "height_m": 12.0
+      "at": [
+        123.23796710806,
+        13.62988445674
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23799976429, 13.62981632071],
-      "crown_m": 11.0,
-      "height_m": 13.2
+      "at": [
+        123.23800890652,
+        13.62988140934
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23809179351, 13.62982051582],
-      "crown_m": 10.0,
-      "height_m": 12.0
+      "at": [
+        123.23805070498,
+        13.62987836195
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23817754073, 13.62980554052],
-      "crown_m": 11.0,
-      "height_m": 13.2
+      "at": [
+        123.23809250344,
+        13.62987531455
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23824005002, 13.62983042578],
-      "crown_m": 10.0,
-      "height_m": 12.0
+      "at": [
+        123.2381343019,
+        13.62987226716
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23836237217, 13.6299621779],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23817610036,
+        13.62986921976
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23829338904, 13.62997593098],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23798675812,
+        13.62984769298
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23847324648, 13.62996063721],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23802855658,
+        13.62984464558
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23863024916, 13.629837963],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23807035504,
+        13.62984159819
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23871194958, 13.62980365433],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.2381121535,
+        13.6298385508
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23871012717, 13.62972836619],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23815395196,
+        13.6298355034
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23869972394, 13.62965802534],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23819575042,
+        13.62983245601
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23868675409, 13.62957033045],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23796460973,
+        13.62981397662
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23867469513, 13.62948879447],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23800640819,
+        13.62981092922
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23862436614, 13.62931194094],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23804820665,
+        13.62980788183
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23862738852, 13.62925150028],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.2380900051,
+        13.62980483443
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.2384341974, 13.62930157065],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23813180356,
+        13.62980178704
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23836109132, 13.62935706207],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23817360202,
+        13.62979873964
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23843942286, 13.62921526107],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23798425979,
+        13.62977721286
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23831056176, 13.6292112643],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23802605825,
+        13.62977416546
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23814498987, 13.62923095905],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23806785671,
+        13.62977111807
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.2380227031, 13.62924550505],
-      "crown_m": 5.0,
-      "height_m": 6.0
+      "at": [
+        123.23810965517,
+        13.62976807068
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23775296739, 13.62927759008],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23815145363,
+        13.62976502328
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23771237728, 13.62929531106],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23819325209,
+        13.62976197589
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23787038761, 13.62954877452],
-      "crown_m": 5.0,
-      "height_m": 6.0
+      "at": [
+        123.23861061819,
+        13.62986262118
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.23793983339, 13.62954807332],
-      "crown_m": 4.0,
-      "height_m": 5
+      "at": [
+        123.23865241665,
+        13.62985957378
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     },
     {
-      "at": [123.2381583439, 13.62948525232],
-      "crown_m": 5.0,
-      "height_m": 6.0
+      "at": [
+        123.23869421511,
+        13.62985652639
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [
+        123.23863026825,
+        13.62982585742
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [
+        123.23867206671,
+        13.62982281003
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [
+        123.23871386517,
+        13.62981976263
+      ],
+      "crown_m": 5.3,
+      "height_m": 6.1
     }
   ],
   "areas": [
     {
       "ring": [
-        [123.23823115323, 13.62979940583],
-        [123.23842664201, 13.62978515336],
-        [123.23842606688, 13.62976892836],
-        [123.2382305781, 13.62978318084],
-        [123.23823115323, 13.62979940583]
-      ],
-      "cover": "planting"
-    },
-    {
-      "ring": [
-        [123.23814887245, 13.62946963089],
-        [123.23814998735, 13.62950108307],
-        [123.23823036272, 13.62949522315],
-        [123.23822924783, 13.62946377097],
-        [123.23814887245, 13.62946963089]
-      ],
-      "cover": "planting"
-    },
-    {
-      "ring": [
-        [123.23781420507, 13.62954309697],
-        [123.23781181986, 13.62960207551],
-        [123.23787568243, 13.62960395489],
-        [123.23790547696, 13.62956039127],
-        [123.2378798113, 13.62953068783],
-        [123.23781420507, 13.62954309697]
+        [
+          123.23790199689,
+          13.6296805524
+        ],
+        [
+          123.23792719105,
+          13.62967871557
+        ],
+        [
+          123.23792009685,
+          13.62963025185
+        ],
+        [
+          123.23790026512,
+          13.62963169772
+        ],
+        [
+          123.23790199689,
+          13.6296805524
+        ]
       ],
       "cover": "planting"
     }
@@ -222,7 +506,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6296076,123.2381788,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Two large distinguishable interior canopy groups west of open concrete yard, perimeter belts along north/west/east/south and central small green pockets. Actual exposed yard is bounded by classroom roofs and planted islands. No broad lawn/hedge visible. Ignore map operating-status text; no furniture inferred from tiny courtyard objects. Large northeast classroom, west/top classroom chain and isolated central-east roof enclose a concrete court/yard. Ignore unverified operating-status label. Independent excluded check errors: 1.68 m, 3.31 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The central quadrangle between the classroom blocks is packed earth and concrete used for assembly and parking, traced as hardscape; the dirt yard in the north-west corner stays bare. The link from the east road between the north and east blocks runs under canopy and is inferred. Canopy: the large crown cluster north of the centre, the belt along the north frontage, the cluster east of the north block, crowns west of the west blocks, the palm and crown beside the west corridor, crowns between the south blocks and the large south-east crowns, plus a crown row along the south frontage. A small green bed sits between the west classroom blocks. Registration: global affine; independent check errors 1.68 m, 3.31 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

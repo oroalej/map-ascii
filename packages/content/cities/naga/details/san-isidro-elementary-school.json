@@ -7,171 +7,186 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.26947436026, 13.63267411588],
-        [123.2694743481, 13.63267405739],
-        [123.26947934598, 13.6326657119],
-        [123.26947994601, 13.63266443674],
-        [123.269480278, 13.63266307448],
-        [123.26948033014, 13.63266167544],
-        [123.26948010043, 13.63266029341],
-        [123.2694795977, 13.63265898148],
-        [123.26947884126, 13.63265779007],
-        [123.26947786019, 13.63265676497],
-        [123.26947669219, 13.63265594557],
-        [123.26947538213, 13.63265536337],
-        [123.26947398038, 13.63265504073],
-        [123.26947254079, 13.63265499006],
-        [123.26947111869, 13.63265521329],
-        [123.26946976872, 13.63265570186],
-        [123.26946854278, 13.63265643699],
-        [123.26946748796, 13.63265739042],
-        [123.26946664348, 13.63265852732],
-        [123.26946252615, 13.63266540246],
-        [123.26946247488, 13.63266542341],
-        [123.26943327894, 13.63264408585],
-        [123.26939959343, 13.63270033411],
-        [123.26945667024, 13.63273817579],
-        [123.26948873924, 13.63268462677],
-        [123.26947436026, 13.63267411588]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-2",
-      "ring": [
-        [123.26934029825, 13.63279029248],
-        [123.26933930178, 13.63279130346],
-        [123.26933850912, 13.63279252957],
-        [123.26936558743, 13.63281220675],
-        [123.26936575356, 13.63281236935],
-        [123.26936602708, 13.63281273113],
-        [123.26936622122, 13.63281313365],
-        [123.26936633237, 13.63281356939],
-        [123.26936635468, 13.6328137975],
-        [123.26936633003, 13.63281424579],
-        [123.26936621743, 13.63281467666],
-        [123.26936601897, 13.63281508205],
-        [123.26928154294, 13.63292504206],
-        [123.26928119993, 13.63292534285],
-        [123.26928100345, 13.63292546957],
-        [123.26928058927, 13.6329256584],
-        [123.2692803634, 13.63292572424],
-        [123.26927990612, 13.63292578832],
-        [123.26927944925, 13.63292576514],
-        [123.26927900132, 13.63292565513],
-        [123.26927878373, 13.63292556679],
-        [123.26927839018, 13.63292533579],
-        [123.26926894771, 13.63291848715],
-        [123.26926807121, 13.63291995072],
-        [123.26932353152, 13.63296049164],
-        [123.26940892061, 13.63281790842],
-        [123.26935182583, 13.63278009675],
-        [123.26934669628, 13.63278865796],
-        [123.26934564621, 13.63278859371],
-        [123.26934420373, 13.63278862386],
-        [123.26934279724, 13.63278892644],
-        [123.26934147852, 13.63278948986],
-        [123.26934029825, 13.63279029248]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-3",
-      "ring": [
-        [123.26901628027, 13.63237154655],
-        [123.26907248734, 13.6324213066],
-        [123.26907279539, 13.63242163835],
-        [123.26907303232, 13.63242202387],
-        [123.26907312202, 13.63242223583],
-        [123.26907323207, 13.63242266744],
-        [123.26907325459, 13.63242289558],
-        [123.26907323099, 13.63242333965],
-        [123.26907311802, 13.63242377506],
-        [123.26907302722, 13.63242398658],
-        [123.269072791, 13.6324243674],
-        [123.26906526215, 13.63243241617],
-        [123.26933342054, 13.63262843723],
-        [123.26935616745, 13.6325904543],
-        [123.26902858716, 13.63235099644],
-        [123.26901628027, 13.63237154655]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-4",
-      "ring": [
-        [123.26902767343, 13.6324725169],
-        [123.2689771831, 13.63255682596],
-        [123.26898270375, 13.6325608615],
-        [123.26898271591, 13.63256091998],
-        [123.26892686877, 13.63265417344],
-        [123.26892680355, 13.632654183],
-        [123.26892129164, 13.63265015386],
-        [123.26891079969, 13.63266767339],
-        [123.26895341048, 13.63270300502],
-        [123.26909442958, 13.63246753045],
-        [123.26905758998, 13.63244060107],
-        [123.26902767343, 13.6324725169]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-5",
-      "ring": [
-        [123.26883814295, 13.6326002053],
-        [123.2688687265, 13.63261747813],
-        [123.26888097885, 13.63262565709],
-        [123.2689023272, 13.63264165024],
-        [123.26890478607, 13.63263808845],
-        [123.26888978042, 13.63262711948],
-        [123.26888976453, 13.63262706888],
-        [123.26893412498, 13.63255299386],
-        [123.26891912964, 13.63249808512],
-        [123.26889478919, 13.63248062681],
-        [123.26890867252, 13.63250678726],
-        [123.26887558912, 13.63253413833],
-        [123.26887322887, 13.63253863277],
-        [123.26886661605, 13.63253795965],
-        [123.26882790988, 13.63252690183],
-        [123.26881177124, 13.63252045423],
-        [123.26876826033, 13.63245909272],
-        [123.26876829482, 13.63245905669],
-        [123.26881689145, 13.63244741916],
-        [123.26883295267, 13.63244407608],
-        [123.2688402073, 13.63244646959],
-        [123.26881482869, 13.6324327618],
-        [123.26871362552, 13.63236008955],
-        [123.26871057208, 13.63235806459],
-        [123.26868939774, 13.63234328579],
-        [123.2686447665, 13.63237678061],
-        [123.26863575543, 13.63238636754],
-        [123.26862612807, 13.63238129001],
-        [123.26850710373, 13.6323282987],
-        [123.26850163148, 13.63233347591],
-        [123.26867705642, 13.63246018381],
-        [123.26867726138, 13.63246036478],
-        [123.26867742669, 13.63246058069],
-        [123.26867754617, 13.63246082347],
-        [123.26867761536, 13.63246108405],
-        [123.26867763167, 13.6324613527],
-        [123.26867759551, 13.63246161516],
-        [123.26867750705, 13.63246187018],
-        [123.26867736977, 13.6324621039],
-        [123.26866837599, 13.63247220397],
-        [123.26874912895, 13.6325335666],
-        [123.26883814295, 13.6326002053]
+        [
+          123.26862337235,
+          13.6321073232
+        ],
+        [
+          123.26865849022,
+          13.63213128019
+        ],
+        [
+          123.2686637854,
+          13.63212413119
+        ],
+        [
+          123.26866524137,
+          13.63212351455
+        ],
+        [
+          123.26866676756,
+          13.63212393427
+        ],
+        [
+          123.26886076937,
+          13.63225823559
+        ],
+        [
+          123.26886167438,
+          13.63225949868
+        ],
+        [
+          123.26886155069,
+          13.63226103728
+        ],
+        [
+          123.2688571575,
+          13.63226710887
+        ],
+        [
+          123.26886151731,
+          13.63226990945
+        ],
+        [
+          123.26888788955,
+          13.63228997661
+        ],
+        [
+          123.26889657927,
+          13.63228023682
+        ],
+        [
+          123.26889803333,
+          13.63227961509
+        ],
+        [
+          123.26889956311,
+          13.63228003126
+        ],
+        [
+          123.26898720899,
+          13.63235382246
+        ],
+        [
+          123.26898782359,
+          13.63235501545
+        ],
+        [
+          123.26898754939,
+          13.63235653153
+        ],
+        [
+          123.26898265683,
+          13.63236208692
+        ],
+        [
+          123.26899951131,
+          13.63237491184
+        ],
+        [
+          123.26900759981,
+          13.63236635734
+        ],
+        [
+          123.26900911992,
+          13.63236591233
+        ],
+        [
+          123.26901041075,
+          13.63236636496
+        ],
+        [
+          123.26907264893,
+          13.63242146436
+        ],
+        [
+          123.26907323272,
+          13.6324226718
+        ],
+        [
+          123.26907302722,
+          13.63242398658
+        ],
+        [
+          123.26906935091,
+          13.63242805418
+        ],
+        [
+          123.26925645278,
+          13.63257042605
+        ],
+        [
+          123.26910758712,
+          13.6328190554
+        ],
+        [
+          123.2691556428,
+          13.63285418362
+        ],
+        [
+          123.26930391264,
+          13.63260660172
+        ],
+        [
+          123.26931490949,
+          13.6326149046
+        ],
+        [
+          123.26932855905,
+          13.63259211248
+        ],
+        [
+          123.26934677373,
+          13.6325616975
+        ],
+        [
+          123.26933580471,
+          13.63255338604
+        ],
+        [
+          123.26933975739,
+          13.63254674794
+        ],
+        [
+          123.26929251039,
+          13.63251026938
+        ],
+        [
+          123.2692882068,
+          13.63251735426
+        ],
+        [
+          123.26895126391,
+          13.63226224203
+        ],
+        [
+          123.26883526681,
+          13.63217626953
+        ],
+        [
+          123.2686416556,
+          13.63204476524
+        ],
+        [
+          123.26862581907,
+          13.63208256477
+        ],
+        [
+          123.26863467601,
+          13.63208889671
+        ],
+        [
+          123.2686353832,
+          13.63209003112
+        ],
+        [
+          123.26863538831,
+          13.63209114914
+        ],
+        [
+          123.26862337235,
+          13.6321073232
+        ]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -183,23 +198,96 @@
     {
       "id": "link-1-1",
       "line": [
-        [123.26947299587, 13.63266211771],
-        [123.26945020214, 13.63270017882],
-        [123.26943878229, 13.63271924776]
+        [
+          123.26931307992,
+          13.63253360819
+        ],
+        [
+          123.26914298841,
+          13.63281762805
+        ]
       ],
       "width_m": 1.2
     },
     {
       "id": "frontage-to-classroom",
       "line": [
-        [123.26947386371, 13.63266116273],
-        [123.26946716233, 13.63266910916],
-        [123.26946691206, 13.63266938435],
-        [123.26946669579, 13.63266960651],
-        [123.26946627962, 13.63266996187],
-        [123.26946583154, 13.63267027847],
-        [123.26946535536, 13.63267055362],
-        [123.26940759948, 13.63269857369]
+        [
+          123.26929417628,
+          13.63251901303
+        ],
+        [
+          123.26929338083,
+          13.63252032255
+        ],
+        [
+          123.26929305019,
+          13.63252080954
+        ],
+        [
+          123.26929267118,
+          13.63252126203
+        ],
+        [
+          123.26929224761,
+          13.6325216755
+        ],
+        [
+          123.26929178368,
+          13.63252204583
+        ],
+        [
+          123.26929128405,
+          13.63252236931
+        ],
+        [
+          123.26929075369,
+          13.63252264273
+        ],
+        [
+          123.2692901979,
+          13.63252286334
+        ],
+        [
+          123.26928962223,
+          13.63252302894
+        ],
+        [
+          123.26928903243,
+          13.63252313789
+        ],
+        [
+          123.26928843439,
+          13.63252318909
+        ],
+        [
+          123.26928783407,
+          13.63252318204
+        ],
+        [
+          123.26928723747,
+          13.63252311679
+        ],
+        [
+          123.26928665056,
+          13.63252299401
+        ],
+        [
+          123.26928607918,
+          13.63252281493
+        ],
+        [
+          123.26928552904,
+          13.63252258132
+        ],
+        [
+          123.26928500564,
+          13.63252229552
+        ],
+        [
+          123.26863975241,
+          13.63208575707
+        ]
       ],
       "width_m": 1.2
     }
@@ -215,7 +303,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6327770,123.2689804,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. ES broad north/east, west interior and southern road-frontage canopy with separate courtyard crowns and palm-like radial crowns (generic trees unless kind is unmistakable), two visible green openings and classroom-side low green strips. Open paths wind between crowns and roofs. One shared image does not merge NHS/ES grounds or identities; no dense grove converted to woods. Crown-width observations: Mature distinguishable clumps roughly 45-65 px across the shared image; radial/edge crowns about 35-50 px. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/881093803 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 2.14 m, 1.17 m, 8.29 m, 8.23 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): The flat strip beside the western classroom opening is continuous low grass, not a distinguishable formal bed. Preserve the raised courtyard planting island and east classroom-edge planting; retain the dry/green openings and all shared crowns. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Shares one owner image with San Isidro National High. Forest canopy fills the north of the campus around the pale-roofed block; canopy fills the strip south of the high school and the east group between the east blocks; crowns stand between the classroom roofs and along the frontage. The tan walkway between the dark and light classroom roofs and the packed front apron along the road are hardscape; the low green patches beside the high school boundary and south of the high school are grass, and the striped vegetable-garden plot north of the classroom blocks is planting. Registration: continuous triangulated image registration; independent check errors 2.14 m, 1.17 m, 8.29 m, 8.23 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }
