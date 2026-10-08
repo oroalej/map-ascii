@@ -9,7 +9,37 @@ import { left, right } from './testing/continuity';
 import type { DialogueMemory } from './dialogue';
 import type { EmojiObservation } from './emoji';
 import type { Visit } from './interactions';
-import { pedestrianWorld } from './testing/pedestrians';
+import { pedestrianWorld, pedestrianEntry, seedPedestrians } from './testing/pedestrians';
+import { tileToLngLat } from '../raster/geometry';
+
+it('keeps cursor-on human physics identical with the observer enabled and disabled', () => {
+  const entry = pedestrianEntry();
+  const worlds = [new LifeWorld(), new LifeWorld(undefined, undefined, undefined, false, false)];
+  const fixtures = worlds.map((world) => {
+    world.sync([structuredClone(entry)]);
+    const f = seedPedestrians(world, -40);
+    const at = tileToLngLat(entry.tile, f.life.pose(f.human));
+    world.setEmojiView([19, 1, at]);
+    return { world, ...f, at };
+  });
+  for (let i = 0; i < 30; i++) {
+    for (const f of fixtures)
+      f.world.step(
+        0.1,
+        undefined,
+        19,
+        undefined,
+        undefined,
+        { rain: 0, minutes: 1080 },
+        1,
+        1.8,
+        1,
+        i < 20 ? f.at : undefined,
+        2,
+      );
+    expect(completeScenarioState(worlds[0]!)).toEqual(completeScenarioState(worlds[1]!));
+  }
+});
 
 afterEach(() => vi.restoreAllMocks());
 

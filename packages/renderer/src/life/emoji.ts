@@ -369,6 +369,7 @@ export class EmojiObserver {
   private season?: string | null;
   private entries: readonly SeasonEmojiEntry[] = [];
   private graveVisitors = false;
+  private pointerMosquito = new WeakMap<object, number>();
   constructor(
     seed: number,
     readonly perMeter: number,
@@ -391,6 +392,7 @@ export class EmojiObserver {
   dispose() {
     for (const g of this.groups) this.memory.retire(g);
     this.epoch++;
+    this.pointerMosquito = new WeakMap();
   }
   freeze() {
     this.frozenAt ??= this.clock;
@@ -566,6 +568,16 @@ export class EmojiObserver {
       t.clock = this.clock;
       for (const event of pointerEvents)
         if (event.owner === o.owner) (t.pointerEdges ??= new Set()).add(event.mood);
+      const mosquito =
+        o.subject === 'person' &&
+        (env.pointerRest ?? 0) >= 1 &&
+        !!env.pointerPeople?.has(o.owner) &&
+        inHours(env.minutes, EMOJI.hours.mosquito);
+      if (!mosquito) t.pointerEdges?.delete('mosquito');
+      else if (this.clock >= (this.pointerMosquito.get(o.owner) ?? -Infinity)) {
+        (t.pointerEdges ??= new Set()).add('mosquito');
+        this.pointerMosquito.set(o.owner, this.clock + 10);
+      }
       if (t.attemptAt === undefined) {
         // Bias the one initial opportunity toward the early part of its 2–12 s window.
         // Slow rendering must not require most owners to wait near the upper bound.
