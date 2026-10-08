@@ -266,7 +266,9 @@ export class PeddlerPopulation {
     )
       return false;
     return (
-      !from.some((body, i) => this.obstacles.sweptHits(body, to[i]!)) && this.context.safe(from, to)
+      (!this.obstacles.polygons.length ||
+        !from.some((body, i) => this.obstacles.sweptHits(body, to[i]!))) &&
+      this.context.safe(from, to)
     );
   }
   private routesFor(config: PeddlerConfig): Route[] {

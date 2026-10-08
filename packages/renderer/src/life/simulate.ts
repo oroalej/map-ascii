@@ -8621,6 +8621,13 @@ export class LifeWorld {
             safe: (from, to) => {
               const terrain = this.groundTerrain;
               if (!terrain?.ref) return false;
+              const indexes = [
+                terrain.blocked,
+                terrain.water,
+                terrain.seasonal,
+                terrain.roadAccess.roads,
+              ].filter((index) => index.polygons.length);
+              if (!indexes.length) return true;
               const frame = metricFrame(life, terrain.ref),
                 project = (body: Body): Body => ({
                   ...body,
@@ -8632,9 +8639,7 @@ export class LifeWorld {
               const start = from.map(project),
                 end = to.map(project);
               return !start.some((body, i) =>
-                [terrain.blocked, terrain.water, terrain.seasonal, terrain.roadAccess.roads].some(
-                  (index) => index.sweptHits(body, end[i]!),
-                ),
+                indexes.some((index) => index.sweptHits(body, end[i]!)),
               );
             },
             ordinary: () => {
