@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { Season, SeasonalRecordSchema, type SeasonConfig } from '@atlas/shared';
+import { type SeasonConfig } from '@atlas/shared';
+import { Season, SeasonalRecordSchema } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { generateSeasonalInstallations, seasonalRecordGeometry } from './seasonal-installations';
 

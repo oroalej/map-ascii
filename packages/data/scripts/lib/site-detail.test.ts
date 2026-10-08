@@ -1,4 +1,4 @@
-import { Cemetery, SiteDetail } from '@atlas/shared';
+import { Cemetery, SiteDetail } from '@atlas/shared/schemas';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';

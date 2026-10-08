@@ -2,11 +2,11 @@ import { expect, it } from 'vitest';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import { polygon } from '@turf/helpers';
 import {
-  Season,
   localMetricProjection,
   type SeasonalPoint,
   type SeasonalLightStringRecord,
 } from '@atlas/shared';
+import { Season } from '@atlas/shared/schemas';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/magsaysay-christmas.json';
 import type { AtlasFeature } from '../03-normalize';

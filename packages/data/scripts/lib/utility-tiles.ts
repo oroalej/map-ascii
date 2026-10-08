@@ -11,11 +11,11 @@ import {
   utilityTileMeters,
   utilityTilePoint,
   utilityRecordId,
-  UtilityRecordSchema,
   type BBox,
   type LitLine,
   type UtilityRecord,
 } from '@atlas/shared';
+import { UtilityRecordSchema } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeJson } from './io';
 import { generateUtilities, type UtilityLamp } from './utilities';

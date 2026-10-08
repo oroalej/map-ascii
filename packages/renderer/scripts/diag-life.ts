@@ -5,13 +5,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadCityPacks } from '@atlas/content';
-import {
-  activeSeason,
-  CityMeta,
-  CityProcessions,
-  dialogueChoices,
-  runtimeDialogueCatalog,
-} from '@atlas/shared';
+import { activeSeason, dialogueChoices, runtimeDialogueCatalog } from '@atlas/shared';
+import { CityMeta, CityProcessions } from '@atlas/shared/schemas';
 import * as workingCamera from '../src/camera';
 import * as workingDensity from '../src/density';
 import * as workingGrid from '../src/grid';

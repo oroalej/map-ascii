@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { carnivalRing, offsetUtility, pointInPolygon, Season } from '@atlas/shared';
+import { carnivalRing, offsetUtility, pointInPolygon } from '@atlas/shared';
+import { Season } from '@atlas/shared/schemas';
 import city from '../../../content/cities/naga/city.json';
 import reference from '../__fixtures__/sabang-carnival.json';
 import type { AtlasFeature } from '../03-normalize';

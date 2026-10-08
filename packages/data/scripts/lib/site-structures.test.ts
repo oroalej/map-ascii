@@ -1,4 +1,4 @@
-import { SiteDetail } from '@atlas/shared';
+import { SiteDetail } from '@atlas/shared/schemas';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeSiteDetails } from './site-detail';

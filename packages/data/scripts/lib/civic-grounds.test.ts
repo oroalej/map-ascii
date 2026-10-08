@@ -1,12 +1,6 @@
 import { readFixture, readPack as content } from './landmark-detail.geometry';
-import {
-  Cemetery,
-  Landmark,
-  LandmarkPlan,
-  Landcover,
-  SiteDetail,
-  type LngLat,
-} from '@atlas/shared';
+import { type LngLat } from '@atlas/shared';
+import { Cemetery, Landmark, LandmarkPlan, Landcover, SiteDetail } from '@atlas/shared/schemas';
 import type { ContentBundle } from '@atlas/content';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';

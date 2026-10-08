@@ -1,12 +1,11 @@
+import { type LngLat, type BBox } from '@atlas/shared';
 import {
   Cemetery,
   Landcover,
   Landmark,
   SiteDetail,
   DetailSelectionSchema,
-  type LngLat,
-  type BBox,
-} from '@atlas/shared';
+} from '@atlas/shared/schemas';
 import type { ContentBundle } from '@atlas/content';
 import type { Polygon, MultiPolygon } from 'geojson';
 import inside from '@turf/boolean-point-in-polygon';

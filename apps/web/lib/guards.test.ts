@@ -1,4 +1,9 @@
-import { CityMeta, CityProcessions, SearchIndexFile, SubdivisionAreas } from '@atlas/shared';
+import {
+  CityMeta,
+  CityProcessions,
+  SearchIndexFile,
+  SubdivisionAreas,
+} from '@atlas/shared/schemas';
 import { describe, expect, it } from 'vitest';
 import { isCityMeta, isCityProcessions, isSearchIndexFile, isSubdivisionAreas } from './guards';
 import { isCityEmergency } from './guards';

@@ -1,11 +1,6 @@
 import { expect, it } from 'vitest';
-import {
-  Season,
-  SeasonalRecordSchema,
-  pointInPolygon,
-  type SeasonConfig,
-  type SeasonalPoint,
-} from '@atlas/shared';
+import { pointInPolygon, type SeasonConfig, type SeasonalPoint } from '@atlas/shared';
+import { Season, SeasonalRecordSchema } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { generateSeasonalInstallations, seasonalRecordGeometry } from './seasonal-installations';
 const area: AtlasFeature = {

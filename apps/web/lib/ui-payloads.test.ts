@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
-import { CityArt, Landmark, Tour } from '@atlas/shared';
+import { CityArt, Landmark, Tour } from '@atlas/shared/schemas';
 import fixture from './__fixtures__/ui-payloads.json';
 import { isCityArt, isCityLandmarks, isCityTours } from './guards';
 it('accepts actual pipeline wire formats and their corresponding schemas', () => {

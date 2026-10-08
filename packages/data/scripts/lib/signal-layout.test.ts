@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SignalLayout } from '@atlas/shared';
+import { SignalLayout } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeTraffic } from './traffic';
 
