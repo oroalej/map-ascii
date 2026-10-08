@@ -8,6 +8,14 @@ import { themes } from './theme';
 import { MOOD_GLYPHS } from '@atlas/shared';
 
 const labels = (zoom: number) => legendEntries('dark', zoom).map((e) => e.label);
+it('discloses draft rice stages while retaining farmland identity and focus', () => {
+  const regular = legendEntries('dark', 18, ['farmland']).find((e) => e.id === 'class:farmland')!;
+  const draft = legendEntries('dark', 18, ['farmland'], { cropCalendarDraft: true }).find(
+    (e) => e.id === regular.id,
+  )!;
+  expect(regular.label).toBe('Farmland');
+  expect(draft).toEqual({ ...regular, label: 'Farmland (illustrative rice stages)' });
+});
 it.each(['dark', 'light'] as const)(
   'places folklore with simulated rows using %s theme legend ink',
   (name) => {

@@ -790,7 +790,31 @@ export function grassVariant(
 }
 
 /** Crop glyphs by role (theme.ts `farmland`): rows at rest, then leaning right, left, and flat. */
-export const CropGlyph = { leanRight: 2, leanLeft: 3, flat: 4 } as const;
+export const CropGlyph = {
+  leanRight: 2,
+  leanLeft: 3,
+  flat: 4,
+  water: 5,
+  seedling: 6,
+  stubble: 7,
+  soil: 8,
+  soilDark: 9,
+} as const;
+
+/** Calendar codes and cell thresholds shared with the GLSL twin. */
+export const CROP_STAGE = {
+  fallow: 0,
+  flooded: 1,
+  transplanted: 2,
+  growing: 3,
+  ripe: 4,
+  harvested: 5,
+  ripeStart: 0.3,
+  seedEvery: 0.2,
+  seedEnd: 0.8,
+  waterShare: 0.8,
+  shimmerRate: 0.12,
+} as const;
 
 /** Broad patches of a field ripen: above `ripeAbove` its noise (`ripeScale` cells) is straw. */
 export const CROP = { ripeScale: 16, ripeSeed: 13, ripeAbove: 0.62 } as const;
@@ -808,6 +832,66 @@ export function cropVariant(y: number, gust = 0, dir: WindDir = DEFAULT_WIND_DIR
   if (gust < GUST_STEPS[0]) return row;
   if (row === 0 || gust >= GUST_STEPS[1]) return CropGlyph.flat;
   return dir[0] >= 0 ? CropGlyph.leanRight : CropGlyph.leanLeft;
+}
+
+/** Seasonal world cells; time zero freezes water independently of wind and Life. */
+export function cropCell(
+  x: number,
+  y: number,
+  gust: number,
+  dir: WindDir,
+  stage: number,
+  progress: number,
+  time = 0,
+): { variant: number; tone: number } {
+  const p = Math.max(0, Math.min(1, progress));
+  const h = cellHash(x, y) >>> 8;
+  const row = mod(y, 2) === 0;
+  if (stage === CROP_STAGE.growing || stage === CROP_STAGE.ripe) {
+    const smooth = p * p * (3 - 2 * p);
+    const threshold =
+      stage === CROP_STAGE.growing
+        ? CROP.ripeAbove + (CROP_STAGE.ripeStart - CROP.ripeAbove) * smooth
+        : CROP_STAGE.ripeStart * (1 - smooth);
+    return {
+      variant: cropVariant(y, gust, dir),
+      tone: valueNoise(x, y, CROP.ripeScale, CROP.ripeSeed) > threshold ? Tone.dry : Tone.none,
+    };
+  }
+  if (stage === CROP_STAGE.flooded)
+    return {
+      variant:
+        time > 0 && (h + Math.floor(time * CROP_STAGE.shimmerRate)) % 5 === 0
+          ? CropGlyph.flat
+          : CropGlyph.water,
+      tone: Tone.light,
+    };
+  if (stage === CROP_STAGE.transplanted) {
+    const planted =
+      row && h / 16777216 < CROP_STAGE.seedEvery + (CROP_STAGE.seedEnd - CROP_STAGE.seedEvery) * p;
+    return {
+      variant: planted ? ((h & 1) === 0 ? CropGlyph.seedling : 1) : CropGlyph.water,
+      tone: planted ? Tone.none : Tone.light,
+    };
+  }
+  if (stage === CROP_STAGE.harvested)
+    return {
+      variant: row && (h & 1) === 0 ? CropGlyph.stubble : CropGlyph.seedling,
+      tone: Tone.dry,
+    };
+  return { variant: (h & 1) === 0 ? CropGlyph.soil : CropGlyph.soilDark, tone: Tone.shade };
+}
+
+type CropTint = [number, number, number];
+/** Seedlings retain field pigment; tone marks water without another state bit. */
+export function cropTint(stage = -1): { tint: CropTint; waterTint: CropTint } {
+  return {
+    tint: stage === CROP_STAGE.fallow ? [0.85, 0.55, 0.7] : [1, 1, 1],
+    waterTint:
+      stage === CROP_STAGE.flooded || stage === CROP_STAGE.transplanted
+        ? [0.4, 0.34, 2]
+        : [1, 1, 1],
+  };
 }
 
 /**
@@ -1066,6 +1150,7 @@ export type CellContext = {
   windDir?: WindDir;
   /** The feature's variant byte (classes.ts `variantCode`). */
   variant?: number;
+  crop?: { stage: number; progress: number };
 };
 
 /** The variant a class with `count` glyphs shows in a cell: the CPU twin of the select shader. */
@@ -1121,6 +1206,19 @@ export function variantFor(
     }
     case 'crop': {
       const gust = (ctx.wind ?? 1) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
+      if (ctx.crop)
+        return Math.min(
+          cropCell(
+            ctx.x,
+            ctx.y,
+            gust,
+            ctx.windDir ?? DEFAULT_WIND_DIR,
+            ctx.crop.stage,
+            ctx.crop.progress,
+            ctx.time,
+          ).variant,
+          count - 1,
+        );
       return Math.min(cropVariant(ctx.y, gust, ctx.windDir), count - 1);
     }
     case 'foliage': {
