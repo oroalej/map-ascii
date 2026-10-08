@@ -1,11 +1,7 @@
 import { expect, it } from 'vitest';
 import type { Feature, FeatureCollection, Geometry, Polygon } from 'geojson';
-import {
-  CityProcessions,
-  Procession,
-  type SeasonalRecord,
-  type SubdivisionArea,
-} from '@atlas/shared';
+import { type SeasonalRecord, type SubdivisionArea } from '@atlas/shared';
+import { CityProcessions, Procession } from '@atlas/shared/schemas';
 import { normalize, type AtlasFeature } from './03-normalize';
 import { tileRecords, yearRange } from './05-tiles';
 import { buildSearchIndex, searchEntries } from './06-search-index';

@@ -1,4 +1,5 @@
-import { SignalLayout, SignalStops, type City, type SignalArm } from '@atlas/shared';
+import { type City, type SignalArm } from '@atlas/shared';
+import { SignalLayout, SignalStops } from '@atlas/shared/schemas';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { delta, key, lines, point, SIGNAL_STOP_GAP_M, width } from './road-geometry';

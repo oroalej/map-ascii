@@ -5,7 +5,7 @@ import { LifeInspection } from './inspection';
 import { LifeWorld, type VisibleAgent } from './simulate';
 import { makeScenario, worldTiles } from './testing/scenarios';
 import { bounded } from './testing/scenario-checks';
-import { createInlineHost } from './host';
+import { createInlineHost } from './inline-host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
 import { UMBRELLA_MOTION } from './config';
 

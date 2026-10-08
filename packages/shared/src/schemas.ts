@@ -48,6 +48,7 @@ export { BuntingCorridorSchema, SeasonalRecordSchema } from './seasonal-schema';
 import { LIFE_SITE_KINDS, TRANSIT_MODES, type LifeSiteConfig } from './life-sites';
 import {
   artChars,
+  ART_CHARACTERS,
   ATLAS_CLASSES,
   FRONTAGE_KINDS,
   CAMERA_RANGES,
@@ -189,19 +190,7 @@ export const NameHistoryEntry = z
   });
 export type NameHistoryEntry = z.infer<typeof NameHistoryEntry>;
 
-const range = (from: number, to: number) =>
-  Array.from({ length: to - from + 1 }, (_, i) => String.fromCodePoint(from + i));
-
-/**
- * Characters landmark art may use: printable ASCII, the box-drawing and block-element ranges,
- * and a few symbols. The renderer's glyph atlas includes all of them.
- */
-export const ART_CHARACTERS: ReadonlySet<string> = new Set([
-  ...range(0x20, 0x7e),
-  ...range(0x2500, 0x257f),
-  ...range(0x2580, 0x259f),
-  ...'◆◇▲△▼▽○●◦•·†‡¶°∩≡≈♣♠♦☼',
-]);
+export { ART_CHARACTERS } from './constants';
 
 /** Colors an art piece can use; each theme defines them. */
 export const ArtRole = z.enum([

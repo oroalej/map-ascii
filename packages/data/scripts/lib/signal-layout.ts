@@ -1,4 +1,5 @@
-import { SignalLayout, type SignalArm } from '@atlas/shared';
+import { type SignalArm } from '@atlas/shared';
+import { SignalLayout } from '@atlas/shared/schemas';
 import type { Position } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { signalStop, type RoadArm, type RoadVertex } from './streets';

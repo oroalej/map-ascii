@@ -1,5 +1,5 @@
 import type { Atlas, AtlasEventMap, LegendFocus } from '@atlas/renderer';
-import * as rendererExports from '@atlas/renderer';
+import * as rendererExports from '@atlas/renderer/hud';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -62,6 +62,7 @@ beforeEach(() => {
   useLifeStore.setState({ enabled: false });
   useEmojiStore.setState({ enabled: true });
   useUiStore.setState({
+    startup: null,
     legendFocus: null,
     lifeHover: null,
     processions: [],
@@ -71,6 +72,28 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+});
+it('defers subdivisions until the matching atlas has drawn and handles a late subscription', async () => {
+  const instance = renderer();
+  useAtlasInstance.setState({ atlas: instance.atlas });
+  useUiStore.setState({ startup: { city: 'test', atlas: instance.atlas, status: 'drawing' } });
+  await act(async () => {
+    root.render(createElement(Hud, { city: 'test', subdivisionLabel: 'district' }));
+    await Promise.resolve();
+  });
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => {
+    useUiStore.setState({ startup: { city: 'test', atlas: instance.atlas, status: 'ready' } });
+    await Promise.resolve();
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    useUiStore.setState({ startup: { city: 'next', atlas: instance.atlas, status: 'ready' } });
+    root.render(createElement(Hud, { city: 'next', subdivisionLabel: 'district' }));
+    await Promise.resolve();
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenLastCalledWith('/tiles/next.subdivisions.json');
 });
 it('passes the illustrative rice disclosure to the legend and restores the absent-calendar label', async () => {
   const instance = renderer();

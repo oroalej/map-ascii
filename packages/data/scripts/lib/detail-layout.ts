@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DetailLayouts } from '@atlas/shared';
+import { DetailLayouts } from '@atlas/shared/schemas';
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
 import type { StepContext } from '../step';
 import { files } from '../step';

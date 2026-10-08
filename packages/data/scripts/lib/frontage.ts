@@ -1,7 +1,8 @@
 import bbox from '@turf/bbox';
 import pointInPolygon from '@turf/boolean-point-in-polygon';
 import { difference } from 'polyclip-ts';
-import { ShopAnchor, SHOP_POINT_RADIUS_M, type FrontageKind } from '@atlas/shared';
+import { SHOP_POINT_RADIUS_M, type FrontageKind } from '@atlas/shared';
+import { ShopAnchor } from '@atlas/shared/schemas';
 import type { Feature, FeatureCollection, Polygon, MultiPolygon, Position } from 'geojson';
 import { classify, type Tags } from './classify';
 export type Frontage = FrontageKind;

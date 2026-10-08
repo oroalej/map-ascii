@@ -1,4 +1,5 @@
-import { Landcover, SiteDetail, Landmark, DetailSelectionSchema, type LngLat } from '@atlas/shared';
+import { type LngLat } from '@atlas/shared';
+import { Landcover, SiteDetail, Landmark, DetailSelectionSchema } from '@atlas/shared/schemas';
 import inside from '@turf/boolean-point-in-polygon';
 import { describe, expect, it } from 'vitest';
 import type { Polygon, Point } from 'geojson';

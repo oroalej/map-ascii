@@ -2,12 +2,12 @@ import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
 import {
   searchOptions,
-  SearchIndexFile,
   type BBox,
   type SearchEntry,
   type SearchType,
   type SubdivisionArea,
 } from '@atlas/shared';
+import { SearchIndexFile } from '@atlas/shared/schemas';
 import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
 import type { Feature, Geometry, Position } from 'geojson';

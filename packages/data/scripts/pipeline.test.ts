@@ -4,14 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import {
-  Procession,
-  SiteDetail,
-  OSM_ATTRIBUTION,
-  type City,
-  type CityArt,
-  type LngLat,
-} from '@atlas/shared';
+import { OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
+import { Procession, SiteDetail } from '@atlas/shared/schemas';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { step as convert, type Geography } from './02-convert';
@@ -519,6 +513,11 @@ describe('pipeline (02–04) on the fixture extract', () => {
     expect(plaza.label_lng).toEqual(expect.any(Number));
     expect(plaza.label_lat).toEqual(expect.any(Number));
     expect(byId.get('osm:way/104')).not.toHaveProperty('label_lng');
+  });
+
+  it('writes the validated lazy UI arrays', async () => {
+    expect(await readJson(join(ctx.outDir, 'fixture.landmarks.json'))).toEqual(content.landmarks);
+    expect(await readJson(join(ctx.outDir, 'fixture.tours.json'))).toEqual(content.tours);
   });
 
   it('writes the city landmark art, placed on its features', async () => {

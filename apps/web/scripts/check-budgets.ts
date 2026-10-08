@@ -2,21 +2,29 @@
  * `pnpm check:budgets`: check the static export against the size budgets in ARCHITECTURE.md §8,
  * after `pnpm build`. Initial JS is the gzipped scripts each city page loads (the tile worker
  * loads later, and `nomodule` polyfills load only in old browsers, so neither is counted). The
- * asynchronous map renderer has its own gzipped budget, and each city's `<slug>.pmtiles`
+ * asynchronous map renderer's normal worker startup graph has its own gzipped budget;
+ * nested import factories (the inline-Life fallback) load only when invoked. Each `<slug>.pmtiles`
  * must stay under its cap. Each `<slug>.processions.json` has a 60 KiB gzip cap.
- * The page's own HTML, with the content inlined
- * in it, is reported alongside.
+ * City HTML has a raw-size cap. Startup JSON counts automatic tile sidecars fetched before
+ * the first tile frame: currently none (meta is inline; subdivisions, landmarks, processions
+ * and emergency wait for readiness). Interaction-triggered requests are outside that set.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { canvasChunks, canvasEntries, gzippedChunks } from './chunk-budgets';
+import { STARTUP_JSON_BUDGET, startupJsonSize } from './startup-json-budget';
+import { assertZodFreeChunks } from './browser-chunks';
 
 const KB = 1024;
 const MB = 1024 * KB;
 const BUDGETS = {
   initialJs: 250 * KB,
   renderer: 120 * KB,
+  canvasAsync: 200 * KB,
+  cityHtml: 48 * KB,
+  startupJson: STARTUP_JSON_BUDGET,
   pmtiles: 40 * MB,
   processions: 60 * KB,
   emergency: 32 * KB,
@@ -39,6 +47,7 @@ const rows: { what: string; size: number; budget: number }[] = [];
 const notes: string[] = [];
 const human = (n: number) => (n >= MB ? `${(n / MB).toFixed(1)} MB` : `${(n / KB).toFixed(0)} KB`);
 const chunks = join(out, '_next', 'static', 'chunks');
+assertZodFreeChunks(chunks);
 const rendererChunks = readdirSync(chunks)
   .filter((file) => file.endsWith('.js'))
   .map((file) => ({ path: join(chunks, file), source: readFileSync(join(chunks, file)) }))
@@ -65,6 +74,33 @@ for (const slug of slugs) {
   let js = 0;
   for (const src of scripts) js += gzipSync(readFileSync(join(out, src))).length;
   rows.push({ what: `/${slug} initial JS (gzipped)`, size: js, budget: BUDGETS.initialJs });
+  const entries = canvasEntries(
+    out,
+    scripts,
+    `/_next/static/chunks/${renderer.path.split(/[\\/]/).pop()!}`,
+  );
+  const async = canvasChunks(out, entries, scripts);
+  rows.push({
+    what: `/${slug} canvas async JS (gzipped)`,
+    size: gzippedChunks(out, async),
+    budget: BUDGETS.canvasAsync,
+  });
+  rows.push({
+    what: `/${slug} HTML (raw)`,
+    size: Buffer.byteLength(html),
+    budget: BUDGETS.cityHtml,
+  });
+  rows.push({
+    what: `/${slug} startup JSON (gzipped)`,
+    size: startupJsonSize((suffix) => readFileSync(join(tiles, `${slug}.${suffix}.json`))),
+    budget: BUDGETS.startupJson,
+  });
+  for (const src of scripts) {
+    const source = readFileSync(join(out, src), 'utf8');
+    if (source.includes('webglcontextlost') || source.includes('#version 300 es'))
+      throw new Error(`/${slug} initial chunk contains the renderer: ${src}`);
+  }
+  notes.push(`/${slug} canvas async chunks: ${[...async].join(', ')}`);
   rows.push({
     what: `/${slug} renderer chunk (gzipped)`,
     size: rendererSize,

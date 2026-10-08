@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CityLife, LifeSite } from '@atlas/shared';
+import { CityLife, LifeSite } from '@atlas/shared/schemas';
 import { siteOfTags, mergeLifeSites } from './life-sites';
 import { classify, variantOf } from './classify';
 import { lifeQuery } from '../01-fetch';

@@ -1,8 +1,8 @@
 /**
- * Decoded vector tile → typed arrays for the cell pass. Runs in the tile worker; kept free of
+ * Decoded vector tile â†’ typed arrays for the cell pass. Runs in the tile worker; kept free of
  * worker and GL APIs so it can be unit-tested.
  *
- * Positions stay tile-local (0–EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
+ * Positions stay tile-local (0â€“EXTENT, with tippecanoe's buffer beyond) as Int16, and the cell
  * pass maps them with a per-tile matrix computed in float64, so precision holds at z19.
  */
 import {
@@ -17,14 +17,16 @@ import {
   type UtilityRecord,
   featureZoomBand,
   LIFE_SITE_KINDS,
-  SignalLayout,
-  ControllerSeed,
-  SignalStops,
-  decodeCrossingController,
-  decodeCrossingSignal,
   type ZoomBand,
   FRONTAGE_KINDS,
   type FrontageKind,
+} from '@atlas/shared';
+import { parseSignalLayout } from '@atlas/shared';
+import {
+  parseControllerSeed,
+  parseSignalStops,
+  decodeCrossingController,
+  decodeCrossingSignal,
 } from '@atlas/shared';
 import earcut from 'earcut';
 import {
@@ -117,7 +119,7 @@ export type GeometryArrays = {
   surfaceScale?: number;
   /** x, y per vertex. */
   positions: Int16Array;
-  /** class id, height (m, 0–255), flags, variant (or ridge angle) per vertex. */
+  /** class id, height (m, 0â€“255), flags, variant (or ridge angle) per vertex. */
   meta: Uint8Array;
   /** Feature index (1-based; 0 = none) per vertex. */
   ids: Uint32Array;
@@ -152,7 +154,7 @@ const STREET_MINOR_BANDS: Readonly<Record<string, ZoomBand>> = {
 const CROSSING_CUT_M = 1.5;
 
 /**
- * How a street's name ranks and when it shows, from its class and OSM kind (`highway=…`): only
+ * How a street's name ranks and when it shows, from its class and OSM kind (`highway=â€¦`): only
  * the key streets are named at the Street level. Major roads show from the District level (z14)
  * and secondary roads from z15.5. Tertiary roads (and middle roads of unknown kind) wait for the
  * Place level (z17.5), other streets for z18, and paths for z18.5.
@@ -630,7 +632,7 @@ export function principalAxis(ring: readonly TilePoint[]) {
   return { cx, cy, ux: Math.cos(theta), uy: Math.sin(theta), theta };
 }
 
-/** Whether `p` is inside a polygon (its outer ring, less its holes), even–odd. */
+/** Whether `p` is inside a polygon (its outer ring, less its holes), evenâ€“odd. */
 export function insidePolygon(polygon: readonly (readonly TilePoint[])[], p: TilePoint): boolean {
   let inside = false;
   for (const ring of polygon) {
@@ -690,7 +692,7 @@ export function parkingStalls(
 export type TileAddress = { z: number; x: number; y: number };
 
 /**
- * Add a road segment as a strip `2 × half` units wide, extended by `half` past each end so
+ * Add a road segment as a strip `2 Ã— half` units wide, extended by `half` past each end so
  * consecutive segments overlap into square joins.
  */
 function addStrip(
@@ -1150,17 +1152,17 @@ export function buildTileGeometry(
                   feature.properties.life_signal === 'mapped',
                   feature.properties.signal_layout === undefined
                     ? undefined
-                    : SignalLayout.parse(JSON.parse(String(feature.properties.signal_layout))),
+                    : parseSignalLayout(JSON.parse(String(feature.properties.signal_layout))),
                   {
                     id: featureId,
                     seed:
                       feature.properties.signal_seed === undefined
                         ? undefined
-                        : ControllerSeed.parse(feature.properties.signal_seed),
+                        : parseControllerSeed(feature.properties.signal_seed),
                     stops:
                       feature.properties.signal_stops === undefined
                         ? undefined
-                        : SignalStops.parse(JSON.parse(String(feature.properties.signal_stops))),
+                        : parseSignalStops(JSON.parse(String(feature.properties.signal_stops))),
                   },
                 );
               continue;
