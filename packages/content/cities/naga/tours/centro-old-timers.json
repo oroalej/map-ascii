@@ -4,10 +4,37 @@
     "en": "Centro old-timers"
   },
   "description": {
-    "en": "Mami, bakeries and halo-halo around the old commercial streets."
+    "en": "Chinese-Filipino classics, mami, bakeries and halo-halo around the old commercial streets."
   },
   "status": "verified",
   "steps": [
+    {
+      "camera": {
+        "lng": 123.1842225,
+        "lat": 13.6222399,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Start at New China Restaurant near Prieto and General Luna. Established in 1943, it remains a downtown stop for pancit, siopao and coffee."
+      },
+      "select": "landmark/new-china",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: New China Restaurant (2025)",
+          "url": "https://dateline-ibalon.com/2025/02/naga-city-360-arts-culture-and-heritage-in-28-days-28-ways-part-2-dennis-b-gonzaga/"
+        },
+        {
+          "title": "The Archipelago Press: Downtown Naga stroll (2026)",
+          "url": "https://thearchipelagopress.com/a-nostalgic-stroll-through-downtown-naga-city-the-heart-of-bicol/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/642992021",
+          "note": "Point copied from the mapped New China business node near Prieto and General Luna. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
     {
       "camera": {
         "lng": 123.1853901,
@@ -147,7 +174,7 @@
       },
       "duration_ms": 12000,
       "narration": {
-        "en": "Crown Park, on the Crown Hotel’s ground floor, is known for dim sum and hung ma rice."
+        "en": "Crown Park Restaurant, on Crown Hotel's ground floor, serves dim sum and hung ma: braised pork paired with hung ma bread."
       },
       "sources": [
         {
@@ -155,11 +182,21 @@
           "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
         },
         {
-          "title": "OpenStreetMap: independent business POI",
+          "title": "Langyaw: Hung ma in Naga (2011)",
+          "url": "https://langyaw.com/2011/05/02/delicious-hung-ma-rice-in-naga-city/"
+        },
+        {
+          "title": "Crown Park Restaurant: Elias Angeles menu on Foodpanda",
+          "url": "https://www.foodpanda.ph/restaurant/dz2f/crown-park-restaurant-elias-angeles",
+          "note": "Menu checked on 2026-10-08; items may change."
+        },
+        {
+          "title": "OpenStreetMap: restaurant location",
           "url": "https://www.openstreetmap.org/node/4946223021",
-          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+          "note": "Dedicated restaurant POI within Crown Hotel; no hotel ownership or construction date inferred."
         }
-      ]
+      ],
+      "select": "osm:node/4946223021"
     },
     {
       "camera": {
