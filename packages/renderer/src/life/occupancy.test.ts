@@ -32,6 +32,33 @@ const nearest = (o: Occupancy, x = 0, y = 0, hx = 1, hy = 0, width = 1, range = 
     range,
   );
 
+it('visits owners once across bins, with human masks and no retained query state', () => {
+  const o = new Occupancy(),
+    group = {},
+    outside = {},
+    animal = {};
+  o.set(group, [
+    { ...box(11, 0, 30), kind: BODY_KIND.human },
+    { ...box(13, 0), kind: BODY_KIND.human },
+  ]);
+  o.set(outside, [{ ...box(60, 0), kind: BODY_KIND.human }]);
+  o.set(animal, [{ ...box(12, 0), kind: BODY_KIND.animal }]);
+  const area = [
+    [
+      { x: 10, y: -5 },
+      { x: 25, y: -5 },
+      { x: 25, y: 5 },
+      { x: 10, y: 5 },
+    ],
+  ];
+  const visited: object[] = [];
+  o.visitInArea(area, BODY_KIND.human, (owner) => visited.push(owner));
+  expect(visited).toEqual([group]);
+  o.delete(group);
+  o.visitInArea(area, BODY_KIND.human, (owner) => visited.push(owner));
+  expect(visited).toEqual([group]);
+});
+
 describe('pedestrian occupancy queries', () => {
   const human = (x: number, y: number): Body => ({ ...box(x, y, 1, 1), kind: BODY_KIND.human });
   it('preserves corner-derived bin membership at rotated and degenerate boundary positions', () => {
@@ -246,6 +273,7 @@ describe('ground footprints', () => {
         hy: Math.sin(heading),
       };
       expect(index.hits([body])).toBe(polygons.some((p) => bodyHitsPolygon(body, p)));
+      expect(index.contains([body])).toBe(polygons.some((p) => bodyInside(body, p)));
     }
   });
   it('retains near-touch tolerance and queries padded bounds across bins', () => {
@@ -277,6 +305,21 @@ describe('ground footprints', () => {
     const lot = [ring(0, 0, 10, 10), ring(4.8, 4.8, 0.4, 0.4)];
     expect(bodyInside(box(5, 5), lot)).toBe(false);
     expect(bodyHitsPolygon(box(5, 5, 0.1, 0.1), lot)).toBe(false);
+  });
+  it('contains whole rotated bodies across bins, rejects enclosed holes and clears query scratch', () => {
+    const water = new PolygonIndex();
+    water.add([ring(-30, -30, 60, 60)]);
+    for (let i = 0; i < 40; i++) water.add([ring(1000 + i * 20, 1000, 10, 10)]);
+    const rotated = { ...box(0, 0, 40, 4), hx: Math.SQRT1_2, hy: Math.SQRT1_2 };
+    expect(water.contains([rotated, box(24, 24)])).toBe(true);
+    expect(water.contains([box(29, 0)])).toBe(false);
+    expect(water.contains([box(100, 0)])).toBe(false);
+    expect(water.contains([rotated])).toBe(true);
+    const holed = new PolygonIndex();
+    holed.add([ring(-30, -30, 60, 60), ring(-0.2, -0.2, 0.4, 0.4)]);
+    expect(holed.contains([box(0, 0)])).toBe(false);
+    expect(holed.contains([box(10, 0)])).toBe(true);
+    expect(holed.contains([box(0, 0, 40, 4)])).toBe(false);
   });
   it('indexes moving bodies and removes their old reservation', () => {
     const occupied = new Occupancy(),

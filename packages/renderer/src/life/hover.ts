@@ -188,7 +188,7 @@ export class LifeHoverController {
         (c.agent.inspectionId !== undefined && held.agent.inspectionId === c.agent.inspectionId)) &&
       held.identity === c.identity &&
       now - held.at < validity;
-    this.setInspection(holding && c.agent.kind !== 'bird', c.agent);
+    this.setInspection(holding && !['bird', 'cat', 'dog'].includes(c.agent.kind), c.agent);
     if (this.confirmed?.key === c.key) this.publish(this.confirmed.visible ? c.label : null);
     else this.publish(holding ? held.label : null);
     if (this.pending) return;

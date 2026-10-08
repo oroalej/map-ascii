@@ -1,3 +1,5 @@
+import type { Ripple } from './life/cursor-effects';
+import { cursorUniforms, type CursorWind } from './life/cursor-wind';
 import { throng, type ThrongFieldPool, type ThrongGuardFactory } from './life/throng';
 import type { ProcessionRoute } from '@atlas/shared';
 import { project } from './camera';
@@ -351,6 +353,7 @@ export function crownPass(
   tiles: readonly TileDraw[],
   time: number,
   wind: WindNow,
+  cursor?: CursorWind,
 ) {
   const { cols, rows, base, subBase, sub } = targets;
   const program = programs.cell;
@@ -373,6 +376,7 @@ export function crownPass(
     u_crownOverDepth: crownOverDepth,
     u_wind: wind.strength,
     u_windDir: wind.dir,
+    ...cursorUniforms(cursor),
     u_grid: [cols, rows],
   });
   // Only the tiles with crowns are drawn, and their matrices are worked out once for both grids.
@@ -494,6 +498,7 @@ export function selectPass(
   shadows = true,
   awnings = true,
   crop: CropPass | null = null,
+  cursor?: CursorWind,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -517,6 +522,7 @@ export function selectPass(
     u_time: time,
     u_wind: wind.strength,
     u_windDir: wind.dir,
+    ...cursorUniforms(cursor),
     u_zoom: view.detailZoom,
     u_seeThrough: seeThrough,
     u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
@@ -843,6 +849,8 @@ export function effectClockPass(gl: GL, targets: CellTargets) {
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
 export type Weather = {
+  ripples?: readonly Ripple[];
+  cursorWind?: CursorWind;
   rain: number;
   wind: WindNow | null;
   fish?: boolean;
@@ -1070,6 +1078,8 @@ export function glyphPass(
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
     u_time: time,
+    u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
+    u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
     u_lifeTime: lifeTime,
     ...hauntUniforms(
@@ -1085,6 +1095,7 @@ export function glyphPass(
     u_shimmer: !reducedMotion,
     u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
     u_buntingWindDir: weather.wind?.dir ?? [0, 0],
+    ...cursorUniforms(reducedMotion ? undefined : weather.cursorWind),
     u_focus: focused,
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,

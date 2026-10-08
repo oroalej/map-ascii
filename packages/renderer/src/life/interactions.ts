@@ -18,6 +18,7 @@ import {
   kinematicsOf,
   SHELTER_DEPARTURE,
   HEAT,
+  POINTER,
   hotAt,
   underUmbrella,
   umbrellaShare,
@@ -201,6 +202,11 @@ export class LocalScenes {
   private wet = false;
   private showers = 0;
   private rain = 0;
+  private pointerPeople?: ReadonlySet<object>;
+  private pointerShade = false;
+  private cursorCatFlee?: (m: Mover) => boolean;
+  private readonly cursorHolds = new Map<Mover, number>();
+  readonly cursorAdmissions: Mover[] = [];
   private scan = 0;
   private cursor = 0;
   private minutes = -1;
@@ -323,6 +329,7 @@ export class LocalScenes {
 
   /** Release all references, including private cooldowns, without advancing any random stream. */
   release(m: Mover): void {
+    this.cursorHolds.delete(m);
     const service = this.services.get(m);
     if (service?.passenger) {
       const visit = this.visits.get(service.passenger);
@@ -552,7 +559,19 @@ export class LocalScenes {
 
   /** Whether this person is caught in sheltering weather with no umbrella over the group. */
   caught(m: Mover): boolean {
-    return this.wet && m.kind === 'person' && exposed(m.group, this.rain);
+    return (
+      this.wet && m.kind === 'person' && !this.cursorSheltered(m) && exposed(m.group, this.rain)
+    );
+  }
+
+  cursorSheltered(m: Mover): boolean {
+    return this.wet && m.kind === 'person' && !!this.pointerPeople?.has(m);
+  }
+  cursorShaded(owner: object): boolean {
+    return this.pointerShade && !!this.pointerPeople?.has(owner);
+  }
+  cursorHolding(m: Mover): boolean {
+    return (this.cursorHolds.get(m) ?? 0) > 0;
   }
 
   /** A caught person's dash pace, or undefined when the group stays dry. */
@@ -562,6 +581,8 @@ export class LocalScenes {
 
   /** Exposed people run on scene approaches and returns while it rains; everyone else walks. */
   private pace(m: Mover, visit: Visit): number {
+    if (m.kind === 'cat' && this.cursorCatFlee?.(m))
+      return Math.max(m.speed, POINTER.fleePace * this.perMeter);
     return visit.state === 'approach' || visit.state === 'return'
       ? (this.dashPace(m) ?? m.speed)
       : m.speed;
@@ -1289,6 +1310,9 @@ export class LocalScenes {
       minutes?: number;
       sunAltitude?: number;
       cityLife?: Pick<CityLifeConfig, 'schedules'>;
+      pointerPeople?: ReadonlySet<object>;
+      pointerRest?: number;
+      cursorCatFlee?: (m: Mover) => boolean;
     },
     near?: (x: number, y: number) => boolean,
     shows?: (kind: Mover['kind']) => boolean,
@@ -1302,6 +1326,53 @@ export class LocalScenes {
     this.returnSteps.clear();
     const rain = env.rain ?? 0;
     this.rain = rain;
+    this.pointerPeople = env.pointerPeople;
+    this.cursorCatFlee = env.cursorCatFlee;
+    this.pointerShade = (env.pointerRest ?? 0) >= 1 && hotAt(env.minutes, rain, env.sunAltitude);
+    this.cursorAdmissions.length = 0;
+    for (const m of this.cursorHolds.keys())
+      if (!this.cursorShaded(m) || (owns && !owns(m))) this.cursorHolds.delete(m);
+    // The indexed neighborhood bounds this work; inactivity and inspection freeze only its timer.
+    if (this.pointerShade)
+      for (const owner of this.pointerPeople ?? []) {
+        if (!('kind' in owner) || owner.kind !== 'person') continue;
+        const m = owner as Mover;
+        if (
+          (owns && !owns(m)) ||
+          (near && !near(m.x, m.y)) ||
+          (shows && !shows('person')) ||
+          (env.levels && m.rank >= env.levels.person)
+        )
+          continue;
+        const left = this.cursorHolds.get(m);
+        if (left !== undefined) {
+          if (
+            this.busy?.(m) ||
+            this.visits.has(m) ||
+            this.services.has(m) ||
+            m.crossingWait?.waiting ||
+            m.crossingWait?.commitments.length ||
+            !this.canIdle(m)
+          ) {
+            this.cursorHolds.set(m, 0);
+            continue;
+          }
+          if (inspecting !== m && left > 0) this.cursorHolds.set(m, Math.max(0, left - dt));
+          continue;
+        }
+        if (
+          !this.canIdle(m) ||
+          m.crossingWait?.waiting ||
+          m.crossingWait?.commitments.length ||
+          m.turning ||
+          this.visits.has(m) ||
+          this.services.has(m) ||
+          this.busy?.(m)
+        )
+          continue;
+        this.cursorHolds.set(m, 5 + 10 * personSample(m, 0, 'cursor-shade'));
+        this.cursorAdmissions.push(m);
+      }
     this.speechEvents.length = 0;
     this.purchaseCompletions.length = 0;
     const wasWet = this.wet;
@@ -1341,6 +1412,10 @@ export class LocalScenes {
       if (this.returnAfterInspection?.delete(m)) this.requestReturn(m, visit);
       if (owns && !owns(m)) continue;
       if ((shows && !shows(m.kind)) || (near && !near(m.x, m.y))) continue;
+      if (m.kind === 'cat' && visit.state === 'rest' && this.cursorCatFlee?.(m)) {
+        m.grooming = false;
+        this.requestReturn(m, visit);
+      }
       diagnostics?.eligible(m, m.kind);
       if (visit.state !== 'approach' && visit.state !== 'return') diagnostics?.hold(m, 'visit');
       if (visit.state === 'return' && visit.blocked > 0) diagnostics?.tag(m, 'blockedReturn');
@@ -1562,6 +1637,7 @@ export class LocalScenes {
       const m = movers[this.cursor++ % movers.length]!;
       if (
         inspecting === m ||
+        this.cursorHolding(m) ||
         (owns && !owns(m)) ||
         (shows && !shows(m.kind)) ||
         (near && !near(m.x, m.y)) ||
@@ -1607,6 +1683,7 @@ export class LocalScenes {
         }
       } else if (
         (m.kind === 'person' || m.kind === 'dog' || m.kind === 'cat') &&
+        !m.pointerDog &&
         !this.visits.has(m) &&
         !this.cooldown.has(m)
       ) {
@@ -1647,6 +1724,7 @@ export class LocalScenes {
           !this.wet &&
           m.kind === 'person' &&
           hotAt(env.minutes, rain, env.sunAltitude) &&
+          !this.cursorShaded(m) &&
           !m.group?.some((w) => underUmbrella(w, umbrellaShare(0, env.sunAltitude!))) &&
           personSample(m, Math.floor(minutes / HEAT.window), 'shade-pick') < HEAT.share
         ) {

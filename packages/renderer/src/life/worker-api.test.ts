@@ -19,6 +19,78 @@ import { BRAKE } from './lamps';
 import { emergencyConfig, emergencyFixture } from './testing/emergency';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
+import { birdFixture, birdLngLat } from './testing/bird-fixture';
+
+it('adds independent cursor gusts to perched-bird flushing with cloned worker parity', () => {
+  const direct = birdFixture(),
+    remote = birdFixture();
+  const api = createLifeWorkerApi(
+    () => 0,
+    () => remote.world,
+  );
+  api.init({ processions: [] });
+  const at = birdLngLat(20, 0);
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: at[0], lat: at[1], zoom: 19 },
+      size: { width: 400, height: 300 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: {
+      dt: 0.1,
+      zoom: 19,
+      bounds: undefined,
+      wind: undefined,
+      weather: undefined,
+      cellMeters: direct.cellMeters(19),
+      gust: { lngLat: at, dir: [1, 0], radiusM: 8, strength: 0.3 },
+    },
+    visible: [19, 1, at],
+  };
+  for (const f of [direct.flock, remote.flock]) Object.assign(f, { perched: true, perch: 0 });
+  runLifeFrame(direct.world, input);
+  const weak = api.frame(structuredClone(input));
+  expect(remote.flock.perched).toBe(true);
+  expect(weak.agents).toEqual(direct.world.visible(...input.visible));
+  input.step.gust!.strength = 1;
+  const strong = api.frame(structuredClone(input));
+  const expected = runLifeFrame(direct.world, input);
+  expect(remote.flock.perched).toBe(false);
+  expect(strong.agents).toEqual(expected.agents);
+  expect(remote.flock).toEqual(direct.flock);
+});
+
+it('transports optional pointer rest and geographic gust without inventing absent inputs', () => {
+  const world = new LifeWorld(),
+    step = vi.spyOn(world, 'step');
+  const input: FrameInput = {
+    gust: {
+      camera: { lng: 0, lat: 0, zoom: 18 },
+      size: { width: 800, height: 600 },
+      cssCell: { w: 5, h: 9 },
+      time: 0,
+      wind: { dir: [1, 0], strength: 0 },
+    },
+    step: {
+      dt: 0.1,
+      zoom: 18,
+      bounds: undefined,
+      wind: undefined,
+      weather: undefined,
+      cellMeters: 1,
+    },
+    visible: [18, 1, [0, 0]],
+  };
+  runLifeFrame(world, input);
+  expect(step.mock.calls[0]!.slice(9)).toEqual([undefined, undefined, undefined]);
+  input.step.pointer = [0, 0];
+  input.step.pointerRest = 2;
+  input.step.gust = { lngLat: [0, 0], dir: [0, 1], strength: 0.8, radiusM: 8 };
+  runLifeFrame(world, structuredClone(input));
+  expect(step.mock.calls[1]!.slice(9)).toEqual([input.step.pointer, 2, input.step.gust]);
+});
 it('transports independent active folklore identically without detaching observer storage', () => {
   const t = folkloreTile(),
     entry = { key: t.key, tile: t.tile, life: t.geo },

@@ -3,6 +3,7 @@
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
 import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
+import { combineWind, type CursorWind } from '../life/cursor-wind';
 import {
   classId,
   Flags,
@@ -1148,6 +1149,9 @@ export type CellContext = {
   wind?: number;
   /** Where the wind blows (a unit vector); default from the northeast. */
   windDir?: WindDir;
+  cursorWind?: CursorWind;
+  /** CPU double-precision origin for converting world cells to local patch coordinates. */
+  origin?: readonly [number, number];
   /** The feature's variant byte (classes.ts `variantCode`). */
   variant?: number;
   crop?: { stage: number; progress: number };
@@ -1160,6 +1164,14 @@ export function variantFor(
   count: number,
   ctx: CellContext,
 ): number {
+  const front = (tree = false) =>
+    combineWind(
+      (ctx.wind ?? 1) * (tree ? treeGust : windGust)(ctx.x, ctx.y, ctx.time, ctx.windDir),
+      ctx.windDir ?? DEFAULT_WIND_DIR,
+      ctx.x - (ctx.origin?.[0] ?? 0),
+      ctx.y - (ctx.origin?.[1] ?? 0),
+      ctx.cursorWind,
+    );
   switch (kind) {
     case 'road': {
       const at = (dx: number, dy: number) => connects(cls, ctx.neighbor(dx, dy));
@@ -1194,35 +1206,37 @@ export function variantFor(
     case 'ramp':
       return rampVariant(ctx.height, count);
     case 'planting': {
-      const gust = (ctx.wind ?? 1) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
-      return Math.min(plantingCell(ctx.x, ctx.y, gust, ctx.windDir).variant, count - 1);
+      const wind = front();
+      return Math.min(plantingCell(ctx.x, ctx.y, wind.strength, wind.dir).variant, count - 1);
     }
-    case 'grass':
-      return Math.min(grassVariant(ctx.x, ctx.y, ctx.time, ctx.wind, ctx.windDir), count - 1);
+    case 'grass': {
+      const wind = front();
+      return Math.min(grassCell(ctx.x, ctx.y, wind.strength, wind.dir).variant, count - 1);
+    }
     case 'canopy': {
-      const gust = (ctx.wind ?? 1) * treeGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
-      const v = canopyVariant(ctx.x, ctx.y, ctx.variant, gust, ctx.time, ctx.windDir);
+      const wind = front(true);
+      const v = canopyVariant(ctx.x, ctx.y, ctx.variant, wind.strength, ctx.time, wind.dir);
       return Math.min(v, count - 1);
     }
     case 'crop': {
-      const gust = (ctx.wind ?? 1) * windGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
+      const wind = front();
       if (ctx.crop)
         return Math.min(
           cropCell(
             ctx.x,
             ctx.y,
-            gust,
-            ctx.windDir ?? DEFAULT_WIND_DIR,
+            wind.strength,
+            wind.dir,
             ctx.crop.stage,
             ctx.crop.progress,
             ctx.time,
           ).variant,
           count - 1,
         );
-      return Math.min(cropVariant(ctx.y, gust, ctx.windDir), count - 1);
+      return Math.min(cropVariant(ctx.y, wind.strength, wind.dir), count - 1);
     }
     case 'foliage': {
-      const gust = (ctx.wind ?? 1) * treeGust(ctx.x, ctx.y, ctx.time, ctx.windDir);
+      const gust = front(true).strength;
       // The rim of a crown: some side neighbor is something else.
       const rim = (
         [

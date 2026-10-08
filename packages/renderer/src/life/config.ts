@@ -24,6 +24,18 @@ import { VEHICLES } from './vehicles';
 
 export type AgentKind = 'vehicle' | 'person' | 'boat' | 'bird' | 'train' | 'dog' | 'cat';
 
+/** Hover reaches in CSS cells, converted to metres at the current camera scale. */
+export const POINTER = {
+  cat: 3,
+  dog: 12,
+  sit: 1.5,
+  person: 3,
+  boat: 4,
+  folklore: 6,
+  fleeSeconds: 2,
+  fleePace: 2.5,
+} as const;
+
 /** Ground walkers share routing, crossing, and clearance rules. */
 export const isWalker = (kind: AgentKind) => kind === 'person' || kind === 'dog' || kind === 'cat';
 

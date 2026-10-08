@@ -3,6 +3,19 @@ import { BUNTING_MOTION, buntingMotion, buntingWindResponse } from './bunting-mo
 import { WIND_PRESETS, windAt, type WindNow } from './wind';
 import { drawProcedural } from '../glyphs/atlas';
 import { SEASONAL_GLYPHS } from './seasonal-glyphs';
+import type { CursorWind } from './cursor-wind';
+
+it('moves cloth in cursor-only wind and preserves exact output outside its local radius', () => {
+  const cursor: CursorWind = { at: [2, 3], dir: [-1, 0], radius: 8, aspect: 1.8, strength: 1 };
+  const origin = [20_000_000, 10_000_000] as const;
+  const world = [origin[0] + 2, origin[1] + 3] as const;
+  const still = buntingMotion(world, 7, [0.5, 0.8], 0.7, 0, [1, 0]);
+  expect(buntingMotion(world, 7, [0.5, 0.8], 0.7, 0, [1, 0], cursor, origin)).not.toEqual(still);
+  const far = [world[0] + 20, world[1]] as const;
+  expect(buntingMotion(far, 7, [0.5, 0.8], 0.7, 0.5, [1, 0], cursor, origin)).toEqual(
+    buntingMotion(far, 7, [0.5, 0.8], 0.7, 0.5, [1, 0]),
+  );
+});
 
 /** Coverage only: changing fold brightness cannot satisfy a visible silhouette check. */
 function clothFrame(
