@@ -127,16 +127,13 @@ import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { candleLamps } from './life/seasonal-candles';
 import { liveProgress, type LngLatBounds } from './life/procession';
-import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
-import { simulationSeasons } from './life/seasonal-simulation';
-import { runtimeFolklore } from './life/folklore-config';
+import type { LifeTile, ProcessionRun, VisibleAgent } from './life/simulate';
 import { EMPTY_FOLKLORE, type FolklorePacket, type FolkloreCalendar } from './life/folklore';
 import { folkloreLayout, folklorePass, type FolkloreQuad } from './folklore-pass';
 import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
-import { configureLifeWorld } from './life/worker-api';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
-import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
 import { createThrongPool } from './life/throng-pool';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
@@ -175,7 +172,13 @@ const EMPTY_LIFE_CELLS = new Uint8Array(0);
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
+export {
+  legendEntries,
+  legendGroup,
+  type LegendEntry,
+  type LegendEntryId,
+  type LegendIcon,
+} from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
@@ -948,18 +951,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
       ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
-      : (() => {
-          const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
-          configureLifeWorld(world, {
-            processions,
-            seasons: simulationSeasons(options.cityLife?.seasons),
-            shopSchedule: options.cityLife?.schedules?.shops,
-            folklore: runtimeFolklore(options.cityLife),
-            emergencyConfig: options.cityLife?.emergency,
-            emergency: options.emergency,
-          });
-          return createInlineHost(world, profiler);
-        })();
+      : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler);
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
   const lifeView = () => lifePause.view(host.latest());
@@ -1928,7 +1920,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         daylight,
         fireworkSites,
       );
-      folklorePass(gl, programs, targets, themeRes, v, labelGrid, folkloreQuads);
+      folklorePass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        labelGrid,
+        folkloreQuads,
+        focus,
+        time,
+        reducedMotion,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;

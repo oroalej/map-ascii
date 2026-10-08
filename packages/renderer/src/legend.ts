@@ -69,6 +69,20 @@ export type LegendEntry = {
   icons?: LegendIcon[];
 };
 
+/** Separate geographic features from animated agents and illustrative events by stable identity. */
+export function legendGroup(entry: LegendEntry): 'Map' | 'Simulated' {
+  return entry.id.startsWith('life:') ||
+    entry.id === 'info:fish' ||
+    entry.id === 'info:emoji' ||
+    entry.id === 'info:folklore' ||
+    entry.id === 'info:season-visitors' ||
+    entry.id === 'info:season-congregations' ||
+    entry.id === 'info:season-stalls' ||
+    entry.id === 'info:season-fireworks'
+    ? 'Simulated'
+    : 'Map';
+}
+
 /** A small pixel picture: rows of `#` (in `paint`), `o` (in `tone`), and `.` (empty). */
 export type LegendIcon = { pixels: readonly string[]; paint: string; tone: string };
 
@@ -527,6 +541,7 @@ export function legendEntries(
     if (entry.id === 'life:vendors') life.push('vendors');
     if (entry.id === 'life:pets') life.push('pets');
     if (classes.length || life.length) entry.focus = { classes, life };
+    if (entry.id === 'info:folklore') entry.focus = { classes: [], life: [], folklore: true };
   }
   return entries;
 }

@@ -6,7 +6,8 @@ import {
   pointObstacles,
   assertPointClear,
 } from './landmark-detail.geometry';
-import { Landcover, type LngLat } from '@atlas/shared';
+import { type LngLat } from '@atlas/shared';
+import { Landcover } from '@atlas/shared/schemas';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import type { Polygon } from 'geojson';

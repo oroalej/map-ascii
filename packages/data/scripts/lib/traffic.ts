@@ -1,13 +1,11 @@
+import { type SignalArm, type City, type CityLifeConfig } from '@atlas/shared';
 import {
   canonicalSignalSeed,
   crossingControllerProperties,
   SignalStops,
   SignalController,
   SignalLayout,
-  type SignalArm,
-  type City,
-  type CityLifeConfig,
-} from '@atlas/shared';
+} from '@atlas/shared/schemas';
 import {
   applyRoadDirections,
   mergeStreetDetails,

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { classMask, lifeFocusOf, normalizeFocus, LIFE_FOCUS_BIT } from './focus';
+import { classMask, lifeFocusOf, normalizeFocus, LIFE_FOCUS_BIT, focusPulse } from './focus';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT } from './life/turn-signals';
 import { CellBit } from './life/config';
 import { legendEntries } from './legend';
@@ -19,6 +19,16 @@ it('packs ids 31, 32 and 63 in unsigned words and excludes invalid/empty ids', (
   input.life.length = 0;
   expect([...result.life]).toEqual(['vendors']);
   expect(normalizeFocus(null).key).toBe(normalizeFocus({ classes: [], life: [] }).key);
+});
+it('distinguishes folklore focus and matches the shared shader pulse with motion gates', () => {
+  const folklore = normalizeFocus({ classes: [], life: [], folklore: true });
+  expect(folklore.folklore).toBe(true);
+  expect(folklore.key).not.toBe(normalizeFocus(null).key);
+  expect(normalizeFocus(null).folklore).toBe(false);
+  expect(focusPulse(0, true)).toBe(0.75);
+  expect(focusPulse(Math.PI / 6, true)).toBe(1);
+  expect(focusPulse(Math.PI / 2, true)).toBe(0.5);
+  expect(focusPulse(0, false)).toBe(1);
 });
 it('separates vendor attendants, pets, paddlers and carabao from their drawing classes', () => {
   const base: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 };

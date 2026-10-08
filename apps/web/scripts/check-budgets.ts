@@ -11,6 +11,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
+import { assertZodFreeChunks } from './browser-chunks';
 
 const KB = 1024;
 const MB = 1024 * KB;
@@ -39,6 +40,7 @@ const rows: { what: string; size: number; budget: number }[] = [];
 const notes: string[] = [];
 const human = (n: number) => (n >= MB ? `${(n / MB).toFixed(1)} MB` : `${(n / KB).toFixed(0)} KB`);
 const chunks = join(out, '_next', 'static', 'chunks');
+assertZodFreeChunks(chunks);
 const rendererChunks = readdirSync(chunks)
   .filter((file) => file.endsWith('.js'))
   .map((file) => ({ path: join(chunks, file), source: readFileSync(join(chunks, file)) }))

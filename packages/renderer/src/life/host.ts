@@ -11,17 +11,11 @@ import {
 } from '@atlas/shared';
 import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
-import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './simulate';
-import {
-  configureLifeWorld,
-  runLifeFrame,
-  type FrameInput,
-  type LifeWorkerApi,
-} from './worker-api';
+import type { LifeWorld, LifeTile, ProcessionRun, VisibleAgent } from './simulate';
+import type { FrameInput, LifeWorkerApi } from './worker-api';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
-import { spawnMargin, type LifeViewContext } from './births';
-import { LifePreparation } from './preparation';
+import type { LifeViewContext } from './births';
 import { EMPTY_PUFFS } from './exhaust';
 import { groundsForRoutes, trafficRings } from './ground-events';
 import { PolygonIndex } from './occupancy';
@@ -30,9 +24,10 @@ import { runtimeFolklore } from './folklore-config';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './folklore';
 import { isEmergencyCraft } from './emergency';
 let nextGeneration = 0;
+export const allocateLifeGeneration = () => ++nextGeneration;
 
 /** Commands retain the previous ordinary snapshot while a fresh event frame is produced. */
-function retainOrdinary(
+export function retainOrdinary(
   view: FrameView | undefined,
   route?: ProcessionRoute,
 ): FrameView | undefined {
@@ -111,164 +106,134 @@ export interface LifeHost {
   dispose(): void;
 }
 
-export function createInlineHost(
-  world: LifeWorld,
+type InlineLoader = () => Promise<{
+  createConfiguredInlineHost: (
+    options: LifeHostOptions,
+    processions: readonly ProcessionRoute[],
+    profiler?: FrameProfiler,
+  ) => LifeHost;
+}>;
+
+/** Frames are rejected while loading, so the caller retains dt and submits a fresh view. */
+export function createInlineHostLazy(
+  options: LifeHostOptions,
+  routes: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
-  preparationClock?: () => number,
+  load: InlineLoader = () => import('./inline-host'),
 ): LifeHost {
-  let view: FrameView | undefined;
-  const preparation = new LifePreparation(world, profiler, preparationClock);
+  let host: LifeHost | undefined;
   let disposed = false;
-  let acceptedPost: number | undefined;
-  let generation = ++nextGeneration;
-  let liveIdentity: { id?: string; occurrence?: string } = {};
-  return {
-    invalidateFrame() {
-      if (view) view = { ...view, agents: [], throngRun: undefined, folklore: EMPTY_FOLKLORE };
-      acceptedPost = undefined;
-    },
-    invalidateFolklore() {
-      if (view) view = { ...view, folklore: EMPTY_FOLKLORE };
-    },
-    sync: (tiles, focus, context) => {
+  let initialOptions: LifeHostOptions | undefined = options;
+  let initialRoutes: readonly ProcessionRoute[] = routes;
+  let processions = routes;
+  let pending: ProcessionRun | undefined;
+  let commands: ((host: LifeHost) => void)[] = [];
+  const send = (command: (host: LifeHost) => void) => {
+    if (disposed) return;
+    if (host) command(host);
+    else commands.push(command);
+  };
+  // Always replay against the initial configuration, then apply replacements in call order.
+  void Promise.resolve()
+    .then(load)
+    .then(({ createConfiguredInlineHost }) => {
       if (disposed) return;
-      preparation.sync(tiles, focus, context);
-      if (!tiles.length) view = undefined;
-    },
-    clearTiles() {
-      generation = ++nextGeneration;
-      world.clearTiles();
-      preparation.clear();
-      view = undefined;
-      acceptedPost = undefined;
-    },
-    request(input) {
-      if (disposed) return false;
-      acceptedPost = profiler?.time();
-      preparation.camera(
-        input.step.bounds,
-        spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
-      );
-      preparation.commit();
-      const result = runLifeFrame(world, input, profiler);
-      const terrain = world.cellTerrain();
-      view = {
-        ...result,
-        generation,
-        throngRun: result.procession,
-        cellGuard: (toCell, terrainOnly) =>
-          terrain &&
-          makeCellGuard(
-            terrain.ref,
-            { roads: terrain.roads, forbidden: terrain.forbidden },
-            terrain.trees,
-            toCell,
-            terrain.events,
-            terrain.blocked,
-            terrain.hardBlocked,
-            terrainOnly,
-          ),
-      };
-      preparation.schedule();
-      return true;
-    },
-    latest: () => {
-      if (acceptedPost !== undefined)
-        profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
-      return {
-        folklore: EMPTY_FOLKLORE,
-        agents: [],
-        puffs: EMPTY_PUFFS,
-        signalClock: world.signalClock,
-        cellGuard: () => undefined,
-        ...view,
-        procession: world.procession(),
-      };
-    },
-    setProcessions(routes) {
+      host = createConfiguredInlineHost(initialOptions!, initialRoutes, profiler);
+      initialOptions = undefined;
+      initialRoutes = [];
+      for (const command of commands) command(host);
+      commands = [];
+      pending = undefined;
+      processions = [];
+    })
+    .catch((error: unknown) => {
       if (disposed) return;
-      world.setProcessions(routes);
-      view = retainOrdinary(view);
-      acceptedPost = undefined;
-    },
-    setEmergency(data) {
-      if (disposed) return;
-      world.setEmergency(data);
-      if (view)
-        view = {
-          ...view,
-          agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
-          puffs: EMPTY_PUFFS,
-        };
-      acceptedPost = undefined;
-    },
-    setLive: (id, progress, occurrence) => {
-      const previous = world.procession();
-      const occurrenceChanged = liveIdentity.id !== id || liveIdentity.occurrence !== occurrence;
-      liveIdentity = { id, occurrence };
-      world.setLive(id, progress, occurrence);
-      const next = world.procession();
-      if (
-        previous?.id !== next?.id ||
-        previous?.live !== next?.live ||
-        (next?.live && occurrenceChanged)
-      ) {
-        view = retainOrdinary(view, world.processionRoute(next?.id));
-        acceptedPost = undefined;
-      }
-    },
-    play: (id, timing) => {
-      if (!world.play(id, timing)) return false;
-      view = retainOrdinary(view, world.processionRoute(id));
-      return true;
-    },
-    stop: () => {
-      world.stop();
-      view = retainOrdinary(view, world.processionRoute(world.procession()?.id));
-    },
-    dispose: () => {
       disposed = true;
-      world.clearTiles();
-      preparation.clear();
-      view = undefined;
+      commands = [];
+      initialOptions = undefined;
+      initialRoutes = [];
+      processions = [];
+      pending = undefined;
+      host?.dispose();
+      host = undefined;
+      console.error('Unable to load inline Life simulation', error);
+    });
+  return {
+    sync: (tiles, focus, view) => send((h) => h.sync(tiles, focus, view)),
+    clearTiles: () => send((h) => h.clearTiles()),
+    invalidateFrame: () => send((h) => h.invalidateFrame()),
+    invalidateFolklore: () => send((h) => h.invalidateFolklore()),
+    setEmergency: (data) => send((h) => h.setEmergency(data)),
+    setLive: (id, progress, occurrence) => send((h) => h.setLive(id, progress, occurrence)),
+    setProcessions(next) {
+      if (disposed) return;
+      processions = next;
+      pending = undefined;
+      send((h) => h.setProcessions(next));
+    },
+    play(id, timing) {
+      if (disposed) return false;
+      if (host) return host.play(id, timing);
+      if (!processions.some((route) => route.id === id)) return false;
+      pending = { id, progress: 0, live: false, ...(timing && { time: eventTime(timing, 0) }) };
+      send((h) => {
+        h.play(id, timing);
+      });
+      return true;
+    },
+    stop() {
+      pending = undefined;
+      send((h) => h.stop());
+    },
+    request: (input) => !disposed && !!host && host.request(input),
+    latest: () => {
+      if (disposed) return;
+      if (host) return host.latest();
+      if (pending)
+        return {
+          agents: [],
+          folklore: EMPTY_FOLKLORE,
+          puffs: EMPTY_PUFFS,
+          signalClock: 0,
+          cellGuard: () => undefined,
+          procession: pending,
+        };
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      commands = [];
+      initialOptions = undefined;
+      initialRoutes = [];
+      processions = [];
+      pending = undefined;
+      host?.dispose();
+      host = undefined;
     },
   };
 }
 
+export type LifeHostOptions = {
+  traffic?: TrafficMix;
+  cityLife?: RuntimeCityLife;
+  emergency?: EmergencyData;
+  itemInspection?: boolean;
+  emojiObserver?: boolean;
+  moments?: MomentOptions;
+};
+
 export function createWorkerHost(
-  options: {
-    traffic?: TrafficMix;
-    cityLife?: RuntimeCityLife;
-    emergency?: EmergencyData;
-    itemInspection?: boolean;
-    emojiObserver?: boolean;
-    moments?: MomentOptions;
-  },
+  options: LifeHostOptions,
   processions: readonly ProcessionRoute[],
   profiler?: FrameProfiler,
+  loadInline?: InlineLoader,
 ): LifeHost {
   const seasons = simulationSeasons(options.cityLife?.seasons);
   let emergency = options.emergency;
   let eventGrounds = groundsForRoutes(processions);
   let worker: Worker;
-  const inline = () => {
-    const world = new LifeWorld(
-      options.traffic,
-      profiler,
-      options.moments,
-      options.itemInspection,
-      options.emojiObserver,
-    );
-    configureLifeWorld(world, {
-      processions,
-      seasons,
-      shopSchedule: options.cityLife?.schedules?.shops,
-      folklore: runtimeFolklore(options.cityLife),
-      emergencyConfig: options.cityLife?.emergency,
-      emergency,
-    });
-    return createInlineHost(world, profiler);
-  };
+  const inline = () =>
+    createInlineHostLazy({ ...options, emergency }, processions, profiler, loadInline);
   try {
     worker = new Worker(new URL('./life.worker.ts', import.meta.url), { type: 'module' });
   } catch {
@@ -278,7 +243,7 @@ export function createWorkerHost(
   let ready = false,
     inFlight = false,
     disposed = false,
-    generation = ++nextGeneration,
+    generation = allocateLifeGeneration(),
     agentEpoch = 0,
     folkloreEpoch = 0,
     frames = 0,
@@ -300,7 +265,7 @@ export function createWorkerHost(
   };
   const fail = () => {
     if (disposed || fallback) return;
-    generation = ++nextGeneration;
+    generation = allocateLifeGeneration();
     ready = false;
     release();
     fallback = inline();
@@ -353,7 +318,7 @@ export function createWorkerHost(
       const keep = new Set(next.map((tile) => tile.key));
       if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
         if (!nextView || !keep.size) {
-          generation = ++nextGeneration;
+          generation = allocateLifeGeneration();
           terrain = undefined;
         }
         // Keep the last complete frame while nonempty geometry loads. It is never combined
@@ -383,7 +348,7 @@ export function createWorkerHost(
       tiles = [];
       focus = undefined;
       viewContext = undefined;
-      generation = ++nextGeneration;
+      generation = allocateLifeGeneration();
       acceptedPost = undefined;
       profiler?.clearContinuity();
       terrain = undefined;
@@ -575,7 +540,7 @@ export function createWorkerHost(
     dispose() {
       if (disposed) return;
       disposed = true;
-      generation = ++nextGeneration;
+      generation = allocateLifeGeneration();
       worker.removeEventListener('error', fail);
       worker.removeEventListener('messageerror', fail);
       if (fallback) fallback.dispose();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DetailSelectionSchema, SiteDetail, type Cemetery, type LngLat } from '@atlas/shared';
+import { type Cemetery, type LngLat } from '@atlas/shared';
+import { DetailSelectionSchema, SiteDetail } from '@atlas/shared/schemas';
 import type { Polygon, MultiPolygon } from 'geojson';
 import type { AtlasFeature } from '../03-normalize';
 import { burialRow, cemeteryCredits, mergeCemeteries } from './cemeteries';

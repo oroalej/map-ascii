@@ -1040,7 +1040,8 @@ export function glyphPass(
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
   const { cellDev } = view;
-  const focused = focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
+  const focused =
+    focus.folklore || focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0;
   const hasEffectClocks = targets.effectClockTex !== undefined;
   const program = glyphProgram(
     gl,

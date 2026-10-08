@@ -5,7 +5,10 @@ import type { VisibleAgent } from './simulate';
 
 const people = (n: number) =>
   Array.from({ length: n }, (_, i) =>
-    identifyEventActor({ kind: 'person', lng: 0, lat: 0, flap: 0 }, `procession/test/devotee/${i}`),
+    identifyEventActor<VisibleAgent>(
+      { kind: 'person', lng: 0, lat: 0, flap: 0 },
+      `procession/test/devotee/${i}`,
+    ),
   );
 const cues = (agents: VisibleAgent[]) =>
   agents.map((a) => (a.speech ? `say ${a.speech.exchangeId}` : a.emoji ? a.emoji.mood : '-'));

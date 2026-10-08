@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { CityProcessions, type ProcessionRoute } from '@atlas/shared';
+import { type ProcessionRoute } from '@atlas/shared';
+import { CityProcessions } from '@atlas/shared/schemas';
 import { quantizeGroundRoutes } from './07-processions';
 
 it('serializes compact ground geography while preserving fluvial geometry and physical numbers', () => {

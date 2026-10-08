@@ -4,15 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentBundle } from '@atlas/content';
-import {
-  CityProcessions,
-  Procession,
-  SiteDetail,
-  OSM_ATTRIBUTION,
-  type City,
-  type CityArt,
-  type LngLat,
-} from '@atlas/shared';
+import { OSM_ATTRIBUTION, type City, type CityArt, type LngLat } from '@atlas/shared';
+import { CityProcessions, Procession, SiteDetail } from '@atlas/shared/schemas';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { step as convert, type Geography } from './02-convert';

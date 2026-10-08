@@ -28,7 +28,8 @@ const visibility = vi.hoisted(() => ({
   watched: true,
   changed: undefined as ((watched: boolean) => void) | undefined,
 }));
-import * as Hosts from './life/host';
+import type * as Hosts from './life/host';
+import * as InlineHosts from './life/inline-host';
 import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
@@ -49,6 +50,8 @@ import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
 import type * as FolklorePassModule from './folklore-pass';
 import type { FolkloreQuad } from './folklore-pass';
+import { folklorePass } from './folklore-pass';
+import { focusPulse } from './focus';
 import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
 import { cloudCover, driftClouds, SKY, skyAnchor } from './life/sky';
@@ -261,9 +264,9 @@ vi.mock('./pacing', async (load) => ({
 }));
 
 describe('live motion preference', () => {
-  it('calls the Life pass for an accepted crowd frame with zero simulated actors', () => {
+  it('calls the Life pass for an accepted crowd frame with zero simulated actors', async () => {
     atlas.destroy();
-    const original = Hosts.createInlineHost;
+    const original = InlineHosts.createConfiguredInlineHost;
     const event: FluvialRoute = {
       id: 'crowd-only',
       kind: 'fluvial',
@@ -298,8 +301,8 @@ describe('live motion preference', () => {
         bridges: [],
       },
     };
-    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((world, profiler, clock) => {
-      const host = original(world, profiler, clock);
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation((...args) => {
+      const host = original(...args);
       host.latest = () => ({
         agents: [],
         puffs: new Float64Array(0),
@@ -320,6 +323,7 @@ describe('live motion preference', () => {
       lifeWorker: false,
       processions: [event],
     });
+    await vi.dynamicImportSettled();
     vi.mocked(lifePass).mockClear();
     draw(100);
     expect(
@@ -331,30 +335,43 @@ describe('live motion preference', () => {
     ).toBe(true);
   });
 
-  it.each([1, 2])('uses uniform cloud dimming below the detail resolution at DPR %s', (dpr) => {
-    vi.stubGlobal('devicePixelRatio', dpr);
-    atlas.setQuality('high');
-    const anchor = skyAnchor([-1, -1, 1, 1]);
-    const boundary = Math.log2(
-      (anchor.meters * SKY.detailPixels * SKY.fineCells) / (SKY.wrap * dpr),
-    );
-    const weather = () => vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
-    atlas.setCamera({ zoom: boundary - 0.1 });
-    draw(100);
-    expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
-    atlas.setCamera({ zoom: boundary + 0.1 });
-    draw(200);
-    expect(weather()).toMatchObject({ cloudDetail: true, cloudCover: 1 });
-    atlas.setCamera({ zoom: 12 });
-    draw(300);
-    expect(weather().cloudDetail).toBe(true);
-    atlas.setQuality('low');
-    atlas.setCamera({ zoom: 18 });
-    draw(1400);
-    expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
-  });
+  it.each([1, 2])(
+    'uses uniform cloud dimming below the detail resolution at DPR %s',
+    async (dpr) => {
+      atlas.destroy();
+      atlas = createAtlas(canvas, {
+        tilesUrl: '/tiles/test.pmtiles',
+        bounds: [-1, -1, 1, 1],
+        initialCamera: { lat: 0, lng: 0, zoom: 18 },
+        minZoom: 7,
+        year: 2026,
+        life: { time: 720, wind: 'storm' },
+      });
+      await vi.dynamicImportSettled();
+      vi.stubGlobal('devicePixelRatio', dpr);
+      atlas.setQuality('high');
+      const anchor = skyAnchor([-1, -1, 1, 1]);
+      const boundary = Math.log2(
+        (anchor.meters * SKY.detailPixels * SKY.fineCells) / (SKY.wrap * dpr),
+      );
+      const weather = () => vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+      atlas.setCamera({ zoom: boundary - 0.1 });
+      draw(100);
+      expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
+      atlas.setCamera({ zoom: boundary + 0.1 });
+      draw(200);
+      expect(weather()).toMatchObject({ cloudDetail: true, cloudCover: 1 });
+      atlas.setCamera({ zoom: 12 });
+      draw(300);
+      expect(weather().cloudDetail).toBe(true);
+      atlas.setQuality('low');
+      atlas.setCamera({ zoom: 18 });
+      draw(1400);
+      expect(weather()).toMatchObject({ cloudDetail: false, cloudCover: 1 });
+    },
+  );
 
-  it('keeps storm cloud cover independent of Life, motion and live wind resolution', () => {
+  it('keeps storm cloud cover independent of Life, motion and live wind resolution', async () => {
     atlas.setLife({ enabled: false });
     draw(100);
     let weather = vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
@@ -375,6 +392,7 @@ describe('live motion preference', () => {
       life: { enabled: false, wind: 'live' },
       climate: { wind: [], default: { from: 90, strength: 'storm' }, source: 'test' },
     });
+    await vi.dynamicImportSettled();
     draw(300);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]).toMatchObject({
       cloudCover: 1,
@@ -424,7 +442,7 @@ describe('live motion preference', () => {
     );
   });
 
-  it('updates cover on sun ticks from the shown moment and attenuates fresh moonlight', () => {
+  it('updates cover on sun ticks from the shown moment and attenuates fresh moonlight', async () => {
     atlas.destroy();
     let date = new Date('2026-07-29T22:00:00Z');
     atlas = createAtlas(canvas, {
@@ -436,6 +454,7 @@ describe('live motion preference', () => {
       now: () => date,
       reducedMotion: true,
     });
+    await vi.dynamicImportSettled();
     const seed = skyAnchor([-1, -1, 1, 1]).seed;
     const check = () => {
       const call = vi.mocked(glyphPass).mock.calls.at(-1)!;
@@ -463,9 +482,9 @@ describe('live motion preference', () => {
       cloudCover(atCityMinutes(date, { lng: 0 }, 720), seed),
     );
   });
-  it('keeps ordinary agents when Wind or Time changes clear folklore', () => {
+  it('keeps ordinary agents when Wind or Time changes clear folklore', async () => {
     atlas.destroy();
-    const original = Hosts.createInlineHost,
+    const original = InlineHosts.createConfiguredInlineHost,
       hosts: {
         host: Hosts.LifeHost;
         frame: MockInstance<() => void>;
@@ -473,7 +492,7 @@ describe('live motion preference', () => {
       }[] = [],
       person = { kind: 'person' as const, lng: 0, lat: 0, flap: 0 };
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([person]);
-    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation((...args) => {
       const host = original(...args);
       const frame = vi.spyOn(host, 'invalidateFrame');
       const folklore = vi.spyOn(host, 'invalidateFolklore');
@@ -487,6 +506,7 @@ describe('live motion preference', () => {
       year: 2026,
       lifeWorker: false,
     });
+    await vi.dynamicImportSettled();
     draw(100);
     const { host, frame, folklore } = hosts[0]!;
     expect(host.latest()?.agents).toEqual([person]);
@@ -520,15 +540,40 @@ describe('live motion preference', () => {
     draw(100);
     expect(changed).toHaveBeenCalledWith(true);
     expect(folkloreCapture.quads).toHaveLength(1);
+    atlas.setFocus({ classes: [], life: [], folklore: true });
+    draw(200);
+    const spiritDraw = () => vi.mocked(folklorePass).mock.calls.at(-1)!;
+    expect(spiritDraw()[7]!.folklore).toBe(true);
+    const firstPulse = focusPulse(spiritDraw()[8]!, !spiritDraw()[9]);
+    expect(spiritDraw()[8]).toBe(vi.mocked(glyphPass).mock.calls.at(-1)![8]);
+    draw(300);
+    expect(focusPulse(spiritDraw()[8]!, !spiritDraw()[9])).not.toBe(firstPulse);
+    atlas.setFocus({ classes: [], life: ['people'] });
+    draw(400);
+    expect([...spiritDraw()[7]!.life]).toEqual(['people']);
+    expect(spiritDraw()[7]!.folklore).toBe(false);
+    atlas.setFocus(null);
+    draw(500);
+    expect(spiritDraw()[7]).toMatchObject({ folklore: false, mask: new Uint32Array(2) });
+    expect(spiritDraw()[7]!.life.size).toBe(0);
+    const draws = vi.mocked(folklorePass).mock.calls.length;
+    visibility.watched = false;
+    visibility.changed!(false);
+    draw(600);
+    expect(vi.mocked(folklorePass)).toHaveBeenCalledTimes(draws);
+    visibility.watched = true;
+    visibility.changed!(true);
     atlas.setLife({ enabled: false });
     expect(changed).toHaveBeenLastCalledWith(false);
-    draw(200);
+    draw(700);
     expect(folkloreCapture.packet?.haunts ?? []).toEqual([]);
     atlas.setLife({ enabled: true });
-    draw(300);
+    draw(800);
     expect(changed).toHaveBeenLastCalledWith(true);
     atlas.setReducedMotion(true);
     expect(changed).toHaveBeenLastCalledWith(false);
+    draw(900);
+    expect(spiritDraw()[9]).toBe(true);
   });
   it('emits fixture changes when only pedestrian head visibility changes', () => {
     const changed = vi.fn();
@@ -570,7 +615,7 @@ describe('live motion preference', () => {
     time = at;
     next(at);
   };
-  const usePauseMode = (mode: 'item' | 'all') => {
+  const usePauseMode = async (mode: 'item' | 'all') => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
       tilesUrl: '/tiles/test.pmtiles',
@@ -581,8 +626,9 @@ describe('live motion preference', () => {
       lifeHoverPause: mode,
       lifeWorker: false,
     });
+    await vi.dynamicImportSettled();
   };
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     folkloreCapture.quads = undefined;
     folkloreCapture.packet = undefined;
@@ -627,11 +673,25 @@ describe('live motion preference', () => {
       life: { time: 720, wind: 'storm' },
       lifeHoverPause: 'all',
     });
+    await vi.dynamicImportSettled();
   });
   afterEach(() => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+  it('clamps an initial zoom below the default floor before and after drawing', async () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/tiles/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 10 },
+      year: 2026,
+    });
+    await vi.dynamicImportSettled();
+    expect(atlas.getCamera().zoom).toBe(15);
+    draw(100);
+    expect(atlas.getCamera().zoom).toBe(15);
   });
   it('projects current camera and CSS size before rendering, independently of DPR', () => {
     expect(atlas.project([0, 0])).toEqual([200, 150]);
@@ -645,7 +705,7 @@ describe('live motion preference', () => {
     expect(center[0]).toBeCloseTo(300);
     expect(center[1]).toBeCloseTo(100);
   });
-  it("ends a replay when another season is shown, keeping its own season's and season-less ones", () => {
+  it("ends a replay when another season is shown, keeping its own season's and season-less ones", async () => {
     atlas.destroy();
     const route = (id: string, season?: string): FluvialRoute => ({
       id,
@@ -686,6 +746,7 @@ describe('live motion preference', () => {
       processions: [route('fiesta-event', 'fiesta'), route('any-season')],
       cityLife: { source: 'Fixture', seasons: [season('fiesta', 9), season('christmas', 12)] },
     });
+    await vi.dynamicImportSettled();
     const reports: (ProcessionRun | null)[] = [];
     atlas.on('procession', (run) => reports.push(run));
     draw(10);
@@ -706,19 +767,21 @@ describe('live motion preference', () => {
     draw(210);
     expect(reports.at(-1)?.id).toBe('any-season');
   });
-  it('advances the event clock and lighting in renderer frames, restores preferences and cancels on Life off/reduced motion', () => {
+  it('advances the event clock and lighting in renderer frames, restores preferences and cancels on Life off/reduced motion', async () => {
     atlas.destroy();
-    const original = Hosts.createInlineHost,
+    const original = InlineHosts.createConfiguredInlineHost,
       requests: FrameInput[] = [];
-    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((world, profiler, clock) => {
-      const host = original(world, profiler, clock),
-        request = host.request.bind(host);
-      host.request = (frame) => {
-        requests.push(frame);
-        return request(frame);
-      };
-      return host;
-    });
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation(
+      (world, profiler, clock) => {
+        const host = original(world, profiler, clock),
+          request = host.request.bind(host);
+        host.request = (frame) => {
+          requests.push(frame);
+          return request(frame);
+        };
+        return host;
+      },
+    );
     const event: FluvialRoute = {
       id: 'event',
       kind: 'fluvial',
@@ -765,6 +828,7 @@ describe('live motion preference', () => {
       processions: [event],
       climate,
     });
+    await vi.dynamicImportSettled();
     const reports: (ProcessionRun | null)[] = [];
     atlas.on('procession', (run) => reports.push(run));
     draw(10);
@@ -813,7 +877,7 @@ describe('live motion preference', () => {
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![18]).toBeNull();
   });
 
-  it('redraws a real-city crop boundary with fixed time and sends scaled farm attendance to Life', () => {
+  it('redraws a real-city crop boundary with fixed time and sends scaled farm attendance to Life', async () => {
     atlas.destroy();
     let date = new Date('2026-06-30T15:59:00Z');
     const visible = vi.spyOn(LifeWorld.prototype, 'visible');
@@ -841,6 +905,7 @@ describe('live motion preference', () => {
         },
       },
     });
+    await vi.dynamicImportSettled();
     draw(10);
     expect(vi.mocked(selectPass).mock.calls.at(-1)![12]?.stage).toBe(CROP_STAGE.fallow);
     date = new Date('2026-06-30T16:01:00Z');
@@ -859,7 +924,7 @@ describe('live motion preference', () => {
     );
   });
 
-  it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', () => {
+  it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', async () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     const date = new Date('2026-12-24T16:30:00Z'),
       zone = { timezone: 'Asia/Manila', lng: 0 };
@@ -890,6 +955,7 @@ describe('live motion preference', () => {
         ],
       },
     });
+    await vi.dynamicImportSettled();
     draw(10);
     const weather = () => step.mock.calls.at(-1)![5]!;
     expect(weather().date).toEqual({
@@ -915,7 +981,7 @@ describe('live motion preference', () => {
     expect(weather().windPreset).toBe('storm');
     expect(weather().rain).toBe(1);
   });
-  it('compiles residential samplers only while a fireworks season is selected', () => {
+  it('compiles residential samplers only while a fireworks season is selected', async () => {
     atlas.destroy();
     labelFixture.enabled = true;
     labelFixture.loaded = {
@@ -944,6 +1010,7 @@ describe('live motion preference', () => {
       life: { season: 'auto' },
       now: () => new Date('2026-06-01T12:00:00Z'),
     });
+    await vi.dynamicImportSettled();
     draw(100);
     expect(compile).not.toHaveBeenCalled();
     expect(labelFixture.residentialRequests).toHaveBeenLastCalledWith(false, [
@@ -977,7 +1044,7 @@ describe('live motion preference', () => {
     draw(600);
     expect(compile).toHaveBeenCalledTimes(2);
   });
-  it('prepares bunting as its fade becomes visible without a tile arrival', () => {
+  it('prepares bunting as its fade becomes visible without a tile arrival', async () => {
     atlas.destroy();
     labelFixture.enabled = true;
     const b = new LifeBuilder();
@@ -1013,6 +1080,7 @@ describe('live motion preference', () => {
         ],
       },
     });
+    await vi.dynamicImportSettled();
     const hasBunting = () =>
       vi
         .mocked(fixturePass)
@@ -1028,7 +1096,7 @@ describe('live motion preference', () => {
     expect(hasBunting()).toBe(false);
   });
 
-  it('updates carried candle ink clocks in daylight when the lighting pass stays idle', () => {
+  it('updates carried candle ink clocks in daylight when the lighting pass stays idle', async () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
       tilesUrl: '/test.pmtiles',
@@ -1040,6 +1108,7 @@ describe('live motion preference', () => {
       life: { time: 720, wind: 'calm' },
       lifeWorker: false,
     });
+    await vi.dynamicImportSettled();
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0, candle: true, effectClock: -2 },
     ]);
@@ -1106,10 +1175,10 @@ describe('live motion preference', () => {
     draw(200);
   };
 
-  it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', () => {
+  it('carries geographic mouse hover in frames and clears it on input, flight and Life changes', async () => {
     const frames: FrameInput[] = [];
-    const createInline = Hosts.createInlineHost;
-    vi.spyOn(Hosts, 'createInlineHost').mockImplementation((...args) => {
+    const createInline = InlineHosts.createConfiguredInlineHost;
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation((...args) => {
       const host = createInline(...args);
       const request = host.request.bind(host);
       host.request = (frame) => {
@@ -1118,7 +1187,7 @@ describe('live motion preference', () => {
       };
       return host;
     });
-    usePauseMode('item');
+    await usePauseMode('item');
     draw(100);
     expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
     input.intents!.hover([120, 90]);
@@ -1168,7 +1237,7 @@ describe('live motion preference', () => {
     expect(frames.at(-1)!.step).not.toHaveProperty('pointer');
   });
 
-  it('sends only the hovered identity while continuing requests, other poses and shared clocks', () => {
+  it('sends only the hovered identity while continuing requests, other poses and shared clocks', async () => {
     atlas.destroy();
     let generation = 1,
       clock = 0;
@@ -1193,7 +1262,7 @@ describe('live motion preference', () => {
       };
       return true;
     });
-    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockReturnValue({
       invalidateFrame() {},
       invalidateFolklore() {},
       sync() {},
@@ -1214,6 +1283,7 @@ describe('live motion preference', () => {
       year: 2026,
       lifeWorker: false,
     });
+    await vi.dynamicImportSettled();
     hoverAgent();
     draw(250);
     const held = first,
@@ -1257,8 +1327,8 @@ describe('live motion preference', () => {
 
   it.each(['item', 'all'] as const)(
     'reacquires %s inspection at a stationary pointer after internal resize and tile arrival',
-    (mode) => {
-      usePauseMode(mode);
+    async (mode) => {
+      await usePauseMode(mode);
       const hovered = vi.fn();
       atlas.on('lifehover', hovered);
       hoverAgent();
@@ -1289,8 +1359,8 @@ describe('live motion preference', () => {
     (['item', 'all'] as const).flatMap((mode) =>
       (['pan', 'zoom', 'camera', 'theme', 'time'] as const).map((action) => ({ mode, action })),
     ),
-  )('clears $mode inspection on $action and requires fresh hover', ({ mode, action }) => {
-    usePauseMode(mode);
+  )('clears $mode inspection on $action and requires fresh hover', async ({ mode, action }) => {
+    await usePauseMode(mode);
     const select = vi.spyOn(LifeInspection.prototype, 'select');
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     const hovered = vi.fn();
@@ -1318,8 +1388,8 @@ describe('live motion preference', () => {
 
   it.each(['item', 'all'] as const)(
     'suppresses %s hover during flights and lost visibility',
-    (mode) => {
-      usePauseMode(mode);
+    async (mode) => {
+      await usePauseMode(mode);
       const step = vi.spyOn(LifeWorld.prototype, 'step');
       const hovered = vi.fn();
       atlas.on('lifehover', hovered);
@@ -1341,68 +1411,72 @@ describe('live motion preference', () => {
     },
   );
 
-  it.each(['item', 'all'] as const)('handles a late host reply during %s inspection', (mode) => {
-    atlas.destroy();
-    const original: Hosts.FrameView = {
-      agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
-      procession: undefined,
-      puffs: new Float64Array(0),
-      folklore: { sprites: [], haunts: [] },
-      signalClock: 1,
-      cellGuard: () => undefined,
-    };
-    let latest = original;
-    const request = vi.fn<(input: FrameInput) => boolean>(() => true);
-    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
-      invalidateFrame() {},
-      invalidateFolklore() {},
-      sync() {},
-      clearTiles() {},
-      request,
-      latest: () => latest,
-      setProcessions() {},
-      setEmergency() {},
-      setLive() {},
-      play: () => false,
-      stop() {},
-      dispose() {},
-    });
-    atlas = createAtlas(canvas, {
-      tilesUrl: '/test.pmtiles',
-      bounds: [-1, -1, 1, 1],
-      initialCamera: { lat: 0, lng: 0, zoom: 18 },
-      year: 2026,
-      lifeWorker: false,
-      lifeHoverPause: mode,
-    });
-    hoverAgent();
-    const count = request.mock.calls.length;
-    latest = {
-      ...original,
-      puffs: new Float64Array(0),
-      folklore: { sprites: [], haunts: [] },
-      signalClock: 2,
-      agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
-      cellGuard: () => undefined,
-    };
-    draw(250);
-    if (mode === 'all') {
-      expect(request.mock.calls.length).toBe(count);
-      expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(original.agents);
-      expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(1);
-    } else {
-      expect(request.mock.calls.length).toBeGreaterThan(count);
+  it.each(['item', 'all'] as const)(
+    'handles a late host reply during %s inspection',
+    async (mode) => {
+      atlas.destroy();
+      const original: Hosts.FrameView = {
+        agents: [{ kind: 'person', inspectionId: 42, lng: 0, lat: 0, flap: 0 }],
+        procession: undefined,
+        puffs: new Float64Array(0),
+        folklore: { sprites: [], haunts: [] },
+        signalClock: 1,
+        cellGuard: () => undefined,
+      };
+      let latest = original;
+      const request = vi.fn<(input: FrameInput) => boolean>(() => true);
+      vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockReturnValue({
+        invalidateFrame() {},
+        invalidateFolklore() {},
+        sync() {},
+        clearTiles() {},
+        request,
+        latest: () => latest,
+        setProcessions() {},
+        setEmergency() {},
+        setLive() {},
+        play: () => false,
+        stop() {},
+        dispose() {},
+      });
+      atlas = createAtlas(canvas, {
+        tilesUrl: '/test.pmtiles',
+        bounds: [-1, -1, 1, 1],
+        initialCamera: { lat: 0, lng: 0, zoom: 18 },
+        year: 2026,
+        lifeWorker: false,
+        lifeHoverPause: mode,
+      });
+      await vi.dynamicImportSettled();
+      hoverAgent();
+      const count = request.mock.calls.length;
+      latest = {
+        ...original,
+        puffs: new Float64Array(0),
+        folklore: { sprites: [], haunts: [] },
+        signalClock: 2,
+        agents: [{ kind: 'person', inspectionId: 43, lng: 0.01, lat: 0, flap: 1 }],
+        cellGuard: () => undefined,
+      };
+      draw(250);
+      if (mode === 'all') {
+        expect(request.mock.calls.length).toBe(count);
+        expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(original.agents);
+        expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(1);
+      } else {
+        expect(request.mock.calls.length).toBeGreaterThan(count);
+        expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
+        draw(260);
+        expect(request.mock.calls.at(-1)![0].inspection!.id).toBeNull();
+      }
+      input.intents!.hover(null);
+      draw(270);
       expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
-      draw(260);
-      expect(request.mock.calls.at(-1)![0].inspection!.id).toBeNull();
-    }
-    input.intents!.hover(null);
-    draw(270);
-    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toBe(latest.agents);
-    expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(2);
-  });
+      expect(vi.mocked(fixturePass).mock.calls.at(-1)![6]).toBe(2);
+    },
+  );
 
-  it('preserves live occurrence hover delay across replay start and stop', () => {
+  it('preserves live occurrence hover delay across replay start and stop', async () => {
     atlas.destroy();
     const setLive = vi.fn<(id: string | undefined, progress?: number) => void>();
     const visible: Hosts.FrameView = {
@@ -1413,7 +1487,7 @@ describe('live motion preference', () => {
       signalClock: 0,
       cellGuard: () => undefined,
     };
-    vi.spyOn(Hosts, 'createInlineHost').mockReturnValue({
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockReturnValue({
       invalidateFrame() {},
       invalidateFolklore() {},
       sync() {},
@@ -1459,6 +1533,7 @@ describe('live motion preference', () => {
         },
       ],
     });
+    await vi.dynamicImportSettled();
     hoverAgent();
     const initial = setLive.mock.calls.at(-1)![1] as number;
     for (let at = 250; at <= 1200; at += 50) draw(at);
@@ -1480,8 +1555,8 @@ describe('live motion preference', () => {
 
   it.each(['item', 'all'] as const)(
     'clears %s hover on exit, Life off, reduced motion and context loss',
-    (mode) => {
-      usePauseMode(mode);
+    async (mode) => {
+      await usePauseMode(mode);
       vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
         { kind: 'person', inspectionId: 99, lng: 0, lat: 0, flap: 0 },
       ]);
@@ -1556,7 +1631,7 @@ describe('live motion preference', () => {
     ).toBe(true);
   });
 
-  it('packs speech ownership only at the speech zoom threshold', () => {
+  it('packs speech ownership only at the speech zoom threshold', async () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
       tilesUrl: '/tiles/test.pmtiles',
@@ -1565,6 +1640,7 @@ describe('live motion preference', () => {
       year: 2026,
       dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
     });
+    await vi.dynamicImportSettled();
     vi.spyOn(LifeWorld.prototype, 'visible').mockReturnValue([
       { kind: 'person', lng: 0, lat: 0, flap: 0 },
     ]);
@@ -1578,7 +1654,7 @@ describe('live motion preference', () => {
     expect(vi.mocked(lifePass).mock.calls.at(-1)![12]).toBeUndefined();
   });
 
-  it('delivers GPU visibility replies after a slow drawing frame', () => {
+  it('delivers GPU visibility replies after a slow drawing frame', async () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
       tilesUrl: '/tiles/test.pmtiles',
@@ -1587,6 +1663,7 @@ describe('live motion preference', () => {
       year: 2026,
       dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
     });
+    await vi.dynamicImportSettled();
     vi.mocked(lifePass).mockImplementation((_gl, targets) => {
       const life = new Uint8Array(targets.cols * targets.rows * 4);
       vi.mocked(lifeRaster).mockReturnValue({
@@ -1622,7 +1699,7 @@ describe('live motion preference', () => {
       ['speech', 320],
     ]);
   });
-  it('waits for camera input to settle before scheduling speech visibility work', () => {
+  it('waits for camera input to settle before scheduling speech visibility work', async () => {
     atlas.destroy();
     atlas = createAtlas(canvas, {
       tilesUrl: '/tiles/test.pmtiles',
@@ -1631,6 +1708,7 @@ describe('live motion preference', () => {
       year: 2026,
       dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
     });
+    await vi.dynamicImportSettled();
     vi.mocked(lifePass).mockImplementation((_gl, targets) => {
       const life = new Uint8Array(targets.cols * targets.rows * 4);
       vi.mocked(lifeRaster).mockReturnValue({
@@ -1659,7 +1737,7 @@ describe('live motion preference', () => {
     draw(560);
     expect(update).toHaveBeenCalledOnce();
   });
-  it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', () => {
+  it('retains fixtures on tile reordering and invalidates on eviction or replacement with Life off', async () => {
     atlas.destroy();
     const a = { z: 16, x: 32768, y: 32768 },
       b = { ...a, x: a.x + 1 };
@@ -1696,6 +1774,7 @@ describe('live motion preference', () => {
       utilities: { derive: true },
       life: { enabled: false, time: 720 },
     });
+    await vi.dynamicImportSettled();
     draw(10);
     const fixtures = vi.mocked(fixturePass).mock.calls.at(-1)![5];
     expect(fixtures).toHaveLength(2);
@@ -1716,7 +1795,7 @@ describe('live motion preference', () => {
     draw(200);
     expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
   });
-  it('releases inspection when the real calendar changes season without user input', () => {
+  it('releases inspection when the real calendar changes season without user input', async () => {
     atlas.destroy();
     let date = new Date('2026-12-31T04:00:00Z');
     atlas = createAtlas(canvas, {
@@ -1738,6 +1817,7 @@ describe('live motion preference', () => {
         ],
       },
     });
+    await vi.dynamicImportSettled();
     const hovered = vi.fn();
     atlas.on('lifehover', hovered);
     hoverAgent();
@@ -1747,7 +1827,7 @@ describe('live motion preference', () => {
     expect(atlas.getSeason()).toBeNull();
     expect(hovered).toHaveBeenLastCalledWith({ label: null, point: null });
   });
-  it('resolves the real city date immediately, independently of year/time, and changes fixtures without moving', () => {
+  it('resolves the real city date immediately, independently of year/time, and changes fixtures without moving', async () => {
     atlas.destroy();
     let date = new Date('2026-11-30T16:01:00Z');
     const tile = { z: 16, x: 32768, y: 32768 },
@@ -1777,6 +1857,7 @@ describe('live motion preference', () => {
       cityLife: { source: 'Synthetic calendar', seasons: [winter] },
       life: { enabled: false, time: 1320 },
     });
+    await vi.dynamicImportSettled();
     expect(atlas.getSeason()?.id).toBe('winter');
     expect(atlas.getSeason()).toBe(atlas.getSeason());
     const events = vi.fn();
@@ -1814,7 +1895,13 @@ describe('live motion preference', () => {
     atlas.setLife({ season: 'winter' });
     atlas.setCamera({ zoom: 14 });
     draw(1300);
-    expect(vi.mocked(fixturePass).mock.calls.at(-1)![5]).toEqual([]);
+    expect(atlas.getCamera().zoom).toBe(15);
+    expect(
+      vi
+        .mocked(fixturePass)
+        .mock.calls.at(-1)![5]
+        .some((f) => f.kind === 'season-lantern'),
+    ).toBe(true);
     atlas.setCamera({ zoom: 19 });
     draw(1400);
     expect(
@@ -1825,7 +1912,7 @@ describe('live motion preference', () => {
     ).toBe(true);
   });
 
-  it('leaves profiling disabled by default and resets enabled profiles on context loss', () => {
+  it('leaves profiling disabled by default and resets enabled profiles on context loss', async () => {
     draw(10);
     expect(atlas.getProfile()).toBeNull();
     atlas.resetProfile();
@@ -1838,6 +1925,7 @@ describe('live motion preference', () => {
       life: { time: 720, wind: 'storm' },
       profiling: true,
     });
+    await vi.dynamicImportSettled();
     draw(20);
     expect(atlas.getProfile()!.samples).toHaveLength(1);
     expect(atlas.getProfile()!.stages.callback.count).toBe(1);
@@ -1895,7 +1983,7 @@ describe('live motion preference', () => {
     expect(atlas.getStats().quality.tier).toBe(3);
   });
 
-  it('reads GPU metadata only for profiling and refreshes it after context restoration', () => {
+  it('reads GPU metadata only for profiling and refreshes it after context restoration', async () => {
     expect(defaultGetExtension).not.toHaveBeenCalled();
     const extension = { UNMASKED_RENDERER_WEBGL: 123 };
     const getExtension = vi.fn((name: string) =>
@@ -1911,6 +1999,7 @@ describe('live motion preference', () => {
       year: 2026,
       profiling: true,
     });
+    await vi.dynamicImportSettled();
     expect(atlas.getProfile()!.gpuRenderer).toBe('initial GPU');
     expect(atlas.getProfile()!.gpuRenderer).toBe('initial GPU');
     expect(getExtension).toHaveBeenCalledOnce();
@@ -2148,6 +2237,7 @@ describe('label focus in the renderer frame', () => {
       reducedMotion: true,
       life: { enabled: false, time: 720, wind: 'storm' },
     });
+    await vi.dynamicImportSettled();
   });
   afterEach(() => {
     atlas.destroy();
@@ -2261,7 +2351,7 @@ describe('label focus in the renderer frame', () => {
   });
   it.each([false, true])(
     'changes hover and speech evidence only when focus changes layout: %s',
-    (changes) => {
+    async (changes) => {
       if (changes)
         labelFixture.loaded = {
           ...labelFixture.loaded!,
@@ -2299,6 +2389,7 @@ describe('label focus in the renderer frame', () => {
         year: 2026,
         dialogue: { native: { code: 'en', label: 'English' }, translations: [], exchanges: [] },
       });
+      await vi.dynamicImportSettled();
       input.intents!.hover([20, 20]);
       draw(1000);
       let previousHover = hoverFrames.mock.calls.at(-1)?.[0],

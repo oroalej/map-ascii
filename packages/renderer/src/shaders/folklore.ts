@@ -1,3 +1,5 @@
+import { FOCUS_DIM } from '../focus';
+
 export const folkloreVertex = `#version 300 es
 precision highp float;
 layout(location=0) in vec4 a_quad;
@@ -28,6 +30,9 @@ uniform sampler2D u_overlay;
 uniform vec2 u_labelCell;
 uniform vec2 u_labelShift;
 uniform float u_height;
+uniform vec3 u_accent;
+uniform int u_focusMode;
+uniform float u_pulse;
 out vec4 o_color;
 void main() {
   ivec2 label = ivec2(floor(
@@ -44,6 +49,8 @@ void main() {
   vec3 color = ghost ? vec3(0.73, 0.94, 1.0)
     : mix(vec3(0.05, 0.02, 0.09), vec3(0.75, 0.09, 0.16), halo * 3.0);
   float alpha = v_style.y * max(ink, halo);
+  if (u_focusMode == 2) color = u_accent * u_pulse;
+  else if (u_focusMode == 1) color *= ${FOCUS_DIM.toFixed(1)};
   if (alpha < 0.001) discard;
   o_color = vec4(color, alpha);
 }`;

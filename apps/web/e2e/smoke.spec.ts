@@ -437,7 +437,9 @@ for (const city of cities) {
           await mapReady(page);
           await page.getByRole('button', { name: 'Time: 12:00', exact: true }).press('Enter');
           await page.getByRole('button', { name: 'Time: 18:00', exact: true }).press('Enter');
-          const folklore = page.getByText('Folklore (simulated)', { exact: true });
+          const folklore = page
+            .getByRole('region', { name: 'Simulated', exact: true })
+            .getByText('Folklore', { exact: true });
           await expect(folklore).toBeVisible({ timeout: 20_000 });
           await life.press('Enter');
           await expect(folklore).toHaveCount(0);

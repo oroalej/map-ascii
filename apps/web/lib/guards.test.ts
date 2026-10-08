@@ -3,8 +3,8 @@ import {
   CityProcessions,
   SearchIndexFile,
   SubdivisionAreas,
-  PROCESSION_DEFAULTS,
-} from '@atlas/shared';
+} from '@atlas/shared/schemas';
+import { PROCESSION_DEFAULTS } from '@atlas/shared';
 import { describe, expect, it } from 'vitest';
 import { isCityMeta, isCityProcessions, isSearchIndexFile, isSubdivisionAreas } from './guards';
 import { isCityEmergency } from './guards';

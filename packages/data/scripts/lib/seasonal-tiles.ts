@@ -1,11 +1,11 @@
 import { join } from 'node:path';
 import type { PMTiles } from 'pmtiles';
 import {
-  SeasonalTileRecordSchema,
   type SeasonConfig,
   type SeasonalRecord,
   type SeasonalBuntingRunRecord,
 } from '@atlas/shared';
+import { SeasonalTileRecordSchema } from '@atlas/shared/schemas';
 type TileRecord = SeasonalRecord | SeasonalBuntingRunRecord;
 import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeJson } from './io';

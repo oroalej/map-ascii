@@ -7,6 +7,7 @@ import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from '.
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
 import { folkloreVertex, folkloreFragment } from './shaders/folklore';
+import { focusPulse, normalizeFocus } from './focus';
 
 export type FolkloreQuad = {
   sprite: FolkloreSprite;
@@ -137,6 +138,9 @@ export function folklorePass(
   view: View,
   labelGrid: Grid,
   quads: readonly FolkloreQuad[],
+  focus = normalizeFocus(null),
+  time = 0,
+  reducedMotion = false,
 ) {
   if (!quads.length) return;
   const r = (programs.folklore ??= createFolklore(gl, programs));
@@ -168,6 +172,13 @@ export function folklorePass(
     u_labelCell: [view.labelDev.w, view.labelDev.h],
     u_labelShift: [labelGrid.shiftX, labelGrid.shiftY],
     u_height: view.height,
+    u_accent: theme.uniforms.accent,
+    u_focusMode: focus.folklore
+      ? 2
+      : focus.mask[0] !== 0 || focus.mask[1] !== 0 || focus.life.size > 0
+        ? 1
+        : 0,
+    u_pulse: focusPulse(time, !reducedMotion),
   });
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

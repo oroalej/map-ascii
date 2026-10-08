@@ -4,7 +4,7 @@ ASCII Atlas is a generic engine for explorable, ASCII-rendered city maps. Each c
 
 ## 1. Experience
 
-A city opens on its surrounding region drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through the region and into the city's subdivisions, its center, and individual streets and buildings. (For Naga: Bicol peninsula → Camarines Sur → barangays → the Centro → streets.) Visitors can:
+A city opens on a detailed map drawn in glowing ASCII on a dark background. One continuous zoom takes the visitor through the city's subdivisions, its center, and individual streets and buildings. Visitors can:
 
 - drag and zoom around the map
 - tap a landmark with sourced facts to open its facts beside it
@@ -15,7 +15,7 @@ A city opens on its surrounding region drawn in glowing ASCII on a dark backgrou
 
 ## 2. Zoom levels
 
-Zoom is continuous (web-mercator zoom ≈ 7 → 19). Content and glyph detail change at named levels, and these transitions crossfade over roughly 0.5 zoom units rather than popping. Each city brief describes what these levels show for that city.
+Zoom is continuous (web-mercator zoom 15 → 21). The Region and City levels are no longer reachable by zooming out; the view opens and stays at District, Street or Place. Content and glyph detail change at named levels, and these transitions crossfade over roughly 0.5 zoom units rather than popping. Each city brief describes what these levels show for that city.
 
 | Level | Approx. zoom | Content | Labels |
 |---|---|---|---|
@@ -33,7 +33,7 @@ The map is strictly top-down and north-up: it never tilts or rotates, and there 
 
 **Fly-to.** A search result, a Places in view choice, or a tour step animates the camera along an eased arc: zoom out, travel, zoom in. Duration scales with distance and is clamped to 0.8–3 s. Any user input cancels the animation.
 
-**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom where the region fills the viewport, so no space outside it shows (never below 7). On a screen shaped differently from the region, the widest view crops the region on one axis, and the visitor pans to see the rest.
+**Bounds.** The camera is clamped to the current city's region bounding box, read from the city meta the pipeline emits (`<city>.meta.json`). Max zoom is 21 (the Place level's closest view, §2). Zooming out stops at the zoom where the region fills the viewport, so no space outside it shows (never below 15). On a screen shaped differently from the region, the widest view crops the region on one axis, and the visitor pans to see the rest.
 
 ## 4. Visual language
 
@@ -111,11 +111,11 @@ The tooltip remains while visibility checks are renewed, including pointer movem
 
 Tooltips prefer the space below and right of the pointer, flip away from overflowing edges, and stay at least 8 CSS pixels inside the visible viewport. Long names use ellipsis within the available width. Simulated visibility validation normally expires 250 ms after its sampled frame. At low frame rates, the limit adapts to four recent frame intervals, capped at one second, so normal asynchronous readback latency does not flicker while stalled reads still lose their tooltip.
 
-**Legend focus.** Clicking a map entry or simulated Life group focuses that entry: matching glyphs take the accent colour, a soft halo reaches neighboring cells, and other map and agent colours dim to about half brightness. One entry can be focused at a time; clicking it again or pressing Escape clears focus. Focus survives collapsing the legend and opening a facts dialog; closing the dialog with Escape also clears focus. Focus clears if the entry disappears, becomes ineligible, or the city changes. The effect pulses slowly; reduced motion keeps map focus steady and removes Life entries. Native toggle buttons support keyboard activation and expose their pressed state. Shops, streetlights, street markings, traffic signals, fish and illustrative utility wires/poles remain explanatory entries. Labels and label halos retain their ordinary appearance; amber vehicle indicators and traffic signal colours retain their meaning. Focus is transient and is never shared or saved in the URL.
+**Legend focus.** Clicking a map entry, simulated Life group or Folklore entry focuses that entry: matching glyphs take the accent colour, a soft halo reaches neighboring cells, and other map and agent colours dim to about half brightness. Folklore focus pulses spirits in the accent colour while dimming the map; focusing other entries dims spirits too. One entry can be focused at a time; clicking it again or pressing Escape clears focus. Focus survives collapsing the legend and opening a facts dialog; closing the dialog with Escape also clears focus. Focus clears if the entry disappears, becomes ineligible, or the city changes. The effect pulses slowly; reduced motion keeps map focus steady and removes Life entries. Native toggle buttons support keyboard activation and expose their pressed state. Shops, streetlights, street markings, traffic signals, fish and illustrative utility wires/poles remain explanatory entries. Labels and label halos retain their ordinary appearance; amber vehicle indicators and traffic signal colours retain their meaning. Focus is transient and is never shared or saved in the URL.
 
 While focus is active, a “Focus: <entry> ×” clear button stays beside the zoom readout, including with the legend collapsed or a facts dialog open. Clearing it preserves the selected place and returns keyboard focus to the visible legend summary or the map. On screens up to 640 CSS pixels wide, legend buttons, the summary and this clear button have at least 44 CSS pixels of height; the list scrolls above attribution, and expanded place sheets leave 8 pixels below the active focus control. Category identity is independent of display wording and the city's subdivision label.
 
-**Life layer.** The map is inhabited by simulated agents drawn over it. They are decoration, not data, and the legend labels them "(simulated)". They are derived only from the OSM geometry in the tiles, so they work for any city.
+**Life layer.** The map is inhabited by simulated agents drawn over it. They are decoration, not data, and appear under the legend's "Simulated" heading without repeating "(simulated)" on each entry. Geographic features appear under "Map"; specific derived or illustrative disclosures remain in their labels. Empty groups are hidden. Agents are derived only from the OSM geometry in the tiles, so they work for any city.
 
 Packs can opt into **Folklore (simulated)** at night. Pale ghosts drift through cemeteries from z17 and wander mapped paths near churches and hospitals, fading near people and briefly becoming wisps when a body passes through. Undas increases cemetery density. A cartoon manananggal can appear from z15 during the pack's seasonal window: its lower half stays at a field edge while the winged silhouette circles nearby roofs, lands and returns before dawn. These figures describe folklore, not specific sites or residents. Hover identifies them as simulated folklore. Life off and reduced motion hide them. Fixed Night keeps their movement animated; the existing season preview can represent an Undas night.
 
@@ -272,7 +272,7 @@ Shop areas without a building or another rendered area class receive one interio
 - Current subdivision name, with the city's local label. An approximate subdivision (see `DATA.md` §2 step 03) shows as "≈ Name".
 - Coordinates, toggleable.
 - A "Life" toggle for the life layer (§4) and a time chip that cycles live → 05:30 → 08:00 → 12:00 → 18:00 → 22:00 (the city's local time). Both are viewer preferences remembered in the browser, not view state, so they stay out of the URL.
-- Attribution keeps the OSM link visible, with additional credits in a bounded scrolling region so sourced city packs leave the map and controls accessible.
+- Attribution keeps the OSM link visible, with additional credits one click away under Sources in a bounded scrolling popover at every zoom and Life state.
 - For packs with seasons, a chip cycles Today and pack titles. Today names the active season when there is one. Preview titles use the pack title. The choice is remembered in this browser, validated again for each city, and stays out of the shared URL. The legend names visible seasonal hardware and possible temporary vendors on walking routes.
 
 ## 6. Tours

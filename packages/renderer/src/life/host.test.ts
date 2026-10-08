@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventOccurrence, eventTime, type ProcessionRoute } from '@atlas/shared';
 import { FrameProfiler } from '../profile';
-import { createInlineHost, createWorkerHost } from './host';
+import { createWorkerHost } from './host';
+import { createInlineHost } from './inline-host';
+import * as Inline from './inline-host';
 import { makeScenario } from './testing/scenarios';
 import type { FrameInput, FrameResult, SyncTile } from './worker-api';
 import { LifeWorld, type LifeTile, type VisibleAgent } from './simulate';
@@ -31,6 +33,7 @@ vi.mock('comlink', () => ({
 }));
 const flush = async () => {
   for (let i = 0; i < 6; i++) await Promise.resolve();
+  await vi.dynamicImportSettled();
 };
 const result = (clock: number): FrameResult => ({
   folklore: { sprites: [], haunts: [] },
@@ -460,7 +463,7 @@ describe('pipelined Life host', () => {
       host.dispose();
     },
   );
-  it('installs late event routes in the inline fallback and replaces active playback', () => {
+  it('installs late event routes in the inline fallback and replaces active playback', async () => {
     vi.stubGlobal(
       'Worker',
       class {
@@ -478,6 +481,9 @@ describe('pipelined Life host', () => {
     host.setProcessions([]);
     expect(host.latest()?.procession).toBeUndefined();
     expect(host.play(route.id)).toBe(false);
+    await flush();
+    expect(host.request(s.input)).toBe(true);
+    expect(host.latest()?.procession).toBeUndefined();
     host.dispose();
   });
   it('installs late routes without resyncing tiles and discards an older event reply', async () => {
@@ -668,6 +674,64 @@ describe('pipelined Life host', () => {
     );
   });
   afterEach(() => vi.unstubAllGlobals());
+
+  it('never constructs an inline world while the worker stays healthy', async () => {
+    const inline = vi.spyOn(Inline, 'createConfiguredInlineHost');
+    const loader = vi.fn(() => Promise.resolve(Inline));
+    const s = fixture(),
+      host = createWorkerHost({}, [], undefined, loader);
+    try {
+      host.sync(s.tiles);
+      await flush();
+      mock.frame.mockResolvedValueOnce(result(1));
+      expect(host.request(s.input)).toBe(true);
+      await flush();
+      expect(loader).not.toHaveBeenCalled();
+      expect(inline).not.toHaveBeenCalled();
+    } finally {
+      host.dispose();
+      inline.mockRestore();
+    }
+  });
+
+  it('buffers current geometry and commands after an asynchronous worker error', async () => {
+    const workers: EventTarget[] = [];
+    vi.stubGlobal(
+      'Worker',
+      class extends EventTarget {
+        constructor() {
+          super();
+          workers.push(this);
+        }
+        terminate = mock.terminate;
+      },
+    );
+    let resolve!: (module: typeof Inline) => void;
+    const loader = vi.fn(
+      () =>
+        new Promise<typeof Inline>((done) => {
+          resolve = done;
+        }),
+    );
+    const s = fixture(),
+      host = createWorkerHost({}, [route], undefined, loader);
+    host.sync(s.tiles);
+    await flush();
+    workers[0]!.dispatchEvent(new Event('error'));
+    host.play(route.id);
+    expect(host.request(s.input)).toBe(false);
+    expect(host.latest()?.procession?.id).toBe(route.id);
+    await flush();
+    expect(loader).toHaveBeenCalledTimes(1);
+    host.setProcessions([]);
+    host.setEmergency(undefined);
+    resolve(Inline);
+    await flush();
+    expect(host.request(s.input)).toBe(true);
+    expect(host.latest()?.procession).toBeUndefined();
+    expect(mock.terminate).toHaveBeenCalledTimes(1);
+    host.dispose();
+  });
 
   it('sends geometry once per residency, limits frames in flight and merges asynchronous profiles', async () => {
     const s = fixture();

@@ -1,11 +1,11 @@
 import { expect, it } from 'vitest';
 import {
   pointInPolygon,
-  Procession,
   localMetricProjection,
   processionAltarLayout,
   PROCESSION_GEOMETRY,
 } from '@atlas/shared';
+import { Procession } from '@atlas/shared/schemas';
 import type { Feature, Geometry } from 'geojson';
 import { localFrame } from './geo';
 import { bakeCrowdAreas, compactLattice } from './crowd-ground';

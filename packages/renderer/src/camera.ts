@@ -8,7 +8,7 @@ import { lngLatToWorld, WebMercatorViewport, worldToLngLat } from '@math.gl/web-
 export const TILE_SIZE = 512;
 
 /** Zoom range (SPEC.md §2): the Region level out to the Place level's closest view. */
-export const MIN_ZOOM = 7;
+export const MIN_ZOOM = 15;
 export const MAX_ZOOM = 21;
 const MAX_LAT = 85.051129;
 

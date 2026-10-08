@@ -50,7 +50,7 @@ it.each(['worship', 'hospital'])(
   'loads a %s-only folklore pack without a cemetery and parses Life once',
   async (site) => {
     configure([site]);
-    const { RuntimeCityLifeSchema } = await import('@atlas/shared');
+    const { RuntimeCityLifeSchema } = await import('@atlas/shared/schemas');
     const parse = vi.spyOn(RuntimeCityLifeSchema, 'parse');
     const { cities } = await import('../e2e/helpers');
     expect(cities).toHaveLength(1);
