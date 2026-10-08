@@ -470,6 +470,19 @@ it('fills all safe Mass components during hold, preserving the altar apron and s
     ),
   ).toBe(true);
   expect(throng(event, 1, placement, 100, 40, 18).cells).toHaveLength(0);
+  // Already gathered when the Mass starts: no arrival wave.
+  const at = (progress: number) =>
+    throng(event, progress, placement, 100, 40, 18)
+      .cells.map((c) => `${c.col}/${c.row}`)
+      .sort();
+  expect(at(0.001)).toEqual(at(0.5));
+  // Leaving at the end, from the outside in.
+  const leaving = throng(event, 0.95, placement, 100, 40, 18).cells;
+  const distance = (c: { agent: { lng: number; lat: number } }) =>
+    Math.hypot(...frame.to([c.agent.lng, c.agent.lat]));
+  expect(leaving.length).toBeGreaterThan(0);
+  expect(leaving.length).toBeLessThan(payload.cells.length);
+  expect(Math.max(...leaving.map(distance))).toBeLessThan(Math.max(...payload.cells.map(distance)));
 });
 it('rasterizes every new crowd/altar glyph without changing legacy map positions', () => {
   for (let code = 0xe404; code <= 0xe40b; code++) {

@@ -1086,14 +1086,9 @@ export function throng(
   field.lastKey = key;
   const layout =
     event.kind === 'procession' || event.kind === 'parade' ? formationLayout(event) : undefined;
+  // The Mass crowd has gathered when the Mass starts; it only leaves at the end.
   const massRamp =
-    event.kind === 'mass'
-      ? Math.min(
-          1,
-          progress / PROCESSION.mass.arrivalEnd,
-          (1 - progress) / (1 - PROCESSION.mass.disperseStart),
-        )
-      : 1;
+    event.kind === 'mass' ? Math.min(1, (1 - progress) / (1 - PROCESSION.mass.disperseStart)) : 1;
   const head = layout?.head(progress) ?? 0;
   const progressKey = event.kind === 'mass' ? massRamp : event.kind === 'fluvial' ? 0 : head;
   const at = [originCol, originRow, cols, rows];
@@ -1132,7 +1127,7 @@ export function throng(
     let density = 0,
       paint = 3 + (hash % 8);
     if (event.kind === 'mass') {
-      // Stable cells fill from the facing point and drain outside-in.
+      // Stable cells drain outside-in as the Mass ends.
       if (massRamp < 1 && cells.dist[index]! / outer > massRamp) continue;
       density = PROCESSION.throng.mass;
     } else if (event.kind === 'fluvial') density = PROCESSION.throng.bank;
