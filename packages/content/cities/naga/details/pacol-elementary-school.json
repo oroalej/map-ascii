@@ -7,145 +7,106 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.23216916784, 13.65124316867],
-        [123.23211026539, 13.65138134365],
-        [123.23215137047, 13.65139717126],
-        [123.23215178119, 13.65139737724],
-        [123.2321521394, 13.65139765406],
-        [123.23215230049, 13.65139782154],
-        [123.23215256056, 13.65139818751],
-        [123.23215266467, 13.65139839322],
-        [123.23215280419, 13.65139881679],
-        [123.23215285693, 13.651399263],
-        [123.23215284893, 13.65139949211],
-        [123.23215276645, 13.65139992958],
-        [123.23215269123, 13.65140014453],
-        [123.23209559123, 13.65154004453],
-        [123.23209538082, 13.65154044176],
-        [123.23209509352, 13.65154079335],
-        [123.23209474118, 13.65154108374],
-        [123.23209433731, 13.65154130177],
-        [123.23209389744, 13.65154143906],
-        [123.23209343846, 13.65154149034],
-        [123.232092978, 13.65154145363],
-        [123.23209253375, 13.65154133036],
-        [123.2320491809, 13.65152463736],
-        [123.23203461511, 13.65155880619],
-        [123.23206337577, 13.65156896659],
-        [123.2320927974, 13.65157955636],
-        [123.23209953806, 13.65156697825],
-        [123.23209959511, 13.65156695688],
-        [123.23250069345, 13.6517113248],
-        [123.2325007217, 13.65171137972],
-        [123.23249421936, 13.65173263858],
-        [123.23250594858, 13.6517368603],
-        [123.23252463087, 13.65168842615],
-        [123.23252466421, 13.65168839805],
-        [123.23254336894, 13.65169565596],
-        [123.23254390142, 13.65169584014],
-        [123.232613593, 13.65171705824],
-        [123.23261897722, 13.65170372973],
-        [123.23254856244, 13.65168229131],
-        [123.23247452678, 13.65165352952],
-        [123.23242537853, 13.6516153161],
-        [123.23242538224, 13.65161525473],
-        [123.23243264538, 13.6516085679],
-        [123.23243359053, 13.65160750841],
-        [123.2324343037, 13.65160629202],
-        [123.23243475895, 13.65160496381],
-        [123.23243493881, 13.65160357481],
-        [123.23243483635, 13.65160217841],
-        [123.23243445551, 13.65160082826],
-        [123.23243381093, 13.65159957625],
-        [123.23243292738, 13.6515984705],
-        [123.23243183882, 13.65159755349],
-        [123.23243058707, 13.65159686048],
-        [123.23242922024, 13.65159641808],
-        [123.23242779086, 13.65159624331],
-        [123.23242635386, 13.65159634288],
-        [123.23242496446, 13.65159671295],
-        [123.23242367605, 13.65159733932],
-        [123.23242253635, 13.65159819927],
-        [123.23240911164, 13.65161055878],
-        [123.23240819437, 13.65161158025],
-        [123.23240749303, 13.65161274969],
-        [123.23240703135, 13.65161402673],
-        [123.23240682593, 13.65161536547],
-        [123.23240688414, 13.65161671784],
-        [123.23240720389, 13.65161803524],
-        [123.23240777369, 13.65161927035],
-        [123.23240857308, 13.6516203788],
-        [123.23240957492, 13.65162132226],
-        [123.23242591733, 13.65163402841],
-        [123.23242593122, 13.65163408052],
-        [123.23242588369, 13.65163410816],
-        [123.23240217562, 13.651624374],
-        [123.23214880029, 13.65153317624],
-        [123.23213272658, 13.65152749185],
-        [123.2321327187, 13.65152744513],
-        [123.23215326602, 13.6514792496],
-        [123.23214782318, 13.65147732678],
-        [123.2322084976, 13.65134969909],
-        [123.23223775033, 13.65128108424],
-        [123.23230902805, 13.65130626017],
-        [123.23233756379, 13.6513057691],
-        [123.23245998744, 13.65134688749],
-        [123.23247175198, 13.65136373572],
-        [123.23249213154, 13.65137093396],
-        [123.23251198098, 13.65134921401],
-        [123.23251237952, 13.65134828389],
-        [123.23251242707, 13.65134826862],
-        [123.23251274312, 13.65134838005],
-        [123.23253181641, 13.65132750939],
-        [123.23223268726, 13.65122183481],
-        [123.23222540168, 13.65121913406],
-        [123.23222537871, 13.65121907876],
-        [123.23223319271, 13.65119777437],
-        [123.23223354159, 13.6511964138],
-        [123.23223361051, 13.65119501545],
-        [123.23223339736, 13.65119363091],
-        [123.23223291035, 13.65119231338],
-        [123.23223216819, 13.65119111349],
-        [123.23223119939, 13.65119007735],
-        [123.2322300412, 13.65118924479],
-        [123.23222873811, 13.65118864779],
-        [123.2322273402, 13.6511883093],
-        [123.2322259012, 13.65118824233],
-        [123.2322244764, 13.65118844945],
-        [123.23222312057, 13.6511889227],
-        [123.23222188579, 13.6511896439],
-        [123.23222081953, 13.65119058533],
-        [123.23221996276, 13.6511917108],
-        [123.23221934744, 13.65119297909],
-        [123.23221162273, 13.65121400884],
-        [123.23219376971, 13.65120740934],
-        [123.23219336553, 13.65123502413],
-        [123.23219231336, 13.65124377428],
-        [123.23219226592, 13.65124378375],
-        [123.23218012257, 13.65123949382],
-        [123.23217135789, 13.65123624504],
-        [123.23216916784, 13.65124316867]
-      ],
-      "height_m": 0.1,
-      "material": "paving",
-      "overhead": false,
-      "ground_override": true
-    },
-    {
-      "id": "approach-2",
-      "ring": [
-        [123.23256266215, 13.65135971984],
-        [123.23252771289, 13.65134737076],
-        [123.23252537962, 13.6513528442],
-        [123.23254192373, 13.6513586888],
-        [123.2325419522, 13.65135874394],
-        [123.23253707916, 13.65137017585],
-        [123.23247168116, 13.65153972129],
-        [123.23247162183, 13.65153974765],
-        [123.23245455654, 13.65153360532],
-        [123.23243056418, 13.65159580594],
-        [123.23246659535, 13.6516087747],
-        [123.23256266215, 13.65135971984]
+        [
+          123.23223828449,
+          13.6512764083
+        ],
+        [
+          123.23228787111,
+          13.65115562789
+        ],
+        [
+          123.23227455584,
+          13.65115055001
+        ],
+        [
+          123.232271235,
+          13.65115912684
+        ],
+        [
+          123.23226850045,
+          13.65116263229
+        ],
+        [
+          123.23226564994,
+          13.65116444138
+        ],
+        [
+          123.23226238626,
+          13.65116536787
+        ],
+        [
+          123.23226010916,
+          13.65116545375
+        ],
+        [
+          123.23225677715,
+          13.65116477429
+        ],
+        [
+          123.23225379519,
+          13.65116318685
+        ],
+        [
+          123.23225212256,
+          13.65116168291
+        ],
+        [
+          123.23225026088,
+          13.65115891293
+        ],
+        [
+          123.23224930745,
+          13.65115574144
+        ],
+        [
+          123.23224957638,
+          13.65115134608
+        ],
+        [
+          123.23225295211,
+          13.65114231127
+        ],
+        [
+          123.23224591988,
+          13.65113962948
+        ],
+        [
+          123.23219791818,
+          13.6512565351
+        ],
+        [
+          123.23214071904,
+          13.65123438555
+        ],
+        [
+          123.2320844639,
+          13.65137140876
+        ],
+        [
+          123.23215136838,
+          13.6513971704
+        ],
+        [
+          123.23215266287,
+          13.65139838917
+        ],
+        [
+          123.23215273772,
+          13.65140001217
+        ],
+        [
+          123.23217894719,
+          13.65141017312
+        ],
+        [
+          123.23223445435,
+          13.65127497178
+        ],
+        [
+          123.23223828449,
+          13.6512764083
+        ]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -157,67 +118,60 @@
     {
       "id": "link-1-1",
       "line": [
-        [123.23222627084, 13.65119537465],
-        [123.23220459099, 13.6512544834],
-        [123.23215853525, 13.65137247261],
-        [123.23215239039, 13.65139128327]
-      ],
-      "width_m": 1.2
-    },
-    {
-      "id": "link-2-1",
-      "line": [
-        [123.23261053692, 13.65170864391],
-        [123.23254609782, 13.65168902497],
-        [123.23247078824, 13.65165976922],
-        [123.23241416456, 13.65161574456],
-        [123.23242759251, 13.65160338207]
+        [
+          123.23225733363,
+          13.65117091896
+        ],
+        [
+          123.23216942051,
+          13.65138505296
+        ],
+        [
+          123.23214585671,
+          13.65138876742
+        ]
       ],
       "width_m": 1.2
     },
     {
       "id": "frontage-to-classroom",
       "line": [
-        [123.23261102794, 13.65170742841],
-        [123.23254662405, 13.65168781418],
-        [123.23213067168, 13.65153297882],
-        [123.23213013822, 13.65153276137],
-        [123.23212962876, 13.65153249508],
-        [123.23212914801, 13.65153218242],
-        [123.23212870043, 13.65153182629],
-        [123.23212829017, 13.65153142998],
-        [123.23212792102, 13.65153099717],
-        [123.23212759642, 13.65153053187],
-        [123.23212731936, 13.6515300384],
-        [123.23212726618, 13.65152991721],
-        [123.23212709242, 13.65152952132],
-        [123.2321269177, 13.65152898543],
-        [123.23212678895, 13.65152838898],
-        [123.23212672457, 13.65152785258],
-        [123.23212671147, 13.6515273127],
-        [123.23212674975, 13.65152677395],
-        [123.2321268391, 13.65152624094],
-        [123.23215867686, 13.6514009818],
-        [123.23215882299, 13.65140011889],
-        [123.23215885219, 13.65139971839],
-        [123.23215886084, 13.65139902821],
-        [123.23215877373, 13.65139815057],
-        [123.23215870987, 13.65139777375],
-        [123.23215863379, 13.6513974256],
-        [123.23215852696, 13.65139703678],
-        [123.23215823714, 13.65139620884],
-        [123.23215795252, 13.65139561061],
-        [123.23215781957, 13.65139537065],
-        [123.23215750498, 13.65139486957],
-        [123.23215698027, 13.65139415906],
-        [123.23215652918, 13.6513936669],
-        [123.23215621538, 13.65139336383],
-        [123.23215552126, 13.6513928072],
-        [123.23215504462, 13.65139247443],
-        [123.23215453684, 13.65139218844],
-        [123.23215412611, 13.65139198247],
-        [123.23215358398, 13.65139174287],
-        [123.23211815216, 13.65137809976]
+        [
+          123.23227803367,
+          13.65115814888
+        ],
+        [
+          123.23227685888,
+          13.65116118304
+        ],
+        [
+          123.23227662949,
+          13.65116169875
+        ],
+        [
+          123.23227635015,
+          13.65116219064
+        ],
+        [
+          123.2322756111,
+          13.65116336551
+        ],
+        [
+          123.23227497142,
+          13.65116427539
+        ],
+        [
+          123.2322026127,
+          13.65126017973
+        ],
+        [
+          123.23220222258,
+          13.65126060921
+        ],
+        [
+          123.2320922767,
+          13.65136813638
+        ]
       ],
       "width_m": 1.2
     }
@@ -233,7 +187,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit); the mapped Educare footprint sits about 9 m off its image roof and is kept as mapped. The central field's reddish worn soil stays bare; its olive south-west part and west edge are dry turf (grass). A clipped hedge row lines the field's north edge below the north classrooms; vegetable-garden beds sit west; a small lawn west of the south-west classrooms; tree belts run along the north edge, the Pacol Road frontage and the east edge, with a column of small trees on the field's east side and crowns among the west classroom blocks. The yard south of the main building is hardscape; its short gate walk to Pacol Road under the roadside canopy is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 4.67 m, 2.82 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }

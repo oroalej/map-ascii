@@ -3,251 +3,615 @@
   "title": "Pacol Elementary School grounds",
   "trees": [
     {
-      "at": [123.23165399639, 13.65156390416],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23161694302,
+        13.6516111084
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23172092296, 13.65162241054],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23171034183,
+        13.6516258423
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23183357911, 13.65169052843],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23180566709,
+        13.65166279825
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23198273146, 13.65171839286],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23195438448,
+        13.65173119098
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23208582711, 13.65175979914],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23205351278,
+        13.6517588837
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23219753768, 13.65179570838],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23214503502,
+        13.65180510287
+      ],
+      "crown_m": 10.0,
+      "height_m": 11.5
     },
     {
-      "at": [123.23234536611, 13.65184461758],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23224416331,
+        13.65183279559
+      ],
+      "crown_m": 10.0,
+      "height_m": 11.5
     },
     {
-      "at": [123.23244190833, 13.65184532025],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23233568555,
+        13.65187901476
+      ],
+      "crown_m": 10.0,
+      "height_m": 11.5
     },
     {
-      "at": [123.23253610761, 13.65175421175],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23243481385,
+        13.65190670748
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.232566078, 13.65165967572],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23250727102,
+        13.65194553546
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23266618103, 13.65155169244],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23158824567,
+        13.651492607
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.2326884664, 13.65142949987],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23160913742,
+        13.65141480562
+      ],
+      "crown_m": 6.7,
+      "height_m": 7.7
     },
     {
-      "at": [123.23264280395, 13.65135412621],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23172733077,
+        13.65144988953
+      ],
+      "crown_m": 6.7,
+      "height_m": 7.7
     },
     {
-      "at": [123.23253399777, 13.65130265898],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23163763523,
+        13.65131847779
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23239838768, 13.65126753806],
-      "crown_m": 9.0,
-      "height_m": 10.8
+      "at": [
+        123.23180151487,
+        13.65129611033
+      ],
+      "crown_m": 6.7,
+      "height_m": 7.7
     },
     {
-      "at": [123.2322580344, 13.65121369268],
-      "crown_m": 8.0,
-      "height_m": 9.6
+      "at": [
+        123.23167186253,
+        13.65123510878
+      ],
+      "crown_m": 6.7,
+      "height_m": 7.7
     },
     {
-      "at": [123.23212256193, 13.6511875215],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23212425919,
+        13.65159732921
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23201526195, 13.65116304306],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23180739402,
+        13.65147019106
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23190188663, 13.6511088405],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23185875991,
+        13.6513719912
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23178372437, 13.65108945703],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23233532638,
+        13.65149232215
+      ],
+      "crown_m": 3.3,
+      "height_m": 4
     },
     {
-      "at": [123.23174967399, 13.65118715094],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23237718968,
+        13.65142265108
+      ],
+      "crown_m": 3.3,
+      "height_m": 4
     },
     {
-      "at": [123.23167907891, 13.65128652843],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23241372874,
+        13.65136594852
+      ],
+      "crown_m": 4.0,
+      "height_m": 4.6
     },
     {
-      "at": [123.23180083981, 13.65133517412],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23256426665,
+        13.6517528798
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23190935231, 13.651337288],
-      "crown_m": 7.0,
-      "height_m": 8.4
+      "at": [
+        123.23259469092,
+        13.65167877401
+      ],
+      "crown_m": 6.7,
+      "height_m": 7.7
     },
     {
-      "at": [123.23195976326, 13.65150044421],
-      "crown_m": 6.0,
-      "height_m": 7.2
+      "at": [
+        123.23267267805,
+        13.65151573158
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23172085436, 13.65145976514],
-      "crown_m": 5.0,
-      "height_m": 6.0
+      "at": [
+        123.2326935698,
+        13.6514379302
+      ],
+      "crown_m": 7.8,
+      "height_m": 9.0
     },
     {
-      "at": [123.23183708841, 13.65148150881],
-      "crown_m": 5.0,
-      "height_m": 6.0
+      "at": [
+        123.2317523128,
+        13.65103883746
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23214961015, 13.65160005295],
-      "crown_m": 3.0,
-      "height_m": 5
+      "at": [
+        123.23182038039,
+        13.65108867229
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23222257389, 13.65162416545],
-      "crown_m": 3.0,
-      "height_m": 5
+      "at": [
+        123.23190044363,
+        13.65110897382
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23228765074, 13.65165188756],
-      "crown_m": 3.0,
-      "height_m": 5
+      "at": [
+        123.23197290081,
+        13.6511478018
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     },
     {
-      "at": [123.23238006877, 13.65168730118],
-      "crown_m": 3.0,
-      "height_m": 5
+      "at": [
+        123.23205296406,
+        13.65116810333
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.23212542124,
+        13.65120693131
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.2322817447,
+        13.6512567976
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.23235420187,
+        13.65129562558
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.23243426512,
+        13.65131592711
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.2325067223,
+        13.65135475509
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.23258678555,
+        13.65137505662
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [
+        123.23265924272,
+        13.6514138846
+      ],
+      "crown_m": 8.9,
+      "height_m": 10.2
     }
   ],
   "areas": [
     {
       "ring": [
-        [123.23176300527, 13.65114125055],
-        [123.23174569919, 13.65118482478],
-        [123.23174549011, 13.65118522764],
-        [123.23174520544, 13.6511855813],
-        [123.23174485896, 13.65118587167],
-        [123.23174465971, 13.65118599425],
-        [123.23174445299, 13.6511860951],
-        [123.23174401854, 13.65118623453],
-        [123.23174378618, 13.6511862737],
-        [123.23174332878, 13.65118628459],
-        [123.23174309472, 13.65118625653],
-        [123.23174265377, 13.65118613795],
-        [123.23171199909, 13.65117464737],
-        [123.23170186767, 13.65120206675],
-        [123.23176410258, 13.6512224581],
-        [123.23179074972, 13.65115034105],
-        [123.23176300527, 13.65114125055]
+        [
+          123.23217334509,
+          13.65144020947
+        ],
+        [
+          123.23228195575,
+          13.65147158329
+        ],
+        [
+          123.2324039174,
+          13.65149739663
+        ],
+        [
+          123.23247618257,
+          13.65137517433
+        ],
+        [
+          123.23224176312,
+          13.65127356055
+        ],
+        [
+          123.23217334509,
+          13.65144020947
+        ]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.23161374302, 13.65132805798],
-        [123.23156139014, 13.65148242167],
-        [123.23157025351, 13.65151695174],
-        [123.23163260644, 13.65152687828],
-        [123.23163430892, 13.65152689662],
-        [123.23169201005, 13.65137172842],
-        [123.23165407269, 13.65130193296],
-        [123.23161374302, 13.65132805798]
+        [
+          123.23211249492,
+          13.65158842501
+        ],
+        [
+          123.23215053917,
+          13.6516031741
+        ],
+        [
+          123.23220374739,
+          13.65147357241
+        ],
+        [
+          123.23216570314,
+          13.65145882332
+        ],
+        [
+          123.23211249492,
+          13.65158842501
+        ]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.23217384596, 13.65149087941],
-        [123.23214468528, 13.65152949431],
-        [123.23215182494, 13.65153183487],
-        [123.23223067372, 13.65155825048],
-        [123.23227612686, 13.65156386503],
-        [123.23232375397, 13.6515638183],
-        [123.23235623228, 13.65154120193],
-        [123.23228861064, 13.65151471599],
-        [123.23221552754, 13.65150775541],
-        [123.23217384596, 13.65149087941]
+        [
+          123.23164900462,
+          13.65118324843
+        ],
+        [
+          123.23176331038,
+          13.65122756278
+        ],
+        [
+          123.23181652593,
+          13.65110870153
+        ],
+        [
+          123.23178134886,
+          13.65109506399
+        ],
+        [
+          123.23174569919,
+          13.65118482478
+        ],
+        [
+          123.2317442371,
+          13.65118617577
+        ],
+        [
+          123.23174265163,
+          13.6511861372
+        ],
+        [
+          123.23166395163,
+          13.6511566372
+        ],
+        [
+          123.23166264564,
+          13.65115542968
+        ],
+        [
+          123.23166260039,
+          13.65115367644
+        ],
+        [
+          123.2316984098,
+          13.65106290997
+        ],
+        [
+          123.23164900462,
+          13.65118324843
+        ]
       ],
       "cover": "grass"
     },
     {
       "ring": [
-        [123.23209960123, 13.65156705488],
-        [123.23208419423, 13.65159580438],
-        [123.23249235562, 13.65173841662],
-        [123.23250062076, 13.65171139443],
-        [123.23209960123, 13.65156705488]
+        [
+          123.23171393947,
+          13.65142317441
+        ],
+        [
+          123.23176334466,
+          13.65130283595
+        ],
+        [
+          123.23175389799,
+          13.65129917364
+        ],
+        [
+          123.23170449281,
+          13.65141951211
+        ],
+        [
+          123.23171393947,
+          13.65142317441
+        ]
       ],
       "cover": "planting"
     },
     {
       "ring": [
-        [123.23233756379, 13.6513057691],
-        [123.23226280849, 13.65130705555],
-        [123.23220938603, 13.65134783028],
-        [123.23214782318, 13.65147732678],
-        [123.23218461601, 13.65149032474],
-        [123.23222749806, 13.65145436314],
-        [123.2322475039, 13.65139749133],
-        [123.23228779413, 13.65136269698],
-        [123.23233203555, 13.65134848412],
-        [123.23241632039, 13.65136972568],
-        [123.2324796778, 13.65137508643],
-        [123.23245998744, 13.65134688749],
-        [123.23233756379, 13.6513057691]
+        [
+          123.23169868743,
+          13.65141726146
+        ],
+        [
+          123.23174809262,
+          13.65129692299
+        ],
+        [
+          123.23173864595,
+          13.65129326069
+        ],
+        [
+          123.23168924077,
+          13.65141359916
+        ],
+        [
+          123.23169868743,
+          13.65141726146
+        ]
       ],
-      "cover": "grass"
+      "cover": "planting"
     },
     {
       "ring": [
-        [123.23247161076, 13.65153964787],
-        [123.23253699288, 13.6513701436],
-        [123.23254184675, 13.65135875719],
-        [123.23251244127, 13.651348369],
-        [123.23249574896, 13.65138752627],
-        [123.23244128241, 13.65152873174],
-        [123.23247161076, 13.65153964787]
+        [
+          123.23168343539,
+          13.65141134851
+        ],
+        [
+          123.23173284057,
+          13.65129101004
+        ],
+        [
+          123.23172339391,
+          13.65128734774
+        ],
+        [
+          123.23167398873,
+          13.65140768621
+        ],
+        [
+          123.23168343539,
+          13.65141134851
+        ]
       ],
-      "cover": "grass"
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [
+          123.23166818335,
+          13.65140543556
+        ],
+        [
+          123.23171758853,
+          13.65128509709
+        ],
+        [
+          123.23170814187,
+          13.65128143479
+        ],
+        [
+          123.23165873668,
+          13.65140177325
+        ],
+        [
+          123.23166818335,
+          13.65140543556
+        ]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [
+          123.2316529313,
+          13.65139952261
+        ],
+        [
+          123.23170233649,
+          13.65127918414
+        ],
+        [
+          123.23169288982,
+          13.65127552183
+        ],
+        [
+          123.23164348464,
+          13.6513958603
+        ],
+        [
+          123.2316529313,
+          13.65139952261
+        ]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [
+          123.23212816219,
+          13.65163100675
+        ],
+        [
+          123.232185386,
+          13.65165319143
+        ],
+        [
+          123.23219123085,
+          13.65163980267
+        ],
+        [
+          123.23219263111,
+          13.65163870352
+        ],
+        [
+          123.23219421906,
+          13.65163879058
+        ],
+        [
+          123.23238522538,
+          13.65171738727
+        ],
+        [
+          123.23238618852,
+          13.65171833788
+        ],
+        [
+          123.23238640785,
+          13.65171986641
+        ],
+        [
+          123.23238225416,
+          13.65172951378
+        ],
+        [
+          123.23239927852,
+          13.65173611383
+        ],
+        [
+          123.23240373726,
+          13.65172573143
+        ],
+        [
+          123.23240479801,
+          13.65172488369
+        ],
+        [
+          123.23240638063,
+          13.65172480692
+        ],
+        [
+          123.23252330885,
+          13.65177177816
+        ],
+        [
+          123.23252876355,
+          13.65175849189
+        ],
+        [
+          123.23213801582,
+          13.65160700581
+        ],
+        [
+          123.23212816219,
+          13.65163100675
+        ]
+      ],
+      "cover": "shrubs"
     }
   ],
   "status": "draft",
@@ -261,7 +625,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit); the mapped Educare footprint sits about 9 m off its image roof and is kept as mapped. The central field's reddish worn soil stays bare; its olive south-west part and west edge are dry turf (grass). A clipped hedge row lines the field's north edge below the north classrooms; vegetable-garden beds sit west; a small lawn west of the south-west classrooms; tree belts run along the north edge, the Pacol Road frontage and the east edge, with a column of small trees on the field's east side and crowns among the west classroom blocks. The yard south of the main building is hardscape; its short gate walk to Pacol Road under the roadside canopy is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 4.67 m, 2.82 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
     }
   ]
 }
