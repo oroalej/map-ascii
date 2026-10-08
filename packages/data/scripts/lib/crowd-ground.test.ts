@@ -145,33 +145,7 @@ it('derives the Mass extent around the displaced altar and rejects unsupported e
     'baked crowd extent',
   );
 });
-it('admits only accessible decks within the river and bank envelope', () => {
-  const deck = (id: string, x: number, y: number, extra = {}): F => ({
-    type: 'Feature',
-    properties: { id, class: 'road_minor', width: 4, bridge: 'yes', ...extra },
-    geometry: { type: 'LineString', coordinates: [q(x, y - 15), q(x, y + 15)] },
-  });
-  const crowd = bakeFluvialCrowd(
-    [
-      deck('osm:way/1', 0, 0),
-      deck('osm:way/2', 40, 90),
-      deck('osm:way/3', -40, 0, { foot: 'no' }),
-      deck('osm:way/4', 60, 0, { access: 'private' }),
-    ],
-    [q(-100, 0), q(100, 0)],
-    [
-      [5, 5],
-      [5, 5],
-    ],
-  );
-  const onDeck = (x: number, y: number) =>
-    crowd.bridges.some((ring) => pointInPolygon(q(x, y), [ring]));
-  expect(onDeck(0, 0)).toBe(true);
-  expect(onDeck(40, 90)).toBe(false);
-  expect(onDeck(-40, 0)).toBe(false);
-  expect(onDeck(60, 0)).toBe(false);
-});
-it('excludes a fluvial permission hole enclosed by two decks despite a mapped-water gap', () => {
+it('keeps fluvial spectators on the river sides, off the water, decks and inland streets', () => {
   const water = [
     feature('osm:way/1', 'water', box(-101, -5, -10, 5)),
     feature('osm:way/2', 'water', box(10, -5, 101, 5)),
@@ -190,19 +164,24 @@ it('excludes a fluvial permission hole enclosed by two decks despite a mapped-wa
     geometry: { type: 'LineString', coordinates: [q(x, -40), q(x, 40)] },
   }));
   const crowd = bakeFluvialCrowd([...water, ...decks], route, banks);
+  expect(crowd.bridges).toEqual([]);
   const allows = (x: number, y: number) => {
     const point = q(x, y);
     return (
       crowd.grounds.some((ring) => pointInPolygon(point, [ring])) &&
       !crowd.blocked.some((ring) => pointInPolygon(point, [ring])) &&
-      (!crowd.water.some((ring) => pointInPolygon(point, [ring])) ||
-        crowd.bridges.some((ring) => pointInPolygon(point, [ring])))
+      !crowd.water.some((ring) => pointInPolygon(point, [ring]))
     );
   };
+  // Both banks, right at the water and up to 8 m inland.
+  for (const y of [-6, 6, -12, 12]) expect(allows(-30, y)).toBe(true);
+  // Never on the water, a bridge deck or the streets further inland.
+  expect(allows(-30, 0)).toBe(false);
   expect(allows(0, 0)).toBe(false);
-  expect(allows(0, 20)).toBe(true);
-  expect(allows(-60, 0)).toBe(true);
-  expect(allows(60, 0)).toBe(true);
+  expect(allows(-60, 8)).toBe(false);
+  expect(allows(60, -8)).toBe(false);
+  expect(allows(-30, 16)).toBe(false);
+  expect(allows(-30, -25)).toBe(false);
 });
 it('losslessly compacts adjacent lattice rows while retaining holes and disconnected pieces', () => {
   const cells = new Map<string, Point>();

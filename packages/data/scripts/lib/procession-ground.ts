@@ -694,7 +694,9 @@ export function bakeMassSite(
   };
 }
 
-/** Bank bands and mapped decks are explicit permissions; water never grants a bank. */
+/** Spectators stand only along the river sides: from the water's edge to this far inland. */
+const RIVERSIDE_M = 8;
+/** Riverside bands are the only permissions; water and bridge decks stay clear. */
 export function bakeFluvialCrowd(
   features: readonly F[],
   route: Point[],
@@ -723,11 +725,17 @@ export function bakeFluvialCrowd(
     );
     for (const side of [-1, 1]) {
       const index = side > 0 ? 0 : 1;
-      const offset = side * (Math.max(...banks.slice(start, i + 1).map((p) => p[index])) + 15.5);
+      // From inside the narrowest bank (mapped water is blocked) to inland of the widest.
+      const reach = banks.slice(start, i + 1).map((p) => p[index]);
+      const inner = Math.min(...reach) - 2,
+        outer = Math.max(...reach) + RIVERSIDE_M;
+      const offset = (side * (inner + outer)) / 2;
       const line = [a, b].map((q) =>
         frame.toLngLat([q[0] - ((b[1] - a[1]) / d) * offset, q[1] + ((b[0] - a[0]) / d) * offset]),
       );
-      strips.push(...seatingFootprint(line, 29).coordinates.map((poly) => poly.map(asPoints)));
+      strips.push(
+        ...seatingFootprint(line, outer - inner).coordinates.map((poly) => poly.map(asPoints)),
+      );
     }
   }
   const points = route;
@@ -738,7 +746,7 @@ export function bakeFluvialCrowd(
     Math.max(...points.map((q) => q[1])) + 0.001,
   ];
   const relevant = [...strips, ...river];
-  const bridges = features
+  const decks = features
     .filter((f) => f.properties.bridge && f.properties.bridge !== 'no' && walkable(f.properties))
     .flatMap((f) =>
       lines(f as AtlasFeature).flatMap((line) => {
@@ -749,7 +757,7 @@ export function bakeFluvialCrowd(
         );
       }),
     );
-  const pieces = [...strips, ...bridges.map((r) => [r])];
+  const pieces = strips;
   // Balanced union keeps source precision and avoids a sequential growing sweep.
   const groups = pieces.map(
     (p) =>
@@ -762,5 +770,6 @@ export function bakeFluvialCrowd(
   const envelope = balancedUnion(groups);
   const { blocked, water } = assembleExclusions(features, frame, bounds, pieces, true);
   for (const polygon of envelope) for (const hole of polygon.slice(1)) blocked.push(asPoints(hole));
-  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges };
+  blocked.push(...decks);
+  return { grounds: envelope.map((p) => asPoints(p[0]!)), blocked, water, bridges: [] };
 }
