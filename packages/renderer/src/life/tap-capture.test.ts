@@ -67,6 +67,34 @@ it('targets touch without hover or any owner selection', () => {
   expect(f.done).toHaveBeenCalledWith(expect.objectContaining({ pointer: 'touch', agent: 0 }));
   expect(f.frame.agents[0]!.inspectionId).toBeUndefined();
 });
+it.each(['building_part', 'building', 'tree_crown'])(
+  'candle admission matches the shader burial exception on %s',
+  (cls) => {
+    const f = fixture(),
+      done = vi.fn();
+    f.frame.owners.fill(0);
+    captureTap(
+      [5, 5],
+      {
+        generation: 1,
+        frame: 1,
+        at: [0, 0],
+        pointer: 'touch',
+        cellMeters: 1,
+        candle: { key: 'candle', at: [0, 0] },
+        signal: { seed: 1, midBlock: false },
+      },
+      f.frame,
+      f.reads,
+      100,
+      () => true,
+      done,
+    );
+    f.finish(cls, 5);
+    expect(done.mock.calls[0]![0].candle !== undefined).toBe(cls === 'building_part');
+    expect(done.mock.calls[0]![0].signal).toBeUndefined();
+  },
+);
 it.each(['path', 'tree_crown', 'building'])(
   'admits signal hardware only on its visible %s surface',
   (cls) => {

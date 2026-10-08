@@ -23,7 +23,7 @@ export type LifeTap = {
   folklore?: string;
   signal?: { seed: number; midBlock: boolean };
   carnival?: { key: string; at: readonly [number, number]; record?: SeasonalCarnivalRecord };
-  candle?: { key: string; at: readonly [number, number] };
+  candle?: { key: string; at: readonly [number, number]; seed?: number };
   firework?: boolean;
 };
 export type TapReceipt = { id: number; action?: TapAction };

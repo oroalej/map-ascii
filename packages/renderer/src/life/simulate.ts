@@ -8771,7 +8771,14 @@ export class LifeWorld {
       if (state.request(target, this.emojiClock, minutes, 'procession-cheer')) break;
     return true;
   }
-  private tapPeople(tap: LifeTap, reach: number, cap: number, mood: EmojiMood, duration = 2.5) {
+  private tapPeople(
+    tap: LifeTap,
+    reach: number,
+    cap: number,
+    mood: EmojiMood,
+    duration = 2.5,
+    eligible?: (target: TapTarget) => boolean,
+  ) {
     const ref = this.tiles.values().next().value;
     if (!ref) return;
     const at = lngLatToTile(ref.tile, ...tap.at),
@@ -8784,6 +8791,7 @@ export class LifeWorld {
           target.agent.vehicle ||
           target.agent.prop ||
           target.agent.aboard ||
+          (eligible && !eligible(target)) ||
           seen.has(target.owner)
         )
           return [];
@@ -8917,7 +8925,13 @@ export class LifeWorld {
               signal: (tap) => this.tapSignal(tap),
               procession: (tap) => this.tapProcession(tap, minutes, zoom),
               carnival: (tap) => this.tapPeople({ ...tap, at: tap.carnival!.at }, 15, 8, 'party'),
-              candle: () => {},
+              candle: (tap) => {
+                if (!this.seasonalConfig?.visitors) return;
+                this.tapPeople({ ...tap, at: tap.candle!.at }, 6, 8, 'pray', 2.5, (target) => {
+                  const person = this.tapPerson(target.owner)?.person;
+                  return !!person && 'seasonal' in person && person.seasonal === 'visitors';
+                });
+              },
               tree: () => false,
               rice: () => false,
             }),

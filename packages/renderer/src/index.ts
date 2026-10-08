@@ -97,8 +97,9 @@ import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { TapQueue } from './life/tap';
 import { captureTap } from './life/tap-capture';
-import { tapSignalFixture, tapCarnivalFixture } from './life/tap-fixtures';
+import { tapSignalFixture, tapCarnivalFixture, tapCandleFixture } from './life/tap-fixtures';
 import { CarnivalBoosts, carnivalKey } from './life/carnival-boost';
+import { CandleFlare } from './life/candle-flare';
 import { normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
@@ -951,11 +952,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler);
   const taps = new TapQueue();
   let carnivalBoosts: CarnivalBoosts | undefined;
+  let candleFlare: CandleFlare | undefined;
   let tapEpoch = 0;
   const clearTaps = () => {
     tapEpoch++;
     taps.clear();
-    if (!lifeActive() || lost) carnivalBoosts = undefined;
+    if (!lifeActive() || lost) {
+      carnivalBoosts = undefined;
+      candleFlare = undefined;
+    }
   };
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
@@ -1125,6 +1130,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
       drawnLife = lifeView();
       for (const { tap, action } of taps.consume(drawnLife?.tapReceipts, drawnLife?.generation)) {
+        if (action === 'candle' && tap.candle)
+          candleFlare = new CandleFlare(
+            { at: tap.candle.at, seed: tap.candle.seed ?? 0 },
+            (now - start) / 1000,
+          );
         if (action === 'carnival') {
           if (tap.carnival?.record) {
             (carnivalBoosts ??= new CarnivalBoosts()).request(
@@ -1534,6 +1544,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (next === season) return;
     clearTaps();
     carnivalBoosts = undefined;
+    candleFlare = undefined;
     clearFolklore();
     lifeHover.clear();
     season = next;
@@ -1918,6 +1929,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         folklorePacket,
         cropPass,
         placement && carnivalBoosts ? carnivalBoosts.uniforms(time, placement.toCell) : undefined,
+        placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined,
       );
       drawDirty = false;
       fireworksPass(
@@ -2154,6 +2166,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const signal = placement && tapSignalFixture(fixtures, [at[0]!, at[1]!], placement.toCell);
       const carnival =
         placement && tapCarnivalFixture(fixtures, [at[0]!, at[1]!], placement.toCell);
+      const candle = placement && tapCandleFixture(fixtures, [at[0]!, at[1]!], placement.toCell);
       picker.click(point);
       if (!eligible || !target || !source || !raster) return;
       captureTap(
@@ -2166,6 +2179,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           cellMeters: metersPerCssPx(camera) * stepCell(schedule, step ?? 0).width,
           ...(signal && { signal }),
           ...(carnival && { carnival }),
+          ...(candle && { candle }),
         },
         {
           targets: target,

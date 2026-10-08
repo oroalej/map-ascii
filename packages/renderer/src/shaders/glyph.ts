@@ -53,6 +53,7 @@ import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
 import { festivePulseGlsl } from '../life/seasonal-installations';
 import { carnivalMotionGlsl } from '../life/carnival-motion';
+import { candleFlareGlsl } from '../life/candle-flare';
 import { hauntLampGlsl } from '../life/folklore-lighting';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -215,6 +216,7 @@ float effectTime(ivec2 cell, int channel) {
 }
 
 ${hauntLampGlsl}
+${candleFlareGlsl}
 float lampOn(int g, float time, vec2 sampleCell) {
   int state = g & 7;
   if (state == ${LampState.dead}) return 0.0;
@@ -229,7 +231,9 @@ float lampOn(int g, float time, vec2 sampleCell) {
   }
   if (state == ${LampState.candle}) {
     float beat = 5.0 + float(g >> 3) * 0.23;
-    return u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
+    float flicker = u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
+    float flare = candleFlareAt(g,sampleCell);
+    return flare>0.0 ? flicker*(1.0+flare) : flicker;
   }
   if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
   int seed = g >> 3;
@@ -530,6 +534,7 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
     vec3 wax = lampLit(daylit(vec3(0.95, 0.88, 0.69)), rainLight);
     vec3 amber = vec3(1.0, 0.64, 0.16);
     color = flame ? amber * mix(1.0, lit, darkness()) : mix(wax, amber * 0.7 * lit, darkness());
+    if(flame) color *= 1.0+candleFlareAt(info,vec2(cell)+0.5)*(1.0-darkness());
   }
   if (part == ${FixturePart.bunting}) {
     color = lampLit(daylit(u_fixturePaints[8 + min(info & 7, 2)] * buntingFold), rainLight);

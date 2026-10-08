@@ -3,6 +3,26 @@ import type { LifeTap } from './tap';
 import { carnivalKey } from './carnival-boost';
 import { carnivalRing } from '@atlas/shared';
 import { pointInside } from './occupancy';
+import { candleKey } from './candle-flare';
+
+export function tapCandleFixture(
+  fixtures: readonly StreetFixture[],
+  point: readonly [number, number],
+  toCell: (lng: number, lat: number) => [number, number],
+): LifeTap['candle'] {
+  const at = toCell(...point);
+  let closest = 1.5,
+    chosen: LifeTap['candle'];
+  for (const c of fixtures) {
+    if (c.kind !== 'season-candle') continue;
+    const p = toCell(...c.at),
+      distance = Math.hypot(p[0] - at[0], p[1] - at[1]);
+    if (distance > closest) continue;
+    closest = distance;
+    chosen = { key: candleKey(c), at: c.at, seed: c.seed };
+  }
+  return chosen;
+}
 
 export function tapCarnivalFixture(
   fixtures: readonly StreetFixture[],

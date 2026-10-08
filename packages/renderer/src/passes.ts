@@ -1,6 +1,7 @@
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
 import type { CarnivalUniforms } from './life/carnival-boost';
+import type { CandleFlareUniforms } from './life/candle-flare';
 import type { cropTint } from './glyphs/select';
 
 export type CropPass = { stage: number; progress: number } & ReturnType<typeof cropTint>;
@@ -979,6 +980,7 @@ export function glyphPass(
   folklore: FolklorePacket = EMPTY_FOLKLORE,
   crop: CropPass | null = null,
   carnival?: CarnivalUniforms,
+  candleFlare?: CandleFlareUniforms,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -1027,6 +1029,8 @@ export function glyphPass(
     u_accent: themeRes.uniforms.accent,
     u_shimmer: !reducedMotion,
     u_carnivalCount: reducedMotion ? 0 : (carnival?.count ?? 0),
+    u_candleFlare: reducedMotion ? [0, 0, 0, -1] : (candleFlare?.center ?? [0, 0, 0, -1]),
+    u_candleFlareRadius: candleFlare?.radius ?? [1, 1],
     ...(carnival && { u_carnivalCenters: carnival.centers, u_carnivalAxes: carnival.axes }),
     u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
     u_buntingWindDir: weather.wind?.dir ?? [0, 0],

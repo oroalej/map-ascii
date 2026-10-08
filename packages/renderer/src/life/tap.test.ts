@@ -4,9 +4,75 @@ import type { VisibleAgent } from './simulate';
 import { makeScenario, completeScenarioState } from './testing/scenarios';
 import { LifeWorld } from './simulate';
 import { continuityTile, continuityMover, left } from './testing/continuity';
-import { LifeLine } from './geometry';
+import { LifeLine, LifeBuilder } from './geometry';
 import { folkloreTile, folkloreConfig, folkloreCenter, calendar } from './testing/folklore';
-import { lngLatToTile } from '../raster/geometry';
+import { lngLatToTile, tileToLngLat } from '../raster/geometry';
+import { activityLevels } from './config';
+it('a candle tap reaches nearby seasonal grave visitors only while their season is active', () => {
+  const builder = new LifeBuilder();
+  builder.grave({ x: 2000, y: 2000 }, 'grave', 1);
+  builder.place({ x: 1000, y: 1000 }, 'worship', 30);
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.enableTaps();
+  world.setSeasons([
+    {
+      id: 'memorial',
+      visitors: {
+        label: 'Visitors',
+        share: 1,
+        per_grave_family: [2, 2],
+        max_per_tile: 8,
+        hours: [
+          [0, 1],
+          [23, 1],
+        ],
+      },
+    },
+  ]);
+  world.sync([{ key: 'grave', tile: left, life: builder.finish() }]);
+  world.step(0, undefined, 19, undefined, undefined, { season: 'memorial', rain: 0 });
+  const life = world.resident('grave')!,
+    at = tileToLngLat(left, { x: 2000, y: 2000 });
+  const levels = { ...activityLevels(1), season: { visitors: 1, congregations: 1 } };
+  expect(life.gatherers.some((g) => g.seasonal === 'visitors')).toBe(true);
+  world.visible(19, levels, at);
+  const request = vi.spyOn(life, 'requestEmoji');
+  const tap: LifeTap = {
+    id: 1,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at,
+    pointer: 'touch',
+    cellMeters: 1,
+    candle: { key: 'grave', at },
+  };
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { season: 'memorial', rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    [tap],
+  );
+  expect(request).toHaveBeenCalled();
+  expect(
+    request.mock.calls.every(
+      (c) => c[2] === 'pray' && life.gatherers.some((g) => g === c[0] && g.seasonal === 'visitors'),
+    ),
+  ).toBe(true);
+  request.mockClear();
+  world.step(0, undefined, 19, undefined, undefined, { season: null });
+  world.visible(19, levels, at);
+  world.step(0, undefined, 19, undefined, undefined, { season: null }, 1, 1.8, 1, undefined, [
+    { ...tap, frame: world.tapSources!.frame },
+  ]);
+  expect(request).not.toHaveBeenCalled();
+});
 it('a chosen carnival tap requests party from at most eight people within fifteen metres', () => {
   const f = vehicleWorld();
   const at = f.world.visible(19, 1, [0, 0]).find((a) => a.kind === 'person')!;

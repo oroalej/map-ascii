@@ -51,10 +51,19 @@ export function captureTap(
       reads,
       attachment,
       f.targets,
-      { col, row, sx, sy, cls: classId('life_person'), flags: CellBit.person },
-      (visible) => {
+      { col, row, sx, sy, cls: classId('life_person'), flags: CellBit.person, exposeCoarse: true },
+      (visible, coarse) => {
         if (visible === undefined || !current()) return;
-        done(visible ? tap : { ...tap, signal: undefined, carnival: undefined, candle: undefined });
+        done(
+          visible
+            ? tap
+            : {
+                ...tap,
+                signal: undefined,
+                carnival: undefined,
+                candle: coarse === classId('building_part') ? tap.candle : undefined,
+              },
+        );
       },
     );
   };

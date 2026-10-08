@@ -16,6 +16,23 @@ import {
   type VisibleLamp,
 } from './lights';
 import type { VisibleAgent } from './simulate';
+import { candleLamps } from './seasonal-candles';
+import { CandleFlare } from './candle-flare';
+import { glyphFragmentFor } from '../shaders/glyph';
+
+it('flare uniforms and the candle pool share their five-bit seed without repacking pools', () => {
+  const candle = { kind: 'season-candle' as const, at: [0, 0] as [number, number], seed: 91 };
+  const lamps = candleLamps([candle], 19),
+    flare = new CandleFlare(candle, 0);
+  const uniforms = flare.uniforms(1, (lng, lat) => [lng * 1e6, lat * 1e6])!;
+  expect(uniforms.center[3]).toBe(lamps[0]!.seed);
+  expect(lamps[0]!.state).toBe(LampState.candle);
+  const shader = glyphFragmentFor();
+  expect(shader).toContain('float flare = candleFlareAt(g,sampleCell)');
+  expect(shader).toContain('lampOn(lampG, lampClock, vec2(cell)+0.5)');
+  expect(shader).toContain('(g>>3)!=int(u_candleFlare.w+0.5)');
+  expect(flare.uniforms(3, () => [0, 0])).toBeUndefined();
+});
 
 const EXTENT = 4096;
 
