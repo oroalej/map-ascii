@@ -63,6 +63,21 @@ const osmTree = (lng: number, lat: number) => ({
 });
 
 describe('landcoverFeatures', () => {
+  it('routes curated farmland through the existing OSM layer and zoom band', () => {
+    const { features, warnings } = landcoverFeatures(
+      [],
+      [pack({ areas: [{ ring, cover: 'farmland' }] })],
+    );
+    expect(warnings).toEqual([]);
+    expect(features).toEqual([
+      {
+        type: 'Feature',
+        geometry: { type: 'Polygon', coordinates: [ring] },
+        properties: { id: 'cover:test/area-1', class: 'farmland' },
+        tippecanoe: { layer: 'landuse', minzoom: 12, maxzoom: 16 },
+      },
+    ]);
+  });
   it('turns trees, rows, and areas into features the way OSM ones are', () => {
     const { features, warnings } = landcoverFeatures(
       [],
