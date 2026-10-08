@@ -14,6 +14,7 @@ import {
   peddlerWeather,
 } from './testing/peddlers';
 import { bodyCorners } from './occupancy';
+import type { EmojiObservation } from './emoji';
 
 describe('isolated peddler population', () => {
   it('has no births without a local clock or outside inclusive/exclusive hours', () => {
@@ -142,6 +143,18 @@ describe('isolated peddler population', () => {
 });
 
 describe('world integration and ordinary isolation', () => {
+  it('clears peddler metadata when ordinary observations are reused', () => {
+    const world = new LifeWorld();
+    world.sync([{ key: 'pool', tile: peddlerTile, life: peddlerGeometry() }]);
+    const life = worldTiles(world).get('pool')!;
+    const input: Partial<EmojiObservation> = {
+      peddler: {} as NonNullable<EmojiObservation['peddler']>,
+    };
+    (
+      life as unknown as { clearEmojiInput(input: Partial<EmojiObservation>): void }
+    ).clearEmojiInput(input);
+    expect(input.peddler).toBeUndefined();
+  });
   it.each([0, 0.7])('leaves complete ordinary movers/scenes unchanged in rain %s', (rain) => {
     const entry = { key: 'peddler-isolation', tile: peddlerTile, life: peddlerGeometry() };
     const a = new LifeWorld(),

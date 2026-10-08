@@ -1,11 +1,14 @@
 /** Separate population: never enters ordinary mover RNG, scenes, queues or reservations. */
 import {
   DIALOGUE_WEATHER,
+  SPEECH_ZOOM,
+  type DialogueChoice,
+  type GreetingPeriods,
   type PeddlerConfig,
   type PeddlerHours,
   type PeddlerProp,
 } from '@atlas/shared';
-import { EXTENT, tileToLngLat } from '../raster/geometry';
+import { EXTENT, tileToLngLat, lngLatToTile } from '../raster/geometry';
 import type { TileId } from '../tiles';
 import { LifeLine, SITE_STRIDE, type LifeGeometry } from './geometry';
 import { hotAt, inHours, MAX_TILE_AGENTS, umbrellaShare } from './config';
@@ -22,11 +25,13 @@ import { FIGURE_SIZE_M, type PersonLook } from './people';
 import { random, hashString } from './random';
 import { isPeddlerCart, peddlerCartOffset, Paint, VEHICLES } from './vehicles';
 import type { LifeEnv, VisibleAgent } from './simulate';
+import { PeddlerCaller } from './peddler-calls';
+import { PeddlerEmojiObserver, type EmojiObservation } from './emoji';
 
 export type PeddlerSignals = Pick<
   LifeEnv,
-  'minutes' | 'rain' | 'sunAltitude' | 'windPreset' | 'wind'
-> & { wet: boolean };
+  'minutes' | 'rain' | 'sunAltitude' | 'windPreset' | 'wind' | 'pointer' | 'emojiView'
+> & { wet: boolean; zoom?: number };
 export function peddlerWindow(config: PeddlerConfig, minutes: number | undefined) {
   if (minutes === undefined) return;
   const hours = Array.isArray(config.hours) ? config.hours : [config.hours];
@@ -96,6 +101,10 @@ export type PeddlerOwner = {
   canopy: number;
   window?: PeddlerHours;
   waiting: number;
+  identity: string;
+  resumeToken: number;
+  sheltered: boolean;
+  shaded: boolean;
 };
 type Slot = {
   config: PeddlerConfig;
@@ -115,6 +124,7 @@ export type PeddlerContext = {
   ordinary: () => readonly Body[];
   held?: (owner: PeddlerOwner) => boolean;
   forget?: (owner: PeddlerOwner) => void;
+  generation?: number;
 };
 
 function clipSegment(
@@ -165,10 +175,18 @@ export class PeddlerPopulation {
   private readonly routes = new Map<PeddlerConfig, Route[]>();
   private ordinaryBodies: readonly Body[] = [];
   private readonly obstacles = new PolygonIndex();
+  readonly caller: PeddlerCaller;
+  readonly emoji = new PeddlerEmojiObserver();
   constructor(
     readonly context: PeddlerContext,
     readonly configs: readonly PeddlerConfig[],
+    readonly presentation: {
+      dialogue?: readonly DialogueChoice[];
+      periods?: Readonly<GreetingPeriods>;
+      emoji?: boolean;
+    } = {},
   ) {
+    this.caller = new PeddlerCaller(presentation.dialogue, presentation.periods);
     const { geo, perMeter } = context;
     for (let line = 0; line < geo.obstacleClosed.length; line++) {
       const points: Point[] = [];
@@ -198,8 +216,18 @@ export class PeddlerPopulation {
   clear() {
     for (const slot of this.slots) this.remove(slot);
   }
+  hide(owner?: PeddlerOwner) {
+    for (const p of owner ? [owner] : this.owners) {
+      this.caller.hide(p);
+      this.emoji.forget(p);
+    }
+  }
   private remove(slot: Slot) {
-    if (slot.owner) this.context.forget?.(slot.owner);
+    if (slot.owner) {
+      this.context.forget?.(slot.owner);
+      this.caller.forget(slot.owner);
+      this.emoji.forget(slot.owner);
+    }
     slot.owner = undefined;
   }
   private safe(config: PeddlerConfig, a: Point, b: Point, hx: number, hy: number, site?: Point) {
@@ -321,6 +349,22 @@ export class PeddlerPopulation {
     return true;
   }
   step(dt: number, env: PeddlerSignals, ordinaryPopulation: number) {
+    const pointer = env.pointer && lngLatToTile(this.context.tile, ...env.pointer.lngLat);
+    const hovered = (owner: PeddlerOwner) =>
+      !!pointer &&
+      (owner.x * this.context.perMeter - pointer.x) ** 2 +
+        (owner.y * this.context.perMeter - pointer.y) ** 2 <=
+        (3 * env.pointer!.cellMeters * this.context.perMeter) ** 2;
+    const eligible = (owner: PeddlerOwner) => {
+      if ((env.zoom ?? 0) < SPEECH_ZOOM) return false;
+      const bounds = env.emojiView?.bounds;
+      if (!bounds) return true;
+      const [lng, lat] = tileToLngLat(this.context.tile, {
+        x: owner.x * this.context.perMeter,
+        y: owner.y * this.context.perMeter,
+      });
+      return lng >= bounds[0] && lng <= bounds[2] && lat >= bounds[1] && lat <= bounds[3];
+    };
     this.ordinaryBodies = this.context.ordinary();
     let count = this.owners.length;
     for (const slot of this.slots) {
@@ -362,6 +406,10 @@ export class PeddlerPopulation {
             canopy: 0,
             window: window.window,
             waiting: 0,
+            identity: `${this.context.generation ?? 0}:${this.context.tile.z}/${this.context.tile.x}/${this.context.tile.y}:${slot.config.id}:${slot.seed}:${slot.births}`,
+            resumeToken: 0,
+            sheltered: false,
+            shaded: false,
           };
           if (this.fits(owner, owner)) {
             slot.owner = owner;
@@ -373,6 +421,7 @@ export class PeddlerPopulation {
       const owner = slot.owner;
       if (!owner) continue;
       if (!window || slot.rank >= share) owner.leaving = true;
+      this.caller.step(owner, dt, env, eligible(owner), hovered(owner));
       if (this.context.held?.(owner)) continue;
       owner.effectClock += dt;
       owner.window = window?.window ?? owner.window;
@@ -391,6 +440,7 @@ export class PeddlerPopulation {
         owner.nextCall = 40 + owner.rng() * 50;
         owner.callToken++;
         owner.lastCall = owner.effectClock;
+        this.caller.step(owner, 0, env, eligible(owner), hovered(owner));
         continue;
       }
       const travel = dt * 1.2 * 0.7 * (env.wet && owner.canopy > 0 ? 0.8 : 1),
@@ -435,6 +485,40 @@ export class PeddlerPopulation {
         owner.hy = chosen.route.hy * chosen.dir;
       }
     }
+    const observations: EmojiObservation[] = this.owners.map((owner) => {
+      const clock = peddlerWindow(owner.config, env.minutes),
+        t = this.caller.state(owner);
+      return {
+        owner,
+        subject: 'person',
+        figure: 'adult',
+        eligible: this.presentation.emoji !== false && eligible(owner),
+        speaking: !!this.caller.cue(owner, env.zoom),
+        peddler: {
+          goods: owner.config.id,
+          cart: isPeddlerCart(owner.config.prop),
+          call: owner.config.call ?? 'voice',
+          progress: clock?.progress ?? 1,
+          elapsed: clock?.elapsed ?? 0,
+          dawn: (owner.window?.from ?? 24) < 6,
+          wrappingNight:
+            !!owner.window &&
+            owner.window.from > owner.window.to &&
+            (env.minutes ?? 1440) < owner.window.to * 60,
+          leaving: owner.leaving,
+          umbrella: owner.canopy > 0,
+          shade: owner.shaded,
+          shelter: owner.sheltered,
+          waitingNear: !!owner.config.near && owner.waiting > 3,
+          sinceCall: owner.effectClock - owner.lastCall,
+          resumeToken: owner.resumeToken,
+          callToken: t.serial,
+          hover: t.event === 'hover',
+          heat: owner.config.emoji?.heat,
+        },
+      };
+    });
+    this.emoji.step(dt, env, observations);
   }
   visible(owner: PeddlerOwner, env: PeddlerSignals): VisibleAgent {
     const { tile, perMeter } = this.context,
@@ -468,6 +552,8 @@ export class PeddlerPopulation {
       side: at(owner.x - owner.hy, owner.y + owner.hx),
       people: [look],
       flap: look.flap,
+      speech: this.caller.cue(owner, env.zoom),
+      emoji: (env.zoom ?? 0) >= SPEECH_ZOOM ? this.emoji.cue(owner) : undefined,
       paint: isPeddlerCart(prop)
         ? VEHICLES[prop].paints[owner.seed % VEHICLES[prop].paints.length]!
         : Paint.orange,

@@ -4,9 +4,12 @@ import { dialogueChoices, SCENE_PROFILES } from '@atlas/shared';
 import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
+import { peddlerFixture, peddlerConfig, peddlerWeather } from './testing/peddlers';
+import { PeddlerCaller } from './peddler-calls';
 
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on dialogue edits.
 import.meta.glob('../../../content/cities/*/dialogue.json');
+import.meta.glob('../../../content/cities/*/city.json');
 const { packs, errors } = await loadCityPacks();
 if (errors.length) throw new Error(JSON.stringify(errors));
 const entries = packs.flatMap(({ city, dialogue }) =>
@@ -52,6 +55,12 @@ it.each(entries)(
       figures:
         entry.conditions?.audience === 'adult-child' ? ['adult', 'child'] : ['adult', 'adult'],
       ...(sceneOwned && { profiles: [entry.profile!] }),
+      ...(entry.profile === 'peddler-call' && {
+        peddler: {
+          goods: entry.conditions?.goods?.[0] ?? 'sample-goods',
+          event: entry.conditions?.event as 'hover' | 'leaving' | undefined,
+        },
+      }),
     };
     context.figures = Array.from({ length: slots }, (_, i) => context.figures[i] ?? 'adult');
     // Search the pack's legal clock window rather than assuming Naga's period boundaries.
@@ -62,7 +71,43 @@ it.each(entries)(
     context.minutes = minutes!;
     expect(dialogueEligible(entry, context, periods)).toBe(true);
     const seen = new Map<number, number>();
-    if (sceneOwned) {
+    if (entry.profile === 'peddler-call') {
+      const { population } = peddlerFixture([{ ...peddlerConfig, id: context.peddler!.goods }]);
+      population.step(0, peddlerWeather, 0);
+      const owner = population.owners[0]!;
+      const caller = new PeddlerCaller([entry], periods);
+      caller.step(owner, 0, { ...peddlerWeather, ...context }, true, false);
+      owner.callToken++;
+      owner.resumeToken += Number(weather === 'clearing');
+      owner.leaving = context.peddler!.event === 'leaving';
+      caller.step(
+        owner,
+        0,
+        { ...peddlerWeather, ...context },
+        true,
+        context.peddler!.event === 'hover',
+      );
+      const cue = caller.cue(owner);
+      expect(cue?.exchangeId).toBe(entry.id);
+      seen.set(cue!.line, cue!.member!);
+      expect(dialogueEligible(entry, { ...context, peddler: undefined }, periods)).toBe(false);
+      if (entry.conditions?.goods)
+        expect(
+          dialogueEligible(
+            entry,
+            { ...context, peddler: { ...context.peddler!, goods: 'unrelated-goods' } },
+            periods,
+          ),
+        ).toBe(false);
+      if (entry.conditions?.event)
+        expect(
+          dialogueEligible(
+            entry,
+            { ...context, peddler: { ...context.peddler!, event: undefined } },
+            periods,
+          ),
+        ).toBe(false);
+    } else if (sceneOwned) {
       const host = new SceneSpeech(42, [entry], periods);
       const scene = {
         key: {},

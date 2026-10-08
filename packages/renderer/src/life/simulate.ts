@@ -37,6 +37,7 @@ import {
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import {
+  EMOJI,
   EmojiObserver,
   EmojiMemory,
   type EmojiCue,
@@ -6039,6 +6040,7 @@ export class TileLife {
   }
 
   private clearEmojiInput(input: Partial<EmojiObservation>) {
+    input.peddler = undefined;
     input.owner = undefined;
     input.mover = undefined;
     input.gatherer = undefined;
@@ -8579,7 +8581,9 @@ export class LifeWorld {
   private peddlerConfig: readonly PeddlerConfig[] = [];
   private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
   private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
+  private peddlerGeneration = 0;
   setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    this.peddlerGeneration++;
     for (const population of this.peddlers.values()) population.clear();
     this.peddlers.clear();
     this.peddlerConfig = config ?? [];
@@ -8596,7 +8600,12 @@ export class LifeWorld {
         this.peddlers.delete(life);
       }
     this.peddlerWeather = env;
-    if (zoom !== undefined && zoom < LIFE_ZOOM.person[0]) return;
+    if (zoom !== undefined && zoom < LIFE_ZOOM.person[0]) {
+      for (const population of this.peddlers.values()) population.hide();
+      return;
+    }
+    const active = new Set(this.tiles.values());
+    for (const [life, population] of this.peddlers) if (!active.has(life)) population.hide();
     for (const [key, life] of this.tiles) {
       let population = this.peddlers.get(life);
       if (!population) {
@@ -8606,6 +8615,7 @@ export class LifeWorld {
             geo: life.geo,
             perMeter: life.perMeter,
             seed: hashString(key),
+            generation: this.peddlerGeneration,
             held: (owner) => this.inspection?.held(owner) ?? false,
             forget: (owner) => this.inspection?.forgetOwner(owner, this.clock),
             safe: (from, to) => {
@@ -8663,10 +8673,15 @@ export class LifeWorld {
             },
           },
           this.peddlerConfig,
+          {
+            dialogue: this.momentOptions?.dialogue,
+            periods: this.momentOptions?.periods,
+            emoji: this.emojiObserver,
+          },
         );
         this.peddlers.set(life, population);
       }
-      population.step(dt, { ...env, wet: life.scenes.raining }, life.population);
+      population.step(dt, { ...env, zoom, wet: life.scenes.raining }, life.population);
     }
   }
   private readonly folklore: FolkloreObserver;
@@ -9351,6 +9366,7 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.peddlerGeneration++;
     for (const population of this.peddlers.values()) population.clear();
     this.peddlers.clear();
     this.peddlerWeather = undefined;
@@ -12810,15 +12826,22 @@ export class LifeWorld {
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
     const withPeddlers = (admitted: VisibleAgent[]) => {
       if (!shows('person') || !this.peddlerWeather) return admitted;
+      let speeches = admitted.filter((a) => a.speech).length,
+        emojis = admitted.filter((a) => a.emoji).length;
       for (const life of this.tiles.values()) {
         const population = this.peddlers.get(life);
         if (!population) continue;
         for (const owner of population.owners) {
-          if (admitted.length >= maxAgents) return admitted;
-          if (!this.owns(life, { x: owner.x * life.perMeter, y: owner.y * life.perMeter }))
+          if (
+            admitted.length >= maxAgents ||
+            !this.owns(life, { x: owner.x * life.perMeter, y: owner.y * life.perMeter })
+          ) {
+            population.hide(owner);
             continue;
+          }
           const agent = population.visible(owner, {
             ...this.peddlerWeather,
+            zoom,
             wet: life.scenes.raining,
           });
           if (
@@ -12829,6 +12852,14 @@ export class LifeWorld {
               agent.lat > bounds[3])
           )
             continue;
+          if (agent.speech) {
+            if (speeches >= MOMENTS.scene.capacity) agent.speech = undefined;
+            else speeches++;
+          }
+          if (agent.emoji) {
+            if (emojis >= EMOJI.capacity) agent.emoji = undefined;
+            else emojis++;
+          }
           admitted.push(inspection ? inspection.present(owner, agent) : agent);
         }
       }

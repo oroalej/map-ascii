@@ -21,6 +21,7 @@ export const DialogueProfile = z.enum([
   'companion',
   'play',
   'place-reaction',
+  'peddler-call',
 ]);
 export type DialogueProfile = z.infer<typeof DialogueProfile>;
 export const DialogueAnchor = z.enum(['monument', 'fountain', 'plaza', 'stall', 'stop', 'seat']);
@@ -43,7 +44,12 @@ export const DialogueConditions = z
       ])
       .optional(),
     audience: z.enum(['adults', 'adult-child']).optional(),
-    event: z.enum(['arrival', 'catch', 'pass']).optional(),
+    event: z.enum(['arrival', 'catch', 'pass', 'hover', 'leaving']).optional(),
+    goods: z
+      .array(z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/))
+      .min(1)
+      .refine((ids) => new Set(ids).size === ids.length, 'duplicate goods')
+      .optional(),
   })
   .strict();
 export type DialogueConditions = z.infer<typeof DialogueConditions>;
@@ -68,6 +74,32 @@ export const GreetingPeriods = z
   });
 export type GreetingPeriods = z.infer<typeof GreetingPeriods>;
 const language = z.object({ code: LanguageCode, label: z.string().min(1).max(32) }).strict();
+
+function peddlerMetadata(
+  entry: {
+    profile?: DialogueProfile;
+    kind: string;
+    delivery?: DialogueDelivery;
+    conditions?: DialogueConditions;
+    speakers?: number[];
+  },
+  count: number,
+) {
+  const peddler = entry.profile === 'peddler-call';
+  if (!peddler)
+    return (
+      !entry.conditions?.goods && !['hover', 'leaving'].includes(entry.conditions?.event ?? '')
+    );
+  return (
+    entry.kind === 'talk' &&
+    entry.delivery === 'utterance' &&
+    count === 1 &&
+    entry.speakers?.length === 1 &&
+    entry.speakers[0] === 0 &&
+    (!entry.conditions?.event || ['hover', 'leaving'].includes(entry.conditions.event)) &&
+    (!entry.conditions?.weather || ['heat', 'rain', 'clearing'].includes(entry.conditions.weather))
+  );
+}
 
 /** Curated simulated speech. Missing catalogs are supported; incomplete translations are not. */
 export function dialogueCatalog(languages?: readonly string[]) {
@@ -125,6 +157,12 @@ export function dialogueCatalog(languages?: readonly string[]) {
           });
         ids.add(exchange.id);
         const count = exchange.lines.length;
+        if (!peddlerMetadata(exchange, count))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['exchanges', i],
+            message: 'invalid peddler metadata',
+          });
         const delivery = dialogueDelivery(exchange);
         const slots =
           exchange.kind === 'look'
@@ -222,15 +260,27 @@ export const RuntimeDialogueCatalog = z
       .min(1)
       .max(140),
   })
-  .strict();
+  .strict()
+  .superRefine((catalog, ctx) => {
+    catalog.exchanges.forEach((entry, i) => {
+      if (!peddlerMetadata(entry, entry.lines.length))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['exchanges', i],
+          message: 'invalid peddler metadata',
+        });
+    });
+  });
 export type RuntimeDialogueCatalog = z.infer<typeof RuntimeDialogueCatalog>;
 
 /** Text-free worker configuration; language switches never reach the simulation. */
-export const DialogueChoice = z.object({
-  id: z.string(),
-  kind: DialogueKind,
-  ...metadata,
-  period: GreetingPeriod.optional(),
-  turns: z.number().int().min(1).max(3),
-});
+export const DialogueChoice = z
+  .object({
+    id: z.string(),
+    kind: DialogueKind,
+    ...metadata,
+    period: GreetingPeriod.optional(),
+    turns: z.number().int().min(1).max(3),
+  })
+  .refine((entry) => peddlerMetadata(entry, entry.turns), 'invalid peddler metadata');
 export type DialogueChoice = z.infer<typeof DialogueChoice>;

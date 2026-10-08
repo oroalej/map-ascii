@@ -2659,6 +2659,592 @@
         "weather": "clearing"
       },
       "delivery": "utterance"
+    },
+    {
+      "id": "peddler-taho-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Tahoo!! Tahoo!!",
+          "en": "Taho! Taho!",
+          "fil": "Tahoo!! Tahoo!!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "How is taho made, and where?",
+          "url": "https://lifestyle.inquirer.net/208164/how-is-taho-made-and-where/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["taho"]
+      }
+    },
+    {
+      "id": "peddler-taho-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Taho kamo diyan!",
+          "en": "Taho for you there!",
+          "fil": "Taho kayo diyan!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "How is taho made, and where?",
+          "url": "https://lifestyle.inquirer.net/208164/how-is-taho-made-and-where/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["taho"]
+      }
+    },
+    {
+      "id": "peddler-balut-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Baluuut! Penoy!",
+          "en": "Balut! Penoy eggs!",
+          "fil": "Baluuut! Penoy!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "The authentic balut: history, culture, and economy",
+          "url": "https://doi.org/10.1186/s42779-019-0020-8",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["balut"]
+      }
+    },
+    {
+      "id": "peddler-balut-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Balut! Mainit pa!",
+          "en": "Balut! Still warm!",
+          "fil": "Balut! Mainit pa!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "The authentic balut: history, culture, and economy",
+          "url": "https://doi.org/10.1186/s42779-019-0020-8",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["balut"]
+      }
+    },
+    {
+      "id": "peddler-sorbetes-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Sorbetes! Sorbetes!",
+          "en": "Ice cream! Ice cream!",
+          "fil": "Sorbetes! Sorbetes!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Dirty ice cream gets a make-over",
+          "url": "https://www.philstar.com/other-sections/starweek-magazine/2008/04/06/54243/dirty-ice-cream-gets-make-over/amp/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["sorbetes"]
+      }
+    },
+    {
+      "id": "peddler-sorbetes-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Sorbetes, suki!",
+          "en": "Ice cream, my regulars!",
+          "fil": "Sorbetes, suki!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Dirty ice cream gets a make-over",
+          "url": "https://www.philstar.com/other-sections/starweek-magazine/2008/04/06/54243/dirty-ice-cream-gets-make-over/amp/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["sorbetes"]
+      }
+    },
+    {
+      "id": "peddler-bote-dyaryo-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Bote, dyaryo, bakal, plastik!",
+          "en": "Bottles, newspapers, metal, plastic!",
+          "fil": "Bote, dyaryo, bakal, plastik!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Solid Waste Management: Guide for Teens",
+          "url": "https://www.nestle.com.ph/sites/g/files/pydnoa366/files/2021-06/Solid%20Waste%20Management%20-%20Guide%20for%20Teens%202.5.pdf",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["bote-dyaryo"]
+      }
+    },
+    {
+      "id": "peddler-bote-dyaryo-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Bote! Dyaryo! Bakal!",
+          "en": "Bottles! Newspapers! Metal!",
+          "fil": "Bote! Dyaryo! Bakal!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Solid Waste Management: Guide for Teens",
+          "url": "https://www.nestle.com.ph/sites/g/files/pydnoa366/files/2021-06/Solid%20Waste%20Management%20-%20Guide%20for%20Teens%202.5.pdf",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["bote-dyaryo"]
+      }
+    },
+    {
+      "id": "peddler-fishball-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Fishball! Kikiam! Kwek-kwek!",
+          "en": "Fish balls! Kikiam! Battered quail eggs!",
+          "fil": "Fishball! Kikiam! Kwek-kwek!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Eating through Manila’s mobile street food vendors",
+          "url": "https://afn.netlify.app/en/articles/guide--eating-your-way-through-manila-s-mobile-street-food-vendo/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["fishball"]
+      }
+    },
+    {
+      "id": "peddler-fishball-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Tusok na, suki!",
+          "en": "Pick a skewerful, my regular!",
+          "fil": "Tusok na, suki!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Eating through Manila’s mobile street food vendors",
+          "url": "https://afn.netlify.app/en/articles/guide--eating-your-way-through-manila-s-mobile-street-food-vendo/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["fishball"]
+      }
+    },
+    {
+      "id": "peddler-kakanin-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Suman! Puto! Biko!",
+          "en": "Suman! Puto! Biko rice cakes!",
+          "fil": "Suman! Puto! Biko!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Department of Agriculture Bicol native delicacies procurement",
+          "url": "https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["kakanin"]
+      }
+    },
+    {
+      "id": "peddler-kakanin-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Suman! Ibos! Puto digdi!",
+          "en": "Suman! Ibos! Puto here!",
+          "fil": "Suman! Ibos! Puto rito!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Department of Agriculture Bicol native delicacies procurement",
+          "url": "https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["kakanin"]
+      }
+    },
+    {
+      "id": "peddler-takatak-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Takatak-takatak!",
+          "en": "Tap-tap! The candy box calls.",
+          "fil": "Takatak-takatak!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Naga Ordinance 2021-004: regulated tobacco retail",
+          "url": "https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/",
+          "note": "Context for the trade, not attestation of this exact sentence. Candy-only takatak is a conservative simulation choice under regulated retail; no blanket street-selling ban is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["takatak"]
+      }
+    },
+    {
+      "id": "peddler-takatak-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Kendi, suki! Kendi!",
+          "en": "Candy, my regular! Candy!",
+          "fil": "Kendi, suki! Kendi!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Naga Ordinance 2021-004: regulated tobacco retail",
+          "url": "https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/",
+          "note": "Context for the trade, not attestation of this exact sentence. Candy-only takatak is a conservative simulation choice under regulated retail; no blanket street-selling ban is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["takatak"]
+      }
+    },
+    {
+      "id": "peddler-heat-sorbetes",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Sorbetes! Malipot!",
+          "en": "Ice cream! Nice and cold!",
+          "fil": "Sorbetes! Malamig!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "Dirty ice cream gets a make-over",
+          "url": "https://www.philstar.com/other-sections/starweek-magazine/2008/04/06/54243/dirty-ice-cream-gets-make-over/amp/",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["sorbetes"],
+        "weather": "heat"
+      }
+    },
+    {
+      "id": "peddler-rain-balut",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Balut, mainit pa sa uran!",
+          "en": "Balut, still warm in the rain!",
+          "fil": "Balut, mainit pa sa ulan!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        },
+        {
+          "title": "The authentic balut: history, culture, and economy",
+          "url": "https://doi.org/10.1186/s42779-019-0020-8",
+          "note": "Generic Philippine trade or goods context; no Naga-specific schedule survey or exact quotation is claimed."
+        }
+      ],
+      "conditions": {
+        "goods": ["balut"],
+        "weather": "rain"
+      }
+    },
+    {
+      "id": "peddler-clearing",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Tapos na an uran. Bili na!",
+          "en": "The rain has stopped. Come buy!",
+          "fil": "Tapos na ang ulan. Bili na!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        }
+      ],
+      "conditions": {
+        "weather": "clearing"
+      }
+    },
+    {
+      "id": "peddler-heat-tired",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Hay, kainit! Bili na, suki!",
+          "en": "Whew, so hot! Come buy, my regular!",
+          "fil": "Hay, ang init! Bili na, suki!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        }
+      ],
+      "conditions": {
+        "weather": "heat"
+      }
+    },
+    {
+      "id": "peddler-hover-1",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Bili na, suki!",
+          "en": "Come buy, my regular!",
+          "fil": "Bili na, suki!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        }
+      ],
+      "conditions": {
+        "event": "hover"
+      }
+    },
+    {
+      "id": "peddler-hover-2",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Madya digdi, suki!",
+          "en": "Come over here, my regular!",
+          "fil": "Halika rito, suki!"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        }
+      ],
+      "conditions": {
+        "event": "hover"
+      }
+    },
+    {
+      "id": "peddler-leaving",
+      "kind": "talk",
+      "profile": "peddler-call",
+      "delivery": "utterance",
+      "speakers": [0],
+      "lines": [
+        {
+          "bcl": "Puli na ako.",
+          "en": "I’m heading home.",
+          "fil": "Pauwi na ako."
+        }
+      ],
+      "sources": [
+        {
+          "title": "Standard Bikol — Peace Corps grammatical reference",
+          "url": "https://files.eric.ed.gov/fulltext/ED018772.pdf",
+          "note": "Original illustrative composition, not a quotation or native-speaker approval. Goods names and some common calls retain Filipino loanwords."
+        }
+      ],
+      "conditions": {
+        "event": "leaving"
+      }
     }
   ]
 }
