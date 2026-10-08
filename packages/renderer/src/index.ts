@@ -953,6 +953,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const taps = new TapQueue();
   let carnivalBoosts: CarnivalBoosts | undefined;
   let candleFlare: CandleFlare | undefined;
+  let tapPointer = { revision: 0, left: false };
+  let feedTrackingUntil = 0;
   let tapEpoch = 0;
   const clearTaps = () => {
     tapEpoch++;
@@ -960,6 +962,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!lifeActive() || lost) {
       carnivalBoosts = undefined;
       candleFlare = undefined;
+      feedTrackingUntil = 0;
     }
   };
   /** The procession last reported (`procession` event), as "id live". */
@@ -1113,6 +1116,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             effectCellMeters: (metersPerCssPx(camera) * Math.min(cellDev().w, cellDev().h)) / dpr,
             ...(pointer ? { pointer } : {}),
             ...(tapBatch && { taps: tapBatch }),
+            ...(now < feedTrackingUntil ? { tapPointer } : {}),
           },
           visible: [
             camera.zoom,
@@ -2132,6 +2136,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const zoom = Math.min(limits.maxZoom, Math.max(limits.minZoom, camera.zoom + delta));
       applyCamera(zoomAround(camera, zoom, anchor), true);
     }),
+    pointerActivity: (left) => {
+      tapPointer = { revision: tapPointer.revision + 1, left };
+    },
     hover: (point) => {
       lastPointerInput = performance.now();
       lifeHover.pointer(flight ? null : point);
@@ -2176,6 +2183,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           frame: source.tapFrame!,
           at: [at[0]!, at[1]!],
           pointer: pointerType,
+          pointerRevision: tapPointer.revision,
           cellMeters: metersPerCssPx(camera) * stepCell(schedule, step ?? 0).width,
           ...(signal && { signal }),
           ...(carnival && { carnival }),
@@ -2218,6 +2226,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           drawnLife?.generation === source.generation,
         (tap) => {
           taps.add(tap);
+          feedTrackingUntil = performance.now() + 20_000;
           drawDirty = true;
         },
       );

@@ -18,6 +18,7 @@ export type LifeTap = {
   frame: number;
   at: readonly [number, number];
   pointer: string;
+  pointerRevision?: number;
   cellMeters: number;
   agent?: number;
   folklore?: string;

@@ -10,6 +10,8 @@ export type InputIntents = {
   zoom: (delta: number, anchor: [number, number]) => void;
   /** The mouse is over (x, y) CSS pixels from the canvas's top left, or has left (null). */
   hover: (point: [number, number] | null) => void;
+  /** New idle mouse activity, distinct from pointerdown clearing hover. */
+  pointerActivity?: (left: boolean) => void;
   /** A click or tap at (x, y): a press and release that barely moved. */
   tap: (point: [number, number], pointerType: string) => void;
 };
@@ -69,6 +71,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   const onPointerMove = (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) {
       if (e.pointerType === 'mouse' && pointers.size === 0) {
+        intents.pointerActivity?.(false);
         const p = local(e);
         intents.hover([p.x, p.y]);
       }
@@ -112,7 +115,10 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   };
 
   const onPointerLeave = (e: PointerEvent) => {
-    if (e.pointerType === 'mouse' && pointers.size === 0) intents.hover(null);
+    if (e.pointerType === 'mouse' && pointers.size === 0) {
+      intents.pointerActivity?.(true);
+      intents.hover(null);
+    }
   };
 
   const onWheel = (e: WheelEvent) => {

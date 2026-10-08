@@ -36,6 +36,7 @@ import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import { EventTaps } from './event-taps';
 import { ProcessionGlyph } from './procession-glyphs';
+import { feedSpot, feedCrumbs, type FeedPoint, type TapPointer } from './feed';
 import {
   TapSources,
   TapReactions,
@@ -595,6 +596,7 @@ export type Mover = {
 export type LifeEnv = {
   /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
   pointer?: { lngLat: readonly [number, number]; cellMeters: number };
+  tapPointer?: TapPointer;
   diagnostics?: LifeDiagnostics;
   /** Actual render scale, independent of synthetic movement clearance in benchmarks. */
   effectCellMeters?: number;
@@ -821,6 +823,7 @@ export type Flock = {
   perched: boolean;
   /** Approaching a prepared suitable ground patch, and settled there (birds.ts `ground`). */
   landing: boolean;
+  tapLanding?: true;
   landed: boolean;
   /** Feeding rather than resting during a ground visit. */
   feeding: boolean;
@@ -920,6 +923,7 @@ export class TileLife {
   tapRequests?: TapReactions;
   private tapDash?: WeakMap<Mover, number>;
   private tapWake?: WeakMap<Mover, number>;
+  tapFeed?: FeedPoint;
   wake(m: Mover, clock: number) {
     m.pause = 0;
     m.lying = m.grooming = false;
@@ -7862,6 +7866,7 @@ export class TileLife {
    * one of a habitat its species favors.
    */
   private pickDestination(flock: Flock, { prepare = true }: { prepare?: boolean } = {}) {
+    delete flock.tapLanding;
     const roosts = this.geo.roosts.length / 2;
     const perches = this.geo.perches.length / 2;
     const spec = BIRD_SPECIES[flock.species];
@@ -7882,6 +7887,93 @@ export class TileLife {
   }
 
   /** Stage a complete safe layout before changing the flock or any of its bird identities. */
+  flushFlock(flock: Flock, zoom = 19) {
+    this.beginPointerTakeoff(flock);
+    this.beginDeparture(flock);
+    this.recordStartle(flock, this.emoji.observes(zoom));
+    flock.perched = flock.landed = flock.landing = flock.feeding = false;
+    flock.perch = flock.home = -1;
+    flock.landingAttempted = false;
+    flock.landingBlend = 0;
+    flock.scatter = PERCH.scatter;
+    delete flock.tapLanding;
+    flock.stay = 20 + (flock.birds[0]?.phase ?? 0) * 10;
+    let closest = Infinity;
+    for (let i = 0; i < this.geo.roosts.length / 2; i++) {
+      const distance = Math.hypot(
+        this.geo.roosts[i * 2]! - flock.x,
+        this.geo.roosts[i * 2 + 1]! - flock.y,
+      );
+      if (distance < closest) {
+        closest = distance;
+        flock.roost = i;
+      }
+    }
+  }
+  scatterFeed(at: Point, tap: LifeTap, clock: number) {
+    const terrain = (this.forageTerrain ??= complete(
+      prepareForageTerrainSteps(this.geo, this.perMeter, this.forageMode),
+    ));
+    if (!forageable('pigeon', Habitat.park, at.x, at.y, terrain, this.perMeter)) return false;
+    this.tapFeed = {
+      ...at,
+      until: clock + 20,
+      inhibited: tap.pointer === 'mouse',
+      revision: tap.pointerRevision ?? 0,
+      cellMeters: tap.cellMeters,
+      seed: hashString(`${tap.at[0]}/${tap.at[1]}`),
+    };
+    return true;
+  }
+  /** Feed targets use fixed samples; saved tree-return anchors remain exact in prepareLanding. */
+  prepareFeedLanding(flock: Flock, at: Point) {
+    const spec = FORAGE_SPECIES[flock.species],
+      terrain = this.forageTerrain;
+    if (!spec || !terrain) return false;
+    const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
+    const ok = (p: Point) => {
+      this.forageCheckCount++;
+      return (
+        forageable(flock.species, habitat, p.x, p.y, terrain, this.perMeter) &&
+        (!this.forageGuard || this.forageGuard(p, p))
+      );
+    };
+    const radius = Math.min(2, spec.patch) * this.perMeter;
+    const center = feedSpot(at, radius, ok);
+    if (!center) return false;
+    const placements: Point[] = [];
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!,
+        angle = bird.phase * 2 * Math.PI + i * 2.399963229728653;
+      const desired = {
+        x: center.x + Math.cos(angle) * radius * 0.5,
+        y: center.y + Math.sin(angle) * radius * 0.5,
+      };
+      const fits = (p: Point) => Math.hypot(p.x - at.x, p.y - at.y) <= radius && ok(p);
+      const p = fits(desired) ? desired : feedSpot(center, radius, fits, angle);
+      if (!p) return false;
+      placements.push({ x: p.x - center.x, y: p.y - center.y });
+    }
+    if (flock.perched || flock.landed) this.beginPointerTakeoff(flock);
+    this.beginDeparture(flock);
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!,
+        p = placements[i]!;
+      bird.gx = bird.tx = p.x;
+      bird.gy = bird.ty = p.y;
+      bird.face = bird.phase * 2 * Math.PI;
+      bird.wait = 0;
+    }
+    flock.lx = center.x;
+    flock.ly = center.y;
+    flock.landing = true;
+    flock.tapLanding = true;
+    flock.landingBlend = 0;
+    flock.landed = flock.perched = false;
+    flock.perch = -1;
+    flock.home = -1;
+    return true;
+  }
   private prepareLanding(flock: Flock, preferred?: Point): boolean {
     flock.landingAttempted = true;
     const spec = FORAGE_SPECIES[flock.species];
@@ -7956,6 +8048,7 @@ export class TileLife {
     flock.lx = centre.x;
     flock.ly = centre.y;
     flock.landing = true;
+    delete flock.tapLanding;
     flock.landingBlend = 0;
     flock.landed = flock.perched = false;
     flock.perch = -1;
@@ -8121,10 +8214,40 @@ export class TileLife {
       pointer.cellMeters = env.pointer.cellMeters;
       this.pointerInside ??= new WeakSet();
     }
+    let feed = this.tapFeed;
+    if (feed && (env?.emojiTime?.clock ?? env?.clock ?? this.time) >= feed.until)
+      this.tapFeed = feed = undefined;
+    if (feed?.inhibited && env?.tapPointer && env.tapPointer.revision > feed.revision) {
+      const reach =
+        Math.max(
+          ...this.flocks
+            .filter((f) => !!FORAGE_SPECIES[f.species])
+            .map((f) => BIRD_SPECIES[f.species].wary + this.flockExtent(f) / this.perMeter),
+          BIRD_POINTER.cells * feed.cellMeters,
+        ) * this.perMeter;
+      if (
+        env.tapPointer.left ||
+        (pointer && Math.hypot(pointer.x - feed.x, pointer.y - feed.y) > reach)
+      )
+        feed.inhibited = false;
+    }
     for (const flock of this.flocks) {
       if (pointer) pointer.radius = undefined;
       if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (
+        feed &&
+        !feed.inhibited &&
+        FORAGE_SPECIES[flock.species] &&
+        !flock.landing &&
+        !flock.landed &&
+        !flock.takeoff &&
+        flock.scatter <= 0 &&
+        !flock.birds.some((b) => !!b.flight) &&
+        Math.hypot(flock.x - feed.x, flock.y - feed.y) <= FORAGE.reach * this.perMeter &&
+        (!pointer || !this.pointerNear(flock, pointer, feed, true))
+      )
+        this.prepareFeedLanding(flock, feed);
       if (flock.takeoff) {
         flock.takeoff.age += dt;
         if (flock.takeoff.age >= flock.takeoff.seconds) {
@@ -8200,7 +8323,7 @@ export class TileLife {
       let to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
-          : flock.landing && count > 0
+          : flock.landing && (count > 0 || flock.tapLanding)
             ? { x: flock.lx, y: flock.ly }
             : undefined;
       if (pointer && to && this.pointerNear(flock, pointer, to, true)) {
@@ -8911,6 +9034,31 @@ export class LifeWorld {
       if (++count >= 8) break;
     }
   }
+  private tapTree(tap: LifeTap, zoom: number) {
+    let selected: { life: TileLife; flock: Flock; distance: number } | undefined;
+    for (const life of this.tiles.values()) {
+      const at = lngLatToTile(life.tile, ...tap.at);
+      for (const flock of life.flocks) {
+        if (!flock.perched || !this.owns(life, flock)) continue;
+        const distance = Math.hypot(flock.x - at.x, flock.y - at.y) / life.perMeter;
+        if (distance <= 1.5 * tap.cellMeters && (!selected || distance < selected.distance))
+          selected = { life, flock, distance };
+      }
+    }
+    if (!selected) return false;
+    const perch = selected.flock.perch;
+    for (const flock of selected.life.flocks)
+      if (flock.perched && flock.perch === perch && this.owns(selected.life, flock))
+        selected.life.flushFlock(flock, zoom);
+    return true;
+  }
+  private tapRice(tap: LifeTap) {
+    for (const life of this.tiles.values()) {
+      const at = lngLatToTile(life.tile, ...tap.at);
+      if (inTile(at) && this.owns(life, at)) return life.scatterFeed(at, tap, this.emojiClock);
+    }
+    return false;
+  }
   private resolveTaps(taps: readonly LifeTap[] | undefined, minutes = 720, zoom = 19, rain = 0) {
     this.tapReceipts =
       taps?.length && this.tapSources
@@ -8932,8 +9080,8 @@ export class LifeWorld {
                   return !!person && 'seasonal' in person && person.seasonal === 'visitors';
                 });
               },
-              tree: () => false,
-              rice: () => false,
+              tree: (tap) => this.tapTree(tap, zoom),
+              rice: (tap) => this.tapRice(tap),
             }),
           )
         : undefined;
@@ -11564,6 +11712,7 @@ export class LifeWorld {
     effectCellMeters = cellMeters,
     pointer?: readonly [number, number],
     taps?: readonly LifeTap[],
+    tapPointer?: TapPointer,
   ) {
     this.tapReceipts = undefined;
     this.syncSeason(weather?.season);
@@ -11627,6 +11776,7 @@ export class LifeWorld {
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
       ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
+      ...(tapPointer ? { tapPointer } : {}),
     };
     this.sampleFolklore(weather, Math.max(0, dt));
     const folklore = this.folklore.manananggal;
@@ -12708,6 +12858,21 @@ export class LifeWorld {
     }
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
+      if (life.tapFeed && this.emojiClock >= life.tapFeed.until) life.tapFeed = undefined;
+      if (life.tapFeed && shows('bird')) {
+        const feed = life.tapFeed;
+        for (const offset of feedCrumbs(feed.seed)) {
+          const [lng, lat] = tileToLngLat(tile, {
+            x: feed.x + offset.x * perMeter,
+            y: feed.y + offset.y * perMeter,
+          });
+          if (
+            !bounds ||
+            (lng >= bounds[0] && lng <= bounds[2] && lat >= bounds[1] && lat <= bounds[3])
+          )
+            out.push({ kind: 'person', prop: 'event', glyph: '.', lng, lat, flap: 0 });
+        }
+      }
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!this.owns(life, m)) continue;

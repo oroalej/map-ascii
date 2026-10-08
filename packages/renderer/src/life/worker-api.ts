@@ -23,6 +23,7 @@ import type { InspectionCommand } from './inspection';
 import type { RuntimeFolklore } from './folklore-config';
 import type { FolklorePacket } from './folklore';
 import type { LifeTap, TapReceipt } from './tap';
+import type { TapPointer } from './feed';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -46,6 +47,7 @@ export type FrameInput = {
     /** Mouse hover in longitude/latitude; absent after hover clears. */
     pointer?: readonly [number, number];
     taps?: readonly LifeTap[];
+    tapPointer?: TapPointer;
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -122,6 +124,7 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.effectCellMeters ?? metersPerCssPx(gust.camera) * Math.min(gust.cssCell.w, gust.cssCell.h),
     step.pointer,
     step.taps,
+    step.tapPointer,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
