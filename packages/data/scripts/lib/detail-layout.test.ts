@@ -1,4 +1,4 @@
-import { DetailLayouts, SiteDetail } from '@atlas/shared';
+import { DetailLayouts, SiteDetail } from '@atlas/shared/schemas';
 import { describe, expect, it } from 'vitest';
 import { detailLayoutKey } from '@atlas/shared/detail-layout';
 

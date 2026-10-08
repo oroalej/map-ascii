@@ -1,4 +1,5 @@
-import { BBox as BBoxSchema, type BBox } from '@atlas/shared';
+import { type BBox } from '@atlas/shared';
+import { BBox as BBoxSchema } from '@atlas/shared/schemas';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfBbox from '@turf/bbox';
 import type { Feature, Geometry, MultiPolygon, Polygon, Position } from 'geojson';

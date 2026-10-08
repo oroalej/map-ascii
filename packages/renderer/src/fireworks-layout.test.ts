@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FIREWORK_VARIANTS, RuntimeCityLifeSchema, resolveSeason, epochDay } from '@atlas/shared';
+import { FIREWORK_VARIANTS, resolveSeason, epochDay } from '@atlas/shared';
+import { RuntimeCityLifeSchema } from '@atlas/shared/schemas';
 import city from '../../content/cities/naga/city.json';
 import {
   FIREWORKS,

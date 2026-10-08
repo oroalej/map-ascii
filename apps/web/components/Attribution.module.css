@@ -14,6 +14,25 @@
   font-size: 10px;
 }
 
+.attribution[data-open='true'] {
+  z-index: 15;
+}
+
+.toggle {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.toggle:focus-visible {
+  outline: 1px solid var(--fg-dim);
+  outline-offset: 2px;
+}
+
 .extra + .extra::before {
   content: ' · ';
 }
@@ -21,7 +40,11 @@
 /* A city's sourced detail can grow independently of the viewport. Keep OSM outside
    the scroll area, and leave the map and the controls above the footer accessible. */
 .sources {
-  max-height: min(160px, 20dvh);
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  width: min(640px, calc(100vw - 16px));
+  max-height: min(50dvh, 360px);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 2px 4px;

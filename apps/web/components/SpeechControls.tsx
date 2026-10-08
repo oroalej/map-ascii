@@ -12,15 +12,9 @@ export function SpeechControls({ catalog }: { catalog: RuntimeDialogueCatalog })
   const enabled = useSpeechStore((s) => s.enabled);
   const translation = useSpeechStore((s) => s.translation);
   const life = useLifeStore((s) => s.enabled);
-  const zoom = useAtlasStore((s) => s.camera?.zoom ?? 0);
+  const closeEnough = useAtlasStore((s) => (s.camera?.zoom ?? 0) >= SPEECH_ZOOM);
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
-  const explanation = reduced
-    ? 'Speech pauses while reduced motion is on.'
-    : !life
-      ? 'Turn Life on to see speech.'
-      : zoom < SPEECH_ZOOM
-        ? `Zoom to z${SPEECH_ZOOM} or closer to see speech.`
-        : null;
+  if (!life || reduced || !closeEnough) return null;
   return (
     <>
       <div className={styles.row}>
@@ -47,7 +41,6 @@ export function SpeechControls({ catalog }: { catalog: RuntimeDialogueCatalog })
           ))}
         </select>
       </div>
-      {enabled && explanation && <p className={styles.line}>{explanation}</p>}
     </>
   );
 }

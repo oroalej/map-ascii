@@ -3,11 +3,11 @@ import {
   foldRoofAngle as fold,
   ROOF_PLAN_MAX_LEAVES,
   roofFrame,
-  RoofPlanSchema,
   type RoofNode,
   type RoofPlan,
   type RoofPoint,
 } from '@atlas/shared';
+import { RoofPlanSchema } from '@atlas/shared/schemas';
 import { intersection } from 'polyclip-ts';
 import type { AtlasFeature } from '../03-normalize';
 

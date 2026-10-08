@@ -68,6 +68,11 @@
   font-size: 11px;
 }
 
+.legend[open] {
+  width: 36ch;
+  max-width: 100%;
+}
+
 .legend summary:focus-visible,
 .focusClear:focus-visible {
   outline: 1px solid #ffd35c;
@@ -80,15 +85,34 @@
   list-style: none;
 }
 
+.legendGroup {
+  margin-top: 10px;
+}
+
+.legendGroup + .legendGroup {
+  padding-top: 8px;
+  border-top: 1px solid #2a2c36;
+}
+
+.legendGroup h3 {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .legend li {
   display: flex;
+  align-items: flex-start;
   gap: 10px;
   line-height: 1.6;
 }
 
 .legendEntry {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   width: 100%;
   padding: 0;
@@ -117,6 +141,11 @@
   width: 9ch;
   white-space: pre;
   overflow: hidden;
+}
+
+.legendLabel {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Pictures of what is drawn pixel by pixel (people), the size of the glyphs beside them. */

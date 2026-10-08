@@ -1,11 +1,8 @@
 import { expect, it } from 'vitest';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
-import {
-  canonicalSignalSeed,
-  crossingControllerProperties,
-  type SignalController,
-} from '@atlas/shared';
+import { type SignalController } from '@atlas/shared';
+import { canonicalSignalSeed, crossingControllerProperties } from '@atlas/shared/schemas';
 import { encodeTile, type TestFeature } from '../../../data/scripts/lib/utility-tiles.fixture';
 import {
   buildTileGeometry,

@@ -1,4 +1,5 @@
-import { CityArt, type BBox, type LandmarkArt } from '@atlas/shared';
+import { type BBox, type LandmarkArt } from '@atlas/shared';
+import { CityArt } from '@atlas/shared/schemas';
 import turfBbox from '@turf/bbox';
 import turfCentroid from '@turf/centroid';
 import type { Feature, Geometry } from 'geojson';

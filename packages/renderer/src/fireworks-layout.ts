@@ -1,6 +1,6 @@
 import type { FireworksConfig } from '@atlas/shared';
 import { FIREWORK_VARIANTS } from '@atlas/shared';
-import { MAX_ZOOM, MIN_ZOOM } from './camera';
+import { MAX_ZOOM } from './camera';
 import type { Grid, View } from './grid';
 import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
 import { random } from './life/random';
@@ -9,7 +9,7 @@ const REGULAR_SHELLS = 49;
 
 /** A dense, overlapping display with bounded, immutable particle geometry. */
 export const FIREWORKS = Object.freeze({
-  minZoom: MIN_ZOOM,
+  minZoom: 7,
   hideZoom: MAX_ZOOM,
   denseZoom: 16,
   sparseZoom: 20,

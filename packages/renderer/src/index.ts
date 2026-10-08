@@ -127,16 +127,13 @@ import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
 import { installationLamps, type InstallationFixture } from './life/seasonal-installations';
 import { candleLamps } from './life/seasonal-candles';
 import { liveProgress, type LngLatBounds } from './life/procession';
-import { LifeWorld, type LifeTile, type ProcessionRun, type VisibleAgent } from './life/simulate';
-import { simulationSeasons } from './life/seasonal-simulation';
-import { runtimeFolklore } from './life/folklore-config';
+import type { LifeTile, ProcessionRun, VisibleAgent } from './life/simulate';
 import { EMPTY_FOLKLORE, type FolklorePacket, type FolkloreCalendar } from './life/folklore';
 import { folkloreLayout, folklorePass, type FolkloreQuad } from './folklore-pass';
 import { fireworksPass } from './fireworks-pass';
 import { FIREWORKS } from './fireworks-layout';
-import { configureLifeWorld } from './life/worker-api';
 import { NO_FIREWORK_SITES, residentialFireworkSites } from './fireworks-sites';
-import { createInlineHost, createWorkerHost, type FrameView } from './life/host';
+import { createInlineHostLazy, createWorkerHost, type FrameView } from './life/host';
 import { LifePause, LivePauseOffset } from './life/pause';
 import { SpeechController, type SpeechInView } from './life/speech';
 import { EmojiController, type EmojiInView } from './life/emoji-view';
@@ -174,7 +171,13 @@ const EMPTY_LIFE_CELLS = new Uint8Array(0);
 
 export { CLASS_LABELS, type ThemeName } from './theme';
 export { DEFAULT_CELLS, type CellSchedule } from './density';
-export { legendEntries, type LegendEntry, type LegendEntryId, type LegendIcon } from './legend';
+export {
+  legendEntries,
+  legendGroup,
+  type LegendEntry,
+  type LegendEntryId,
+  type LegendIcon,
+} from './legend';
 export type { FeatureInfo } from './raster/geometry';
 export type { FixtureVisibility } from './life/fixtures';
 export type { SpeechInView } from './life/speech';
@@ -370,6 +373,8 @@ export type LabelInView = {
 
 /** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
 export type AtlasStats = {
+  /** A glyph pass has completed using at least one actual tile mesh since context creation. */
+  hasDrawnTileFrame: boolean;
   quality: QualityState;
   /** Frames drawn in the last second (idle frames that draw nothing don't count). */
   fps: number;
@@ -569,6 +574,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // Frame state
   let cellDirty = true;
+  let cellsHaveTiles = false;
+  let hasDrawnTileFrame = false;
   /**
    * What the cells were last drawn for, in a flat view: the zoom, where the map and label grids
    * start, and which of their cells are on screen. A pan that changes none of it (within a cell)
@@ -838,6 +845,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(tileCache.regionTilesFor(tiles));
     crownTiles = layer(tiles);
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
+    cellsHaveTiles = region.length > 0 || crownTiles.length > 0;
     names.collect(targets, v, labelPlacement, labels);
     labelsForReport = names.draw(
       gl,
@@ -941,18 +949,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const host =
     options.lifeWorker !== false && typeof Worker !== 'undefined'
       ? createWorkerHost({ ...options, itemInspection, moments }, processions, profiler)
-      : (() => {
-          const world = new LifeWorld(options.traffic, profiler, moments, itemInspection);
-          configureLifeWorld(world, {
-            processions,
-            seasons: simulationSeasons(options.cityLife?.seasons),
-            shopSchedule: options.cityLife?.schedules?.shops,
-            folklore: runtimeFolklore(options.cityLife),
-            emergencyConfig: options.cityLife?.emergency,
-            emergency: options.emergency,
-          });
-          return createInlineHost(world, profiler);
-        })();
+      : createInlineHostLazy({ ...options, itemInspection, moments }, processions, profiler);
   /** The procession last reported (`procession` event), as "id live". */
   let processionKey = '';
   const lifeView = () => lifePause.view(host.latest());
@@ -1878,6 +1875,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         folklorePacket,
         cropPass,
       );
+      hasDrawnTileFrame ||= cellsHaveTiles;
       drawDirty = false;
       fireworksPass(
         gl,
@@ -1894,7 +1892,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         daylight,
         fireworkSites,
       );
-      folklorePass(gl, programs, targets, themeRes, v, labelGrid, folkloreQuads);
+      folklorePass(
+        gl,
+        programs,
+        targets,
+        themeRes,
+        v,
+        labelGrid,
+        folkloreQuads,
+        focus,
+        time,
+        reducedMotion,
+      );
       streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
       gpuTimer.end();
       lastDraw = now;
@@ -1974,6 +1983,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    cellsHaveTiles = false;
+    hasDrawnTileFrame = false;
     lastCloudAt = performance.now();
     clearFolklore();
     host.invalidateFrame();
@@ -2162,6 +2173,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     getFeature: (featureId) => source.featureById(featureId),
     getStats: () => ({
+      hasDrawnTileFrame,
       quality: quality.state,
       fps: drawTimes.length,
       frameMs,

@@ -1,4 +1,4 @@
-import { SiteDetail, Landcover, LandmarkPlan } from '@atlas/shared';
+import { SiteDetail, Landcover, LandmarkPlan } from '@atlas/shared/schemas';
 import { intersection, difference } from 'polyclip-ts';
 import { describe, expect, it } from 'vitest';
 import type { AtlasFeature } from '../03-normalize';

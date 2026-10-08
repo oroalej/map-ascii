@@ -1,12 +1,12 @@
 import {
   featureZoomBand,
-  DetailSelectionSchema,
   tileZoomRange,
   type LngLat,
   type SiteDetail,
   type SubdivisionArea,
   isRoofBuilding,
 } from '@atlas/shared';
+import { DetailSelectionSchema } from '@atlas/shared/schemas';
 import inside from '@turf/boolean-point-in-polygon';
 import bbox from '@turf/bbox';
 import type { Polygon, MultiPolygon, LineString, Position } from 'geojson';

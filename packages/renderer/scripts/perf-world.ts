@@ -28,7 +28,7 @@ import { viewportFor } from '../src/camera';
 import { withoutDecorations } from './decorations';
 import { classId } from '../src/classes';
 import { PersonPart } from '../src/life/people';
-import { City } from '@atlas/shared';
+import { City } from '@atlas/shared/schemas';
 import { activityLevels } from '../src/life/config';
 import type * as Snapshot from '../src/life/terrain-snapshot';
 import { openArchive, decodeLifeTiles, realPanStrip, archiveHash } from './archive';

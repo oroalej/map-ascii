@@ -2,11 +2,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
-  CityProcessions,
   localMetricProjection,
   LEGACY_LOCAL_METERS_PER_DEGREE,
   PROCESSION_GEOMETRY,
 } from '@atlas/shared';
+import { CityProcessions } from '@atlas/shared/schemas';
 import churches from './testing/arrival-churches.json';
 import lock from '../../../content/cities/naga/tiles.lock.json';
 import { GroundProcessionScene } from './procession-street';

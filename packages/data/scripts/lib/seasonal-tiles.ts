@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { PMTiles } from 'pmtiles';
-import { SeasonalRecordSchema, type SeasonConfig, type SeasonalRecord } from '@atlas/shared';
+import { type SeasonConfig, type SeasonalRecord } from '@atlas/shared';
+import { SeasonalRecordSchema } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { readFeatures, writeJson } from './io';
 import { generateSeasonalBunting } from './seasonal';

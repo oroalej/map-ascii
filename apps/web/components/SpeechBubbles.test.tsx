@@ -70,21 +70,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
-it('explains when Life, zoom or reduced motion prevents speech', () => {
+it('hides the whole speech row when Life, zoom or reduced motion prevents speech', () => {
+  const hidden = () => {
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.querySelector('select')).toBeNull();
+    expect(container.textContent).toBe('');
+  };
+  expect(container.querySelector('button')).not.toBeNull();
   act(() => useLifeStore.setState({ enabled: false }));
-  expect(container.textContent).toContain('Turn Life on to see speech.');
+  hidden();
   act(() => {
     useLifeStore.setState({ enabled: true });
     useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 17 } });
   });
-  expect(container.textContent).toContain('Zoom to z18 or closer to see speech.');
+  hidden();
   vi.stubGlobal('matchMedia', () => ({
     matches: true,
     addEventListener() {},
     removeEventListener() {},
   }));
   act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 19 } }));
-  expect(container.textContent).toContain('Speech pauses while reduced motion is on.');
+  hidden();
 });
 const cue = (line = 0): SpeechInView => ({
   id: 'speaker',
@@ -120,6 +126,12 @@ it('keeps Bikol visible, switches translations immediately, follows replies and 
   act(() => container.querySelector('button')!.click());
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(0);
   expect(container.querySelector('button')!.getAttribute('aria-pressed')).toBe('false');
+  act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 17 } }));
+  expect(container.querySelector('select')).toBeNull();
+  expect(useSpeechStore.getState()).toMatchObject({ enabled: false, translation: 'fil' });
+  act(() => useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 18 } }));
+  expect(container.querySelector('button')!.getAttribute('aria-pressed')).toBe('false');
+  expect(container.querySelector('select')!.value).toBe('fil');
   act(() => container.querySelector('button')!.click());
   expect(container.querySelectorAll('[data-speech-bubble]')).toHaveLength(1);
   act(() => listener!([]));

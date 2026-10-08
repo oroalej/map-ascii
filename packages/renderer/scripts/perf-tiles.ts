@@ -2,19 +2,42 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { cpus, platform, release } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { VectorTile } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { buildTileGeometry, createIdRegistry } from '../src/raster/geometry';
 import { currentSourceHash } from './snapshot';
 import { openArchive, archiveHash } from './archive';
+import { runPairedTiles } from './perf-tiles-paired';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const arg = (name: string, fallback: string) =>
   process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
 const city = arg('city', 'naga');
 if (!/^[a-z0-9-]+$/.test(city)) throw new Error('Invalid city slug');
+const baseline = arg('baseline', '');
+const control = process.argv.includes('--control');
+if (baseline || control) {
+  if (baseline && control) throw new Error('Choose baseline or control');
+  if (!process.argv.includes('--interleaved'))
+    throw new Error('Paired measurements require --interleaved');
+  const scratch = arg('scratch', '');
+  if (!isAbsolute(scratch))
+    throw new Error('Paired measurements require an absolute --scratch path');
+  await runPairedTiles({
+    root,
+    city,
+    baseline: baseline || undefined,
+    control,
+    rounds: Number(arg('rounds', '10')),
+    scratch,
+    output: resolve(root, arg('output', 'test-results/tiles-decode.json')),
+  });
+  process.exit(0);
+}
+if (process.argv.includes('--interleaved'))
+  throw new Error('--interleaved requires --baseline or --control');
 const pack = JSON.parse(
   await readFile(resolve(root, `packages/content/cities/${city}/city.json`), 'utf8'),
 ) as { life?: { folklore?: unknown } };

@@ -1,5 +1,5 @@
 import type { Atlas, AtlasEventMap, LegendFocus } from '@atlas/renderer';
-import * as rendererExports from '@atlas/renderer';
+import * as rendererExports from '@atlas/renderer/hud';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -62,6 +62,7 @@ beforeEach(() => {
   useLifeStore.setState({ enabled: false });
   useEmojiStore.setState({ enabled: true });
   useUiStore.setState({
+    startup: null,
     legendFocus: null,
     lifeHover: null,
     processions: [],
@@ -71,6 +72,28 @@ beforeEach(() => {
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
+});
+it('defers subdivisions until the matching atlas has drawn and handles a late subscription', async () => {
+  const instance = renderer();
+  useAtlasInstance.setState({ atlas: instance.atlas });
+  useUiStore.setState({ startup: { city: 'test', atlas: instance.atlas, status: 'drawing' } });
+  await act(async () => {
+    root.render(createElement(Hud, { city: 'test', subdivisionLabel: 'district' }));
+    await Promise.resolve();
+  });
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => {
+    useUiStore.setState({ startup: { city: 'test', atlas: instance.atlas, status: 'ready' } });
+    await Promise.resolve();
+  });
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    useUiStore.setState({ startup: { city: 'next', atlas: instance.atlas, status: 'ready' } });
+    root.render(createElement(Hud, { city: 'next', subdivisionLabel: 'district' }));
+    await Promise.resolve();
+  });
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch).toHaveBeenLastCalledWith('/tiles/next.subdivisions.json');
 });
 it('passes the illustrative rice disclosure to the legend and restores the absent-calendar label', async () => {
   const instance = renderer();
@@ -298,12 +321,46 @@ const mount = async (instance: ReturnType<typeof renderer>) => {
     await Promise.resolve();
   });
 };
+it('groups agents separately from map features, omits repeated suffixes and hides empty groups', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  act(() => {
+    instance.emit('classeschange', ['road_mid', 'water_river']);
+    instance.emit('folklorechange', true);
+    instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: false });
+  });
+  const group = (name: string) => legend().querySelector(`section[aria-label="${name}"]`);
+  const map = group('Map')!;
+  const simulated = group('Simulated')!;
+  expect(map.querySelector('h3')?.textContent).toBe('Map');
+  expect(map.textContent).toContain('Streetlights');
+  expect(map.textContent).toContain('Traffic signals (simulated phases)');
+  expect(map.textContent).not.toContain('Folklore');
+  expect(simulated.querySelector('h3')?.textContent).toBe('Simulated');
+  for (const label of ['Traffic', 'People', 'Fish', 'Moods', 'Folklore'])
+    expect(simulated.textContent).toContain(label);
+  expect(simulated.textContent).not.toContain('(simulated)');
+  expect(simulated.textContent).not.toContain('Streetlights');
+  const people = [...simulated.querySelectorAll('button')].find((button) =>
+    button.textContent?.includes('People'),
+  )!;
+  act(() => people.click());
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: [], life: ['people'] });
+  expect(container.querySelector('button[aria-label="Clear legend focus: People"]')).not.toBeNull();
+  act(() => useLifeStore.setState({ enabled: false }));
+  expect(group('Simulated')).toBeNull();
+  expect(group('Map')).not.toBeNull();
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+});
+
 it('shows folklore at z15 and drops visibility on Life off, events and renderer replacement', async () => {
   const instance = renderer();
   useLifeStore.setState({ enabled: true });
   useAtlasStore.setState({ camera: { lng: 0, lat: 0, zoom: 15 } });
   await mount(instance);
-  const shown = () => labels().some((l) => l?.includes('Folklore (simulated)'));
+  const shown = () => labels().some((l) => l?.includes('Folklore'));
   expect(shown()).toBe(false);
   act(() => instance.emit('folklorechange', true));
   expect(shown()).toBe(true);
@@ -320,12 +377,34 @@ it('shows folklore at z15 and drops visibility on Life off, events and renderer 
   expect(shown()).toBe(false);
 });
 
+it('toggles folklore focus and clears it when spirits disappear', async () => {
+  const instance = renderer();
+  useLifeStore.setState({ enabled: true });
+  await mount(instance);
+  act(() => instance.emit('folklorechange', true));
+  const button = [...legend().querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Folklore'),
+  )!;
+  expect(button.getAttribute('aria-pressed')).toBe('false');
+  act(() => button.click());
+  expect(button.getAttribute('aria-pressed')).toBe('true');
+  expect(useUiStore.getState().legendFocus).toBe('info:folklore');
+  expect(instance.focus).toHaveBeenLastCalledWith({ classes: [], life: [], folklore: true });
+  act(() => button.click());
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  act(() => button.click());
+  act(() => instance.emit('folklorechange', false));
+  expect(useUiStore.getState().legendFocus).toBeNull();
+  expect(instance.focus).toHaveBeenLastCalledWith(null);
+  expect(button.isConnected).toBe(false);
+});
+
 it('updates the mood legend when emoji is toggled without replacing the atlas', async () => {
   const instance = renderer();
   useLifeStore.setState({ enabled: true });
   await mount(instance);
-  const moods = () =>
-    labels().some((label) => label?.includes('simulated') && /moods/i.test(label));
+  const moods = () => labels().some((label) => /moods/i.test(label ?? ''));
   expect(moods()).toBe(true);
   act(() => useEmojiStore.setState({ enabled: false }));
   expect(moods()).toBe(false);
@@ -411,9 +490,9 @@ it('replaces focus, updates merged descriptors and clears Life focus when Life i
   act(() => instance.emit('classeschange', ['building_school', 'marker_school', 'road_mid']));
   expect(useUiStore.getState().legendFocus).toBe(label);
   expect(instance.focus.mock.calls.at(-1)![0]?.classes).toContain('marker_school');
-  act(() => button('Street vendors (simulated)').click());
+  act(() => button('Street vendors').click());
   expect(button('School').getAttribute('aria-pressed')).toBe('false');
-  expect(button('Street vendors (simulated)').getAttribute('aria-pressed')).toBe('true');
+  expect(button('Street vendors').getAttribute('aria-pressed')).toBe('true');
   act(() =>
     instance.emit('fixtureschange', { streetlights: true, trafficSignals: true, utilities: true }),
   );

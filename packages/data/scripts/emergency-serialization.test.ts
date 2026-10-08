@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { expect, it } from 'vitest';
-import { CityEmergency, decodeEmergency, encodeEmergency } from '@atlas/shared';
+import { decodeEmergency, encodeEmergency } from '@atlas/shared';
+import { CityEmergency } from '@atlas/shared/schemas';
 
 const generated = import.meta.glob('../../../apps/web/public/tiles/naga.emergency.json', {
   eager: true,

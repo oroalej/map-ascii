@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { decodeCrossingController, SignalLayout, SignalStops } from '@atlas/shared';
+import { decodeCrossingController } from '@atlas/shared';
+import { SignalLayout, SignalStops } from '@atlas/shared/schemas';
 import type { AtlasFeature } from '../03-normalize';
 import { mergeTraffic } from './traffic';
 import { delta } from './road-geometry';
