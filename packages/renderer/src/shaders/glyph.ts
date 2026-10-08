@@ -33,6 +33,7 @@ import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
   CROWN_LIGHT,
+  CROP_STAGE,
   EDGE_INK,
   EDGE_STATE,
   SHADOW,
@@ -46,6 +47,7 @@ import {
 } from '../glyphs/select';
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
+import { SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
@@ -79,6 +81,10 @@ uniform vec2 u_shift;
 uniform float u_height;
 uniform int u_columns;
 uniform vec3 u_colors[${MAX_CLASSES}];
+uniform int u_cropStage;
+uniform int u_farmlandClass;
+uniform vec3 u_cropTint;
+uniform vec3 u_cropWaterTint;
 uniform vec3 u_fillColors[${MAX_CLASSES}];
 uniform float u_fills[${MAX_CLASSES}];
 uniform vec3 u_background;
@@ -139,33 +145,59 @@ uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
 uniform float u_moon;
+uniform float u_cloudCover;
+uniform uint u_cloudSeed;
+uniform bool u_cloudDetail;
+uniform vec2 u_meterOrigin;
+uniform vec2 u_meterStep;
+uniform vec2 u_cloudOffset;
 
 out vec4 o_color;
 
 ${cellHashGlsl}
 ${waterEffectGlsl}
+${skyNoiseGlsl}
+
+// Ambient material only: light emission is composed afterwards, as before.
+float cloudShade = 1.0;
+float cloudFactor(vec2 grid) {
+  if (u_daylight <= 0.0) return 1.0;
+  if (u_cloudCover >= 1.0) return 1.0 - ${SKY.shadow} * u_daylight;
+  if (!u_cloudDetail) return 1.0 - 0.5 * ${SKY.shadow} * u_cloudCover * u_daylight;
+  if (u_cloudCover < ${SKY.detailMin}) return 1.0;
+  vec2 world_m = u_meterOrigin + (grid / u_cell) * u_meterStep - u_cloudOffset;
+  return 1.0 - ${SKY.shadow} * u_daylight * cloudShadow(world_m, u_cloudCover, u_cloudSeed);
+}
 
 float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
+}
+
+vec3 cropPigment(int cls, int tone) {
+  vec3 color = u_colors[cls];
+  if (cls != u_farmlandClass || u_cropStage < 0) return color;
+  bool water = u_cropStage == ${CROP_STAGE.flooded}
+    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+  return color * (water ? u_cropWaterTint : u_cropTint);
 }
 
 vec3 daylit(vec3 color) {
   float dusk = 1.0 - abs(u_daylight - 0.5) * 2.0;
   color = mix(color, color * vec3(1.2, 0.88, 0.68), dusk * 0.45);
   vec3 tint = mix(vec3(0.4, 0.48, 0.78), vec3(0.6, 0.64, 0.76), u_moon);
-  return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon));
+  return mix(color, color * tint, darkness() * (0.85 - 0.2 * u_moon)) * cloudShade;
 }
 
 vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.shade}) return color * ${float(TONE.shade)};
-  if (tone == ${Tone.light}) return mix(color, vec3(1.0), ${float(TONE.light)} * (1.0 - night));
+  if (tone == ${Tone.light}) return mix(color, vec3(cloudShade), ${float(TONE.light)} * (1.0 - night));
   if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
   return color;
 }
 
 vec3 fillOf(int cls, vec3 color) {
   vec3 pigment = color * u_fillColors[cls] / max(u_colors[cls], vec3(1.0 / 255.0));
-  return mix(u_background, pigment, u_fills[cls]);
+  return mix(u_background * cloudShade, pigment, u_fills[cls]);
 }
 
 float lamps() {
@@ -653,6 +685,7 @@ void main() {
     return;
   }
 
+  cloudShade = cloudFactor(grid);
   vec4 g = texelFetch(u_glyphs, cell, 0);
   int cls = int(g.g * 255.0 + 0.5) & 63;
   int rawState = int(g.b * 255.0 + 0.5);
@@ -665,7 +698,7 @@ void main() {
   int bgClass = int(g.a * 255.0 + 0.5);
   float night = darkness();
   // The cell's background: its fill class's color, faint (theme.ts ClassStyle.fill).
-  vec3 back = fillOf(bgClass, daylit(u_colors[bgClass]));
+  vec3 back = fillOf(bgClass, daylit(cropPigment(bgClass, bgClass == cls ? tone : ${Tone.light})));
   // A shadow darkens the ground and whatever stands in it (glyphs/select.ts SHADOW).
   float shade = shaded ? 1.0 - ${float(SHADOW.dark)} : 1.0;
   back *= shade;
@@ -792,7 +825,7 @@ void main() {
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
-  vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(u_colors[cls]), tone, night);
+  vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(cropPigment(cls, tone)), tone, night);
   if (cls == u_crownClass) {
     vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb * 2.0 - 1.0;
     vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
@@ -830,7 +863,7 @@ void main() {
   // Blades caught by a gust show their pale sides, more as it strengthens (glyphs/select.ts
   // WIND_LIGHT by wind level).
   if (awning == 0 && windLevel > 0) {
-    color = mix(color, vec3(1.0), windLevel == 3 ? ${float(WIND_LIGHT[3])}
+    color = mix(color, vec3(cloudShade), windLevel == 3 ? ${float(WIND_LIGHT[3])}
       : windLevel == 2 ? ${float(WIND_LIGHT[2])} : ${float(WIND_LIGHT[1])});
   }
   if (state == ${CellState.hover}) {
@@ -853,7 +886,7 @@ void main() {
   color *= shade;
   if (u_focus) {
     color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
-    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(u_colors[cls])) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(u_colors[cls])) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
+    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }

@@ -39,6 +39,8 @@ for (const city of cities) {
         const errors: string[] = [];
         page.on('pageerror', (err) => errors.push(err.message));
 
+        await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
+
         await page.goto(`/${city.slug}`);
 
         await expect(page).toHaveTitle(`${city.name} · ASCII Atlas`);

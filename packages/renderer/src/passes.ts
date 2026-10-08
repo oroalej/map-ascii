@@ -2,6 +2,17 @@ import { throng, type ThrongGuardFactory } from './life/throng';
 import type { ProcessionRoute } from '@atlas/shared';
 import { project } from './camera';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './life/folklore';
+import type { cropTint } from './glyphs/select';
+
+export type CropPass = { stage: number; progress: number } & ReturnType<typeof cropTint>;
+/** Always write every crop uniform, including identity pigments after calendar removal. */
+const cropUniforms = (crop: CropPass | null) => ({
+  u_cropStage: crop?.stage ?? -1,
+  u_cropProgress: crop?.progress ?? 0,
+  u_cropTint: crop?.tint ?? [1, 1, 1],
+  u_cropWaterTint: crop?.waterTint ?? [1, 1, 1],
+  u_farmlandClass: classId('farmland'),
+});
 import { hauntUniforms, createHauntUniformScratch } from './folklore-pass';
 /**
  * The frame's passes (ARCHITECTURE.md §3): the cell pass rasterizes tiles into one pixel per
@@ -482,6 +493,7 @@ export function selectPass(
   sun: Sun | null = null,
   shadows = true,
   awnings = true,
+  crop: CropPass | null = null,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -494,6 +506,7 @@ export function selectPass(
     u_baseId: targets.base.idTex,
     u_shadows: shadows,
     u_awnings: awnings,
+    ...cropUniforms(crop),
     u_attr: targets.attrTex,
     u_id: targets.idTex,
     u_table: themeRes.map.tableTex,
@@ -826,7 +839,18 @@ export function effectClockPass(gl: GL, targets: CellTargets) {
 }
 
 /** The weather over the map: how hard it rains (0–1), in which wind. */
-export type Weather = { rain: number; wind: WindNow | null; fish?: boolean; detail?: boolean };
+export type Weather = {
+  rain: number;
+  wind: WindNow | null;
+  fish?: boolean;
+  detail?: boolean;
+  cloudCover?: number;
+  cloudSeed?: number;
+  cloudDetail?: boolean;
+  meterOrigin?: readonly [number, number];
+  meterStep?: readonly [number, number];
+  cloudOffset?: readonly [number, number];
+};
 
 const fixturesOf = new WeakMap<
   CellTargets,
@@ -1008,6 +1032,7 @@ export function glyphPass(
   focus = normalizeFocus(null),
   lifeTime = time,
   folklore: FolklorePacket = EMPTY_FOLKLORE,
+  crop: CropPass | null = null,
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -1036,6 +1061,7 @@ export function glyphPass(
     u_labelShift: [labelGrid.shiftX, labelGrid.shiftY],
     u_labelColumns: label.atlas.columns,
     u_colors: tables.colors,
+    ...cropUniforms(crop),
     u_fillColors: tables.fillColors,
     u_fills: tables.fills,
     u_background: theme.background.slice(0, 3),
@@ -1073,6 +1099,12 @@ export function glyphPass(
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_daylight: daylight,
+    u_cloudCover: weather.cloudCover ?? 0,
+    u_cloudSeed: weather.cloudSeed ?? 0,
+    u_cloudDetail: weather.cloudDetail ?? false,
+    u_meterOrigin: weather.meterOrigin ?? [0, 0],
+    u_meterStep: weather.meterStep ?? [0, 0],
+    u_cloudOffset: weather.cloudOffset ?? [0, 0],
     u_light: targets.lightTex,
     u_fixtures: targets.fixtureTex,
     u_fixturePaints: themeRes.uniforms.fixtures,

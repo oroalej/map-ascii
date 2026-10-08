@@ -108,7 +108,6 @@ Name the hot path for every finding: per frame, per agent step, per tile, per wo
   - Content is validated at build time and fails loudly.
 - **Architecture limits:**
   - no backend or tile server
-  - no Google Maps or Street View imagery
   - generated tiles are never hand-edited
   - all geography flows through the pipeline
 - **Tests:**

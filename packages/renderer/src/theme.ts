@@ -342,7 +342,12 @@ function makeTheme(background: number, c: Palette): Theme {
         color: c.crown,
         fill: 0.14,
       },
-      farmland: { kind: 'crop', glyphs: ['≡', "'", '/', '\\', '~'], color: c.farmland, fill: 0.08 },
+      farmland: {
+        kind: 'crop',
+        glyphs: ['≡', "'", '/', '\\', '~', '≈', '.', ',', '·', ':'],
+        color: c.farmland,
+        fill: 0.08,
+      },
       marker_religious: { kind: 'single', glyphs: ['†'], color: c.religious },
       marker_school: { kind: 'single', glyphs: ['⌂'], color: c.school },
       marker_hospital: { kind: 'single', glyphs: ['+'], color: c.hospital },

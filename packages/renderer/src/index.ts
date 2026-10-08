@@ -12,6 +12,9 @@ import {
   resolveSeason,
   eventOccurrence,
   dialogueChoices,
+  CROP_STAGES,
+  cropStageAt,
+  epochDay,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -25,6 +28,7 @@ import type {
   ProcessionRoute,
   TrafficMix,
   EmergencyData,
+  CropNow,
 } from '@atlas/shared';
 import {
   clampCamera,
@@ -38,6 +42,8 @@ import {
 } from './camera';
 import { classesIn, type RenderClass } from './classes';
 import { DEFAULT_FONT } from './glyphs/atlas';
+import { cropTint } from './glyphs/select';
+import type { CropPass } from './passes';
 import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
   cellStep,
@@ -86,6 +92,7 @@ import {
 } from './passes';
 import { LabelRank } from './labels';
 import { screenArea } from './grid';
+import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { normalizeFocus, type LegendFocus } from './focus';
@@ -497,6 +504,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     timezone: options.timezone,
     lng: (options.bounds[0] + options.bounds[2]) / 2,
   };
+  const sky = skyAnchor(options.bounds);
+  let cloudOffset: Meters = [0, 0];
+  let lastCloudAt = performance.now();
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
   let emojiDate = {
@@ -1486,9 +1496,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let daylight = 1;
   /** How much moonlight falls (life/moon.ts), 0–1. */
   let moon = 0;
+  let cover = 0;
   let activity: Activity = activityLevels(1);
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
+  // Real-city crop state is the source for later field-agent behaviour.
+  let crop: CropNow | undefined;
+  let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
   const updateSeason = () => {
     const next = resolveCurrentSeason();
@@ -1550,9 +1564,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
     const next = daylightAt(position.altitude);
-    const nextMoon = moonlight(moment, camera.lng, camera.lat);
+    const nextCover =
+      prevailingWind(life.wind, options.climate, cityTime(now(), zone).month).strength === 'storm'
+        ? 1
+        : cloudCover(moment, sky.seed);
+    const nextMoon = moonlight(moment, camera.lng, camera.lat) * (1 - SKY.moonLoss * nextCover);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
+    crop = cropStageAt(options.climate?.crops, real.year, real.day - epochDay(real.year, 1, 1));
+    const stage = crop ? CROP_STAGES.indexOf(crop.stage) : -1;
+    if (
+      stage !== (cropPass?.stage ?? -1) ||
+      Math.abs((crop?.progress ?? 0) - (cropPass?.progress ?? 0)) > 0.002
+    ) {
+      cropPass = crop ? { stage, progress: crop.progress, ...cropTint(stage) } : null;
+      drawDirty = true;
+    }
     folkloreDate = {
       epochDay: local.day,
       ...(life.season !== 'auto' && options.cityLife?.seasons?.some((s) => s.id === life.season)
@@ -1578,6 +1605,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         minutes: local.minutes,
         weekday: local.weekday,
         life: options.cityLife,
+        crop,
       },
       season,
     );
@@ -1588,12 +1616,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       moved ||
       Math.abs(next - daylight) > 0.001 ||
       Math.abs(nextMoon - moon) > 0.001 ||
+      Math.abs(nextCover - cover) > SKY.dirtyCover ||
       Math.abs((nextSun?.azimuth ?? 0) - (sun?.azimuth ?? 0)) > 0.01 ||
       Math.abs((nextSun?.altitude ?? 0) - (sun?.altitude ?? 0)) > 0.01 ||
       !nextSun !== !sun
     ) {
       daylight = next;
       moon = nextMoon;
+      cover = nextCover;
       activity = nextActivity;
       sun = nextSun;
       drawDirty = true;
@@ -1792,6 +1822,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         labelVisibilityDirty = false;
       }
       const wind = worldWind(time);
+      if (watch.watched() && !reducedMotion)
+        cloudOffset = driftClouds(cloudOffset, wind, (now - lastCloudAt) / 1000, false);
+      lastCloudAt = now;
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
         knobs.crownSway &&
@@ -1816,6 +1849,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         knobs.groundWind ? wind : { ...wind, strength: 0 },
         sun,
         knobs.shadows,
+        true,
+        cropPass,
       );
       const lifeStart = performance.now();
       drawLife(now, wind);
@@ -1839,6 +1874,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           wind,
           detail: camera.zoom >= 18 && knobs.waterDetail,
           fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
+          cloudCover: cover,
+          cloudSeed: sky.seed,
+          cloudDetail:
+            knobs.clouds &&
+            sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
+          cloudOffset,
+          ...(placement?.world ? skyGrid(sky, placement.world) : {}),
         },
         lampShow(),
         moon,
@@ -1846,6 +1888,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         focus,
         lifePause.time,
         folklorePacket,
+        cropPass,
       );
       drawDirty = false;
       fireworksPass(
@@ -1943,6 +1986,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     event.preventDefault();
     if (lost) return;
     lost = true;
+    lastCloudAt = performance.now();
     clearFolklore();
     host.invalidateFrame();
     names.clear();
@@ -1975,6 +2019,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   const onContextRestored = () => {
     if (!lost || destroyed) return;
     lost = false;
+    lastCloudAt = performance.now();
     lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
@@ -1994,6 +2039,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // The map moves on its own only while someone can watch it (pacing.ts); back in view, the
   // agents carry on from where they stood.
   const watch = watchVisibility(canvas, (watched) => {
+    lastCloudAt = performance.now();
     resetQualitySamples();
     if (!watched) lifeHover.pointer(null);
     lifePause.tick(performance.now(), watched && lifeActive() && !lost);
@@ -2096,6 +2142,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emoji.clear();
       if (reducedMotion === enabled) return;
       reducedMotion = enabled;
+      lastCloudAt = performance.now();
       clearFolklore();
       host.invalidateFrame();
       lifeHover.pointer(null);
