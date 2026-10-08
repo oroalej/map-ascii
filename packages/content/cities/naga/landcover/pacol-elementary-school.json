@@ -196,15 +196,18 @@
     },
     {
       "ring": [
-        [123.23244128241, 13.65152873174],
-        [123.23247161076, 13.65153964787],
-        [123.23253699288, 13.6513701436],
-        [123.23254184675, 13.65135875719],
-        [123.23251244127, 13.651348369],
-        [123.23249574896, 13.65138752627],
-        [123.23244128241, 13.65152873174]
+        [123.23217384596, 13.65149087941],
+        [123.23214468528, 13.65152949431],
+        [123.23215182494, 13.65153183487],
+        [123.23223067372, 13.65155825048],
+        [123.23227612686, 13.65156386503],
+        [123.23232375397, 13.6515638183],
+        [123.23235623228, 13.65154120193],
+        [123.23228861064, 13.65151471599],
+        [123.23221552754, 13.65150775541],
+        [123.23217384596, 13.65149087941]
       ],
-      "cover": "planting"
+      "cover": "grass"
     },
     {
       "ring": [
@@ -215,6 +218,36 @@
         [123.23209960123, 13.65156705488]
       ],
       "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23233756379, 13.6513057691],
+        [123.23226280849, 13.65130705555],
+        [123.23220938603, 13.65134783028],
+        [123.23214782318, 13.65147732678],
+        [123.23218461601, 13.65149032474],
+        [123.23222749806, 13.65145436314],
+        [123.2322475039, 13.65139749133],
+        [123.23228779413, 13.65136269698],
+        [123.23233203555, 13.65134848412],
+        [123.23241632039, 13.65136972568],
+        [123.2324796778, 13.65137508643],
+        [123.23245998744, 13.65134688749],
+        [123.23233756379, 13.6513057691]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.23247161076, 13.65153964787],
+        [123.23253699288, 13.6513701436],
+        [123.23254184675, 13.65135875719],
+        [123.23251244127, 13.651348369],
+        [123.23249574896, 13.65138752627],
+        [123.23244128241, 13.65152873174],
+        [123.23247161076, 13.65153964787]
+      ],
+      "cover": "grass"
     }
   ],
   "status": "draft",
@@ -228,7 +261,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
     }
   ]
 }

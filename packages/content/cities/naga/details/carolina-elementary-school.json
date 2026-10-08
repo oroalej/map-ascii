@@ -7,8 +7,10 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.28704933489, 13.66391849661],
         [123.28720941844, 13.66392689457],
+        [123.28730472101, 13.663920815],
+        [123.28731879411, 13.66391289755],
+        [123.28737481713, 13.6639163434],
         [123.28749381681, 13.66390875214],
         [123.28750534917, 13.66393303262],
         [123.28749729636, 13.66399130202],
@@ -56,7 +58,8 @@
         [123.28701202777, 13.66386411779],
         [123.28701064283, 13.66387489627],
         [123.28700856532, 13.66390539695],
-        [123.28704933489, 13.66391849661]
+        [123.28704933489, 13.66391849661],
+        [123.28720941844, 13.66392689457]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -114,7 +117,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6639421,123.2874582,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied carolina-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Dense southwest, south and east canopy belts, northern classroom-gap crowns and isolated forecourt crowns. Broad tan courtyard stays bare; only the narrow visible green tongue gets grass, with small roof-end planted strips. Local west/north/south roof fits correct the old excessive shear. No distinguishable hedge separate from crowns. Crown-width observations: Broad west/south/east crowns about 65-85 px; isolated yard/classroom-end crowns about 30-55 px. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/881083678 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 7.54 m, 13.38 m, 9.83 m, 12.05 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied carolina-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Dense southwest, south and east canopy belts, northern classroom-gap crowns and isolated forecourt crowns. The eastern worn tan courtyard remains bare; the western dry/green turf fringe connects to the green tongue, with small roof-end planted strips retained. Local west/north/south roof fits correct the old excessive shear. No distinguishable hedge separate from crowns. Crown-width observations: Broad west/south/east crowns about 65-85 px; isolated yard/classroom-end crowns about 30-55 px. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/881083678 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 7.54 m, 13.38 m, 9.83 m, 12.05 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): West-yard fringe shows patchy low cover including dry turf merging into the existing green tongue. Its north flat green continuation is lawn, not a separate planted bed. Keep the worn eastern orange/tan yard bare, roof-end beds, isolated crowns and narrow central approach. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
     }
   ]
 }

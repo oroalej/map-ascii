@@ -7,7 +7,6 @@
     {
       "id": "approach-1",
       "ring": [
-        [123.23217135789, 13.65123624504],
         [123.23216916784, 13.65124316867],
         [123.23211026539, 13.65138134365],
         [123.23215137047, 13.65139717126],
@@ -84,7 +83,14 @@
         [123.23214880029, 13.65153317624],
         [123.23213272658, 13.65152749185],
         [123.2321327187, 13.65152744513],
+        [123.23215326602, 13.6514792496],
+        [123.23214782318, 13.65147732678],
+        [123.2322084976, 13.65134969909],
         [123.23223775033, 13.65128108424],
+        [123.23230902805, 13.65130626017],
+        [123.23233756379, 13.6513057691],
+        [123.23245998744, 13.65134688749],
+        [123.23247175198, 13.65136373572],
         [123.23249213154, 13.65137093396],
         [123.23251198098, 13.65134921401],
         [123.23251237952, 13.65134828389],
@@ -117,7 +123,8 @@
         [123.23219231336, 13.65124377428],
         [123.23219226592, 13.65124378375],
         [123.23218012257, 13.65123949382],
-        [123.23217135789, 13.65123624504]
+        [123.23217135789, 13.65123624504],
+        [123.23216916784, 13.65124316867]
       ],
       "height_m": 0.1,
       "material": "paving",
@@ -226,7 +233,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. North and south perimeter belts, western interior grove, distinguishable small plants along the north classroom apron and eastern Educare-side strip. The large central tan yard remains bare. Corrected east Educare roof registration; entrance links follow exposed edges, not a paved whole-yard fill. Continuous shared-vertex triangular mapping preserves each traced surface before mapped-obstacle clipping; no nearest-roof cell jumps. Entire roof osm:way/780476053 and all its observed corners are excluded from fitting and checked against the actual final mapping. Within-roof agreement is recorded separately and does not establish cross-roof accuracy. Independent roof errors exceed five metres, so the registration gate remains unmet. One withheld roof does not establish distributed campus-wide survey accuracy; differing older mapped roof dimensions/placements are retained, not edited. The image traces and recognizable canopy groups remain the observations; surface/trunk placement clears complete mapped records. Virtual outer mesh anchors come only from the all-used-control affine and are not independent evidence. Independent excluded check errors: 3.17 m, 6.05 m, 4.04 m, 5.44 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
     }
   ]
 }

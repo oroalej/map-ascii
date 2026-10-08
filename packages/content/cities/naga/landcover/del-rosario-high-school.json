@@ -78,6 +78,46 @@
         [123.23907608991, 13.61860456665]
       ],
       "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23885332317, 13.61863768416],
+        [123.23885215584, 13.61863528544],
+        [123.23885123778, 13.61863279113],
+        [123.2388505757, 13.61863022139],
+        [123.23885017598, 13.61862760094],
+        [123.23885004246, 13.61862495945],
+        [123.23885017598, 13.61862231354],
+        [123.2388505757, 13.6186196931],
+        [123.23885123778, 13.61861712335],
+        [123.23885215584, 13.61861462905],
+        [123.23885332317, 13.61861223032],
+        [123.23885472466, 13.61860995824],
+        [123.23885634567, 13.61860783401],
+        [123.23885817599, 13.61860587102],
+        [123.2388585577, 13.6186055345],
+        [123.23885806083, 13.61860551056],
+        [123.23885536464, 13.61860512164],
+        [123.23885272066, 13.61860447776],
+        [123.23885015435, 13.6186035851],
+        [123.23884769043, 13.61860245228],
+        [123.23884535261, 13.61860109019],
+        [123.23884316693, 13.61859951476],
+        [123.23884114716, 13.6185977359],
+        [123.23883931651, 13.6185957732],
+        [123.23883769263, 13.61859364557],
+        [123.238836289, 13.61859136959],
+        [123.23883512554, 13.61858897883],
+        [123.23883420706, 13.61858648467],
+        [123.23883354455, 13.61858391503],
+        [123.23883319087, 13.61858159921],
+        [123.23882478294, 13.61857737621],
+        [123.23881856806, 13.61857872032],
+        [123.23884830604, 13.6186447199],
+        [123.23885444614, 13.61863950504],
+        [123.23885332317, 13.61863768416]
+      ],
+      "cover": "grass"
     }
   ],
   "status": "draft",
@@ -91,7 +131,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Northern green patch bordered by broad crowns, south/west/east canopy chains and courtyard-side plants; exposed north-of-classroom apron links remain open. The northern greenery stops at the separate elementary parent and crop boundary; no surveyed extent or hedge inferred. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Independent excluded check errors: 2.64 m, 3.26 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Northern green patch bordered by broad crowns, south/west/east canopy chains and courtyard-side plants; exposed north-of-classroom apron links remain open. The northern greenery stops at the separate elementary parent and crop boundary; no surveyed extent or hedge inferred. Tentative long green roof match; separate reference and source footprint do not imply shared grounds with the elementary school. Corrected the southwest check to the partially visible lower blue roof; the pale upper-left roof is outside this matched source neighborhood. Independent excluded check errors: 2.64 m, 3.26 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): The upper smooth green opening is low cover but falls outside the complete preserved source parent under the unchanged registration; that omission remains a parcel limit, not a claim of no grass. Add only exposed lower/west grass pockets inside the parent, excluding raised tree crowns, roofs and hard apron. Remaining mixed foliage/shadows are ambiguous draft observations. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
     }
   ]
 }

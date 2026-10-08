@@ -248,6 +248,18 @@
     },
     {
       "ring": [
+        [123.21954043026, 13.61296728821],
+        [123.21954145063, 13.61297393762],
+        [123.21954183594, 13.61297447657],
+        [123.21954216769, 13.61297505379],
+        [123.21954244164, 13.61297566378],
+        [123.21954265395, 13.61297630119],
+        [123.21954279976, 13.6129769515],
+        [123.21954287928, 13.61297761257],
+        [123.21954289176, 13.61297827804],
+        [123.21954283764, 13.61297893711],
+        [123.21954271572, 13.61297959652],
+        [123.21954244799, 13.61298043712],
         [123.21954466408, 13.6129948787],
         [123.21954521593, 13.61299479589],
         [123.21961955787, 13.61297082583],
@@ -306,10 +318,15 @@
         [123.21981587563, 13.61295418209],
         [123.21993186905, 13.61293677672],
         [123.21992135374, 13.61291298931],
-        [123.21954029948, 13.61296643591],
-        [123.21954466408, 13.6129948787]
+        [123.21981046018, 13.61292854322],
+        [123.21980980944, 13.61292897427],
+        [123.21980920022, 13.61292928777],
+        [123.21980856642, 13.61292953985],
+        [123.21980791466, 13.61292972928],
+        [123.21980724029, 13.61292985714],
+        [123.21954043026, 13.61296728821]
       ],
-      "cover": "planting"
+      "cover": "grass"
     },
     {
       "ring": [
@@ -353,7 +370,7 @@
     {
       "title": "Google Maps satellite: owner-supplied local reference",
       "url": "https://www.google.com/maps/@13.6126627,123.2197822,80m/data=!3m1!1e3",
-      "note": "Inspected owner-supplied villa-grande-homes-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Dense north/east/south canopy belts and west classroom-edge crowns; separate small crowns below the northern classrooms; central irregular green yard, three distinguishable parallel planted strips at southwest, and exposed north/west links. Dark roof shadows are not hedges. Southern cropped roofs and ground under dense canopy are not reconstructed. Four northern classrooms and east-side roof are recognizable; southern roofs are mostly obscured/cropped. Independent excluded check errors: 1.70 m, 0.53 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+      "note": "Inspected owner-supplied villa-grande-homes-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Dense north/east/south canopy belts and west classroom-edge crowns; separate small crowns below the northern classrooms; central irregular green yard, a flat northern grass strip and three distinguishable parallel planted strips at southwest, and exposed north/west links. Dark roof shadows are not hedges. Southern cropped roofs and ground under dense canopy are not reconstructed. Four northern classrooms and east-side roof are recognizable; southern roofs are mostly obscured/cropped. Independent excluded check errors: 1.70 m, 0.53 m. Visible crown centers are fitted to clear trunks within the observed crown footprint (maximum seven metres); crowns may overhang roofs and roads. Crown widths in the dense belts are estimated from image pixels against their matched local roof scale; existing circular crowns approximate irregular/elliptical image crowns. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Planted islands take precedence over exposed paving; ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships. Owner grass correction (2026-10-08): The flat north classroom apron strip is lawn with scattered small crowns, not a formal bed. Keep the three distinct parallel southwest planting strips and broad central lawn. Classification uses texture, form and context, including dry turf, rather than green hue alone. Added ground excludes opaque observed crowns; original tree positions, routes and registration remain unchanged."
     }
   ]
 }

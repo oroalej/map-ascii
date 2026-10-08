@@ -42,7 +42,19 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.21988393828, 13.61292634082],
+          "imagePixel": [395, 170],
+          "observation": "The flat north classroom apron strip is lawn with scattered small crowns, not a formal bed. Keep the three distinct parallel southwest planting strips and broad central lawn."
+        },
+        {
+          "at": [123.21976775955, 13.61293548798],
+          "imagePixel": [300, 178],
+          "observation": "The flat north classroom apron strip is lawn with scattered small crowns, not a formal bed. Keep the three distinct parallel southwest planting strips and broad central lawn."
+        }
+      ]
     },
     {
       "slug": "concepcion-grande-elementary-school",
@@ -89,7 +101,8 @@
           ]
         }
       ],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "san-rafael-elementary-school",
@@ -116,7 +129,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "villa-corazon-elementary-school",
@@ -143,7 +157,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "pacol-elementary-school",
@@ -204,7 +219,19 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [[123.232282047, 13.651475777]],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.23221541563, 13.65140322248],
+          "imagePixel": [304, 215],
+          "observation": "Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn."
+        },
+        {
+          "at": [123.23236943811, 13.65134042396],
+          "imagePixel": [364, 270],
+          "observation": "Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn."
+        }
+      ]
     },
     {
       "slug": "ateneo-pacol",
@@ -261,12 +288,26 @@
       ],
       "hasLowPlanting": true,
       "lowPlantingOmission": "",
-      "bareYardChecks": [
-        [123.232420182, 13.646501686],
-        [123.232547744, 13.645899421]
-      ],
+      "bareYardChecks": [[123.232547744, 13.645899421]],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.23242018247, 13.64650168604],
+          "imagePixel": [330, 400],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        },
+        {
+          "at": [123.23264620334, 13.6463700118],
+          "imagePixel": [430, 465],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        },
+        {
+          "at": [123.23220654768, 13.6460039271],
+          "imagePixel": [222, 643],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        }
+      ]
     },
     {
       "slug": "naga-city-sports-complex",
@@ -344,7 +385,8 @@
       "opaqueCanopyGroundChecks": [
         [123.236950642, 13.647457493],
         [123.237181089, 13.647098808]
-      ]
+      ],
+      "grassChecks": []
     },
     {
       "slug": "leon-q-mercado-high-school",
@@ -371,7 +413,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [[123.250275274, 13.652699153]],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "teodora-moscoso-elementary-school",
@@ -398,7 +441,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "del-rosario-elementary-school",
@@ -425,7 +469,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "del-rosario-high-school",
@@ -452,7 +497,14 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.23883450734, 13.6186104117],
+          "imagePixel": [30, 310],
+          "observation": "The upper smooth green opening is low cover but falls outside the complete preserved source parent under the unchanged registration; that omission remains a parcel limit, not a claim of no grass. Add only exposed lower/west grass pockets inside the parent, excluding raised tree crowns, roofs and hard apron. Remaining mixed foliage/shadows are ambiguous draft observations."
+        }
+      ]
     },
     {
       "slug": "cararayan-national-high-school",
@@ -495,7 +547,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "don-manuel-i-abella-central-school",
@@ -554,7 +607,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     },
     {
       "slug": "san-isidro-national-high-school",
@@ -587,7 +641,14 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.26839883195, 13.63264775046],
+          "imagePixel": [220, 73],
+          "observation": "Small dry/green low-turf fringe adjoining the existing north forecourt grass. Retain the raised green island as planting and the shared mature crowns; no ground is inferred beneath opaque foliage."
+        }
+      ]
     },
     {
       "slug": "san-isidro-elementary-school",
@@ -644,7 +705,14 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.26866760205, 13.63230596845],
+          "imagePixel": [240, 275],
+          "observation": "The flat strip beside the western classroom opening is continuous low grass, not a distinguishable formal bed. Preserve the raised courtyard planting island and east classroom-edge planting; retain the dry/green openings and all shared crowns."
+        }
+      ]
     },
     {
       "slug": "carolina-elementary-school",
@@ -722,7 +790,14 @@
           ]
         }
       ],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.28730982203, 13.66396850306],
+          "imagePixel": [282, 189],
+          "observation": "West-yard fringe shows patchy low cover including dry turf merging into the existing green tongue. Its north flat green continuation is lawn, not a separate planted bed. Keep the worn eastern orange/tan yard bare, roof-end beds, isolated crowns and narrow central approach."
+        }
+      ]
     },
     {
       "slug": "carolina-national-high-school",
@@ -779,7 +854,8 @@
       "lowPlantingOmission": "",
       "bareYardChecks": [],
       "surfaceConnections": [],
-      "opaqueCanopyGroundChecks": []
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
     }
   ]
 }

@@ -273,6 +273,24 @@ describe('eastern school grounds from the owner references', () => {
             'bare yard painted as lawn',
           ).toBe(false);
       }
+      for (const check of reference.grassChecks) {
+        expect(
+          cover.areas.some(
+            (patch) =>
+              patch.cover === 'grass' &&
+              inside(check.at, { type: 'Polygon', coordinates: [patch.ring] }),
+          ),
+          slug + ': exposed turf at image pixel ' + check.imagePixel.join(','),
+        ).toBe(true);
+        for (const hardscape of paving)
+          expect(
+            inside(check.at, {
+              type: 'Polygon',
+              coordinates: [hardscape.ring, ...(hardscape.holes ?? [])],
+            }),
+            'observed turf painted as paving',
+          ).toBe(false);
+      }
       for (const at of reference.opaqueCanopyGroundChecks) {
         for (const patch of cover.areas)
           expect(
