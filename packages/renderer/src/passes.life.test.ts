@@ -87,8 +87,9 @@ it('uploads crowd-only masks, reuses a held frame, clears owned words and disabl
     undefined,
     { event, progress: 0.4, quality: 1 },
   ];
-  expect(lifePass(...args)).toBe(1);
+  lifePass(...args);
   while (lifeRaster(targets)!.crowdPending) lifePass(...args);
+  expect(lifePass(...args)).toBe(1);
   const uploaded = vi.mocked(uploadCrowdMask).mock.calls.at(-1)![2]!;
   expect([...uploaded.slice(0, 8)]).toEqual(Array(8).fill(0xffffffff));
   expect(lifeRaster(targets)!.owners[0]).toBe(0);

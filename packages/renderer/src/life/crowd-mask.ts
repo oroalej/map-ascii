@@ -220,6 +220,16 @@ export class CrowdMaskRaster {
       this.longitude + (col * this.side + (bit % this.side) + 0.5) * this.step,
     );
   }
+  /** Query an already prepared row without starting another geographic scan. */
+  coversCached(col: number, row: number): boolean | undefined {
+    const cover = this.coverage.get(row);
+    return cover && this.overlapsCover(cover, col);
+  }
+  private overlapsCover(cover: Span[], col: number) {
+    const wholeWest = this.longitude + col * this.side * this.step;
+    const wholeEast = wholeWest + this.side * this.step;
+    return overlaps(cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast));
+  }
   covers(col: number, row: number) {
     let cover = this.coverage.get(row);
     if (!cover) {
@@ -231,10 +241,7 @@ export class CrowdMaskRaster {
         this.coverage.delete(this.coverage.keys().next().value!);
       this.coverage.set(row, cover);
     }
-    const x0 = col * this.side;
-    const wholeWest = this.longitude + x0 * this.step;
-    const wholeEast = wholeWest + this.side * this.step;
-    return overlaps(cover, Math.min(wholeWest, wholeEast), Math.max(wholeWest, wholeEast));
+    return this.overlapsCover(cover, col);
   }
   mask(col: number, row: number, allows?: (col: number, row: number) => boolean) {
     if (!this.covers(col, row)) return undefined;

@@ -20,6 +20,10 @@ export const MAX_THRONG_CELLS = 16000;
 export const MAX_COLD_THRONG_CELLS = 8;
 /** Detailed cells need one classification, rather than 256 subcell classifications. */
 export const MAX_COLD_FINE_THRONG_CELLS = 128;
+/** Fixed world patches, independent of the viewport. Retain several distant locations. */
+export const THRONG_CHUNK_COLS = 32;
+export const THRONG_CHUNK_ROWS = 16;
+export const MAX_THRONG_CHUNKS = 256;
 export type ThrongCell = {
   col: number;
   row: number;
@@ -43,7 +47,6 @@ export type ThrongStampCache = {
   hardTerrain?: object;
   permitted?: boolean;
   complete?: boolean;
-  viewport?: readonly [number, number, number, number];
 };
 export type ThrongPayload = {
   cells: ThrongCell[];
@@ -206,6 +209,7 @@ type StaticCell = {
   s?: number;
   flag?: number;
 };
+type CrowdChunk = { col: number; row: number; payload?: Cache['payload'] };
 type Cache = {
   scale?: readonly [number, number];
   fromCell?: GridPlacement['fromCell'];
@@ -217,7 +221,9 @@ type Cache = {
   area?: CrowdMaskRaster;
   columns: Map<number, Map<number, StaticCell | null>>;
   size: number;
-  viewport?: readonly [number, number, number, number];
+  chunks: Map<string, CrowdChunk>;
+  cursor: number;
+  viewPayload?: Cache['payload'];
   payload?: {
     col: number;
     row: number;
@@ -255,8 +261,10 @@ function cacheFor(
   if (!saved) caches.set(ground, (saved = []));
   const world = grid.world,
     fromCell = grid.fromCell!;
-  const terrain = guard?.terrainKey ?? guard,
-    hardTerrain = guard?.hardTerrainKey ?? guard;
+  // Fine geometry is purely geographic. Its ink permissions are checked against the
+  // accepted terrain in packLife; a new worker snapshot must not rebuild the patches.
+  const terrain = fine ? undefined : (guard?.terrainKey ?? guard),
+    hardTerrain = fine ? undefined : (guard?.hardTerrainKey ?? guard);
   let cache = saved.find(
     (c) =>
       c.terrain === terrain &&
@@ -264,7 +272,12 @@ function cacheFor(
       c.fine === fine &&
       (world ? c.scale?.[0] === world[0] && c.scale[1] === world[1] : c.fromCell === fromCell),
   );
-  if (cache) return cache;
+  if (cache) {
+    // Scale variants share one retention budget; put the used variant last.
+    saved.splice(saved.indexOf(cache), 1);
+    saved.push(cache);
+    return cache;
+  }
   const raster = (g: EventGround) =>
     new CrowdMaskRaster(
       g,
@@ -286,6 +299,8 @@ function cacheFor(
         : undefined,
     columns: new Map(),
     size: 0,
+    chunks: new Map(),
+    cursor: 0,
   };
   if (saved.length >= 4) saved.shift();
   saved.push(cache);
@@ -348,7 +363,7 @@ function movingDensity(
   densityScratch[1] = paint;
   return densityScratch;
 }
-export function throng(
+function rasterThrong(
   event: ProcessionRoute,
   progress: number,
   grid: GridPlacement,
@@ -357,6 +372,8 @@ export function throng(
   zoom: number,
   quality = 1,
   allowsSubcell?: SubGuard,
+  budget?: { remaining: number },
+  chunk?: CrowdChunk,
 ): ThrongPayload {
   const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
   const fromCell = grid.fromCell;
@@ -396,7 +413,8 @@ export function throng(
   const fine = zoom >= 17;
   const cache =
     !fine || grid.world ? cacheFor(ground, event, grid, allowsSubcell, fine) : undefined;
-  const coldLimit = fine ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS;
+  const coldLimit =
+    budget?.remaining ?? (fine ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS);
   const areaGround = areaFor(event, ground);
   const massFrame =
     event.kind === 'mass'
@@ -411,7 +429,7 @@ export function throng(
         )
       : 1;
   const progressKey = event.kind === 'mass' ? massRamp : event.kind === 'fluvial' ? 0 : head;
-  const held = cache?.payload;
+  const held = chunk ? chunk.payload : cache?.payload;
   if (
     held &&
     held.col === origin.originCol &&
@@ -422,29 +440,6 @@ export function throng(
     held.quality === quality
   )
     return held.result;
-  if (cache) {
-    const viewport = [
-      minC + origin.originCol,
-      minR + origin.originRow,
-      maxC + origin.originCol,
-      maxR + origin.originRow,
-    ] as const;
-    if (!cache.viewport || viewport.some((value, i) => value !== cache.viewport![i])) {
-      // Keep a small pan margin, rather than every world cell visited during a long replay.
-      for (const [col, cells] of cache.columns) {
-        if (col < viewport[0] - 32 || col >= viewport[2] + 32) {
-          cache.size -= cells.size;
-          cache.columns.delete(col);
-        } else
-          for (const row of cells.keys())
-            if (row < viewport[1] - 32 || row >= viewport[3] + 32) {
-              cells.delete(row);
-              cache.size--;
-            }
-      }
-      cache.viewport = viewport;
-    }
-  }
   let coldCells = 0;
   for (
     let row = minR + ((stride - ((minR + origin.originRow) % stride)) % stride);
@@ -460,6 +455,20 @@ export function throng(
         ar = row + origin.originRow;
       const cached = cache?.columns.get(ac)?.get(ar);
       if (cached === null) continue;
+      // Empty stretches of a prepared scanline need no point projection, mask or
+      // figure classification. Do not start new scanlines after exhausting the budget.
+      if (
+        cache?.fine &&
+        cached === undefined &&
+        cache.raster.coversCached(ac, ar) === false &&
+        (!cache.seated || cache.seated.coversCached(ac, ar) === false)
+      ) {
+        let column = cache.columns.get(ac);
+        if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
+        column.set(ar, null);
+        cache.size++;
+        continue;
+      }
       if (cache && cached === undefined && coldCells >= coldLimit) {
         result.pending = true;
         continue;
@@ -578,15 +587,6 @@ export function throng(
                 count++;
               }
             cell = { mask, seated, point: representative, along, flags, count };
-          }
-          if (cache.size >= 16384) {
-            // Never evict the current viewport while its bounded construction is unfinished.
-            for (const [column, cells] of cache.columns)
-              if (column < minC + origin.originCol || column >= maxC + origin.originCol) {
-                cache.size -= cells.size;
-                cache.columns.delete(column);
-                break;
-              }
           }
           let column = cache.columns.get(ac);
           if (!column) cache.columns.set(ac, (column = new Map<number, StaticCell | null>()));
@@ -713,10 +713,188 @@ export function throng(
   for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
   for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
   sortedCells.length = 0;
-  if (cache && !result.pending)
-    cache.payload = {
+  if (budget) budget.remaining -= coldCells;
+  if (cache && !result.pending) {
+    const payload = {
       col: origin.originCol,
       row: origin.originRow,
+      cols,
+      rows,
+      progress: progressKey,
+      quality,
+      result,
+    };
+    if (chunk) chunk.payload = payload;
+    else cache.payload = payload;
+  }
+  return result;
+}
+
+/** Assemble retained patches; moving the camera does not rasterize ready patches again. */
+export function throng(
+  event: ProcessionRoute,
+  progress: number,
+  grid: GridPlacement,
+  cols: number,
+  rows: number,
+  zoom: number,
+  quality = 1,
+  allowsSubcell?: SubGuard,
+): ThrongPayload {
+  if (!grid.world || !grid.fromCell || zoom < 15 || progress < 0 || progress >= 1 || quality <= 0)
+    return rasterThrong(event, progress, grid, cols, rows, zoom, quality, allowsSubcell);
+  const cache = cacheFor(groundForRoute(event), event, grid, allowsSubcell, zoom >= 17);
+  const { originCol, originRow } = grid.grid;
+  const progressKey =
+    event.kind === 'mass'
+      ? Math.min(
+          1,
+          progress / PROCESSION.mass.arrivalEnd,
+          (1 - progress) / (1 - PROCESSION.mass.disperseStart),
+        )
+      : event.kind === 'fluvial'
+        ? 0
+        : formationLayout(event).head(progress);
+  const held = cache.viewPayload;
+  if (
+    held &&
+    held.col === originCol &&
+    held.row === originRow &&
+    held.cols === cols &&
+    held.rows === rows &&
+    held.progress === progressKey &&
+    held.quality === quality
+  )
+    return held.result;
+  const bounds = eventGroundBounds(groundForRoute(event));
+  const a = grid.toCell(bounds[0], bounds[1]),
+    b = grid.toCell(bounds[2], bounds[3]);
+  const minC = Math.max(originCol, Math.floor(Math.min(a[0], b[0])) + originCol - 2),
+    maxC = Math.min(originCol + cols, Math.ceil(Math.max(a[0], b[0])) + originCol + 2),
+    minR = Math.max(originRow, Math.floor(Math.min(a[1], b[1])) + originRow - 2),
+    maxR = Math.min(originRow + rows, Math.ceil(Math.max(a[1], b[1])) + originRow + 2);
+  const visible: { key: string; col: number; row: number }[] = [];
+  for (
+    let row = Math.floor(minR / THRONG_CHUNK_ROWS) * THRONG_CHUNK_ROWS;
+    row < maxR;
+    row += THRONG_CHUNK_ROWS
+  )
+    for (
+      let col = Math.floor(minC / THRONG_CHUNK_COLS) * THRONG_CHUNK_COLS;
+      col < maxC;
+      col += THRONG_CHUNK_COLS
+    )
+      visible.push({ key: `${col}/${row}`, col, row });
+  const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
+  if (!visible.length) return result;
+  // Pin all visible patches before evicting anything. An LRU patch owns its geometry,
+  // membership and figure ink together; no sweep deletes the previous location on a pan.
+  for (const patch of visible) {
+    const saved = cache.chunks.get(patch.key) ?? { col: patch.col, row: patch.row };
+    cache.chunks.delete(patch.key);
+    cache.chunks.set(patch.key, saved);
+  }
+  const variants = caches.get(groundForRoute(event))!;
+  // Coarse masks retain 256 along-route samples per cell, so charge eight times
+  // the detailed patch weight. Zoom variants must not each accumulate a full trail.
+  const weight = (variant: Cache) => (variant.fine ? 1 : 8);
+  let retained = variants.reduce((n, variant) => n + variant.chunks.size * weight(variant), 0);
+  const capacity = Math.max(MAX_THRONG_CHUNKS, visible.length * weight(cache));
+  while (retained > capacity) {
+    const oldest = variants.find((variant) => variant !== cache && variant.chunks.size) ?? cache;
+    const [key, patch] = oldest.chunks.entries().next().value!;
+    oldest.chunks.delete(key);
+    oldest.viewPayload = undefined;
+    retained -= weight(oldest);
+    for (let col = patch.col; col < patch.col + THRONG_CHUNK_COLS; col++) {
+      const column = oldest.columns.get(col);
+      if (!column) continue;
+      for (let row = patch.row; row < patch.row + THRONG_CHUNK_ROWS; row++)
+        if (column.delete(row)) oldest.size--;
+      if (!column.size) oldest.columns.delete(col);
+    }
+  }
+  const budget = { remaining: zoom >= 17 ? MAX_COLD_FINE_THRONG_CELLS : MAX_COLD_THRONG_CELLS };
+  // Rotate preparation across locations instead of filling the top-left first. The
+  // single shared budget applies to the whole frame, never once per patch.
+  const start = cache.cursor % visible.length;
+  const quantum = Math.max(1, Math.floor(budget.remaining / Math.min(visible.length, 8)));
+  cache.cursor = start + Math.min(visible.length, 8);
+  const payloads: ThrongPayload[] = [];
+  for (let i = 0; i < visible.length; i++) {
+    const slot = (start + i) % visible.length;
+    const patch = visible[slot]!,
+      saved = cache.chunks.get(patch.key)!;
+    if (saved.payload?.progress === progressKey && saved.payload.quality === quality) {
+      payloads[slot] = saved.payload.result;
+      continue;
+    }
+    const dc = patch.col - originCol,
+      dr = patch.row - originRow;
+    const placement: GridPlacement = {
+      ...grid,
+      grid: { ...grid.grid, originCol: patch.col, originRow: patch.row },
+      fromCell: (c, r) => grid.fromCell!(c + dc, r + dr),
+      toCell: (lng, lat) => {
+        const p = grid.toCell(lng, lat);
+        return [p[0] - dc, p[1] - dr];
+      },
+      world: [grid.world[0], grid.world[1], patch.col, patch.row],
+    };
+    const patchBudget = { remaining: Math.min(budget.remaining, quantum) };
+    const allocated = patchBudget.remaining;
+    const payload = rasterThrong(
+      event,
+      progress,
+      placement,
+      THRONG_CHUNK_COLS,
+      THRONG_CHUNK_ROWS,
+      zoom,
+      quality,
+      allowsSubcell &&
+        Object.assign(
+          (agent: VisibleAgent, c: number, r: number) =>
+            allowsSubcell(agent, c + dc * THRONG_MASK_SIDE, r + dr * THRONG_MASK_SIDE),
+          {
+            terrainKey: allowsSubcell.terrainKey ?? allowsSubcell,
+            hardTerrainKey: allowsSubcell.hardTerrainKey ?? allowsSubcell,
+          },
+        ),
+      patchBudget,
+      saved,
+    );
+    budget.remaining -= allocated - patchBudget.remaining;
+    if (payload.pending) saved.payload = undefined;
+    result.pending ||= payload.pending;
+    payloads[slot] = payload;
+  }
+  for (let i = 0; i < visible.length; i++) {
+    const patch = visible[i]!,
+      payload = payloads[i]!;
+    const dc = patch.col - originCol,
+      dr = patch.row - originRow;
+    for (const cell of payload.cells) {
+      const col = cell.col + dc,
+        row = cell.row + dr;
+      if (col >= 0 && row >= 0 && col < cols && row < rows)
+        result.cells.push({ ...cell, col, row });
+    }
+  }
+  // Keep admission priority independent of patch preparation order.
+  bucketCounts.fill(0);
+  for (const cell of result.cells) bucketCounts[cell.hash >>> 24]!++;
+  let offset = 0;
+  for (let i = 0; i < bucketCounts.length; i++) {
+    bucketOffsets[i] = offset;
+    offset += bucketCounts[i]!;
+  }
+  for (const cell of result.cells) sortedCells[bucketOffsets[cell.hash >>> 24]!++] = cell;
+  for (let i = 0; i < result.cells.length; i++) result.cells[i] = sortedCells[i]!;
+  sortedCells.length = 0;
+  if (!result.pending)
+    cache.viewPayload = {
+      col: originCol,
+      row: originRow,
       cols,
       rows,
       progress: progressKey,

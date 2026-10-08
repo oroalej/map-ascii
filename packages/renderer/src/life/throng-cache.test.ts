@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { localMetricProjection, type MassRoute } from '@atlas/shared';
-import { throng, MAX_COLD_FINE_THRONG_CELLS } from './throng';
+import { throng, MAX_COLD_FINE_THRONG_CELLS, THRONG_CHUNK_COLS, MAX_THRONG_CHUNKS } from './throng';
 import { CrowdMaskRaster } from './crowd-mask';
 import { makeCellGuard } from './cell-guard';
 import { groundForRoute } from './ground-events';
@@ -43,26 +43,134 @@ const event: MassRoute = {
 };
 const cols = 64,
   rows = 32;
-function grid(pan = 0): GridPlacement {
+function grid(pan = 0, scale = 1): GridPlacement {
   return {
     grid: { originCol: pan, originRow: 0, shiftX: 0, shiftY: 0 },
-    world: [1, 1, pan, 0],
+    world: [scale, scale, pan, 0],
     tileMatrix: () => [],
-    fromCell: (c, r) => q((c + pan - cols / 2) * 0.35, -(r - rows / 2) * 0.35),
+    fromCell: (c, r) => q(((c + pan - cols / 2) * 0.35) / scale, (-(r - rows / 2) * 0.35) / scale),
     toCell: (lng, lat) => {
       const [x, y] = frame.to([lng, lat]);
-      return [x / 0.35 + cols / 2 - pan, -y / 0.35 + rows / 2];
+      return [(x * scale) / 0.35 + cols / 2 - pan, (-y * scale) / 0.35 + rows / 2];
     },
   };
 }
-function settled(placement: GridPlacement) {
-  let payload = throng(event, 0.4, placement, cols, rows, 21);
-  while (payload.pending) payload = throng(event, 0.4, placement, cols, rows, 21);
+function settled(placement: GridPlacement, route = event) {
+  let payload = throng(route, 0.4, placement, cols, rows, 21);
+  let attempts = 0;
+  while (payload.pending) {
+    expect(++attempts).toBeLessThan(1000);
+    payload = throng(route, 0.4, placement, cols, rows, 21);
+  }
   return payload;
 }
 const glyphs = mapGlyphs(themes.dark),
   lookup = (g: string) => Math.max(0, glyphs.indexOf(g)),
   lifeGlyphs = buildLifeGlyphs(lookup);
+it('retains three distant locations and their ink across pans and new terrain frames', () => {
+  const route = { ...event, id: 'mass/chunks' };
+  const spy = vi.spyOn(CrowdMaskRaster.prototype, 'mask'),
+    ink = vi.fn(lookup);
+  const out = new Uint8Array(cols * rows * 4);
+  const render = (pan: number) => {
+    const placement = grid(pan),
+      payload = settled(placement, route);
+    const draw = () =>
+      packLife(
+        out,
+        { cols, rows, cellWidth: 10, cellHeight: 18, toCell: placement.toCell },
+        [],
+        themes.dark,
+        ink,
+        undefined,
+        lifeGlyphs,
+        { throng: payload },
+      );
+    draw();
+    while (payload.stampPending) draw();
+    return payload;
+  };
+  try {
+    const first = render(0),
+      stamp = first.cells.find((c) => c.col > 10 && c.row > 10)!.stamp;
+    render(128);
+    render(256);
+    const queries = spy.mock.calls.length,
+      glyphQueries = ink.mock.calls.length;
+    const returned = render(0);
+    expect(returned.cells.some((c) => c.stamp === stamp)).toBe(true);
+    expect(spy.mock.calls.length).toBe(queries);
+    expect(ink.mock.calls.length).toBe(glyphQueries);
+    const newTerrain = Object.assign(() => true, { terrainKey: {}, hardTerrainKey: {} });
+    expect(throng(route, 0.4, grid(), cols, rows, 21, 1, newTerrain).pending).not.toBe(true);
+    expect(spy.mock.calls.length).toBe(queries);
+  } finally {
+    spy.mockRestore();
+  }
+});
+it('prepares complete edge ink once and copies it when the figure enters the screen', () => {
+  const route = { ...event, id: 'mass/edge-ink' },
+    payload = settled(grid(), route);
+  const cell = payload.cells.find((c) => c.col === 0 && c.row > 10 && c.row < 20)!;
+  expect(cell).toBeDefined();
+  payload.cells = [cell];
+  const ink = vi.fn(lookup),
+    out = new Uint8Array(cols * rows * 4);
+  const draw = (placement: GridPlacement, cells = payload.cells) =>
+    packLife(
+      out,
+      { cols, rows, cellWidth: 10, cellHeight: 18, toCell: placement.toCell },
+      [],
+      themes.dark,
+      ink,
+      undefined,
+      lifeGlyphs,
+      { throng: { ...payload, cells } },
+    );
+  draw(grid());
+  const bytes = cell.stamp!.bytes,
+    calls = ink.mock.calls.length;
+  expect(cell.stamp!.complete).toBe(true);
+  const panned = settled(grid(-2), route).cells.filter((c) => c.stamp === cell.stamp);
+  expect(draw(grid(-2), panned)).toBe(1);
+  expect(cell.stamp!.bytes).toBe(bytes);
+  expect(ink.mock.calls.length).toBe(calls);
+});
+it.each([false, true])(
+  'bounds retained world patches across a long pan (zoom variants=%s)',
+  (variants) => {
+    const route = {
+      ...event,
+      id: 'mass/chunk-limit',
+      site: {
+        ...event.site,
+        grounds: [box(-5000, -5000, 5000, 5000)],
+        blocked: [box(-5000, -5000, 5000, 5000)],
+      },
+    };
+    const spy = vi.spyOn(CrowdMaskRaster.prototype, 'mask');
+    const prepare = (pan: number, scale = 1) => {
+      let payload = throng(route, 0.4, grid(pan, scale), 32, 16, 21);
+      for (let attempts = 0; payload.pending; attempts++) {
+        expect(attempts).toBeLessThan(10);
+        payload = throng(route, 0.4, grid(pan, scale), 32, 16, 21);
+      }
+    };
+    try {
+      prepare(0);
+      const original = spy.mock.calls.length;
+      prepare(0);
+      expect(spy.mock.calls.length).toBe(original);
+      for (let i = 1; i <= MAX_THRONG_CHUNKS; i++)
+        prepare(i * THRONG_CHUNK_COLS, variants && i > MAX_THRONG_CHUNKS / 2 ? 2 : 1);
+      const travelled = spy.mock.calls.length;
+      prepare(0);
+      expect(spy.mock.calls.length).toBeGreaterThan(travelled);
+    } finally {
+      spy.mockRestore();
+    }
+  },
+);
 it('bounds detailed preparation and reuses geographic classifications during progress and integer pans', () => {
   const placement = grid(),
     spy = vi.spyOn(CrowdMaskRaster.prototype, 'mask');
@@ -76,7 +184,11 @@ it('bounds detailed preparation and reuses geographic classifications during pro
     expect(throng(event, 0.5, placement, cols, rows, 21).pending).toBeUndefined();
     expect(spy.mock.calls.length).toBe(queries);
     const panned = settled(grid(1));
-    expect(spy.mock.calls.length - queries).toBeLessThanOrEqual(2 * rows);
+    // Entering a patch prepares its whole width, so subsequent small pans reuse it.
+    expect(spy.mock.calls.length - queries).toBeLessThanOrEqual(2 * rows * THRONG_CHUNK_COLS);
+    const prepared = spy.mock.calls.length;
+    settled(grid(2));
+    expect(spy.mock.calls.length).toBe(prepared);
     const before = complete.cells.find(
       (c) => c.col > 10 && c.col < 50 && c.row > 10 && c.row < 20,
     )!;
