@@ -1,0 +1,214 @@
+{
+  "id": "tour/heritage-houses",
+  "group": "heritage",
+  "title": {
+    "en": "Heritage houses"
+  },
+  "description": {
+    "en": "An exterior walk from Abella Street through the Centro’s houses, shops and ruins to Peñafrancia Avenue. Interior access is not included."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": {
+        "lat": 13.6227426,
+        "lng": 123.1820411,
+        "zoom": 18.7
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The city newsletter identifies this as Dominador and Josefa Almeda’s ancestral house. The CCP encyclopedia describes its porch’s iron arch, staircase ornament and narra walls. Those are published architectural descriptions, rather than an invitation to enter the house."
+      },
+      "select": "osm:way/23664606",
+      "sources": [
+        {
+          "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf"
+        },
+        {
+          "title": "CCP Encyclopedia of Philippine Art: Bicol (1994), architecture section",
+          "url": "https://nlpdl.nlp.gov.ph/CC01/monographs/1994/NLP00VM052mcd/v1/v7.pdf"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.622736,
+        "lng": 123.1840901,
+        "zoom": 18.5
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Naga’s city newsletter credits Victor Bichara and Emily Panayotti with opening movie houses in the 1920s. It recalls Bichara Theatre reopening early in 1946 and becoming Bichara Mall by 2023. That history does not date the present building."
+      },
+      "select": "osm:way/23671040",
+      "sources": [
+        {
+          "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.622233,
+        "lng": 123.184444,
+        "zoom": 19
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The Socorro Abella frontage is lettered with its name and 1929, read as an approximate date. Street View research records arched upper windows above shops. This named building is separate from the Abella rows explicitly listed in the city ordinance."
+      },
+      "select": "landmark/socorro-abella-building",
+      "sources": [
+        {
+          "title": "Google Street View: Socorro Abella Building, General Luna Street",
+          "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=2fRArrYiXANTAh2RdyAgwg&heading=75&pitch=15"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.622512,
+        "lng": 123.1845105,
+        "zoom": 18.8
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The 2003 preservation ordinance names the Abella business rows on General Luna Street. This independently identified member is their representative stop; the listing does not give the rows a construction year."
+      },
+      "select": "osm:way/23674415",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.62313,
+        "lng": 123.1875099,
+        "zoom": 19.2
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The red-brick arch survives from Don Mariano Abella’s former mansion. City Tourism describes his role in the Propaganda Movement and later provincial governorship, and records a historical marker installation here on June 12, 2024."
+      },
+      "select": "landmark/old-abella-mansion-arch",
+      "sources": [
+        {
+          "title": "Naga City Tourism: The Old Abella Mansion Arch",
+          "url": "https://tourism.naga.gov.ph/attractions/the-old-abella-arch/"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.6253975,
+        "lng": 123.1875185,
+        "zoom": 19.2
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The smaller old Post Office ruin bears an 1826 inscription, treated as an approximate date. A 2024 heritage account describes the Administración de Correo’s telegraph link to outlying towns. The city’s 2003 preservation list names both stone buildings at this site."
+      },
+      "select": "landmark/administracion-de-correo",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Spanish-era Buildings Declared as Important Cultural Properties in Naga City (July 2024)",
+          "url": "https://dateline-ibalon.com/2024/07/spanish-era-buildings-declared-as-important-cultural-properties-in-naga-city/"
+        },
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        }
+      ],
+      "highlight": ["landmark/old-provincial-jail"]
+    },
+    {
+      "camera": {
+        "lat": 13.6255261,
+        "lng": 123.1875863,
+        "zoom": 19.2
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Beside the postal ruin stands the old provincial jail. Dateline Ibalon cites historian Danilo Gerona’s 1846 date for the jail and a wartime account of prisoners held here in 1943. Its 2024 report records the city’s cultural-property declaration for the pair."
+      },
+      "select": "landmark/old-provincial-jail",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Spanish-era Buildings Declared as Important Cultural Properties in Naga City (July 2024)",
+          "url": "https://dateline-ibalon.com/2024/07/spanish-era-buildings-declared-as-important-cultural-properties-in-naga-city/"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.6266035,
+        "lng": 123.186237,
+        "zoom": 18.8
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The Badiola home is one of the Barlin Street houses named in the city’s preservation ordinance. The tourism directory locates Jikka Hostel on Barlin Street; the house’s later hospitality use belongs to a different chapter from the preservation listing."
+      },
+      "select": "osm:way/23668592",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        },
+        {
+          "title": "Naga City Tourism: Jikka Hostel",
+          "url": "https://tourism.naga.gov.ph/tr-establishments/jikka-hostel/"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.62697,
+        "lng": 123.186128,
+        "zoom": 18.8
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The Roco family house is another Barlin Street home listed in the 2003 ordinance. Naga’s anniversary newsletter describes Senator Raul Roco’s ancestral home as wooden, with its upper floor visible from the street."
+      },
+      "select": "osm:way/23668511",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        },
+        {
+          "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.6286934,
+        "lng": 123.1897869,
+        "zoom": 18.8
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "End at Villafrancia on Peñafrancia Avenue, another home on the preservation list. The city newsletter identifies the 1927 house with Ludivico Arejola and says Melchor Villanueva rented it for his educational project, later Naga College Foundation. It gives no tenancy year."
+      },
+      "select": "osm:way/23669833",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        },
+        {
+          "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf"
+        }
+      ]
+    }
+  ]
+}

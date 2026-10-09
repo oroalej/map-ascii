@@ -18,6 +18,16 @@ const tours = Object.entries(tourFiles).map(([file, value]) => {
 });
 
 describe('city tour content', () => {
+  it('verifies every Naga tour without unresolved wording', () => {
+    for (const { file, city, tour } of tours) {
+      if (city.slug !== 'naga') continue;
+      expect(tour.status, file).toBe('verified');
+      expect(JSON.stringify(tourFiles[file]), file).not.toMatch(
+        /TODO|verify|unverified|draft|placeholder/i,
+      );
+    }
+  });
+
   it.each(tours)(
     '$file references city-local groups and landmarks and cites verified steps',
     ({ file, city, tour }) => {
@@ -49,10 +59,14 @@ describe('city tour content', () => {
     },
   );
 
-  it('includes Naga’s two verified route tours with the declared groups', () => {
+  it('includes Naga’s verified route and heritage tours with the declared groups', () => {
     for (const [id, group] of [
       ['bridges-and-terminals', 'infrastructure'],
       ['traslacion-route', 'heritage'],
+      ['heritage-centro-walk', 'heritage'],
+      ['campus-belt', 'heritage'],
+      ['monuments-and-martyrs', 'heritage'],
+      ['heritage-houses', 'heritage'],
     ]) {
       const entry = tours.find(
         ({ city, tour }) => city.slug === 'naga' && tour.id === `tour/${id}`,
@@ -61,7 +75,7 @@ describe('city tour content', () => {
     }
     const naga = tours.filter(({ city }) => city.slug === 'naga');
     expect(naga.filter(({ tour }) => tour.group === 'food')).toHaveLength(5);
-    expect(naga.filter(({ tour }) => tour.group === 'heritage')).toHaveLength(2);
+    expect(naga.filter(({ tour }) => tour.group === 'heritage')).toHaveLength(5);
     expect(naga.filter(({ tour }) => tour.group === 'infrastructure')).toHaveLength(1);
   });
 });
