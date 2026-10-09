@@ -106,7 +106,21 @@ export const BOAT_PAINTS_AVOID: readonly number[] = [P.blue, P.sky, P.teal, P.gr
 
 /** Something the life layer draws from a plan: a vehicle, a boat, or a vendor's cart. */
 export type CraftType =
-  VehicleType | BoatType | ProcessionCraft | RailCraft | StallCraft | AnimalCraft | EmergencyCraft;
+  | VehicleType
+  | BoatType
+  | ProcessionCraft
+  | RailCraft
+  | StallCraft
+  | AnimalCraft
+  | EmergencyCraft
+  | PeddlerCraft;
+
+export type PeddlerCraft = 'box-cart' | 'fry-cart' | 'flatbed-cart';
+export const PEDDLER_GLYPHS = ['\uE0C9', '\uE0CA', '\uE0CB'] as const;
+export const isPeddlerCart = (prop: string): prop is PeddlerCraft =>
+  prop === 'box-cart' || prop === 'fry-cart' || prop === 'flatbed-cart';
+/** Metres ahead of the adult pusher; also used by swept physical clearance. */
+export const peddlerCartOffset = (craft: PeddlerCraft) => 0.7 + VEHICLES[craft].length / 2;
 
 export type EmergencyCraft = 'ambulance' | 'police' | 'firetruck';
 
@@ -335,6 +349,30 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     paints: [P.red],
     mini: ['▬', '▮'],
     plan: ['TBBDRRLLGBBH', 'BBBDRRLLGBBB', 'BBBDRRLLGBBB', 'TBBDRRLLGBBH'],
+  },
+  'box-cart': {
+    length: 1.2,
+    width: 0.9,
+    speed: 0,
+    paints: [P.red, P.yellow, P.sky],
+    mini: [PEDDLER_GLYPHS[0], PEDDLER_GLYPHS[0]],
+    plan: ['DARRAD', 'BRHRRB', 'DARRAD'],
+  },
+  'fry-cart': {
+    length: 1.3,
+    width: 0.9,
+    speed: 0,
+    paints: [P.silver, P.green, P.orange],
+    mini: [PEDDLER_GLYPHS[1], PEDDLER_GLYPHS[1]],
+    plan: ['DBBBBD', 'BGGGAB', 'DBBBBD'],
+  },
+  'flatbed-cart': {
+    length: 1.5,
+    width: 1,
+    speed: 0,
+    paints: [P.cream, P.maroon],
+    mini: [PEDDLER_GLYPHS[2], PEDDLER_GLYPHS[2]],
+    plan: ['DBBBBD', 'BDRARB', 'DBBBBD'],
   },
 };
 

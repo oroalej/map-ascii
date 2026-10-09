@@ -1,6 +1,12 @@
 import { SeasonalPart } from './seasonal-glyphs';
 
 export const CARNIVAL_MOTION = { carousel: 0.45, wheel: 0.42, cars: 0.7 } as const;
+export type CarnivalBoost = { at: number; offset: number };
+/** Integral of the additional speed, easing 2x to 1x over six seconds. */
+export function carnivalExtraTime(boost: CarnivalBoost, time: number) {
+  const age = Math.max(0, Math.min(6, time - boost.at));
+  return boost.offset + age - (age * age) / 12;
+}
 export const isCarnivalMotionPart = (part: number) =>
   part >= SeasonalPart.carouselMotion && part <= SeasonalPart.bumperMotion;
 
@@ -15,8 +21,11 @@ export const decodeCarnivalUv = (packed: number): [number, number] => [
 ];
 
 /** CPU reference for the shader's bounded, overhead ride motion. */
-export function carnivalPose(time: number, reducedMotion = false) {
-  const t = reducedMotion || !Number.isFinite(time) ? 0 : time;
+export function carnivalPose(time: number, reducedMotion = false, boost?: CarnivalBoost) {
+  const t =
+    reducedMotion || !Number.isFinite(time)
+      ? 0
+      : time + (boost ? carnivalExtraTime(boost, time) : 0);
   return {
     carousel: t * CARNIVAL_MOTION.carousel,
     gondolas: Array.from({ length: 8 }, (_, i): [number, number] => {
@@ -32,6 +41,24 @@ export function carnivalPose(time: number, reducedMotion = false) {
 
 /** World-local samples animate on the existing time uniform without repacking any cells. */
 export const carnivalMotionGlsl = /* glsl */ `
+uniform int u_carnivalCount;
+uniform vec4 u_carnivalCenters[48];
+uniform vec4 u_carnivalAxes[48];
+float carnivalTime(int part, vec2 cell, float time) {
+  for (int i=0; i<48; i++) {
+    if (i>=u_carnivalCount) break;
+    vec4 c=u_carnivalCenters[i], a=u_carnivalAxes[i];
+    if (int(c.w+0.5)!=part) continue;
+    float det=a.x*a.w-a.y*a.z;
+    if(abs(det)<0.000000001) continue;
+    vec2 d=cell-c.xy;
+    vec2 uv=vec2(d.x*a.w-d.y*a.z,a.x*d.y-a.y*d.x)/det;
+    if(abs(uv.x)>1.0 || abs(uv.y)>1.0) continue;
+    if(part==${SeasonalPart.carouselMotion} && dot(uv,uv)>1.0) continue;
+    return time+c.z;
+  }
+  return time;
+}
 vec3 carnivalPaint(int tint) {
   return tint == 1 ? vec3(1.0, 0.06, 0.16) : tint == 2 ? vec3(0.02, 0.82, 0.58) :
     tint == 3 ? vec3(1.0, 0.12, 0.50) : tint == 4 ? vec3(0.12, 0.38, 1.0) :

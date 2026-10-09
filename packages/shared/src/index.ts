@@ -8,6 +8,7 @@ export * from './constants';
 export * from './detail-selection';
 export * from './life-sites';
 export * from './rhythm';
+export * from './peddlers';
 export * from './seasons';
 export * from './carnival';
 export * from './seasonal-access';

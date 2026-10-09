@@ -382,6 +382,31 @@ export class LocalScenes {
   }
 
   /** Explicit entry point also used by deterministic scene tests. */
+  purchaseEligible(m: Mover) {
+    return (
+      m.kind === 'person' &&
+      !this.cooldown.has(m) &&
+      !this.visits.has(m) &&
+      !this.yielding.has(m) &&
+      !this.busy?.(m)
+    );
+  }
+  /** A failed route/capacity check yields to the next bounded, nearest-first passerby. */
+  purchase(stall: Stall, people: readonly Mover[]) {
+    if (stall.open === false || this.wet) return false;
+    const index = this.sites.findIndex((site) => site.kind === 'vendor' && site.stall === stall);
+    if (index < 0) return false;
+    const candidates = people
+      .map((m, order) => ({ m, order, distance: dist(m, stall) }))
+      .filter(
+        ({ m, distance }) =>
+          this.purchaseEligible(m) && distance <= INTERACTIONS.reach * this.perMeter,
+      )
+      .sort((a, b) => a.distance - b.distance || a.m.rank - b.m.rank || a.order - b.order)
+      .slice(0, 32);
+    for (const { m } of candidates) if (this.reserve(m, index)) return true;
+    return false;
+  }
   reserve(m: Mover, index: number, shading = false): boolean {
     const site = this.sites[index];
     if (
@@ -550,6 +575,10 @@ export class LocalScenes {
     visit.site.queue = visit.site.queue.filter((p) => p !== m);
     if (isWalker(m.kind) && !this.canIdle(m)) visit.returnPending = true;
     else this.returning(m, visit);
+  }
+  wake(m: Mover) {
+    const visit = this.visits.get(m);
+    if (visit?.site.kind === 'rest') this.requestReturn(m, visit);
   }
 
   /** Whether it is raining hard enough to shelter (hysteresis: `INTERACTIONS.rainOn`/`rainOff`). */

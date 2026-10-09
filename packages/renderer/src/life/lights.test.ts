@@ -16,6 +16,23 @@ import {
   type VisibleLamp,
 } from './lights';
 import type { VisibleAgent } from './simulate';
+import { candleLamps } from './seasonal-candles';
+import { CandleFlare } from './candle-flare';
+import { glyphFragmentFor } from '../shaders/glyph';
+
+it('flare uniforms and the candle pool share their five-bit seed without repacking pools', () => {
+  const candle = { kind: 'season-candle' as const, at: [0, 0] as [number, number], seed: 91 };
+  const lamps = candleLamps([candle], 19),
+    flare = new CandleFlare(candle, 0);
+  const uniforms = flare.uniforms(1, (lng, lat) => [lng * 1e6, lat * 1e6])!;
+  expect(uniforms.center[3]).toBe(lamps[0]!.seed);
+  expect(lamps[0]!.state).toBe(LampState.candle);
+  const shader = glyphFragmentFor();
+  expect(shader).toContain('float flare = candleFlareAt(g,sampleCell)');
+  expect(shader).toContain('lampOn(lampG, lampClock, vec2(cell)+0.5)');
+  expect(shader).toContain('(g>>3)!=int(u_candleFlare.w+0.5)');
+  expect(flare.uniforms(3, () => [0, 0])).toBeUndefined();
+});
 
 const EXTENT = 4096;
 
@@ -293,6 +310,27 @@ describe('packLights shops', () => {
 });
 
 describe('packCandles', () => {
+  it('packs explicit peddler bulbs without borrowing candle or parked-cart flags', () => {
+    const grid: LightGrid = { cols: 20, rows: 20, toCell: (lng, lat) => [lng, lat] };
+    const agent: VisibleAgent = {
+      kind: 'person',
+      lng: 5.5,
+      lat: 5.5,
+      flap: 0,
+      peddler: { id: 'local', label: 'Local vendor', prop: 'basket', parasol: 0, lamp: 0.5 },
+    };
+    const out = new Uint8Array(20 * 20 * 4);
+    expect(packCandles(out, grid, [agent], 1)).toBe(1);
+    expect(out[(5 * 20 + 5) * 4 + 1]).toBe(lightByte(LampState.bulb, 0));
+    expect(
+      packCandles(
+        new Uint8Array(out.length),
+        grid,
+        [{ ...agent, peddler: { ...agent.peddler!, lamp: 0 } }],
+        1,
+      ),
+    ).toBe(0);
+  });
   it('hangs a bulb on a vendor’s cart, but not on a plain passer-by', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const people: VisibleAgent[] = [

@@ -17,6 +17,7 @@ function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
   return atlas;
 }
 import { LifeWorld } from './life/simulate';
+import * as TapCapture from './life/tap-capture';
 import type { ProcessionRun } from './life/simulate';
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
 import { CROP_STAGE } from './glyphs/select';
@@ -61,6 +62,7 @@ import { SpeechController } from './life/speech';
 import { LifeHoverController } from './life/hover';
 import { prewarmGlyphPrograms } from './gpu-context';
 import * as FireworkSites from './fireworks-sites';
+import { fireworksPass } from './fireworks-pass';
 import { createConePackingScratch } from './life/lights';
 import { cityTime, atCityMinutes } from './life/clock';
 import type * as FolklorePassModule from './folklore-pass';
@@ -256,6 +258,7 @@ vi.mock('./picking', async (load) => ({
   ...(await load<typeof PickingModule>()),
   MAX_HIGHLIGHT: 64,
   Picker: class {
+    click = vi.fn();
     constructor(_readback: unknown, _generation: unknown, reply: (result: PickResult) => void) {
       if (labelFixture.enabled) labelFixture.reply = reply;
     }
@@ -690,10 +693,136 @@ describe('live motion preference', () => {
     });
     await vi.dynamicImportSettled();
   });
+  it.each(['item', 'all'] as const)(
+    'queues a touch once and keeps picking while flights and reduced motion drop Life taps (%s)',
+    async (mode) => {
+      await usePauseMode(mode);
+      const capture = vi
+        .spyOn(TapCapture, 'captureTap')
+        .mockImplementation((_point, tap, _frame, _reads, _attachment, _current, done) =>
+          done(tap),
+        );
+      vi.mocked(lifeRaster).mockReturnValue({
+        owners: new Uint32Array(0),
+        life: new Uint8Array(0),
+        revision: 1,
+      } as NonNullable<ReturnType<typeof lifeRaster>>);
+      const step = vi.spyOn(LifeWorld.prototype, 'step');
+      draw(100);
+      input.intents!.tap([20, 20], 'touch');
+      draw(140);
+      expect(step.mock.calls.at(-1)![12]).toHaveLength(1);
+      draw(180);
+      expect(step.mock.calls.at(-1)![12]).toBeUndefined();
+      atlas.flyTo({ lng: 0.01 });
+      input.intents!.tap([20, 20], 'touch');
+      expect(capture).toHaveBeenCalledOnce();
+      atlas.setReducedMotion(true);
+      input.intents!.tap([20, 20], 'mouse');
+      expect(capture).toHaveBeenCalledOnce();
+    },
+  );
   afterEach(() => {
     atlas.destroy();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+  it('delivers pointer departure after a long pause, zero-time frame and busy rejection', async () => {
+    const original = InlineHosts.createConfiguredInlineHost;
+    const requests: FrameInput[] = [];
+    let reject = false;
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockImplementation(
+      (world, profiler, clock) => {
+        const host = original(world, profiler, clock);
+        const request = host.request.bind(host);
+        host.request = (frame) => {
+          requests.push(frame);
+          if (reject) {
+            reject = false;
+            return false;
+          }
+          return request(frame);
+        };
+        return host;
+      },
+    );
+    await usePauseMode('all');
+    vi.spyOn(TapCapture, 'captureTap').mockImplementation(
+      (_point, tap, _frame, _reads, _attachment, _current, done) => done(tap),
+    );
+    vi.mocked(lifeRaster).mockReturnValue({
+      owners: new Uint32Array(0),
+      life: new Uint8Array(0),
+      revision: 1,
+    } as NonNullable<ReturnType<typeof lifeRaster>>);
+    draw(100);
+    input.intents!.tap([20, 20], 'mouse');
+    draw(140);
+    visibility.watched = false;
+    visibility.changed!(false);
+    time = 30_140;
+    input.intents!.pointerActivity!(true);
+    visibility.watched = true;
+    visibility.changed!(true);
+    draw(30_140);
+    expect(requests.at(-1)!.step.dt).toBe(0);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    reject = true;
+    draw(30_180);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    draw(30_220);
+    expect(requests.at(-1)!.step.tapPointer).toEqual({ revision: 1, left: true });
+    draw(30_260);
+    expect(requests.at(-1)!.step.tapPointer).toBeUndefined();
+  });
+  it('captures night-season fireworks and consumes a chosen launch receipt once', async () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 21 },
+      year: 2026,
+      cityLife: {
+        source: 'Synthetic calendar',
+        seasons: [
+          {
+            id: 'new-year',
+            title: { en: 'New Year' },
+            window: { from: { month: 12, day: 31 }, to: { month: 1, day: 1 } },
+            fireworks: { label: 'Fireworks', variants: ['peony'] },
+          },
+        ],
+      },
+      life: { time: 1320, season: 'new-year' },
+    });
+    await vi.dynamicImportSettled();
+    const capture = vi
+      .spyOn(TapCapture, 'captureTap')
+      .mockImplementation((_point, tap, _frame, _reads, _attachment, _current, done) => done(tap));
+    vi.mocked(lifeRaster).mockReturnValue({
+      owners: new Uint32Array(0),
+      life: new Uint8Array(0),
+      revision: 1,
+    } as NonNullable<ReturnType<typeof lifeRaster>>);
+    draw(100);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBe(true);
+    draw(140);
+    const requests = vi.mocked(fireworksPass).mock.calls.at(-1)![13];
+    expect(requests).toHaveLength(1);
+    expect(Number.isFinite(requests![0]!.time)).toBe(true);
+    expect(requests![0]!.at[0]).toBeCloseTo(0, 10);
+    expect(requests![0]!.at[1]).toBeCloseTo(0, 10);
+    draw(180);
+    expect(vi.mocked(fireworksPass).mock.calls.at(-1)![13]).toBeUndefined();
+    atlas.setLife({ time: 720 });
+    draw(220);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBeUndefined();
+    atlas.setLife({ time: 1320, season: 'unknown' });
+    draw(260);
+    input.intents!.tap([200, 150], 'touch');
+    expect(capture.mock.calls.at(-1)![1].firework).toBeUndefined();
   });
   it('clamps an initial zoom below the default floor before and after drawing', async () => {
     atlas.destroy();

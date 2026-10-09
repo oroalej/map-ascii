@@ -14,6 +14,8 @@ import { tileToLngLat } from '../raster/geometry';
 import { unpackGlyph } from '../glyphs/select';
 import { glyphFragmentFor } from '../shaders/glyph';
 import { classId } from '../classes';
+import { CandleFlare, candleFlareStrength } from './candle-flare';
+import { tapCandleFixture } from './tap-fixtures';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const ring = (l = 500, t = 500, r = 3500, b = 3500) => [
@@ -24,6 +26,28 @@ const ring = (l = 500, t = 500, r = 3500, b = 3500) => [
   { x: l, y: t },
 ];
 describe('seasonal memorial candles', () => {
+  it('captures the nearest candle within 1.5 cells and reprojects its three-second flare', () => {
+    const c = { kind: 'season-candle' as const, at: [0, 0] as [number, number], seed: 91 };
+    const project = (lng: number, lat: number): [number, number] => [
+      10 + lng * 1e6,
+      20 - lat * 1e6,
+    ];
+    expect(tapCandleFixture([c], [0.0000014, 0], project)?.seed).toBe(91);
+    expect(tapCandleFixture([c], [0.0000016, 0], project)).toBeUndefined();
+    const flare = new CandleFlare(c, 10);
+    expect(flare.uniforms(10, project)?.center).toEqual([10, 20, 1, 27]);
+    expect(candleFlareStrength(1.5)).toBe(0.25);
+    const moved = flare.uniforms(11, (lng, lat) => {
+      const [x, y] = project(lng, lat);
+      return [x * 2 + 5, y * 2 - 8];
+    });
+    expect(moved?.center.slice(0, 2)).toEqual([25, 32]);
+    expect(moved?.radius[0]).toBeCloseTo(flare.uniforms(11, project)!.radius[0]! * 2);
+    expect(flare.uniforms(13, project)).toBeUndefined();
+    const source = glyphFragmentFor();
+    expect(source).toContain('if(flame) color *= 1.0+candleFlareAt');
+    expect(source).toContain('return flare>0.0 ? flicker*(1.0+flare) : flicker');
+  });
   it('limits the burial surface exception to candles in the active shader variant', () => {
     const source = glyphFragmentFor();
     expect(source).toContain(

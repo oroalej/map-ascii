@@ -9,6 +9,8 @@ export const SCENE_SPEECH_CAPACITY = MOMENTS.scene.capacity;
 export const AMBIENT_SPEECH_CAPACITY = MOMENTS.scene.ambientCapacity;
 export type SceneSpeaker = { owner: object; member: number; figure: string };
 export type SceneExchange = {
+  kind?: DialogueChoice['kind'];
+  requested?: boolean;
   key: object;
   speakers: readonly SceneSpeaker[];
   profiles: readonly DialogueProfile[];
@@ -98,7 +100,7 @@ export class SceneSpeech {
   }
   admit(scene: SceneExchange, freeCapacity: number) {
     if (this.seen.has(scene.key) || !scene.valid()) return false;
-    if (!scene.ambient) {
+    if (!scene.ambient && !scene.requested) {
       // Services replace background expressions; neither admission nor cancellation moves anyone.
       for (let i = this.active.length - 1; i >= 0; i--)
         if (
@@ -119,19 +121,22 @@ export class SceneSpeech {
       (this.active.length >= capacity && (spare < 0 || this.active.length - 1 >= capacity)) ||
       (scene.ambient &&
         this.active.filter((a) => a.scene.ambient).length >= AMBIENT_SPEECH_CAPACITY) ||
-      !(scene.ambient
-        ? this.selector.memory.ambientReady(owners, this.now)
-        : this.selector.memory.ready(owners, this.now)) ||
+      (!scene.requested &&
+        !(scene.ambient
+          ? this.selector.memory.ambientReady(owners, this.now)
+          : this.selector.memory.ready(owners, this.now))) ||
       scene.speakers.some((s) => this.owners.has(s.owner))
     )
       return false;
     this.seen.add(scene.key);
-    const dialogue = this.selector.choose(
-      'talk',
-      { ...scene.context, figures: scene.speakers.map((s) => s.figure), profiles: scene.profiles },
-      scene.speakers.map((s) => s.owner),
-      false,
-    );
+    const context = {
+      ...scene.context,
+      figures: scene.speakers.map((s) => s.figure),
+      profiles: scene.profiles,
+    };
+    const dialogue = scene.requested
+      ? this.selector.request(scene.kind ?? 'talk', context)
+      : this.selector.choose(scene.kind ?? 'talk', context, owners, false);
     if (!dialogue) return false;
     const vendor = dialogue.profile?.startsWith('vendor-');
     const turn = vendor ? MOMENTS.scene.vendorTurn : MOMENTS.scene.turn;
@@ -154,7 +159,7 @@ export class SceneSpeech {
       start: this.time + delay,
       turn,
       id: ++this.serial,
-      voiced: this.selector.memory.voiced(dialogue),
+      voiced: scene.requested || this.selector.memory.voiced(dialogue),
     };
     this.active.push(active);
     for (const owner of owners) this.owners.set(owner, active);

@@ -29,8 +29,16 @@ export function readLifeSurface(
   reads: SurfaceReads,
   attachment: number,
   targets: LifeSurfaceFrame['targets'],
-  sample: { col: number; row: number; sx: number; sy: number; cls: number; flags: number },
-  done: (visible: boolean | undefined) => void,
+  sample: {
+    col: number;
+    row: number;
+    sx: number;
+    sy: number;
+    cls: number;
+    flags: number;
+    exposeCoarse?: boolean;
+  },
+  done: (visible: boolean | undefined, coarse?: number) => void,
   retired?: () => void,
 ): boolean {
   if (!canReadLifeSurface(reads)) {
@@ -67,15 +75,16 @@ export function readLifeSurface(
     settle(index, data);
     if (!rejected && !published && bytes[0] && bytes[1] && bytes[2]) {
       published = true;
-      done(
-        lifeVisibleOnSurface(
-          sample.cls,
-          sample.flags,
-          unpackGlyph(bytes[0][0]!, bytes[0][1]!).cls,
-          bytes[1][0]!,
-          bytes[2][0]!,
-        ),
+      const coarse = unpackGlyph(bytes[0][0]!, bytes[0][1]!).cls;
+      const visible = lifeVisibleOnSurface(
+        sample.cls,
+        sample.flags,
+        coarse,
+        bytes[1][0]!,
+        bytes[2][0]!,
       );
+      if (sample.exposeCoarse) done(visible, coarse);
+      else done(visible);
     }
   };
   reads.request(

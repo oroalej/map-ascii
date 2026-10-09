@@ -138,12 +138,39 @@ describe('loadCityPacks', () => {
     const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
-    expect(speech?.exchanges).toHaveLength(110);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'utterance')).toHaveLength(48);
-    expect(speech?.exchanges.filter((e) => e.kind === 'cheer')).toHaveLength(6);
-    expect(speech?.exchanges.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
     expect(
-      speech?.exchanges
+      speech!.exchanges.filter((e) => ['transit-call', 'procession-cheer'].includes(e.profile!)),
+    ).toEqual([]);
+    const legacy = speech!.exchanges.filter((e) => e.profile !== 'peddler-call');
+    const peddlers = speech!.exchanges.filter((e) => e.profile === 'peddler-call');
+    expect(legacy).toHaveLength(110);
+    expect(legacy.filter((e) => e.delivery === 'utterance')).toHaveLength(48);
+    expect(legacy.filter((e) => e.delivery === 'exchange')).toHaveLength(62);
+    expect(peddlers).toHaveLength(21);
+    expect(speech!.exchanges.length).toBeLessThanOrEqual(140);
+    expect(peddlers.filter((e) => !e.conditions?.weather && !e.conditions?.event)).toHaveLength(14);
+    expect(peddlers.filter((e) => e.conditions?.weather)).toHaveLength(4);
+    expect(peddlers.filter((e) => e.conditions?.event === 'hover')).toHaveLength(2);
+    expect(peddlers.filter((e) => e.conditions?.event === 'leaving')).toHaveLength(1);
+    for (const goods of [
+      'taho',
+      'balut',
+      'sorbetes',
+      'bote-dyaryo',
+      'fishball',
+      'kakanin',
+      'takatak',
+    ])
+      expect(
+        peddlers.filter(
+          (e) =>
+            e.conditions?.goods?.includes(goods) && !e.conditions?.weather && !e.conditions?.event,
+        ),
+      ).toHaveLength(2);
+    expect(legacy.filter((e) => e.kind === 'cheer')).toHaveLength(6);
+    expect(speech!.exchanges).toHaveLength(131);
+    expect(
+      legacy
         .filter((e) => ['heat', 'clearing'].includes(e.conditions?.weather ?? ''))
         .map((e) => [e.id, e.conditions?.weather, e.delivery]),
     ).toEqual([
@@ -155,8 +182,8 @@ describe('loadCityPacks', () => {
     const counts: Record<string, number> = {};
     const scripts = new Set<string>();
     for (const e of speech!.exchanges) {
-      // Event cheers carry no scene profile.
-      if (e.kind !== 'cheer') counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
+      if (e.profile !== 'peddler-call' && e.kind !== 'cheer')
+        counts[e.profile!] = (counts[e.profile!] ?? 0) + 1;
       const script = e.lines
         .map((line) =>
           line

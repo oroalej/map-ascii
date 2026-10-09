@@ -14,6 +14,8 @@ import {
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
 import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
+import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
+import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -35,7 +37,20 @@ import {
 } from './bird-flight';
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
+import { EventTaps } from './event-taps';
+import { ProcessionGlyph } from './procession-glyphs';
+import { feedSpot, feedCrumbs, type FeedPoint, type TapPointer } from './feed';
 import {
+  TapSources,
+  TapReactions,
+  resolveTap,
+  type LifeTap,
+  type TapReceipt,
+  type TapTarget,
+} from './tap';
+import type { EmojiSubject, EmojiMood } from '@atlas/shared';
+import {
+  EMOJI,
   EmojiObserver,
   EmojiMemory,
   type EmojiCue,
@@ -210,7 +225,7 @@ import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
-import { SignalControl } from './signals';
+import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
 import { bendAt, laneBend, LANE_BEND, type LaneTerrain } from './lane-clearance';
@@ -240,7 +255,7 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
-import { PuffStore, PuffSelector, EMPTY_PUFFS } from './exhaust';
+import { PuffStore, PuffSelector, EMPTY_PUFFS, PUFF, PUFF_STRIDE } from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
 import {
   collectSeasonAnchors,
@@ -594,6 +609,7 @@ export type Mover = {
 export type LifeEnv = {
   /** The mouse, which birds keep clear of; absent for touch, replays and tests. */
   pointer?: { lngLat: readonly [number, number]; cellMeters: number };
+  tapPointer?: TapPointer;
   pointerRest?: number;
   gust?: CursorGust;
   pointerPeople?: ReadonlySet<object>;
@@ -824,6 +840,7 @@ export type Flock = {
   perched: boolean;
   /** Approaching a prepared suitable ground patch, and settled there (birds.ts `ground`). */
   landing: boolean;
+  tapLanding?: true;
   landed: boolean;
   /** Feeding rather than resting during a ground visit. */
   feeding: boolean;
@@ -920,6 +937,43 @@ function flyingBirdNear(flock: Flock, near: (x: number, y: number) => boolean) {
 
 /** The agents of one tile. */
 export class TileLife {
+  tapRequests?: TapReactions;
+  private tapDash?: WeakMap<Mover, number>;
+  private tapWake?: WeakMap<Mover, number>;
+  tapFeed?: FeedPoint;
+  wake(m: Mover, clock: number) {
+    m.pause = 0;
+    m.lying = m.grooming = false;
+    this.scenes.wake(m);
+    (this.tapWake ??= new WeakMap()).set(m, clock + 2);
+  }
+  requestEmoji(
+    owner: object,
+    subject: EmojiSubject,
+    mood: EmojiMood,
+    clock: number,
+    duration = 2.5,
+    delay = 0,
+    lifetime = 5,
+  ) {
+    (this.tapRequests ??= new TapReactions()).add(
+      {
+        owner,
+        subject,
+        mood,
+        eligible: true,
+        speaking: false,
+        duration,
+        expires: clock + delay + lifetime,
+      },
+      clock + delay,
+    );
+  }
+  hurry(m: Mover, clock: number) {
+    if (m.kind !== 'person') return;
+    (this.tapDash ??= new WeakMap()).set(m, clock + 2);
+    m.pause = 0;
+  }
   emergencyRouter?: EmergencyRouter;
   /** Projection is local to this owner; geographic state survives seams and zoom changes. */
   private emergencyStops = new WeakMap<
@@ -1044,6 +1098,7 @@ export class TileLife {
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
   private readonly commerceStallsRng: () => number;
+  private readonly vendorRestrictedLineIds: ReadonlySet<number>;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
   junctionIndex!: JunctionIndex;
@@ -1246,7 +1301,8 @@ export class TileLife {
           shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
           rank: rng(),
         };
-        if (inTile(stall)) result.push(stall);
+        if (inTile(stall) && !this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1))
+          result.push(stall);
       }
     }
     return result;
@@ -1599,6 +1655,7 @@ export class TileLife {
     this.runRng = random(seed ^ 0xcc9e2d51);
     this.rushRng = random(seed ^ 0x5a17d3e9);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
+    this.vendorRestrictedLineIds = new Set(geo.vendorRestrictedLineIds);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
@@ -3321,7 +3378,7 @@ export class TileLife {
               side,
               rank: rng(),
             };
-            if (guard(stall)) {
+            if (!this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1) && guard(stall)) {
               this.stalls.push(stall);
               this.scenes.addStall(stall);
             }
@@ -3489,6 +3546,12 @@ export class TileLife {
    */
   private *spawnStalls(): Generator<void, void, void> {
     const { geo, looks, perMeter } = this;
+    const grounds = new PolygonIndex();
+    for (const area of geo.areas ?? [])
+      if (area.kind === 'peddler-exclusion')
+        grounds.add(
+          area.rings.map((ring) => ring.map((p) => ({ x: p.x / perMeter, y: p.y / perMeter }))),
+        );
     const reach = VENDORS.marketReach * perMeter;
     const nearMarket = (x: number, y: number) => {
       for (let i = 0; i < geo.markets.length; i += 2) {
@@ -3527,9 +3590,12 @@ export class TileLife {
           side,
           rank: looks(),
         };
+        const bodies = this.groundBodies(stall);
         if (
           kind !== LifeLine.roadMinor &&
-          this.roadTerrain.access.allows(this.groundBodies(stall), false)
+          !this.vendorRestrictedLineIds.has(geo.lineIds?.[line] ?? -1) &&
+          this.roadTerrain.access.allows(bodies, false) &&
+          !grounds.hits(bodies)
         )
           this.stalls.push(stall);
       }
@@ -6062,6 +6128,7 @@ export class TileLife {
   }
 
   private clearEmojiInput(input: Partial<EmojiObservation>) {
+    input.peddler = undefined;
     input.owner = undefined;
     input.mover = undefined;
     input.gatherer = undefined;
@@ -6155,6 +6222,7 @@ export class TileLife {
   }
   /** Freeze pending/active cues, but never replay an undelivered physical event. */
   freezeEmoji() {
+    this.tapRequests?.clear();
     this.startled.length = 0;
     this.pointerEvents.length = 0;
     this.pointerInside = undefined;
@@ -6374,6 +6442,19 @@ export class TileLife {
         this.momentHost.voiceCompletions,
         this.startled,
         this.pointerEvents,
+        this.tapRequests?.drain(
+          emojiEnv.emojiTime?.clock ?? clock,
+          (owner) =>
+            this.emojiInputs.some((o) => o.owner === owner && o.eligible) ||
+            this.movers.some(
+              (m) =>
+                m === owner &&
+                !!m.train &&
+                (!near || near(m.x, m.y)) &&
+                (!pass?.owns || pass.owns(m)),
+            ),
+          (owner) => this.momentHost.speaking(owner),
+        ),
       );
       for (const flock of this.birdEmojiOwners) {
         const track = this.emoji.memory.get(flock);
@@ -6381,6 +6462,7 @@ export class TileLife {
       }
     } else {
       this.emoji.step(dt, emojiZoom, emojiEnv, []);
+      this.tapRequests?.clear();
       this.clearBirdEmojiOwners();
     }
     this.startled.length = 0;
@@ -6617,7 +6699,7 @@ export class TileLife {
         const speed =
           m.pointerDog && this.tilePointer
             ? this.followPointer(m, this.tilePointer, fitsGround, dt)
-            : this.dogSpeed(m, dt, this.canIdle(m));
+            : this.dogSpeed(m, dt, this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock));
         if (speed === undefined) {
           m.waiting = 0;
           continue;
@@ -6656,7 +6738,7 @@ export class TileLife {
           }
           speeds[i] = Math.max(m.speed, POINTER.fleePace * this.perMeter);
         } else {
-          const idle = this.canIdle(m);
+          const idle = this.canIdle(m) && !((this.tapWake?.get(m) ?? 0) > clock);
           if (!idle) {
             m.pause = 0;
             m.grooming = false;
@@ -6688,7 +6770,9 @@ export class TileLife {
           continue;
         }
         const idle = this.canIdle(m);
-        const dash = this.scenes.dashPace(m);
+        const dash =
+          this.scenes.dashPace(m) ??
+          ((this.tapDash?.get(m) ?? 0) > clock ? runPace(m, RUN.speed, this.perMeter) : undefined);
         const dashing = dash !== undefined;
         if (!idle || dashing) m.pause = 0;
         if (m.pause > 0) {
@@ -8041,6 +8125,7 @@ export class TileLife {
    * one of a habitat its species favors.
    */
   private pickDestination(flock: Flock, { prepare = true }: { prepare?: boolean } = {}) {
+    delete flock.tapLanding;
     const roosts = this.geo.roosts.length / 2;
     const perches = this.geo.perches.length / 2;
     const spec = BIRD_SPECIES[flock.species];
@@ -8061,6 +8146,93 @@ export class TileLife {
   }
 
   /** Stage a complete safe layout before changing the flock or any of its bird identities. */
+  flushFlock(flock: Flock, zoom = 19) {
+    this.beginPointerTakeoff(flock);
+    this.beginDeparture(flock);
+    this.recordStartle(flock, this.emoji.observes(zoom));
+    flock.perched = flock.landed = flock.landing = flock.feeding = false;
+    flock.perch = flock.home = -1;
+    flock.landingAttempted = false;
+    flock.landingBlend = 0;
+    flock.scatter = PERCH.scatter;
+    delete flock.tapLanding;
+    flock.stay = 20 + (flock.birds[0]?.phase ?? 0) * 10;
+    let closest = Infinity;
+    for (let i = 0; i < this.geo.roosts.length / 2; i++) {
+      const distance = Math.hypot(
+        this.geo.roosts[i * 2]! - flock.x,
+        this.geo.roosts[i * 2 + 1]! - flock.y,
+      );
+      if (distance < closest) {
+        closest = distance;
+        flock.roost = i;
+      }
+    }
+  }
+  scatterFeed(at: Point, tap: LifeTap, clock: number) {
+    const terrain = (this.forageTerrain ??= complete(
+      prepareForageTerrainSteps(this.geo, this.perMeter, this.forageMode),
+    ));
+    if (!forageable('pigeon', Habitat.park, at.x, at.y, terrain, this.perMeter)) return false;
+    this.tapFeed = {
+      ...at,
+      until: clock + 20,
+      inhibited: tap.pointer === 'mouse',
+      revision: tap.pointerRevision ?? 0,
+      cellMeters: tap.cellMeters,
+      seed: hashString(`${tap.at[0]}/${tap.at[1]}`),
+    };
+    return true;
+  }
+  /** Feed targets use fixed samples; saved tree-return anchors remain exact in prepareLanding. */
+  prepareFeedLanding(flock: Flock, at: Point) {
+    const spec = FORAGE_SPECIES[flock.species],
+      terrain = this.forageTerrain;
+    if (!spec || !terrain) return false;
+    const habitat = (this.geo.roostHabitats[flock.roost] ?? Habitat.park) as Habitat;
+    const ok = (p: Point) => {
+      this.forageCheckCount++;
+      return (
+        forageable(flock.species, habitat, p.x, p.y, terrain, this.perMeter) &&
+        (!this.forageGuard || this.forageGuard(p, p))
+      );
+    };
+    const radius = Math.min(2, spec.patch) * this.perMeter;
+    const center = feedSpot(at, radius, ok);
+    if (!center) return false;
+    const placements: Point[] = [];
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!,
+        angle = bird.phase * 2 * Math.PI + i * 2.399963229728653;
+      const desired = {
+        x: center.x + Math.cos(angle) * radius * 0.5,
+        y: center.y + Math.sin(angle) * radius * 0.5,
+      };
+      const fits = (p: Point) => Math.hypot(p.x - at.x, p.y - at.y) <= radius && ok(p);
+      const p = fits(desired) ? desired : feedSpot(center, radius, fits, angle);
+      if (!p) return false;
+      placements.push({ x: p.x - center.x, y: p.y - center.y });
+    }
+    if (flock.perched || flock.landed) this.beginPointerTakeoff(flock);
+    this.beginDeparture(flock);
+    for (let i = 0; i < flock.birds.length; i++) {
+      const bird = flock.birds[i]!,
+        p = placements[i]!;
+      bird.gx = bird.tx = p.x;
+      bird.gy = bird.ty = p.y;
+      bird.face = bird.phase * 2 * Math.PI;
+      bird.wait = 0;
+    }
+    flock.lx = center.x;
+    flock.ly = center.y;
+    flock.landing = true;
+    flock.tapLanding = true;
+    flock.landingBlend = 0;
+    flock.landed = flock.perched = false;
+    flock.perch = -1;
+    flock.home = -1;
+    return true;
+  }
   private prepareLanding(flock: Flock, preferred?: Point): boolean {
     flock.landingAttempted = true;
     const spec = FORAGE_SPECIES[flock.species];
@@ -8135,6 +8307,7 @@ export class TileLife {
     flock.lx = centre.x;
     flock.ly = centre.y;
     flock.landing = true;
+    delete flock.tapLanding;
     flock.landingBlend = 0;
     flock.landed = flock.perched = false;
     flock.perch = -1;
@@ -8293,10 +8466,40 @@ export class TileLife {
     const pointer = this.tilePointer;
     this.birdFlightStep.dt = dt;
     if (pointer) this.pointerInside ??= new WeakSet();
+    let feed = this.tapFeed;
+    if (feed && (env?.emojiTime?.clock ?? env?.clock ?? this.time) >= feed.until)
+      this.tapFeed = feed = undefined;
+    if (feed?.inhibited && env?.tapPointer && env.tapPointer.revision > feed.revision) {
+      const reach =
+        Math.max(
+          ...this.flocks
+            .filter((f) => !!FORAGE_SPECIES[f.species])
+            .map((f) => BIRD_SPECIES[f.species].wary + this.flockExtent(f) / this.perMeter),
+          BIRD_POINTER.cells * feed.cellMeters,
+        ) * this.perMeter;
+      if (
+        env.tapPointer.left ||
+        (pointer && Math.hypot(pointer.x - feed.x, pointer.y - feed.y) > reach)
+      )
+        feed.inhibited = false;
+    }
     for (const flock of this.flocks) {
       if (pointer) pointer.radius = undefined;
       if (near && !near(flock.x, flock.y) && !flyingBirdNear(flock, near)) continue;
       if (this.ownership && !this.ownership(flock)) continue;
+      if (
+        feed &&
+        !feed.inhibited &&
+        FORAGE_SPECIES[flock.species] &&
+        !flock.landing &&
+        !flock.landed &&
+        !flock.takeoff &&
+        flock.scatter <= 0 &&
+        !flock.birds.some((b) => !!b.flight) &&
+        Math.hypot(flock.x - feed.x, flock.y - feed.y) <= FORAGE.reach * this.perMeter &&
+        (!pointer || !this.pointerNear(flock, pointer, feed, true))
+      )
+        this.prepareFeedLanding(flock, feed);
       if (flock.takeoff) {
         flock.takeoff.age += dt;
         if (flock.takeoff.age >= flock.takeoff.seconds) {
@@ -8372,7 +8575,7 @@ export class TileLife {
       let to =
         flock.perch >= 0
           ? { x: perches[flock.perch * 2]!, y: perches[flock.perch * 2 + 1]! }
-          : flock.landing && count > 0
+          : flock.landing && (count > 0 || flock.tapLanding)
             ? { x: flock.lx, y: flock.ly }
             : undefined;
       if (pointer && to && this.pointerNear(flock, pointer, to, true)) {
@@ -8719,6 +8922,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  peddler?: { id: string; label: string; prop: PeddlerProp; parasol: number; lamp: number };
   beacon?: Beacon;
   /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
   mappedPersonMover?: boolean;
@@ -8817,6 +9021,491 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private signalPresses?: SignalPresses;
+  get signalOffsets(): SignalOffsets | undefined {
+    return this.signalPresses?.snapshot();
+  }
+  private tapSignal(tap: LifeTap) {
+    if (!tap.signal) return false;
+    for (const life of this.tiles.values()) {
+      const signal = life.signals.signals.find(
+        (s) => s.seed === tap.signal!.seed && s.a < 0 === tap.signal!.midBlock,
+      );
+      if (!signal) continue;
+      const midBlock = signal.a < 0;
+      const presses = (this.signalPresses ??= new SignalPresses());
+      const before = signalState(signal.seed, this.clock, midBlock, presses.offsets);
+      if (presses.press(signal.seed, midBlock, this.clock)) {
+        let count = 0;
+        for (const tile of this.tiles.values()) {
+          tile.signals.offsets = presses.offsets;
+          tile.crossingWaits.signalOffsets = presses.offsets;
+          for (const m of tile.movers)
+            if (
+              (before.a === 'green' || before.b === 'green') &&
+              count < 4 &&
+              m.kind === 'vehicle' &&
+              this.owns(tile, m) &&
+              tile.signals.caught(m, signal.seed, midBlock, this.clock)
+            ) {
+              tile.requestEmoji(m, 'driver', 'angry', this.emojiClock);
+              count++;
+            }
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+  private barkUntil?: WeakMap<Mover, number>;
+  tapSources?: TapSources;
+  tapReceipts?: readonly TapReceipt[];
+  enableTaps() {
+    this.tapSources ??= new TapSources();
+  }
+  private tapOwner(owner: object) {
+    for (const life of this.tiles.values()) {
+      const mover = life.movers.find((m) => m === owner);
+      if (mover) return { life, mover };
+    }
+  }
+  private tapPerson(owner: object) {
+    for (const life of this.tiles.values()) {
+      const person =
+        life.movers.find((m) => m === owner && m.kind === 'person') ??
+        life.gatherers.find((g) => g === owner);
+      if (person) return { life, person };
+    }
+  }
+  private eventTaps?: EventTaps;
+  private syncEventTaps(create = false) {
+    if (!create && !this.eventTaps) return;
+    const run = this.procession();
+    const scope = run && `${run.id}/${this.eventScope(run)}`;
+    if (this.eventTaps && this.eventTaps.scope !== scope) {
+      this.eventTaps.clear();
+      this.eventTaps = undefined;
+    }
+    if (create && scope)
+      this.eventTaps ??= new EventTaps(
+        scope,
+        this.momentOptions,
+        this.emojiMemory,
+        this.emojiObserver,
+        this.scenes.get(run.id)!.route.kind,
+      );
+    return this.eventTaps;
+  }
+  private stepEventTaps(dt: number, zoom = 19) {
+    const state = this.syncEventTaps();
+    if (!state) return;
+    const visible = new Set(
+      (this.tapSources?.latest() ?? []).flatMap((t) => (t?.agent.event ? [t.owner] : [])),
+    );
+    state.step(dt, zoom, this.emojiClock, visible);
+    if (state.idle) {
+      state.clear();
+      this.eventTaps = undefined;
+    }
+  }
+  private tapProcession(tap: LifeTap, minutes: number, zoom: number) {
+    if (!this.procession()) return false;
+    const targets = this.tapSources?.read(tap)?.targets ?? [];
+    const distance = (agent: VisibleAgent) => {
+      return (
+        (Math.hypot(
+          (agent.lng - tap.at[0]) * Math.cos((tap.at[1] * Math.PI) / 180),
+          agent.lat - tap.at[1],
+        ) *
+          MERCATOR_METERS) /
+        360
+      );
+    };
+    if (
+      !targets.some(
+        (t) =>
+          t?.agent.event &&
+          (t.agent.vehicle === 'pagoda' || t.agent.glyph === ProcessionGlyph.andas) &&
+          distance(t.agent) <= 6 * tap.cellMeters,
+      )
+    )
+      return tap.crowd === true;
+    if (zoom < MOMENTS.zoom) return true;
+    const seen = new Set<object>();
+    const crowd = targets
+      .flatMap((target, index) => {
+        if (
+          !target?.agent.event ||
+          target.agent.kind !== 'person' ||
+          target.agent.prop ||
+          target.agent.vehicle ||
+          target.agent.aboard ||
+          seen.has(target.owner)
+        )
+          return [];
+        seen.add(target.owner);
+        return [{ target, index, distance: distance(target.agent) }];
+      })
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+      .slice(0, 8);
+    const state = this.syncEventTaps(true)!;
+    for (const { target } of crowd) state.react(target.owner, this.emojiClock, 'festive', 3);
+    for (const { target } of crowd)
+      if (state.request(target, this.emojiClock, minutes, 'procession-cheer')) break;
+    return true;
+  }
+  private tapPeople(
+    tap: LifeTap,
+    reach: number,
+    cap: number,
+    mood: EmojiMood,
+    duration = 2.5,
+    eligible?: (target: TapTarget) => boolean,
+  ) {
+    const ref = this.tiles.values().next().value;
+    if (!ref) return;
+    const at = lngLatToTile(ref.tile, ...tap.at),
+      seen = new Set<object>();
+    const people = (this.tapSources?.latest() ?? [])
+      .flatMap((target, index) => {
+        if (
+          !target ||
+          target.agent.kind !== 'person' ||
+          target.agent.vehicle ||
+          target.agent.prop ||
+          target.agent.aboard ||
+          (eligible && !eligible(target)) ||
+          seen.has(target.owner)
+        )
+          return [];
+        seen.add(target.owner);
+        const p = lngLatToTile(ref.tile, target.agent.lng, target.agent.lat),
+          distance = Math.hypot(p.x - at.x, p.y - at.y) / ref.perMeter;
+        return distance <= reach ? [{ target, distance, index }] : [];
+      })
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+      .slice(0, cap);
+    for (const { target } of people) {
+      const person = this.tapPerson(target.owner);
+      person?.life.requestEmoji(target.owner, 'person', mood, this.emojiClock, duration);
+    }
+  }
+  private tapAgent(target: TapTarget, minutes = 720, zoom = 19, rain = 0) {
+    if (target.agent.vehicle === 'cart') {
+      for (const life of this.tiles.values()) {
+        const stall = [...life.allStalls()].find((s) => s === target.owner);
+        if (!stall) continue;
+        if (stall.open === false || rain >= MOMENTS.rain) return;
+        const visible = new Set(
+          this.tapSources?.latest().flatMap((t) => (t ? [t.owner] : [])) ?? [],
+        );
+        if (
+          !life.scenes.purchase(
+            stall,
+            life.movers.filter((m) => visible.has(m) && this.owns(life, m)),
+          )
+        )
+          life.requestEmoji(stall, 'person', 'wave', this.emojiClock);
+        return;
+      }
+    }
+    if (target.agent.kind === 'person' && !target.agent.vehicle && zoom >= MOMENTS.zoom) {
+      if (target.agent.event && !target.agent.prop) {
+        const state = this.syncEventTaps(true);
+        if (state?.request(target, this.emojiClock, minutes, 'greeting'))
+          state.react(target.owner, this.emojiClock, 'wave', 2.5);
+        return;
+      }
+      for (const life of this.tiles.values()) {
+        const person =
+          life.movers.find((m) => m === target.owner && m.kind === 'person') ??
+          life.gatherers.find((g) => g === target.owner);
+        if (!person) continue;
+        if (life.momentHost.sceneHost.request(person, this.emojiClock, minutes))
+          life.requestEmoji(person, 'person', 'wave', this.emojiClock, 2.5, 0, 8);
+        return;
+      }
+    }
+    const owned = this.tapOwner(target.owner);
+    if (!owned) return;
+    const { life, mover } = owned;
+    if (mover.kind === 'dog' || mover.kind === 'cat') {
+      if (mover.lying || mover.pause > 0) {
+        life.wake(mover, this.clock);
+        life.requestEmoji(mover, mover.kind, 'yawn', this.emojiClock);
+      } else if (mover.kind === 'dog' && !((this.barkUntil?.get(mover) ?? 0) > this.emojiClock)) {
+        const dogs = life.movers
+          .map((m, index) => ({ m, index, distance: Math.hypot(m.x - mover.x, m.y - mover.y) }))
+          .filter(
+            ({ m, distance }) =>
+              m.kind === 'dog' &&
+              distance <= 40 * life.perMeter &&
+              !((this.barkUntil?.get(m) ?? 0) > this.emojiClock),
+          )
+          .sort(
+            (a, b) =>
+              Number(b.m === mover) - Number(a.m === mover) ||
+              a.distance - b.distance ||
+              a.m.rank - b.m.rank ||
+              a.index - b.index,
+          )
+          .slice(0, 6);
+        this.barkUntil ??= new WeakMap();
+        dogs.forEach(({ m }, index) => {
+          const delay = index === 0 ? 0 : 0.4 + ((index - 1) * 0.8) / Math.max(1, dogs.length - 2);
+          this.barkUntil!.set(m, this.emojiClock + delay + 2.5);
+          life.requestEmoji(m, 'dog', 'bark', this.emojiClock, 2.5, delay);
+        });
+      }
+      return;
+    }
+    if (mover.kind !== 'vehicle' && !mover.train) return;
+    life.requestEmoji(mover, 'driver', 'honk', this.emojiClock);
+    const at = mover.train
+      ? life.pose(mover)
+      : lngLatToTile(life.tile, target.agent.lng, target.agent.lat);
+    const forward = mover.train
+      ? { x: at.x + mover.hx, y: at.y + mover.hy }
+      : lngLatToTile(life.tile, ...(target.agent.ahead ?? [target.agent.lng, target.agent.lat]));
+    const distance = Math.hypot(forward.x - at.x, forward.y - at.y) || 1;
+    const hx = (forward.x - at.x) / distance,
+      hy = (forward.y - at.y) / distance;
+    const seen = new Set<object>();
+    let count = 0;
+    for (const candidate of this.tapSources?.latest() ?? []) {
+      if (
+        !candidate ||
+        candidate.agent.kind !== 'person' ||
+        candidate.agent.vehicle ||
+        seen.has(candidate.owner)
+      )
+        continue;
+      seen.add(candidate.owner);
+      const p = lngLatToTile(life.tile, candidate.agent.lng, candidate.agent.lat);
+      const dx = p.x - at.x,
+        dy = p.y - at.y;
+      const ahead = (dx * hx + dy * hy) / life.perMeter;
+      const side = Math.abs(dx * hy - dy * hx) / life.perMeter;
+      if (ahead < 0 || ahead > 25 || side > (mover.train ? 8 : 3)) continue;
+      const person = this.tapOwner(candidate.owner);
+      if (!person || person.life.scenes.visits.has(person.mover)) continue;
+      person.life.hurry(person.mover, this.clock);
+      person.life.requestEmoji(person.mover, 'person', 'rushing', this.emojiClock);
+      if (++count >= 8) break;
+    }
+  }
+  private tapTree(tap: LifeTap, zoom: number) {
+    let selected: { life: TileLife; flock: Flock; distance: number } | undefined;
+    for (const life of this.tiles.values()) {
+      const at = lngLatToTile(life.tile, ...tap.at);
+      for (const flock of life.flocks) {
+        if (!flock.perched || !this.owns(life, flock)) continue;
+        const distance = Math.hypot(flock.x - at.x, flock.y - at.y) / life.perMeter;
+        if (distance <= 1.5 * tap.cellMeters && (!selected || distance < selected.distance))
+          selected = { life, flock, distance };
+      }
+    }
+    if (!selected) return false;
+    const perch = selected.flock.perch;
+    for (const flock of selected.life.flocks)
+      if (flock.perched && flock.perch === perch && this.owns(selected.life, flock))
+        selected.life.flushFlock(flock, zoom);
+    return true;
+  }
+  private tapRice(tap: LifeTap) {
+    for (const life of this.tiles.values()) {
+      const at = lngLatToTile(life.tile, ...tap.at);
+      if (inTile(at) && this.owns(life, at)) return life.scatterFeed(at, tap, this.emojiClock);
+    }
+    return false;
+  }
+  private resolveTaps(taps: readonly LifeTap[] | undefined, minutes = 720, zoom = 19, rain = 0) {
+    this.tapReceipts =
+      taps?.length && this.tapSources
+        ? taps.slice(0, 4).map((tap) =>
+            resolveTap(tap, this.tapSources!, {
+              folklore: (id, tap) => {
+                if (!this.folklore.tap(id, this.emojiClock)) return false;
+                this.tapPeople(tap, 10, 6, 'scared');
+                return true;
+              },
+              agent: (target) => this.tapAgent(target, minutes, zoom, rain),
+              signal: (tap) => this.tapSignal(tap),
+              procession: (tap) => this.tapProcession(tap, minutes, zoom),
+              carnival: (tap) => this.tapPeople({ ...tap, at: tap.carnival!.at }, 15, 8, 'party'),
+              candle: (tap) => {
+                if (!this.seasonalConfig?.visitors) return;
+                this.tapPeople({ ...tap, at: tap.candle!.at }, 6, 8, 'pray', 2.5, (target) => {
+                  const person = this.tapPerson(target.owner)?.person;
+                  return !!person && 'seasonal' in person && person.seasonal === 'visitors';
+                });
+              },
+              tree: (tap) => this.tapTree(tap, zoom),
+              rice: (tap) => this.tapRice(tap),
+            }),
+          )
+        : undefined;
+  }
+  private peddlerConfig: readonly PeddlerConfig[] = [];
+  private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
+  private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
+  private peddlerGeneration = 0;
+  private readonly vendorGrounds = new WeakMap<GroundTerrain, PolygonIndex>();
+  private vendorGroundIndex(terrain: GroundTerrain) {
+    const saved = this.vendorGrounds.get(terrain);
+    if (saved) return saved;
+    const index = new PolygonIndex();
+    for (const [life, frame] of terrain.origins)
+      for (const area of life.geo.areas ?? [])
+        if (area.kind === 'peddler-exclusion')
+          index.add(
+            area.rings.map((ring) =>
+              ring.map((p) => ({
+                x: frame.x + (p.x / life.perMeter) * frame.scale,
+                y: frame.y + (p.y / life.perMeter) * frame.scale,
+              })),
+            ),
+          );
+    this.vendorGrounds.set(terrain, index);
+    return index;
+  }
+  private peddlerOrdinarySnapshot?: {
+    ref: TileLife;
+    sources: { life: TileLife; bodies: Body[] }[];
+  };
+  private ordinaryPeddlerBodies(life: TileLife): Body[] {
+    let snapshot = this.peddlerOrdinarySnapshot;
+    if (!snapshot) {
+      const ref = this.groundTerrain?.ref ?? life;
+      snapshot = { ref, sources: [] };
+      for (const other of this.tiles.values()) {
+        const frame = metricFrame(other, ref),
+          bodies: Body[] = [];
+        for (const actors of [other.movers, other.gatherers, other.stalls])
+          for (const actor of actors) {
+            if (!this.owns(other, actor)) continue;
+            for (const body of other.groundBodies(actor))
+              bodies.push({
+                ...body,
+                x: frame.x + body.x * frame.scale,
+                y: frame.y + body.y * frame.scale,
+                length: body.length * frame.scale,
+                width: body.width * frame.scale,
+              });
+          }
+        for (const parked of other.parked) {
+          const spec = VEHICLES[parked.vehicle];
+          bodies.push({
+            x: frame.x + (parked.x / other.perMeter) * frame.scale,
+            y: frame.y + (parked.y / other.perMeter) * frame.scale,
+            hx: parked.hx,
+            hy: parked.hy,
+            length: spec.length * frame.scale,
+            width: spec.width * frame.scale,
+          });
+        }
+        snapshot.sources.push({ life: other, bodies });
+      }
+      this.peddlerOrdinarySnapshot = snapshot;
+    }
+    const frame = metricFrame(snapshot.ref, life),
+      bodies: Body[] = [];
+    for (const source of snapshot.sources) {
+      const neighbor = metricFrame(source.life, life);
+      if (
+        Math.abs(neighbor.x) > EXTENT / life.perMeter + 20 ||
+        Math.abs(neighbor.y) > EXTENT / life.perMeter + 20
+      )
+        continue;
+      for (const body of source.bodies)
+        bodies.push({
+          ...body,
+          x: frame.x + body.x * frame.scale,
+          y: frame.y + body.y * frame.scale,
+          length: body.length * frame.scale,
+          width: body.width * frame.scale,
+        });
+    }
+    return bodies;
+  }
+  setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    this.peddlerOrdinarySnapshot = undefined;
+    this.peddlerGeneration++;
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
+    this.peddlerConfig = config ?? [];
+  }
+  private stepPeddlers(dt: number, zoom: number | undefined, env: LifeEnv) {
+    this.peddlerOrdinarySnapshot = undefined;
+    if (!this.peddlerConfig.length) return;
+    const retained = new Set([
+      ...this.tiles.values(),
+      ...[...this.retired.values()].map((r) => r.life),
+    ]);
+    for (const [life, population] of this.peddlers)
+      if (!retained.has(life)) {
+        population.clear();
+        this.peddlers.delete(life);
+      }
+    this.peddlerWeather = env;
+    if (zoom !== undefined && zoom < LIFE_ZOOM.person.min) {
+      for (const population of this.peddlers.values()) population.hide();
+      return;
+    }
+    const active = new Set(this.tiles.values());
+    for (const [life, population] of this.peddlers) if (!active.has(life)) population.hide();
+    for (const [key, life] of this.tiles) {
+      let population = this.peddlers.get(life);
+      if (!population) {
+        population = new PeddlerPopulation(
+          {
+            tile: life.tile,
+            geo: life.geo,
+            perMeter: life.perMeter,
+            seed: hashString(key),
+            generation: this.peddlerGeneration,
+            held: (owner) => this.inspection?.held(owner) ?? false,
+            forget: (owner) => this.inspection?.forgetOwner(owner, this.clock),
+            safe: (from, to) => {
+              const terrain = this.groundTerrain;
+              if (!terrain?.ref) return false;
+              const indexes = [
+                terrain.blocked,
+                terrain.water,
+                terrain.seasonal,
+                terrain.roadAccess.roads,
+                this.vendorGroundIndex(terrain),
+              ].filter((index) => index.polygons.length);
+              if (!indexes.length) return true;
+              const frame = metricFrame(life, terrain.ref),
+                project = (body: Body): Body => ({
+                  ...body,
+                  x: frame.x + body.x * frame.scale,
+                  y: frame.y + body.y * frame.scale,
+                  length: body.length * frame.scale,
+                  width: body.width * frame.scale,
+                });
+              const start = from.map(project),
+                end = to.map(project);
+              return !start.some((body, i) =>
+                indexes.some((index) => index.sweptHits(body, end[i]!)),
+              );
+            },
+            ordinary: () => this.ordinaryPeddlerBodies(life),
+          },
+          this.peddlerConfig,
+          {
+            dialogue: this.momentOptions?.dialogue,
+            periods: this.momentOptions?.periods,
+            emoji: this.emojiObserver,
+          },
+        );
+        this.peddlers.set(life, population);
+      }
+      population.step(dt, { ...env, zoom, wet: life.scenes.raining }, life.population);
+    }
+    this.peddlerOrdinarySnapshot = undefined;
+  }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
     this.folklore.setConfig(config);
@@ -9510,6 +10199,16 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.eventTaps?.clear();
+    this.eventTaps = undefined;
+    this.signalPresses = undefined;
+    this.barkUntil = undefined;
+    this.tapSources?.clear();
+    this.tapReceipts = undefined;
+    this.peddlerGeneration++;
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
+    this.peddlerWeather = undefined;
     this.folklore.clear();
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
@@ -9597,7 +10296,7 @@ export class LifeWorld {
     prepared?: ReadonlyMap<string, TileLife>,
     bootstrap = false,
   ) {
-    if (!tiles.length) this.folklore.clear();
+    if (!tiles.length) this.folklore.clear(true);
     if (view) this.viewContext = view;
     const gradual = !!this.viewContext && this.bootstrapped && !bootstrap;
     const start = this.profiler?.time();
@@ -9643,6 +10342,10 @@ export class LifeWorld {
           if (this.emergencyRouter) fresh.emergencyRouter = this.emergencyRouter;
           fresh.crossingWaits.registry = this.crossingReservations;
           fresh.crossingWaits.shared = true;
+          if (this.signalPresses) {
+            fresh.signals.offsets = this.signalPresses.offsets;
+            fresh.crossingWaits.signalOffsets = this.signalPresses.offsets;
+          }
           this.tiles.set(key, fresh);
           if (saved)
             for (const m of fresh.movers)
@@ -10193,7 +10896,8 @@ export class LifeWorld {
         for (const body of sample) toRef(o, body);
         if (
           !this.groundTerrain!.roadAccess.allows(sample, false) ||
-          this.groundTerrain!.seasonal.hits(sample)
+          this.groundTerrain!.seasonal.hits(sample) ||
+          this.vendorGroundIndex(this.groundTerrain!).hits(sample)
         ) {
           life.scenes.removeStall(stall);
           life.stalls.splice(i, 1);
@@ -10267,6 +10971,16 @@ export class LifeWorld {
       },
       terrain.seasonal.polygons.length > 0 || !!closure,
     );
+    // Also check later admissions and carts restored when seasonal closures end.
+    for (let i = life.stalls.length - 1; i >= 0; i--) {
+      const stall = life.stalls[i]!;
+      const bodies = life.groundBodies(stall, 0, this.groundSample);
+      for (const body of bodies) transform(body);
+      if (this.vendorGroundIndex(terrain).hits(bodies)) {
+        life.scenes.removeStall(stall);
+        life.stalls.splice(i, 1);
+      }
+    }
     this.reconciledActors.set(life, {
       terrain,
       closure,
@@ -10861,6 +11575,13 @@ export class LifeWorld {
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
+      // All cart admission paths, including shopfront commerce, share campus exclusion.
+      if (
+        !('kind' in owner) &&
+        !('walker' in owner) &&
+        this.vendorGroundIndex(this.groundTerrain!).hits(next)
+      )
+        return false;
       const previous = before ? bodies(previousLife, before, this.groundPrevious, identity) : next;
       let physical: Body[] | undefined;
       const endScore = occupied.conflicts(identity, next, ignore);
@@ -11507,7 +12228,10 @@ export class LifeWorld {
     pointer?: readonly [number, number],
     pointerRest?: number,
     gust?: CursorGust,
+    taps?: readonly LifeTap[],
+    tapPointer?: TapPointer,
   ) {
+    this.tapReceipts = undefined;
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
@@ -11517,15 +12241,19 @@ export class LifeWorld {
     this.effectCellMeters = effectCellMeters;
     this.crossingCellMeters = cellMeters;
     if (clamped === 0) {
+      this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
+      this.stepEventTaps(0, zoom);
       this.sampleFolklore(weather, 0, pointer, cellMeters);
       return;
     }
     if (bounds && this.viewContext) this.viewContext = { ...this.viewContext, bounds };
     this.clock += clamped;
     this.emojiClock += Math.max(0, dt);
+    this.resolveTaps(taps, weather?.minutes, zoom, weather?.rain ?? this.lastRain);
+    this.stepEventTaps(Math.max(0, dt), zoom);
     this.pruneRetired();
     if (!this.tiles.size) {
-      this.folklore.clear();
+      this.folklore.clear(true);
       this.arrivals.clear();
       return;
     }
@@ -11565,6 +12293,7 @@ export class LifeWorld {
       emojiSeasons: this.seasons,
       emojiView: this.emojiView,
       ...(pointer ? { pointer: { lngLat: pointer, cellMeters } } : {}),
+      ...(tapPointer ? { tapPointer } : {}),
       ...(pointer && pointerRest !== undefined ? { pointerRest } : {}),
       ...(pointer && gust ? { gust } : {}),
     };
@@ -12004,6 +12733,7 @@ export class LifeWorld {
     this.retainCrossingClaims();
     this.crossingReservations.resolve();
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
+    this.stepPeddlers(clamped, zoom, env);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -12464,6 +13194,8 @@ export class LifeWorld {
   /** Play a procession from its start, as a time-lapse (`ProcessionScene.playDuration`). */
   play(id: string, timing?: EventTiming): boolean {
     if (!this.scenes.has(id)) return false;
+    this.eventTaps?.clear();
+    this.eventTaps = undefined;
     if (!this.played && this.live) {
       const scene = this.scenes.get(this.live.id);
       this.suspendedLiveOwners = {
@@ -12567,6 +13299,7 @@ export class LifeWorld {
       this.suspendedLiveOwners = undefined;
     }
     this.live = id && this.scenes.has(id) ? { id, progress, occurrence } : undefined;
+    this.syncEventTaps();
     this.reconcileEventTraffic();
   }
 
@@ -12647,6 +13380,8 @@ export class LifeWorld {
     this.lastRain = weather.rain;
     const shows = (kind: AgentKind) => bandVisibility(LIFE_ZOOM[kind], zoom) >= 1;
     const out: VisibleAgent[] = [];
+    const tapOwners = this.tapSources;
+    tapOwners?.begin();
     const diagnostics = this.profiler?.lifeDiagnostics;
     diagnostics?.beginVisible();
     this.actorSources.clear();
@@ -12661,8 +13396,14 @@ export class LifeWorld {
     inspection?.begin(this.clock);
     // Choose the plain fallback once, outside the per-actor loop.
     const normalPush: (owner: object, agent: VisibleAgent) => number = inspection
-      ? (owner, agent) => out.push(inspection.present(owner, agent))
-      : (_owner, agent) => out.push(agent);
+      ? (owner, agent) => {
+          tapOwners?.present(owner, agent);
+          return out.push(inspection.present(owner, agent));
+        }
+      : (owner, agent) => {
+          tapOwners?.present(owner, agent);
+          return out.push(agent);
+        };
     const present = diagnostics
       ? (owner: object, agent: VisibleAgent) => {
           const n = normalPush(owner, agent);
@@ -12678,7 +13419,8 @@ export class LifeWorld {
         !agent.aboard &&
         !agent.parked &&
         !agent.prop &&
-        !agent.consist &&
+        (!agent.consist ||
+          (agent.vehicle === 'locomotive' && cue.subject === 'driver' && cue.mood === 'honk')) &&
         agent.vehicle !== 'carabao'
       )
         agent.emoji = cue;
@@ -12691,6 +13433,7 @@ export class LifeWorld {
     // A procession closes the river to other boats, and always shows.
     const run = this.procession();
     const scene = run && this.scenes.get(run.id)!;
+    const eventTaps = this.syncEventTaps();
     const staged =
       scene instanceof GroundProcessionScene
         ? this.eventAgents
@@ -12704,14 +13447,15 @@ export class LifeWorld {
                     a.lat <= bounds[3])),
             )
             .slice(0, maxAgents)
-            .map((a) =>
-              inspection
-                ? identifyEventActor(
-                    inspection.present(this.eventOwners.get(eventActor(a)!)!, a),
-                    eventActor(a)!,
-                  )
-                : a,
-            )
+            .map((raw) => {
+              const a = eventTaps ? identifyEventActor({ ...raw }, eventActor(raw)!) : raw;
+              const owner = this.eventOwners.get(eventActor(a)!)!;
+              const agent = inspection
+                ? identifyEventActor(inspection.present(owner, a), eventActor(a)!)
+                : a;
+              tapOwners?.present(owner, agent);
+              return agent;
+            })
         : scene
           ? scene.agents(run.progress, this.clock, {
               boats: shows('boat'),
@@ -12720,6 +13464,11 @@ export class LifeWorld {
               bounds,
               inspection,
               scope: this.eventScope(run),
+              ...(tapOwners && {
+                observe: (owner: object, agent: VisibleAgent) => {
+                  tapOwners.present(owner, agent);
+                },
+              }),
             })
           : [];
     for (const agent of staged) agent.event = true;
@@ -12733,8 +13482,29 @@ export class LifeWorld {
         emoji: this.emojiObserver,
       });
     }
+    // Explicit reactions take precedence over the running event's background cues.
+    if (eventTaps && tapOwners)
+      for (const agent of staged) {
+        const owner = tapOwners.owner(agent);
+        if (owner) eventTaps.attach(owner, agent);
+      }
     for (const life of this.tiles.values()) {
       const { tile, perMeter } = life;
+      if (life.tapFeed && this.emojiClock >= life.tapFeed.until) life.tapFeed = undefined;
+      if (life.tapFeed && shows('bird')) {
+        const feed = life.tapFeed;
+        for (const offset of feedCrumbs(feed.seed)) {
+          const [lng, lat] = tileToLngLat(tile, {
+            x: feed.x + offset.x * perMeter,
+            y: feed.y + offset.y * perMeter,
+          });
+          if (
+            !bounds ||
+            (lng >= bounds[0] && lng <= bounds[2] && lat >= bounds[1] && lat <= bounds[3])
+          )
+            out.push({ kind: 'person', prop: 'event', glyph: '.', lng, lat, flap: 0 });
+        }
+      }
       const inView = viewIn(tile, bounds, VIEW_MARGIN_M * perMeter);
       for (const m of life.movers) {
         if (!this.owns(life, m)) continue;
@@ -13144,10 +13914,65 @@ export class LifeWorld {
       return admitted;
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
+    const withPeddlers = (admitted: VisibleAgent[]) => {
+      if (!shows('person') || !this.peddlerWeather) return admitted;
+      let speeches = admitted.filter((a) => a.speech).length,
+        emojis = admitted.filter((a) => a.emoji).length;
+      const extraPuffs: number[] = [];
+      for (const life of this.tiles.values()) {
+        const population = this.peddlers.get(life);
+        if (!population) continue;
+        for (const owner of population.owners) {
+          if (
+            admitted.length >= maxAgents ||
+            !this.owns(life, { x: owner.x * life.perMeter, y: owner.y * life.perMeter })
+          ) {
+            population.hide(owner);
+            continue;
+          }
+          const agent = population.visible(owner, {
+            ...this.peddlerWeather,
+            zoom,
+            wet: life.scenes.raining,
+          });
+          if (
+            bounds &&
+            (agent.lng < bounds[0] ||
+              agent.lng > bounds[2] ||
+              agent.lat < bounds[1] ||
+              agent.lat > bounds[3])
+          ) {
+            population.hide(owner);
+            continue;
+          }
+          if (this.puffPacket.length + extraPuffs.length < PUFF.visible * PUFF_STRIDE)
+            extraPuffs.push(...population.visiblePuff(owner, admitted.length));
+          if (agent.speech) {
+            if (speeches >= MOMENTS.scene.capacity) agent.speech = undefined;
+            else speeches++;
+          }
+          if (agent.emoji) {
+            if (emojis >= EMOJI.capacity) agent.emoji = undefined;
+            else emojis++;
+          }
+          admitted.push(inspection ? inspection.present(owner, agent) : agent);
+        }
+      }
+      if (extraPuffs.length) {
+        const packet = new Float64Array(this.puffPacket.length + extraPuffs.length);
+        packet.set(this.puffPacket);
+        packet.set(extraPuffs, this.puffPacket.length);
+        this.puffPacket = packet;
+      }
+      return admitted;
+    };
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
+      const result = withPeddlers(
+        this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+      );
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
+      tapOwners?.finish(admitted);
       return admitted;
     }
     const [cx, cy] = center;
@@ -13177,9 +14002,10 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
+    const result = withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds));
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
+    tapOwners?.finish(admitted);
     return admitted;
   }
 

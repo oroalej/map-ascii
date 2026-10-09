@@ -11,6 +11,7 @@ import type { Flock, Gatherer, LifeEnv, Mover, Stall } from './simulate';
 import type { Visit } from './interactions';
 import { exhaustKind, PUFF } from './exhaust';
 import { HEAT, hotAt, inHours } from './config';
+import type { PeddlerOwner } from './peddlers';
 export { inHours } from './config';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,6 +46,7 @@ export const EMOJI = {
     rushSpeed: 10,
   },
   person: { impatientWait: 12, blockedWait: 3 },
+  peddler: { window: 20, chance: 0.5 },
   pet: { blockedWait: 1.5, rest: { day: 20, night: 10 } },
   standoff: 4,
   firstAttempt: [2, 12] as const,
@@ -65,6 +67,15 @@ export type EmojiCue = {
   mood: EmojiMood;
   pair?: string;
   order?: 0 | 1;
+};
+export type EmojiRequest = {
+  owner: object;
+  subject: EmojiSubject;
+  mood: EmojiMood;
+  eligible: boolean;
+  speaking: boolean;
+  duration?: number;
+  expires: number;
 };
 export type PointerEvent = { owner: object; mood: 'scared' | 'happy' | 'relaxed' | 'mosquito' };
 export type Temperament = 'neutral' | 'cheerful' | 'grumpy' | 'sleepy';
@@ -111,7 +122,7 @@ export function eveningDate(env: Pick<LifeEnv, 'date' | 'minutes'>) {
   return { month: d.getUTCMonth() + 1, day: d.getUTCDate() };
 }
 export type EmojiObservation = {
-  owner: Mover | Gatherer | Stall | Flock;
+  owner: Mover | Gatherer | Stall | Flock | PeddlerOwner;
   subject: EmojiSubject;
   figure?: 'adult' | 'child';
   eligible: boolean;
@@ -125,6 +136,26 @@ export type EmojiObservation = {
   still?: boolean;
   vendor?: boolean;
   cursorShaded?: boolean;
+  peddler?: PeddlerObservation;
+};
+export type PeddlerObservation = {
+  goods: string;
+  cart: boolean;
+  call: 'voice' | 'bell';
+  progress: number;
+  elapsed: number;
+  dawn: boolean;
+  wrappingNight: boolean;
+  leaving: boolean;
+  umbrella: boolean;
+  shade: boolean;
+  shelter: boolean;
+  waitingNear: boolean;
+  sinceCall: number;
+  resumeToken: number;
+  callToken: number;
+  hover: boolean;
+  heat?: 'cool';
 };
 type Weighted = { mood: EmojiMood; weight: number };
 function selectedSeason(env: Pick<LifeEnv, 'emojiSeasons' | 'season'>) {
@@ -159,6 +190,29 @@ export function ambientPool(
   cruise = 0,
   graveVisitors = !!selectedSeason(env)?.visitors,
 ): Weighted[] {
+  if (o.peddler) {
+    const p = o.peddler,
+      pool: Weighted[] = [];
+    const add = (mood: EmojiMood, weight = 1) => pool.push({ mood, weight });
+    if (p.leaving || p.progress > 0.6) add('tired', p.leaving ? 3 : (p.progress - 0.6) * 5);
+    if (p.cart) add('working');
+    if (hotAt(env.minutes, env.rain, env.sunAltitude) && !p.shade && !p.umbrella) {
+      if (p.heat === 'cool') add('cool', 2);
+      else {
+        add('hot', 2);
+        add('melting', 0.5);
+      }
+    } else if (hotAt(env.minutes, env.rain, env.sunAltitude) && p.heat === 'cool') add('cool', 2);
+    if (env.rain >= EMOJI.rainThreshold && !p.umbrella && !p.shelter) {
+      add('rained', 2);
+      add('sneeze');
+    }
+    if (env.windPreset === 'gusty' || env.windPreset === 'storm') add('windy', 2);
+    if (p.dawn && p.elapsed < 60) add('yawn');
+    if (p.wrappingNight) add('sleepy');
+    if (p.waitingNear || p.sinceCall > 90) add('bored');
+    return pool;
+  }
   const pool = seasonalPool(o, env, entries);
   const add = (mood: EmojiMood, weight = 1.5) => pool.push({ mood, weight });
   const { subject, mover: m, gatherer: g } = o;
@@ -253,6 +307,7 @@ const CONDITIONS = {
 } as const;
 const CONDITION_MOODS = Object.keys(CONDITIONS) as (keyof typeof CONDITIONS)[];
 type Track = {
+  requestedAt?: number;
   cooldownUntil: number;
   attemptAt?: number;
   clock?: number;
@@ -355,6 +410,98 @@ export class EmojiMemory {
     group.members.length = 0;
   }
 }
+
+/** Separate weak tracks keep peddlers out of reply/pair scans and ordinary RNG. */
+export class PeddlerEmojiObserver {
+  private tracks = new WeakMap<
+    PeddlerOwner,
+    {
+      rng: () => number;
+      token: number;
+      resume: number;
+      attempt: number;
+      cooldown: number;
+      pending?: EmojiMood;
+      cue?: EmojiCue;
+      until: number;
+      serial: number;
+    }
+  >();
+  private active = new Set<PeddlerOwner>();
+  private clock = 0;
+  forget(owner: PeddlerOwner) {
+    this.tracks.delete(owner);
+    this.active.delete(owner);
+  }
+  clear() {
+    this.tracks = new WeakMap();
+    this.active.clear();
+  }
+  cue(owner: PeddlerOwner) {
+    return this.tracks.get(owner)?.cue;
+  }
+  step(dt: number, env: LifeEnv, observations: readonly EmojiObservation[]) {
+    this.clock += dt;
+    const shown = new Set(observations.filter((o) => o.eligible).map((o) => o.owner));
+    for (const owner of this.active) if (!shown.has(owner)) this.forget(owner);
+    let count = 0;
+    for (const o of observations) {
+      const p = o.peddler;
+      if (!p || !o.eligible) continue;
+      const owner = o.owner as PeddlerOwner;
+      let t = this.tracks.get(owner);
+      if (!t) {
+        t = {
+          rng: random(owner.seed ^ 0x84d3ca5b),
+          token: p.callToken,
+          resume: p.resumeToken,
+          attempt: this.clock + EMOJI.peddler.window,
+          cooldown: 0,
+          until: 0,
+          serial: 0,
+        };
+        this.tracks.set(owner, t);
+        this.active.add(owner);
+      }
+      if (this.clock >= t.until) t.cue = undefined;
+      const pick = () => {
+        const pool = ambientPool(o, env);
+        let choice = t.rng() * pool.reduce((n, e) => n + e.weight, 0);
+        return pool.find((e) => (choice -= e.weight) < 0)?.mood;
+      };
+      if (p.callToken !== t.token) {
+        t.token = p.callToken;
+        t.pending = p.call === 'bell' ? 'bell' : p.hover ? 'wave' : pick();
+      }
+      if (p.resumeToken !== t.resume) {
+        t.resume = p.resumeToken;
+        if (p.call !== 'bell') t.pending = 'happy';
+      }
+      if (!t.pending && this.clock >= t.attempt) {
+        t.attempt = this.clock + EMOJI.peddler.window;
+        if (this.clock >= t.cooldown && t.rng() < EMOJI.peddler.chance) t.pending = pick();
+      }
+      if (o.speaking) {
+        t.cue = undefined;
+        continue;
+      }
+      if (t.cue) {
+        count++;
+        continue;
+      }
+      if (!t.pending || count >= EMOJI.capacity) continue;
+      t.cue = {
+        id: `peddler-emoji:${owner.identity}:${++t.serial}`,
+        subject: 'person',
+        mood: t.pending,
+      };
+      t.pending = undefined;
+      t.until = this.clock + EMOJI.duration;
+      t.cooldown = this.clock + EMOJI.cooldown;
+      count++;
+    }
+  }
+}
 export type EmojiObserverOptions = { memory?: EmojiMemory; enabled?: boolean; rng?: () => number };
 export class EmojiObserver {
   readonly groups = new Set<Group>();
@@ -424,6 +571,47 @@ export class EmojiObserver {
   }
   private chance(o: EmojiObservation, mood: EmojiMood) {
     return TEMPERAMENT[temperament(o.owner.rank)].chances[mood] ?? EMOJI.chance;
+  }
+  /** Explicit cues do not use observer chance, ambient priorities or cooldown. */
+  request(
+    requests: readonly EmojiRequest[],
+    zoom: number,
+    clock: number,
+    observations: readonly EmojiObservation[] = [],
+  ) {
+    if (!this.observes(zoom)) return;
+    for (const r of requests.slice(0, 32)) {
+      const o = observations.find((candidate) => candidate.owner === r.owner);
+      const t = this.memory.get(r.owner);
+      if (
+        !r.eligible ||
+        r.speaking ||
+        o?.eligible === false ||
+        o?.speaking ||
+        r.expires < clock ||
+        t?.group ||
+        this.size >= EMOJI.capacity ||
+        (t?.requestedAt !== undefined && clock - t.requestedAt < 1)
+      )
+        continue;
+      // New event/train owners need a track, without drawing from any existing stream.
+      const state = t ?? this.memory.track(r.owner, this.epoch, () => 0, random(0x71a5));
+      const g: Group = {
+        index: this,
+        members: [
+          {
+            owner: r.owner,
+            cue: { id: this.memory.id(), subject: r.subject, mood: r.mood, order: 0 },
+          },
+        ],
+        end: clock + Math.max(0, r.duration ?? EMOJI.duration),
+      };
+      this.groups.add(g);
+      state.group = g;
+      state.requestedAt = clock;
+      state.eligible = true;
+      state.speaking = false;
+    }
   }
   private admit(
     o: EmojiObservation,
@@ -500,6 +688,7 @@ export class EmojiObserver {
     completions: readonly { token: object; owners: readonly object[] }[] = [],
     startled: readonly object[] = [],
     pointerEvents: readonly PointerEvent[] = [],
+    requested: readonly EmojiRequest[] = [],
   ) {
     dt = env.emojiTime?.dt ?? dt;
     this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
@@ -737,6 +926,7 @@ export class EmojiObserver {
         })
       )
         this.memory.retire(g);
+    this.request(requested, zoom, this.clock, observations);
     if (this.clock + 1e-8 < this.nextTick) return;
     this.nextTick = (Math.floor((this.clock + 1e-8) / EMOJI.tick) + 1) * EMOJI.tick;
     // Pair opportunities precede all solo admissions. Cat scans are deliberately bounded.

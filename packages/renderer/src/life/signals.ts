@@ -17,6 +17,26 @@ import type { LifeDiagnostics } from './diagnostics';
 import type { Movement } from './junctions';
 
 export type SignalColor = 'green' | 'amber' | 'red';
+export type SignalOffsets = Readonly<Record<string, number>>;
+export const signalIdentity = (seed: number, midBlock: boolean) => `${seed}/${Number(midBlock)}`;
+/** Lazily owned by the world; buffered copies lend the same offsets to every consumer. */
+export class SignalPresses {
+  readonly offsets: Record<string, number> = {};
+  private readonly pressed = new Map<string, number>();
+  press(seed: number, midBlock: boolean, clock: number) {
+    const key = signalIdentity(seed, midBlock);
+    if (clock - (this.pressed.get(key) ?? -Infinity) < 5) return false;
+    this.pressed.set(key, clock);
+    const phase = signalState(seed, clock, midBlock, this.offsets);
+    // Clearance and the mid-block pedestrian window must finish in full.
+    if (phase.a === 'green' || phase.b === 'green')
+      this.offsets[key] = (this.offsets[key] ?? 0) + phase.left;
+    return true;
+  }
+  snapshot(): SignalOffsets | undefined {
+    return Object.keys(this.offsets).length ? { ...this.offsets } : undefined;
+  }
+}
 export type SignalPhase = {
   a: SignalColor;
   b: SignalColor;
@@ -25,7 +45,13 @@ export type SignalPhase = {
   left: number;
 };
 /** Pure position-seeded phases, independent of tile RNG and update rate. */
-export function signalState(seed: number, clock: number, midBlock = false): SignalPhase {
+export function signalState(
+  seed: number,
+  clock: number,
+  midBlock = false,
+  offsets?: SignalOffsets,
+): SignalPhase {
+  if (offsets) clock += offsets[signalIdentity(seed, midBlock)] ?? 0;
   const a = midBlock ? SIGNAL.midBlock.green : SIGNAL.greenA[0] + (seed % 16);
   const b = midBlock ? SIGNAL.midBlock.walk : SIGNAL.greenB[0] + ((seed >>> 8) % 16);
   const stages: {
@@ -63,8 +89,9 @@ export function pedestrianState(
   clock: number,
   midBlock: boolean,
   group: 'a' | 'b',
+  offsets?: SignalOffsets,
 ): 'walk' | 'flash' | 'dont' {
-  const phase = signalState(seed, clock, midBlock);
+  const phase = signalState(seed, clock, midBlock, offsets);
   if (!(group === 'a' ? phase.walkA : phase.walkB)) return 'dont';
   return phase.left >= SIGNAL.walkMin ? 'walk' : 'flash';
 }
@@ -84,6 +111,7 @@ const group = (s: Signal, x: number, y: number): 'a' | 'b' =>
   s.a < 0 || angle(axis(x, y), s.a) <= angle(axis(x, y), s.b) ? 'a' : 'b';
 
 export class SignalControl {
+  offsets?: SignalOffsets;
   readonly signals: Signal[] = [];
   private readonly stops = new Map<number, Stop[]>();
   constructor(
@@ -208,7 +236,9 @@ export class SignalControl {
       if (clearing?.has(stop.signal.key ?? `legacy:${stop.signal.x}/${stop.signal.y}`)) continue;
       const ahead = this.stopAhead(m, stop, progress);
       if (ahead < -0.5 * this.perMeter || ahead >= SIGNAL.lookahead * this.perMeter) continue;
-      const state = signalState(stop.signal.seed, clock, stop.signal.a < 0)[stop.group];
+      const state = signalState(stop.signal.seed, clock, stop.signal.a < 0, this.offsets)[
+        stop.group
+      ];
       const brake = (m.vehicle ? kinematicsOf(m.vehicle).brake : SIGNAL.brake) * this.perMeter;
       const v = m.v ?? m.speed;
       if (state === 'red' || (state === 'amber' && (v * v) / (2 * brake) <= ahead)) {
@@ -223,6 +253,27 @@ export class SignalControl {
     return held;
   }
   /** Distance to the next protected stop, including green approaches, in tile units. */
+  caught(m: Mover, seed: number, midBlock: boolean, clock: number) {
+    const v = m.v ?? m.speed;
+    if (v <= 0.5 * this.perMeter) return false;
+    const progress = this.along[m.from]! + m.dir * m.d;
+    const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
+    return (this.stops.get(m.line) ?? []).some((stop) => {
+      if (
+        stop.signal.seed !== seed ||
+        stop.signal.a < 0 !== midBlock ||
+        (stop.dir !== undefined && stop.dir !== m.dir)
+      )
+        return false;
+      const ahead = this.stopAhead(m, stop, progress);
+      return (
+        ahead >= 0 &&
+        ahead < SIGNAL.lookahead * this.perMeter &&
+        (v * v) / (2 * brake) <= ahead &&
+        signalState(seed, clock, midBlock, this.offsets)[stop.group] !== 'green'
+      );
+    });
+  }
   protectedRoom(m: Mover): number {
     let room = Infinity;
     const progress = this.along[m.from]! + m.dir * m.d;
@@ -263,14 +314,14 @@ export class SignalControl {
             Math.hypot(a.x - x, a.y - y) <= TILE_QUANTIZATION_TOLERANCE,
         );
         if (!entry) continue;
-        const state = signalState(s.seed, clock, s.a < 0)[entry.arm.group];
+        const state = signalState(s.seed, clock, s.a < 0, this.offsets)[entry.arm.group];
         const brake = kinematicsOf(m.vehicle).brake * this.perMeter;
         if (state === 'red' || (state === 'amber' && (m.v ?? m.speed) ** 2 / (2 * brake) <= ahead))
           return false;
         continue;
       }
       if (Math.hypot(s.x - x, s.y - y) > (s.radius + 2) * this.perMeter) continue;
-      const state = signalState(s.seed, clock, s.a < 0)[
+      const state = signalState(s.seed, clock, s.a < 0, this.offsets)[
         group(s, movement?.inHx ?? m.hx, movement?.inHy ?? m.hy)
       ];
       const brake = kinematicsOf(m.vehicle).brake * this.perMeter;

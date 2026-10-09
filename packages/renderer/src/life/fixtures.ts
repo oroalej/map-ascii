@@ -29,7 +29,7 @@ import {
   SIDE_CELLS,
   type LightGrid,
 } from './lights';
-import { pedestrianState, signalState } from './signals';
+import { pedestrianState, signalState, type SignalOffsets } from './signals';
 import {
   packSeasonalFixtures,
   isSeasonalFixture,
@@ -402,20 +402,30 @@ export function updateFixtureFlags(packed: PackedFixtures, motion: FixtureMotion
 /** Bit flags returned by updateFixtureSignals. */
 export const FixtureSignalChange = { vehicle: 1, pedestrian: 2 } as const;
 
-function pedestrianTexelState(seed: number, clock: number, midBlock: boolean, group: 'a' | 'b') {
-  const phase = pedestrianState(seed, clock, midBlock, group);
+function pedestrianTexelState(
+  seed: number,
+  clock: number,
+  midBlock: boolean,
+  group: 'a' | 'b',
+  offsets?: SignalOffsets,
+) {
+  const phase = pedestrianState(seed, clock, midBlock, group, offsets);
   return phase === 'walk' ? 1 : phase === 'flash' ? (Math.floor(clock * 2) % 2 === 0 ? 2 : 3) : 0;
 }
 
 /** Update only phase bytes, without reprojecting or stamping static hardware. */
-export function updateFixtureSignals(packed: PackedFixtures, clock: number): number {
+export function updateFixtureSignals(
+  packed: PackedFixtures,
+  clock: number,
+  offsets?: SignalOffsets,
+): number {
   let changed = 0;
   const phases = packed.pedestrians.length > 1 ? new Map<number, number>() : undefined;
   for (const ped of packed.pedestrians) {
     const key = ped.seed * 4 + Number(ped.midBlock) * 2 + Number(ped.group === 'b');
     let state = phases?.get(key);
     if (state === undefined) {
-      state = pedestrianTexelState(ped.seed, clock, ped.midBlock, ped.group);
+      state = pedestrianTexelState(ped.seed, clock, ped.midBlock, ped.group, offsets);
       phases?.set(key, state);
     }
     if (state === ped.state) continue;
@@ -424,7 +434,8 @@ export function updateFixtureSignals(packed: PackedFixtures, clock: number): num
     changed |= FixtureSignalChange.pedestrian;
   }
   for (const signal of packed.signals) {
-    const color = signalColor[signalState(signal.seed, clock, signal.midBlock)[signal.group]];
+    const color =
+      signalColor[signalState(signal.seed, clock, signal.midBlock, offsets)[signal.group]];
     if (color === signal.color) continue;
     signal.color = color;
     for (const at of signal.cells) packed.texels[at + 2] = color;
@@ -464,6 +475,7 @@ export function packFixtures(
   motion: FixtureMotion = { time: 0, strength: 0 },
   utilityScratch?: UtilityPackingScratch,
   scratch?: FixturePackingScratch,
+  offsets?: SignalOffsets,
 ): PackedFixtures {
   out.fill(0);
   const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
@@ -533,7 +545,10 @@ export function packFixtures(
             group: fixture.group,
             midBlock: fixture.midBlock,
             cells: [],
-            color: signalColor[signalState(fixture.seed, clock, fixture.midBlock)[fixture.group]],
+            color:
+              signalColor[
+                signalState(fixture.seed, clock, fixture.midBlock, offsets)[fixture.group]
+              ],
             emitters: [],
             direction:
               (Math.round(
@@ -785,7 +800,13 @@ export function packFixtures(
       chosen.some((cell) => glyphIndex(cell.glyph) <= 0 || glyphIndex(cell.glyph) > MAX_GLYPHS)
     )
       continue;
-    const state = pedestrianTexelState(fixture.seed, clock, fixture.midBlock, fixture.group);
+    const state = pedestrianTexelState(
+      fixture.seed,
+      clock,
+      fixture.midBlock,
+      fixture.group,
+      offsets,
+    );
     const ped = {
       seed: fixture.seed,
       group: fixture.group,

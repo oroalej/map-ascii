@@ -631,6 +631,7 @@ export class ProcessionScene {
       handover = false,
       bounds,
       inspection,
+      observe,
       scope = 'live/default',
     }: {
       boats?: boolean;
@@ -639,6 +640,7 @@ export class ProcessionScene {
       handover?: boolean;
       bounds?: LngLatBounds;
       inspection?: LifeInspection;
+      observe?: (owner: object, agent: VisibleAgent) => void;
       scope?: string;
     } = {},
   ): VisibleAgent[] {
@@ -655,9 +657,9 @@ export class ProcessionScene {
       for (const b of this.boats) {
         // Every column is roped to the same pagoda, so the whole connected tow is one item.
         const group = b.vehicle === 'pagoda' || b.column !== undefined ? this.boats[0]! : b;
-        const owner = inspection && this.owner(scope, group);
-        const actorTime = owner ? inspection.clock(owner, time) : time;
-        const actorProgress = owner ? inspection.progress(owner, progress) : progress;
+        const owner = (inspection || observe) && this.owner(scope, group);
+        const actorTime = owner && inspection ? inspection.clock(owner, time) : time;
+        const actorProgress = owner && inspection ? inspection.progress(owner, progress) : progress;
         const { sway } = b;
         const beat = (2 * Math.PI * actorTime) / sway.period + sway.phase;
         // Past the landing (or not yet at the start), it's out of the scene; its own sway
@@ -690,7 +692,10 @@ export class ProcessionScene {
           this.crewOf(at, b, actorTime, out);
         }
         if (owner)
-          for (let i = first; i < out.length; i++) out[i] = inspection.present(owner, out[i]!);
+          for (let i = first; i < out.length; i++) {
+            if (inspection) out[i] = inspection.present(owner, out[i]!);
+            observe?.(owner, out[i]!);
+          }
       }
       this.towRopes(placed, ropes);
       const pagodaAt = placed.get(this.boats[0]!);
@@ -711,8 +716,8 @@ export class ProcessionScene {
         if (!near && p.rank >= PROCESSION.crowdShare) continue;
         const { x, y, tx, ty, off } = p;
         if (!inView(x + ty * off, y - tx * off)) continue;
-        const owner = inspection && this.owner(scope, p);
-        const actorTime = owner ? inspection.clock(owner, time) : time;
+        const owner = (inspection || observe) && this.owner(scope, p);
+        const actorTime = owner && inspection ? inspection.clock(owner, time) : time;
         const sway = Math.sin(actorTime * 1.3 + p.phase) * 0.3;
         const [lng, lat] = this.lngLat(x + ty * off + tx * sway, y - tx * off + ty * sway);
         // Facing the river, a meter nearer it.
@@ -730,7 +735,8 @@ export class ProcessionScene {
           flap: 0,
           candle: p.candle,
         };
-        const presented = owner ? inspection.present(owner, agent) : agent;
+        const presented = owner && inspection ? inspection.present(owner, agent) : agent;
+        if (owner) observe?.(owner, presented);
         out.push(handover ? identifyEventActor(presented, `${scope}/${p.id}`) : presented);
       }
     }

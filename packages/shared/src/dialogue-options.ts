@@ -12,7 +12,10 @@ export const SCENE_PROFILES: readonly DialogueProfile[] = [
   'vendor-order',
   'vendor-thanks',
   'transit',
+  'transit-call',
+  'procession-cheer',
   'companion',
+  'peddler-call',
 ];
 export const LOOK_ANCHORS: readonly DialogueAnchor[] = ['monument', 'fountain', 'plaza'];
 export const DIALOGUE_WEATHER = {

@@ -1,6 +1,6 @@
 # Naga ambient dialogue
 
-The catalog contains 104 short, fictional scenes in 15 categories: 42 one-speaker utterances and 62 exchanges. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
+The catalog contains 110 scenes: 104 short, fictional ordinary scenes in 15 categories (42 one-speaker utterances and 62 exchanges), plus six sourced event cheer utterances. All spoken lines include Central Bikol, English and Tagalog. These are illustrative moments, not quotations from residents or claims about actual businesses, products, fares or timetables.
 
 New scripts are original compositions. [Jon Epstein's *Standard Bikol* (Peace Corps, 1967)](https://files.eric.ed.gov/fulltext/ED018772.pdf) supplies grammatical reference for actor/goal focus, pronouns, questions and demonstratives. [Malcolm Mintz's *Bikol Dictionary* (University of Hawaii Press, 1971)](https://manifold.uhpress.hawaii.edu/projects/bikol-dictionary) supplies lexical reference. Existing catalog entries retain their original sources. A reference supports language forms; it does not attest each authored sentence.
 
@@ -64,3 +64,35 @@ Four weather IDs bring the current inventory to 104 scenes (42 utterances and 62
 - `weather-clearing-linger` combines DIGDI/PA/AKO (here, still, I) as an independent observation.
 
 Every word was checked against Mintz's 1971 dictionary, downloaded from its University of Hawaii Press Manifold page. Stress marks are omitted following the existing catalog convention; no new spellings are inferred. These are original fictional compositions, with English and Tagalog meanings rather than literal quotations. Native-speaker review remains pending. The proposed fierce-sun and renewed-rain warnings were omitted in favor of these short supported compositions. Heat is the shared dry/high-sun midday rule, not measured temperature; clearing lines belong only to current post-rain shelter countdowns.
+
+## Requested event cheer
+
+A tap near a running event reuses the first authored cheer for the running event's occasion (`cheer-viva-la-virgen` for procession taps). Its authored wording and source remain those of the selected event entry. English and Tagalog translations are illustrative. A request-only adapter retains that entry's id and text while ordinary conversation never selects it. No duplicate catalog line is added. The existing 104 scenes and all fifteen ordinary profile counts remain unchanged. Jeepney riders are not available, so no transit-call line is added.
+
+## Street peddler calls (2026-10-08)
+
+The 104 legacy scenes remain intact. Added 21 original one-speaker peddler utterances: two plain calls per seven goods, four weather calls, two hover calls and one departure line. Main's six event cheers are also retained. Total 131 of 140; 9 slots remain. All include Bikol, English and Tagalog. Sources explain trades and language forms; native-speaker review has not occurred. Takatak sells candy only as a conservative simulation choice under Ordinance 2021-004, without claiming a blanket ambulant ban.
+
+| ID | Bikol | Context |
+| --- | --- | --- |
+| peddler-taho-1 | Tahoo!! Tahoo!! | taho |
+| peddler-taho-2 | Taho kamo diyan! | taho |
+| peddler-balut-1 | Baluuut! Penoy! | balut |
+| peddler-balut-2 | Balut! Mainit pa! | balut |
+| peddler-sorbetes-1 | Sorbetes! Sorbetes! | sorbetes |
+| peddler-sorbetes-2 | Sorbetes, suki! | sorbetes |
+| peddler-bote-dyaryo-1 | Bote, dyaryo, bakal, plastik! | bote-dyaryo |
+| peddler-bote-dyaryo-2 | Bote! Dyaryo! Bakal! | bote-dyaryo |
+| peddler-fishball-1 | Fishball! Kikiam! Kwek-kwek! | fishball |
+| peddler-fishball-2 | Tusok na, suki! | fishball |
+| peddler-kakanin-1 | Suman! Puto! Biko! | kakanin |
+| peddler-kakanin-2 | Suman! Ibos! Puto digdi! | kakanin |
+| peddler-takatak-1 | Takatak-takatak! | takatak |
+| peddler-takatak-2 | Kendi, suki! Kendi! | takatak |
+| peddler-heat-sorbetes | Sorbetes! Malipot! | sorbetes |
+| peddler-rain-balut | Balut, mainit pa sa uran! | balut |
+| peddler-clearing | Tapos na an uran. Bili na! | selling trades only |
+| peddler-heat-tired | Hay, kainit! Bili na, suki! | selling trades only |
+| peddler-hover-1 | Bili na, suki! | selling trades only |
+| peddler-hover-2 | Madya digdi, suki! | all goods |
+| peddler-leaving | Puli na ako. | all goods |

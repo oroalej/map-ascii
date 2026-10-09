@@ -28,6 +28,7 @@ export type DialogueContext = {
   figures: readonly string[];
   profiles?: readonly DialogueProfile[];
   delivery?: DialogueChoice['delivery'];
+  peddler?: { goods: string; event?: 'hover' | 'leaving'; tier?: 'event' | 'weather' | 'plain' };
 };
 
 /** Shared spatial/default context; scene-specific weather and event flags stay with callers. */
@@ -149,6 +150,24 @@ export function dialogueEligible(
   if (p === 'daily-plans' && c.figures.some((f) => f === 'child')) return false;
   if (p === 'place-reaction' && !c.anchors?.some((a) => LOOK_ANCHORS.includes(a))) return false;
   const q = entry.conditions;
+  if (p === 'peddler-call') {
+    if (!c.peddler || (q?.goods && !q.goods.includes(c.peddler.goods))) return false;
+    if (q?.event && q.event !== c.peddler.event) return false;
+    const tier = q?.event ? 'event' : q?.weather ? 'weather' : 'plain';
+    if (c.peddler.tier && c.peddler.tier !== tier) return false;
+    if (c.peddler.event === 'leaving' && q?.event !== 'leaving') return false;
+    switch (q?.weather) {
+      case 'heat':
+        return hotAt(c.minutes, c.rain, c.sunAltitude);
+      case 'rain':
+        return c.rain >= WEATHER.rain;
+      case 'clearing':
+        return !!c.clearing && c.rain <= WEATHER.easing;
+      default:
+        return true;
+    }
+  }
+  if (c.peddler) return false;
   if ((c.shaded && q?.weather !== 'heat') || (c.clearing && q?.weather !== 'clearing'))
     return false;
   if (!q) return true;
@@ -251,6 +270,12 @@ export class DialogueSelector {
     bag.last = entry!.id;
     if (remember) this.admit(entry!, owners);
     return entry;
+  }
+  /** Explicit speech has a stable choice and leaves the ordinary shuffle bags/RNG alone. */
+  request(kind: DialogueChoice['kind'], context: DialogueContext) {
+    return (this.byKind.get(kind) ?? [])
+      .filter((entry) => dialogueEligible(entry, context, this.periods))
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
   }
   /** Commit history only after physical and service-lifetime admission succeeds. */
   admit(entry: DialogueChoice, owners: readonly object[]) {

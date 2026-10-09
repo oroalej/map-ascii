@@ -27,6 +27,9 @@ const crafts: Record<CraftType, string> = {
   ambulance: 'Ambulance',
   police: 'Police car',
   firetruck: 'Fire truck',
+  'box-cart': 'Pushcart',
+  'fry-cart': 'Frying cart',
+  'flatbed-cart': 'Flatbed cart',
 };
 const figures: Record<PersonFigure, string> = {
   adult: 'Person',
@@ -34,6 +37,10 @@ const figures: Record<PersonFigure, string> = {
   umbrella: 'Person with an umbrella',
   rower: 'Paddler',
   seated: 'Person sitting',
+  'pole-buckets': 'Person carrying buckets',
+  basket: 'Person carrying a basket',
+  'head-tray': 'Person carrying a head tray',
+  'chest-tray': 'Person carrying a chest tray',
 };
 const birds: Record<BirdSpecies, string> = {
   maya: 'Maya',
@@ -55,6 +62,7 @@ const kinds: Record<AgentKind, string> = {
 /** A decorative agent's public name; ropes and poles are not independent subjects. */
 export function describeAgent(agent: VisibleAgent): string | null {
   if (agent.line || agent.prop) return null;
+  if (agent.peddler) return `${agent.peddler.label} (simulated)`;
   let name = kinds[agent.kind];
   if (agent.vehicle && ['vehicle', 'boat', 'train'].includes(agent.kind)) {
     name = crafts[agent.vehicle];
