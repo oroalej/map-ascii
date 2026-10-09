@@ -1,0 +1,69 @@
+{
+  "id": "detail/leon-q-mercado-high-school",
+  "osm_id": "osm:way/780476088",
+  "title": "Leon Q. Mercado High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.2508202908, 13.65285173456],
+        [123.25084263242, 13.65277946886],
+        [123.2508776573, 13.65271753381],
+        [123.25094010011, 13.65257024174],
+        [123.25087398015, 13.65255827889],
+        [123.25083394371, 13.65270003632],
+        [123.25079723252, 13.65276860649],
+        [123.2507576141, 13.65281066682],
+        [123.25077708879, 13.65286685974],
+        [123.2507898363, 13.6528668214],
+        [123.25078844355, 13.65286065952],
+        [123.25078880408, 13.65285938127],
+        [123.2507896347, 13.65285860883],
+        [123.2508202908, 13.65285173456]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.25090715578, 13.65257022061],
+        [123.25085664144, 13.65270547185],
+        [123.25081993429, 13.6527740343],
+        [123.25080061174, 13.65285014083]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.25087831233, 13.65256500206],
+        [123.25083973825, 13.65270158169],
+        [123.25083953762, 13.6527021684],
+        [123.25078293153, 13.65285797911],
+        [123.2507827051, 13.65285874102],
+        [123.25078260627, 13.65285923848]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/780476088",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6527594,123.2502190,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied leon-q-mercado-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit). The central yard is exposed orange soil and stays bare. A row of round crowns lines the front of the diagonal north classroom row; a second row of crowns runs along the south edge of the yard; canopy sits between the west classroom blocks, with single crowns at the west edge, and forest fills the east end. The pale dirt walk from the south-east gate (extended to the mapped road, which runs south of the image's road) curves up into the yard toward the north row. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.63 m, 5.17 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

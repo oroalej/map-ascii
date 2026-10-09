@@ -38,6 +38,8 @@ const fixtureNames = [
   'tarosanan-parents.json',
   'balatas-school-parents.json',
   'tacolod-st-john-parents.json',
+  'east-school-parents.json',
+  'malabsay-falls-parents.json',
 ];
 export const source = [
   ...new Map(

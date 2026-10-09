@@ -1,0 +1,201 @@
+{
+  "id": "detail/malabsay-falls",
+  "osm_id": "osm:node/358728247",
+  "title": "Malabsay Falls: plunge pool and rocky banks",
+  "surface": "keep",
+  "grounds": [
+    [123.3355543, 13.6616305],
+    [123.3358963, 13.6616305],
+    [123.3359241, 13.6617742],
+    [123.3359241, 13.6619539],
+    [123.3357761, 13.6619898],
+    [123.3355913, 13.6619539],
+    [123.3355543, 13.6618012],
+    [123.3355543, 13.6616305]
+  ],
+  "structures": [
+    {
+      "id": "crest-water",
+      "ring": [
+        [123.3357595, 13.6618569],
+        [123.3357752, 13.661856],
+        [123.335778, 13.6618353],
+        [123.3357567, 13.6618308],
+        [123.3357595, 13.6618569]
+      ],
+      "height_m": 0.15,
+      "material": "water",
+      "overhead": false
+    },
+    {
+      "id": "plunge-pool",
+      "ring": [
+        [123.3357567, 13.6618308],
+        [123.335778, 13.6618353],
+        [123.3358039, 13.6618281],
+        [123.3358224, 13.6618102],
+        [123.335827, 13.6617832],
+        [123.3358085, 13.6617563],
+        [123.3357761, 13.6617293],
+        [123.3357392, 13.6617248],
+        [123.3357022, 13.6617473],
+        [123.3356883, 13.6617832],
+        [123.3357022, 13.6618192],
+        [123.3357299, 13.6618326],
+        [123.3357567, 13.6618308]
+      ],
+      "height_m": 0.15,
+      "material": "water",
+      "overhead": false
+    },
+    {
+      "id": "rock-ledge-west",
+      "ring": [
+        [123.3356929, 13.6618551],
+        [123.3357133, 13.6618757],
+        [123.335753, 13.661873],
+        [123.3357595, 13.6618569],
+        [123.3357567, 13.6618308],
+        [123.3357299, 13.6618326],
+        [123.3357022, 13.6618192],
+        [123.3356892, 13.6618398],
+        [123.3356929, 13.6618551]
+      ],
+      "height_m": 2,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "rock-ledge-east",
+      "ring": [
+        [123.3357752, 13.661856],
+        [123.3357835, 13.6618766],
+        [123.3358224, 13.661873],
+        [123.3358501, 13.6618461],
+        [123.3358501, 13.6618102],
+        [123.335827, 13.6617832],
+        [123.3358224, 13.6618102],
+        [123.3358039, 13.6618281],
+        [123.335778, 13.6618353],
+        [123.3357752, 13.661856]
+      ],
+      "height_m": 2,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "outlet-water",
+      "ring": [
+        [123.3357022, 13.6617473],
+        [123.3357392, 13.6617248],
+        [123.3357022, 13.6617024],
+        [123.3356652, 13.6616889],
+        [123.335619, 13.6616934],
+        [123.3356005, 13.6617158],
+        [123.3356097, 13.6617338],
+        [123.3356467, 13.6617203],
+        [123.3356745, 13.6617293],
+        [123.3357022, 13.6617473]
+      ],
+      "height_m": 0.1,
+      "material": "water",
+      "overhead": false
+    },
+    {
+      "id": "outlet-boulder-north",
+      "ring": [
+        [123.335656, 13.6617563],
+        [123.335668, 13.6617608],
+        [123.3356828, 13.6617545],
+        [123.3356874, 13.6617428],
+        [123.3356745, 13.6617329],
+        [123.335656, 13.6617365],
+        [123.3356486, 13.6617473],
+        [123.335656, 13.6617563]
+      ],
+      "height_m": 1.2,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "outlet-boulder-south",
+      "ring": [
+        [123.3356874, 13.6616871],
+        [123.335705, 13.6616961],
+        [123.3357225, 13.6616871],
+        [123.3357262, 13.6616736],
+        [123.3357114, 13.6616637],
+        [123.3356911, 13.6616682],
+        [123.3356828, 13.6616781],
+        [123.3356874, 13.6616871]
+      ],
+      "height_m": 1.1,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "outlet-boulder-west",
+      "ring": [
+        [123.3356051, 13.6616916],
+        [123.3356245, 13.6616853],
+        [123.3356356, 13.6616691],
+        [123.3356264, 13.6616575],
+        [123.3356033, 13.6616619],
+        [123.335594, 13.6616754],
+        [123.3356051, 13.6616916]
+      ],
+      "height_m": 0.9,
+      "material": "stone",
+      "overhead": false
+    },
+    {
+      "id": "pool-bank-rock",
+      "ring": [
+        [123.335827, 13.6617832],
+        [123.3358464, 13.661776],
+        [123.3358436, 13.6617473],
+        [123.3358159, 13.6617167],
+        [123.3357761, 13.661706],
+        [123.3357761, 13.6617293],
+        [123.3358085, 13.6617563],
+        [123.335827, 13.6617832]
+      ],
+      "height_m": 0.8,
+      "material": "stone",
+      "overhead": false
+    }
+  ],
+  "status": "draft",
+  "credit": "Photo-informed draft plan estimates: Monette Nyem (CC BY 3.0), herbert joey (CC BY-SA 2.0), Naga City Tourism; overhead forest context: Esri World Imagery. Pool/rock/vegetation extent and bearing are unsurveyed; no reference bitmap ships. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Malabsay Falls",
+      "url": "https://www.openstreetmap.org/node/358728247",
+      "note": "Real waterfall point at 123.3357669, 13.6618461; waterway=waterfall. Supplemental pipeline query inspected 2026-10-08. This point does not survey the pool perimeter or fall bearing."
+    },
+    {
+      "title": "Naga City Investment and Tourism Promotions Office: Malabsay Falls",
+      "url": "https://tourism.naga.gov.ph/attractions/malabsay-falls/",
+      "note": "Panicuason, Mt. Isarog Natural Park, approximately 40-foot drop and receiving pond. Access times, fees and hours are not asserted."
+    },
+    {
+      "title": "Monette Nyem: Malabsay Falls, 30 October 2011 (CC BY 3.0)",
+      "url": "https://commons.wikimedia.org/wiki/File:Malabsay_Falls,_Panicuason,_Naga_City_-_panoramio.jpg",
+      "note": "Original 1024×680 photograph inspected directly 2026-10-08. Narrow fall against dark rock, broad plunge pool, mossy outlet boulders and leafy/fern banks guide the plan-view impression. https://creativecommons.org/licenses/by/3.0/ . No bitmap ships. Its distant geotag is not used to place the falls."
+    },
+    {
+      "title": "herbert joey: Malabsayfalls, 31 October 2005 (CC BY-SA 2.0)",
+      "url": "https://commons.wikimedia.org/wiki/File:Malabsayfalls.jpg",
+      "note": "Original 600×800 photograph inspected directly 2026-10-08; confirms exposed rock beside the narrow drop, pool and vegetation. https://creativecommons.org/licenses/by-sa/2.0/ . Reference only; no raster or front-view drawing ships."
+    },
+    {
+      "title": "Esri World Imagery: overhead forest context",
+      "url": "https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9",
+      "note": "North-up z17/z18 source tiles inspected directly 2026-10-08 around the OSM point. Dense canopy and shadow obscure water edges; no surveyed pool outline, individual trunks or flow bearing can be derived. Capture date unknown."
+    },
+    {
+      "title": "Draft plan-view placement and limits",
+      "note": "Photo-informed natural forms, not surveyed geometry: about 15 m across and 13 m long for the pool; a narrow crest at the OSM point, asymmetric rock ledge and grouped outlet boulders. Pool/outlet are provisionally southwest of the anchor; bearing, scale and all vegetation boundaries are estimates. Ground photographs establish appearance, not north/south orientation. No added trail, stairway, furniture, concrete, species or historical dates. The complete mapped hiking path is untouched; no mapped stream connects to the point."
+    }
+  ]
+}

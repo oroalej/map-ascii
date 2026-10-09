@@ -48,6 +48,55 @@ const detail = SiteDetail.parse({
 });
 
 describe('site details', () => {
+  it('keeps a natural water anchor and selection on linked water and stone details', () => {
+    const anchor: AtlasFeature = {
+      ...parent,
+      geometry: { type: 'Point', coordinates: p(25, 25) },
+      properties: {
+        ...parent.properties,
+        class: 'water_stream',
+        kind: 'waterway=waterfall',
+        landmark_id: 'landmark/falls',
+      },
+      tippecanoe: { layer: 'poi', minzoom: 12, maxzoom: 16 },
+    };
+    const pack = SiteDetail.parse({
+      ...detail,
+      surface: 'keep',
+      grounds: parent.geometry.type === 'Polygon' ? parent.geometry.coordinates[0] : [],
+      walks: [],
+      seating: [],
+      lamps: [],
+      structures: ['water', 'stone'].map((material, i) => ({
+        id: material,
+        material,
+        height_m: 0.1,
+        overhead: false,
+        ring: [
+          p(10 + i * 10, 10),
+          p(18 + i * 10, 10),
+          p(18 + i * 10, 18),
+          p(10 + i * 10, 18),
+          p(10 + i * 10, 10),
+        ],
+      })),
+    });
+    const result = mergeSiteDetails([anchor], [pack]);
+    expect(result.warnings).toEqual([]);
+    expect(result.features.find((f) => f.properties.id === anchor.properties.id)).toEqual(anchor);
+    for (const part of result.features.filter((f) => f.properties.detail_parent)) {
+      expect(part.properties.detail_parent).toBe(anchor.properties.id);
+      expect(JSON.parse(part.properties.detail_selection!)).toMatchObject({
+        id: anchor.properties.id,
+        landmarkId: 'landmark/falls',
+        class: 'water_stream',
+      });
+      expect(part.properties.detail_blocked).toBe(true);
+    }
+    expect(result.features.find((f) => f.properties.class === 'water_area')?.properties.kind).toBe(
+      'waterway=waterfall',
+    );
+  });
   for (const origin of ['mapped', 'authored'] as const) {
     it(`protects ${origin} court boundaries and holes while allowing contained markings`, () => {
       const ring = (west: number, south: number, east: number, north: number) => [

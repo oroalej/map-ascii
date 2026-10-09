@@ -1,0 +1,47 @@
+{
+  "id": "landmark/malabsay-falls",
+  "osm_id": "osm:node/358728247",
+  "name": {
+    "en": "Malabsay Falls"
+  },
+  "type": "other",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Malabsay Falls",
+      "url": "https://www.openstreetmap.org/node/358728247",
+      "note": "Real waterfall point at 123.3357669, 13.6618461; waterway=waterfall. Supplemental pipeline query inspected 2026-10-08. This point does not survey the pool perimeter or fall bearing."
+    },
+    {
+      "title": "Naga City Investment and Tourism Promotions Office: Malabsay Falls",
+      "url": "https://tourism.naga.gov.ph/attractions/malabsay-falls/",
+      "note": "Panicuason, Mt. Isarog Natural Park, approximately 40-foot drop and receiving pond. Access times, fees and hours are not asserted."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Malabsay Falls is in Panicuason, Naga City."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "The falls lie within Mt. Isarog Natural Park."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Naga City Tourism describes the drop as about 40 feet high (roughly 12 metres)."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "The falling water collects in a pond at the base."
+      },
+      "source": 1
+    }
+  ]
+}

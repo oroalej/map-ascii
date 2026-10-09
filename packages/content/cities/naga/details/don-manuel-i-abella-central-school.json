@@ -1,0 +1,111 @@
+{
+  "id": "detail/don-manuel-i-abella-central-school",
+  "osm_id": "osm:way/730948736",
+  "title": "Don Manuel I. Abella Central School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23981297748, 13.62909191928],
+        [123.2401609347, 13.62903530221],
+        [123.24019140418, 13.62919276214],
+        [123.24006321158, 13.62921365221],
+        [123.24009025491, 13.62935348337],
+        [123.24013550187, 13.62934612014],
+        [123.24013075222, 13.62932150258],
+        [123.24013115311, 13.62932000883],
+        [123.24013243822, 13.6293191015],
+        [123.24031326967, 13.62928612235],
+        [123.24029205172, 13.62917641208],
+        [123.24023160549, 13.62918620412],
+        [123.24020116174, 13.62902878584],
+        [123.24025243444, 13.62902040458],
+        [123.24023232989, 13.6289164513],
+        [123.23979317502, 13.628989528],
+        [123.23981297748, 13.62909191928]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.23993027577, 13.62957796174],
+        [123.23996620413, 13.62957211497],
+        [123.23992393932, 13.62935357911],
+        [123.23987641279, 13.6293613133],
+        [123.23987789995, 13.62936900286],
+        [123.23991102588, 13.6293620249],
+        [123.23991257328, 13.62936237235],
+        [123.2399135426, 13.62936359498],
+        [123.23994064914, 13.62948538706],
+        [123.239939997, 13.6294867897],
+        [123.23993880227, 13.62948743803],
+        [123.23990229497, 13.62949514058],
+        [123.2399041845, 13.62950491069],
+        [123.23991658233, 13.62950311222],
+        [123.23991809905, 13.62950355653],
+        [123.23991891875, 13.62950462699],
+        [123.23993027577, 13.62957796174]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.2399772586, 13.62896481993],
+        [123.23999101166, 13.62903593198],
+        [123.240175848, 13.62901487297],
+        [123.24022151243, 13.62925098706],
+        [123.24015163695, 13.62928039858]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23980020781, 13.62899428172],
+        [123.24016168309, 13.62902950866],
+        [123.24016225649, 13.62902960624],
+        [123.24016281747, 13.62902975729],
+        [123.24016336079, 13.62902996038],
+        [123.24016388132, 13.62903021362],
+        [123.2401643742, 13.62903051463],
+        [123.24016483479, 13.62903086058],
+        [123.24016525877, 13.62903124822],
+        [123.24016564216, 13.62903167392],
+        [123.24016598137, 13.62903213368],
+        [123.24016627319, 13.62903262318],
+        [123.24016651491, 13.62903313783],
+        [123.24022602488, 13.62918836751],
+        [123.24022626639, 13.62918888201],
+        [123.24022655798, 13.62918937138],
+        [123.24022689692, 13.62918983105],
+        [123.2403062547, 13.62928146076]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/730948736",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6293582,123.2402615,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied don-manuel-i-abella-central-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The pale concrete plaza south of the red-roofed hall, the corridor strip west of the central block and the packed forecourt between the front classroom block and Cararayanâ€“San Isidro Road are hardscape; the link from the forecourt up to the plaza runs under canopy and is inferred. The bright lawn west of the front block is grass. Mature canopy fills the north-west corner, the strip north of the hall, the west edge, the group south of the west blocks, the clump between the hall and the east blocks and the whole south-east quarter. Registration: global affine; independent check errors 0.82 m, 3.44 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

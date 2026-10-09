@@ -285,7 +285,7 @@ function applySiteOverrides({
 }
 
 function emitDetailStructures(
-  { pack, area, metadata }: ReturnType<typeof prepareDetailSites>['sites'][number],
+  { pack, parent, area, metadata }: ReturnType<typeof prepareDetailSites>['sites'][number],
   input: AtlasFeature[],
   blocked: { feature: AtlasFeature; bounds: [number, number, number, number] }[],
   { auditFor, standingTarget }: ReturnType<typeof prepareDetailSites>,
@@ -444,7 +444,11 @@ function emitDetailStructures(
       ...(vehicleIds.has(part.id) && {
         kind: `parked_vehicle=${vehicleKinds.get(part.id)!}`,
       }),
-      ...(part.material === 'water' && { kind: 'leisure=swimming_pool' }),
+      ...(part.material === 'water' && {
+        kind: parent.properties.class.startsWith('water_')
+          ? (parent.properties.kind ?? 'natural=water')
+          : 'leisure=swimming_pool',
+      }),
       variant:
         part.roof_shape ??
         (part.material === 'paving'

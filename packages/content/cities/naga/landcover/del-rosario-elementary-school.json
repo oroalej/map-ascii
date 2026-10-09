@@ -1,0 +1,157 @@
+{
+  "id": "landcover/del-rosario-elementary-school",
+  "title": "Del Rosario Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.23653813702, 13.61814074855],
+      "crown_m": 6.8,
+      "height_m": 7.8
+    },
+    {
+      "at": [123.23648636239, 13.61823510694],
+      "crown_m": 3.8,
+      "height_m": 4.4
+    },
+    {
+      "at": [123.23689692993, 13.61794084598],
+      "crown_m": 7.6,
+      "height_m": 8.7
+    },
+    {
+      "at": [123.23699762035, 13.61807386589],
+      "crown_m": 4.5,
+      "height_m": 5.2
+    },
+    {
+      "at": [123.23712698602, 13.61777176012],
+      "crown_m": 4.5,
+      "height_m": 5.2
+    },
+    {
+      "at": [123.23708056017, 13.61773252995],
+      "crown_m": 3.3,
+      "height_m": 4
+    },
+    {
+      "at": [123.23626759126, 13.61784301887],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.2363799313, 13.61780049535],
+      "crown_m": 4.5,
+      "height_m": 5.2
+    },
+    {
+      "at": [123.23642621273, 13.61778306162],
+      "crown_m": 4.9,
+      "height_m": 5.6
+    },
+    {
+      "at": [123.23648083748, 13.61776867146],
+      "crown_m": 4.9,
+      "height_m": 5.6
+    },
+    {
+      "at": [123.23653384599, 13.61774911614],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23672220419, 13.61768971154],
+      "crown_m": 4.5,
+      "height_m": 5.2
+    },
+    {
+      "at": [123.23676808156, 13.61767098652],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23636725186, 13.61813789364],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23634704892, 13.61807332921],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23632684598, 13.61800876479],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23630193191, 13.61793859255],
+      "crown_m": 3.3,
+      "height_m": 4
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.23653201984, 13.61783760555],
+        [123.23655884022, 13.61782914691],
+        [123.23654876565, 13.61779695066],
+        [123.23652194526, 13.6178054093],
+        [123.23653201984, 13.61783760555]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23653141197, 13.61789738355],
+        [123.23652456987, 13.6178755176],
+        [123.23649505865, 13.61788482488],
+        [123.23650190076, 13.61790669082],
+        [123.23653141197, 13.61789738355]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23649099117, 13.61787182603],
+        [123.23652453863, 13.6178612458],
+        [123.23651850464, 13.61784196243],
+        [123.23648495718, 13.61785254266],
+        [123.23649099117, 13.61787182603]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23650838062, 13.6178237801],
+        [123.23650032634, 13.61779804029],
+        [123.23646408805, 13.61780946915],
+        [123.23647214233, 13.61783520897],
+        [123.23650838062, 13.6178237801]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23640824593, 13.6178908287],
+        [123.23644179339, 13.61788024847],
+        [123.23643575941, 13.6178609651],
+        [123.23640221195, 13.61787154533],
+        [123.23640824593, 13.6178908287]
+      ],
+      "cover": "planting"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/729766923",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6179108,123.2367629,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The central courtyard between the west classroom blocks, the north block and the long south roof is bare packed ground and concrete, traced as hardscape. A garden of planters and small plant clumps fills the open plot south of the west block; a canopy column runs down the west edge; a large crown stands north of the west blocks and another at the north-east corner beside the light-green roof; a belt of crowns lines the south frontage along the highway and a small group grows east of the roofed courtyard. The walk along the long south roof's west wall to the frontage is inferred from the garden gap. Registration: global affine; independent check errors 1.93 m, 4.17 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

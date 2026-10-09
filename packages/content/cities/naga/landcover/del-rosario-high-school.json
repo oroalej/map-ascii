@@ -1,0 +1,115 @@
+{
+  "id": "landcover/del-rosario-high-school",
+  "title": "Del Rosario High School grounds",
+  "trees": [
+    {
+      "at": [123.23884661396, 13.61864062862],
+      "crown_m": 3.2,
+      "height_m": 4
+    },
+    {
+      "at": [123.2388367243, 13.6185997919],
+      "crown_m": 3.4,
+      "height_m": 4
+    },
+    {
+      "at": [123.23882930049, 13.6185629585],
+      "crown_m": 3.0,
+      "height_m": 4
+    },
+    {
+      "at": [123.23904073824, 13.61847195256],
+      "crown_m": 2.0,
+      "height_m": 4
+    },
+    {
+      "at": [123.23908800645, 13.61845064613],
+      "crown_m": 2.3,
+      "height_m": 4
+    },
+    {
+      "at": [123.23893405529, 13.61851483417],
+      "crown_m": 2.0,
+      "height_m": 4
+    },
+    {
+      "at": [123.23892387706, 13.61865303629],
+      "crown_m": 2.3,
+      "height_m": 4
+    },
+    {
+      "at": [123.23942429098, 13.61835195059],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.23945769997, 13.61834577943],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.23943388524, 13.61832930503],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.23945520746, 13.61832562789],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.23941021126, 13.61831288037],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.2394388215, 13.61830399011],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    },
+    {
+      "at": [123.23941781728, 13.61828561571],
+      "crown_m": 3.9,
+      "height_m": 4.5
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.23885034898, 13.61855364984],
+        [123.23921959868, 13.61842568371],
+        [123.23921777797, 13.61842073315],
+        [123.2392161046, 13.61841933349],
+        [123.23918822067, 13.61834995962],
+        [123.23897421502, 13.61842412271],
+        [123.23898961539, 13.61846606744],
+        [123.23890705225, 13.61849468511],
+        [123.2388244897, 13.6185232932],
+        [123.2388057839, 13.61848249206],
+        [123.23877933898, 13.61849165647],
+        [123.23885608937, 13.61866199398],
+        [123.23887939916, 13.61865391603],
+        [123.23884427661, 13.61856478492],
+        [123.2388444483, 13.61856346517],
+        [123.23884534567, 13.61856246069],
+        [123.23885255501, 13.61855973056],
+        [123.23885034898, 13.61855364984]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/885899787",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6184087,123.2391200,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The image covers the parcel's north half only; the southern half is beyond its frame and is left as mapped. The packed-earth yard along the north side of the two classroom blocks (the mapped service road continues along its east part) is hardscape. Lawn covers the open ground south of the classroom blocks and the strip west of the west block; crowns stand along the west edge and in the south lawn, and canopy fills the south-east corner beside the maroon roof. Registration: global affine; independent check errors 2.64 m, 3.26 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

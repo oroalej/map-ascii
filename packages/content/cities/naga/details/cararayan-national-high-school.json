@@ -1,0 +1,93 @@
+{
+  "id": "detail/cararayan-national-high-school",
+  "osm_id": "osm:way/881097068",
+  "title": "Cararayan National High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23821307924, 13.62982689475],
+        [123.23854826875, 13.62980245714],
+        [123.23854820853, 13.62979958142],
+        [123.23854828385, 13.62980027399],
+        [123.23871848856, 13.62978395416],
+        [123.23871560048, 13.62976442659],
+        [123.23854751597, 13.62977861133],
+        [123.23854766101, 13.6297852129],
+        [123.23853400676, 13.62940011421],
+        [123.23847468416, 13.62940443923],
+        [123.23849544698, 13.62962068821],
+        [123.23849517112, 13.62962199347],
+        [123.23849439578, 13.62962281343],
+        [123.23849331646, 13.62962318101],
+        [123.23839401646, 13.62963208101],
+        [123.23839229579, 13.62963156353],
+        [123.23839145303, 13.62963001189],
+        [123.23837085288, 13.62941450969],
+        [123.23837124602, 13.62941301898],
+        [123.23837252542, 13.62941210518],
+        [123.2383822956, 13.62941117499],
+        [123.23823791101, 13.62942170162],
+        [123.23816316996, 13.62952526463],
+        [123.23816713186, 13.62963703331],
+        [123.23817265483, 13.62967460137],
+        [123.23817242461, 13.62967569184],
+        [123.23817169262, 13.62967654806],
+        [123.23816855766, 13.62967725642],
+        [123.23816972274, 13.62971012417],
+        [123.23820960685, 13.62972903534],
+        [123.23821307924, 13.62982689475]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23871103195, 13.62977457849],
+        [123.23856457935, 13.62978713696],
+        [123.23855930885, 13.62978347712]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-1-2",
+      "line": [
+        [123.23854114035, 13.62977086089],
+        [123.23842672685, 13.62969141204]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23871164783, 13.6297787427],
+        [123.2385478286, 13.62979104965],
+        [123.23854724156, 13.62979103768],
+        [123.23854665853, 13.62979097007],
+        [123.23854608508, 13.62979084748],
+        [123.23817695095, 13.62967954474]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881097068",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6296076,123.2381788,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The central quadrangle between the classroom blocks is packed earth and concrete used for assembly and parking, traced as hardscape; the dirt yard in the north-west corner stays bare. The link from the east road between the north and east blocks runs under canopy and is inferred. Canopy: the large crown cluster north of the centre, the belt along the north frontage, the cluster east of the north block, crowns west of the west blocks, the palm and crown beside the west corridor, crowns between the south blocks and the large south-east crowns, plus a crown row along the south frontage. A small green bed sits between the west classroom blocks. Registration: global affine; independent check errors 1.68 m, 3.31 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

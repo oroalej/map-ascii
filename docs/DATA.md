@@ -27,6 +27,7 @@ All scripts live in `packages/data/scripts`. `pnpm data:build -- --city <slug>` 
    - Download DEM tiles for the Region bbox.
    - Save raw downloads in `raw/<city>/` (gitignored) and keep them until `--refresh`: they never expire. A saved download is reused for the same query, or for the same query over a bbox inside the saved one (step 03 drops features wholly outside the region). `--offline` never downloads.
    - Transit stops, terminals, shelters, and covered entrances are fetched separately into `detail-life.osm.json`. Step 02 merges that optional download with the detail data; older cached downloads remain usable. Step 03 writes `life_site`, `life_modes` (bus 1, jeepney 2, tricycle 4), `life_covered`, and a stable `life_lng`/`life_lat` anchor. Rail and ferry platforms are excluded. Site metadata is retained from tile zoom 13 even while furniture glyphs stay hidden at smaller display zooms.
+   - Waterfalls (`waterway=waterfall`, nodes/ways/relations and member geometry) use the separate bounded `detail-waterfalls.osm.json` cache. Step 02 admits it when present; older extracts without it remain convertible. A full offline fetch requires the saved supplemental response and matching query coverage, like the other supplements. Adding this filter leaves older detail downloads valid.
 2. **`02-convert`**
    - Write `territory.geojson`: internal JSON metadata with the camera rectangle, retained territory (configured bbox union city polygon), and void (rectangle minus territory). Despite its prescribed filename, this is not a GeoJSON feature or collection. Without `include_boundary`, both geometries are null and existing rectangular behavior remains.
    - OSM → GeoJSON (`osmtogeojson`, or `ogr2ogr` / `osmium export` for PBF). The railway download is merged into the detail download first (if there is one).
@@ -85,6 +86,7 @@ Required CLI tools: `tippecanoe`, `gdal`, and optionally `osmium-tool` and the `
 |---|---|
 | `water_river` | `waterway=river` (from the City level) |
 | `water_stream` | `waterway=stream|canal` (from the District level) |
+| `water_stream` / `water_area` | `waterway=waterfall`: points and crest lines use ordinary stream water, area footprints use area water; retain the OSM identity and `kind` for sourced landmark facts/detail |
 | `water_area` | `natural=water`, `water=*`, `waterway=riverbank`; `natural=coastline` (processed into sea polygons, with the Region layers in Phase 2) |
 | `road_major` | `highway=motorway|trunk|primary` (+ `_link`) |
 | `road_mid` | `highway=secondary|tertiary` (+ `_link`) |
@@ -393,8 +395,8 @@ their vertices lie inside. Existing detail records need no changes.
 Structures may have open interiors: the merge rejects holes outside the outer footprint,
 overlapping holes and empty surfaces. Tile triangulation retains the holes, so a running
 track leaves its lawn infield open without seams between radial pieces. `material: 'water'`
-adds a sourced swimming-pool footprint using the existing water renderer and canonical
-site selection. Pools block pedestrian routes and reject standing-roof and mapped-water
+adds a sourced water footprint using the existing water renderer and canonical
+site selection. Water anchored to a mapped water feature retains its natural `kind` (or `natural=water` when absent); other sites retain the existing `leisure=swimming_pool` default. Water parts block pedestrian routes and reject standing-roof and mapped-water
 overlap. Author surrounding decks with an open water interior. No new renderer
 class or timeline date is introduced. `material: 'pitch'`
 emits a walkable sports pitch with canonical site selection and rejects overhead placement

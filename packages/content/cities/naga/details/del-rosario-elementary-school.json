@@ -1,0 +1,107 @@
+{
+  "id": "detail/del-rosario-elementary-school",
+  "osm_id": "osm:way/729766923",
+  "title": "Del Rosario Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.2366064594, 13.61790086506],
+        [123.23658898841, 13.61784518648],
+        [123.23655945135, 13.6177537864],
+        [123.23655976531, 13.61775179548],
+        [123.2365515661, 13.6177255925],
+        [123.23652851467, 13.61773192396],
+        [123.23658352314, 13.61790772631],
+        [123.23650477591, 13.61793143027],
+        [123.23652704885, 13.61800595489],
+        [123.23653601786, 13.61803461802],
+        [123.23659665858, 13.61801745884],
+        [123.23667599531, 13.61799081937],
+        [123.23681053534, 13.617948388],
+        [123.23690265869, 13.61791224317],
+        [123.23688743842, 13.61781640511],
+        [123.2366064594, 13.61790086506]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.23661767681, 13.6180121438],
+        [123.23664108677, 13.61808695719],
+        [123.23670221442, 13.61807476176],
+        [123.23667678717, 13.61799350151],
+        [123.23661767681, 13.6180121438]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23654110817, 13.61773453267],
+        [123.23659188419, 13.61789680235],
+        [123.23659957147, 13.61789893111]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-1-2",
+      "line": [
+        [123.2366170886, 13.61790378193],
+        [123.23665176604, 13.61791338478],
+        [123.23681725652, 13.61787537944]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23654753188, 13.61773276829],
+        [123.23655371949, 13.61775553604],
+        [123.23660071276, 13.6179025683],
+        [123.23660091278, 13.61790310886],
+        [123.23660116648, 13.61790362771],
+        [123.23660147142, 13.61790411981],
+        [123.23660182463, 13.61790458042],
+        [123.2366022227, 13.61790500506],
+        [123.23660266178, 13.61790538963],
+        [123.23660313762, 13.61790573041],
+        [123.23660364561, 13.6179060241],
+        [123.23660418083, 13.61790626785],
+        [123.23660473811, 13.6179064593],
+        [123.23660531204, 13.61790659662],
+        [123.23660589709, 13.61790667845],
+        [123.23660648757, 13.61790670402],
+        [123.23660707779, 13.61790667307],
+        [123.23660766201, 13.61790658591],
+        [123.2366082346, 13.61790644337],
+        [123.23688256276, 13.61782398261]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/729766923",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6179108,123.2367629,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied del-rosario-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The central courtyard between the west classroom blocks, the north block and the long south roof is bare packed ground and concrete, traced as hardscape. A garden of planters and small plant clumps fills the open plot south of the west block; a canopy column runs down the west edge; a large crown stands north of the west blocks and another at the north-east corner beside the light-green roof; a belt of crowns lines the south frontage along the highway and a small group grows east of the roofed courtyard. The walk along the long south roof's west wall to the frontage is inferred from the garden gap. Registration: global affine; independent check errors 1.93 m, 4.17 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

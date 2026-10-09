@@ -1,0 +1,176 @@
+{
+  "id": "detail/grand-view-elementary-school",
+  "osm_id": "osm:way/780476076",
+  "title": "Grand View Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.25148533594, 13.6564373477],
+        [123.25149780545, 13.65643722555],
+        [123.25149788936, 13.65642744657],
+        [123.2514987099, 13.65642612506],
+        [123.2515002092, 13.65642560932],
+        [123.25163201147, 13.65642610939],
+        [123.25163350427, 13.65642663639],
+        [123.25163431332, 13.65642795967],
+        [123.25163432749, 13.65643588815],
+        [123.25165196951, 13.65643571533],
+        [123.25165237459, 13.65643302807],
+        [123.25165338162, 13.65643213415],
+        [123.2516545038, 13.65643191158],
+        [123.25172505449, 13.65643499938],
+        [123.25174558659, 13.65643479846],
+        [123.25174563972, 13.65643590035],
+        [123.25175983418, 13.65643653249],
+        [123.25176138926, 13.65643743007],
+        [123.25176185492, 13.65643890379],
+        [123.25175265492, 13.65663600379],
+        [123.25175220017, 13.65663725561],
+        [123.25175131429, 13.65663796775],
+        [123.25174773724, 13.65663808085],
+        [123.25174786338, 13.65665076642],
+        [123.25163859829, 13.65665186054],
+        [123.25164009065, 13.65679570965],
+        [123.25175721001, 13.65680509137],
+        [123.25178683155, 13.6563951635],
+        [123.25178674538, 13.65631059384],
+        [123.25174434404, 13.65631100921],
+        [123.25174463779, 13.656339324],
+        [123.25176871712, 13.6563392191],
+        [123.25176998779, 13.65633972323],
+        [123.25177080904, 13.65634103892],
+        [123.25177125726, 13.65641318979],
+        [123.25177057707, 13.65641480974],
+        [123.25176891393, 13.6564154906],
+        [123.25131085392, 13.65641764925],
+        [123.25130948706, 13.65641686407],
+        [123.25130895132, 13.65641556713],
+        [123.25129970977, 13.65641561715],
+        [123.25129885319, 13.65633307202],
+        [123.25126130791, 13.65633343982],
+        [123.25126321403, 13.656517172],
+        [123.25126415691, 13.65656515627],
+        [123.25126372595, 13.65656651627],
+        [123.25126393852, 13.65658700588],
+        [123.2513014838, 13.65658663808],
+        [123.25129995447, 13.65643920424],
+        [123.2513084956, 13.65643908005],
+        [123.25130885959, 13.65642382638],
+        [123.25130993389, 13.65642216781],
+        [123.25131125499, 13.65642180993],
+        [123.25148348343, 13.65642572598],
+        [123.25148490351, 13.65642641669],
+        [123.25148552239, 13.65642760732],
+        [123.25148533594, 13.6564373477]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.25138480065, 13.65669437405],
+        [123.25143641563, 13.65669386842],
+        [123.25143733646, 13.65669305575],
+        [123.25143845341, 13.65669280995],
+        [123.25144086928, 13.65669382479],
+        [123.25150536788, 13.65669319296],
+        [123.25150524049, 13.65668091363],
+        [123.25149850909, 13.65668079004],
+        [123.25149737343, 13.65668004798],
+        [123.25149685298, 13.65667881349],
+        [123.25149716969, 13.6565966101],
+        [123.25129805721, 13.65659856063],
+        [123.25129831771, 13.65662367071],
+        [123.25139315819, 13.65667582779],
+        [123.25139407216, 13.65667708998],
+        [123.2513939565, 13.65667862507],
+        [123.25138480065, 13.65669437405]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.2517757614, 13.65641776213],
+        [123.25177618995, 13.65645906991]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-1-2",
+      "line": [
+        [123.25175975213, 13.65668655038],
+        [123.25171203527, 13.65671245179]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.25128074834, 13.65633910404],
+        [123.25128172752, 13.65643348762],
+        [123.2513026303, 13.65643299427]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-3",
+      "line": [
+        [123.25163956564, 13.65642504175],
+        [123.25170903653, 13.65642340206]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.2517516419, 13.65679878651],
+        [123.25176785765, 13.65643916836],
+        [123.25176784949, 13.65643850073],
+        [123.25176774965, 13.65643778574],
+        [123.25176762863, 13.65643708505],
+        [123.25176741645, 13.65643631894],
+        [123.251767128, 13.65643557673],
+        [123.2517667132, 13.6564347227],
+        [123.25176643435, 13.65643425831],
+        [123.25176611273, 13.65643382081],
+        [123.25176575105, 13.65643341392],
+        [123.25176535239, 13.65643304107],
+        [123.25176483893, 13.65643260184],
+        [123.25176418789, 13.65643212309],
+        [123.25176349168, 13.65643170866],
+        [123.25176275701, 13.65643136255],
+        [123.25176183756, 13.65643102755],
+        [123.25176127344, 13.65643086343],
+        [123.2517606955, 13.65643075376],
+        [123.25174610157, 13.65642898092],
+        [123.25163708838, 13.65642195093]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/780476076",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6565610,123.2514984,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied grand-view-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-09), registered by hand to the mapped classroom roofs (checks 2.0/2.6 m). The campus is mostly roofs. The red-brick courtyard between the diagonal north roofs and the central blocks, the yard north-east of the east block, the walkway along the east boundary, the corridor beside the west classroom block and the corridor in front of the south row are hardscape. A crown cluster stands between the blue north roof and the east yard; canopy along the creek north of the diagonal roofs and the trees west of the campus on Grandview Avenue fall outside the parcel. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.95 m, 2.61 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

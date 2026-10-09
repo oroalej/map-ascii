@@ -1,0 +1,165 @@
+{
+  "id": "detail/mary-coredemptrix-church",
+  "osm_id": "osm:way/871438572",
+  "title": "Mary Co-Redemptrix Church",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.21607090987, 13.6469191298],
+        [123.21610091159, 13.64686838923],
+        [123.21610013638, 13.64686788085],
+        [123.21607745333, 13.64690058215],
+        [123.21607660133, 13.64690132524],
+        [123.21607548955, 13.64690159062],
+        [123.21607418427, 13.64690120066],
+        [123.21602219827, 13.64686721657],
+        [123.21602238948, 13.6469029],
+        [123.21602116148, 13.64691116795],
+        [123.21601901714, 13.64691635006],
+        [123.21601590069, 13.64692103804],
+        [123.21599040309, 13.64694705827],
+        [123.21599795529, 13.64695132875],
+        [123.21595085314, 13.6469997724],
+        [123.21592178369, 13.6470234618],
+        [123.21599795129, 13.64697474702],
+        [123.2160127261, 13.64695955301],
+        [123.21601560741, 13.64696113145],
+        [123.21602246178, 13.6469495396],
+        [123.21603530532, 13.64693610492],
+        [123.21603645566, 13.64693317394],
+        [123.21603656885, 13.64693160173],
+        [123.21603537525, 13.64692769941],
+        [123.21604799309, 13.64690636588],
+        [123.21607090987, 13.6469191298]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.21600736389, 13.64680631607],
+        [123.21600817435, 13.64680884014],
+        [123.21601890906, 13.6468527403],
+        [123.21603702348, 13.64682662535],
+        [123.21601438887, 13.64681190365],
+        [123.21601352161, 13.64681087509],
+        [123.21601337018, 13.64680966976],
+        [123.21600736389, 13.64680631607]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.21595659152, 13.64685084715],
+        [123.21581747761, 13.64677317099],
+        [123.21577430396, 13.64682639635],
+        [123.21593587498, 13.64691661175],
+        [123.21594104394, 13.64691258276],
+        [123.21596221052, 13.64689114218],
+        [123.21596221052, 13.64687382634],
+        [123.21595659152, 13.64685084715]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4",
+      "ring": [
+        [123.21593239273, 13.64691932602],
+        [123.21585503938, 13.64687613472],
+        [123.21579231656, 13.646982215],
+        [123.21582692098, 13.64700153685],
+        [123.21593239273, 13.64691932602]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-5",
+      "ring": [
+        [123.21589587002, 13.6470400355],
+        [123.21589656016, 13.64703959411],
+        [123.2159156107, 13.64700737479],
+        [123.21588295823, 13.64703282602],
+        [123.21589587002, 13.6470400355]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.21600353387, 13.64694917723],
+        [123.21602125106, 13.64692789419],
+        [123.21602321878, 13.64692085847]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-1-2",
+      "line": [
+        [123.21602839526, 13.64690234963],
+        [123.21603408056, 13.64688202147]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.21581888731, 13.64681034658],
+        [123.21595620187, 13.64688701805]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.21602257827, 13.64692190478],
+        [123.2160438761, 13.64690211287],
+        [123.21604432454, 13.64690174148],
+        [123.21604480826, 13.64690141455],
+        [123.21604532261, 13.64690113523],
+        [123.21604586263, 13.64690090621],
+        [123.21604642313, 13.64690072969],
+        [123.21604699874, 13.64690060737],
+        [123.2160475839, 13.64690054041],
+        [123.216048173, 13.64690052948],
+        [123.21604876037, 13.64690057466],
+        [123.21604934036, 13.64690067553],
+        [123.21607149651, 13.64690641742]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/871438572",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6466439,123.2161514,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied mary-coredemptrix-church.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-08), registered by hand to the mapped church and its west wing (check 3.1 m); the mapped parcel's road-side corner sits about 13 m from the image's wall corner, so the church buildings set the frame. The walled forecourt toward Pacol Road is bare dirt with a tree clump, a bush and a palm group; a paved plaza and a paved band along its south end lead to the church facade, and a large crown pair stands west of the facade. The palm-lined walk and lawn east of the forecourt fall on the mapped road and outside the parcel, so they are not drawn. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 3.11 m, 12.77 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}
