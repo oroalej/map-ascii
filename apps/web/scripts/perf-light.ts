@@ -1,4 +1,7 @@
-/** Hardware glyph-only on/off and control campaign; run under heavy.ts --exclusive. */
+/**
+ * Hardware light-ink on/off and control campaign (select and glyph passes timed together, shadows
+ * off vs on); run under heavy.ts --exclusive. Adapted from perf-clouds.ts.
+ */
 /* eslint-disable @typescript-eslint/unbound-method -- Native GL methods retain their receiver. */
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
@@ -25,7 +28,7 @@ type Capture = {
   probe: boolean;
   probes: { on: boolean; hash: number; mean: number }[];
 };
-type CaptureWindow = Window & { cloudCapture: Capture };
+type CaptureWindow = Window & { lightCapture: Capture };
 
 function installCapture() {
   // Pin only Date. Leave native performance, RAF and timers available for GPU sampling.
@@ -53,7 +56,7 @@ function installCapture() {
     probe: false,
     probes: [],
   };
-  (window as unknown as CaptureWindow).cloudCapture = c;
+  (window as unknown as CaptureWindow).lightCapture = c;
   const proto = WebGL2RenderingContext.prototype;
   const location = proto.getUniformLocation,
     scalar = proto.uniform1f,
@@ -62,11 +65,16 @@ function installCapture() {
     vector = proto.uniform2fv,
     draw = proto.drawArrays;
   const names = new WeakMap<WebGLUniformLocation, string>();
-  const glyphs = new WeakMap<WebGLProgram, boolean>();
+  // 1: the select pass (it has the sun's steps), 2: the glyph pass (it draws labels), 0: other.
+  const roles = new WeakMap<WebGLProgram, number>();
   type Extension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
   const contexts = new Map<
     WebGL2RenderingContext,
-    { ext: Extension | null; pending: { query: WebGLQuery; block: number }[] }
+    {
+      ext: Extension | null;
+      pending: { query: WebGLQuery; block: number }[];
+      open: { query: WebGLQuery; block: number } | null;
+    }
   >();
   proto.getUniformLocation = function (program, name) {
     const at = location.call(this, program, name);
@@ -79,9 +87,7 @@ function installCapture() {
       this,
       at,
       name === 'u_cloudCover'
-        ? c.on
-          ? 0.6
-          : 0
+        ? 0.6
         : name === 'u_daylight'
           ? 1
           : name === 'u_wind'
@@ -101,12 +107,14 @@ function installCapture() {
       this,
       at,
       name === 'u_cloudDetail'
-        ? Number(c.on)
-        : name === 'u_shimmer'
-          ? 0
-          : name === 'u_pulse'
-            ? -1
-            : value,
+        ? 1
+        : name === 'u_shadows'
+          ? Number(c.on)
+          : name === 'u_shimmer'
+            ? 0
+            : name === 'u_pulse'
+              ? -1
+              : value,
     );
   };
   proto.uniform1ui = function (at, value) {
@@ -121,18 +129,23 @@ function installCapture() {
   proto.drawArrays = function (mode, first, count) {
     const program = this.getParameter(this.CURRENT_PROGRAM) as WebGLProgram | null;
     if (!program) return draw.call(this, mode, first, count);
-    let glyph = glyphs.get(program);
-    if (glyph === undefined) {
-      // The select pass reads the clouds too (grass ink); only the glyph pass draws labels.
-      glyph = location.call(this, program, 'u_labelAtlas') !== null;
-      glyphs.set(program, glyph);
+    let role = roles.get(program);
+    if (role === undefined) {
+      role =
+        location.call(this, program, 'u_sunStep') !== null
+          ? 1
+          : location.call(this, program, 'u_labelAtlas') !== null
+            ? 2
+            : 0;
+      roles.set(program, role);
     }
-    if (!glyph) return draw.call(this, mode, first, count);
+    if (!role) return draw.call(this, mode, first, count);
     let ctx = contexts.get(this);
     if (!ctx) {
       ctx = {
         ext: this.getExtension('EXT_disjoint_timer_query_webgl2') as Extension | null,
         pending: [],
+        open: null,
       };
       contexts.set(this, ctx);
       c.supported = !!ctx.ext;
@@ -140,50 +153,64 @@ function installCapture() {
       if (info) c.renderer = this.getParameter(info.UNMASKED_RENDERER_WEBGL) as string;
     }
     const { ext, pending } = ctx;
-    const disjoint = !!ext && !!this.getParameter(ext.GPU_DISJOINT_EXT);
-    if (disjoint) {
-      c.disjoint++;
-      for (const p of pending) this.deleteQuery(p.query);
-      pending.length = 0;
-    }
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const p = pending[i]!;
-      if (!this.getQueryParameter(p.query, this.QUERY_RESULT_AVAILABLE)) continue;
-      const ms = Number(this.getQueryParameter(p.query, this.QUERY_RESULT)) / 1e6;
-      if (Number.isFinite(ms) && ms > 0) c.samples.push({ block: p.block, ms });
-      this.deleteQuery(p.query);
-      pending.splice(i, 1);
-    }
-    if (ext && this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY))
-      c.errors.push('Unexpected nested elapsed query');
-    const query =
-      ext &&
-      !disjoint &&
-      c.block >= 0 &&
-      (c.issued[c.block] ?? 0) < 30 &&
-      pending.length < 8 &&
-      !this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY)
-        ? this.createQuery()
-        : null;
-    if (query && ext) this.beginQuery(ext.TIME_ELAPSED_EXT, query);
-    draw.call(this, mode, first, count);
-    if (query && ext) {
-      this.endQuery(ext.TIME_ELAPSED_EXT);
-      pending.push({ query, block: c.block });
-      c.issued[c.block] = (c.issued[c.block] ?? 0) + 1;
-    }
-    if (c.probe) {
-      c.probe = false;
-      const viewport = this.getParameter(this.VIEWPORT) as Int32Array;
-      const pixels = new Uint8Array(viewport[2]! * viewport[3]! * 4);
-      this.readPixels(0, 0, viewport[2]!, viewport[3]!, this.RGBA, this.UNSIGNED_BYTE, pixels);
-      let hash = 2166136261,
-        sum = 0;
-      for (let i = 0; i < pixels.length; i++) {
-        hash = Math.imul(hash ^ pixels[i]!, 16777619);
-        if (i % 4 !== 3) sum += pixels[i]!;
+    if (role === 1) {
+      // A select pass starts a frame's span; one left open (no glyph pass followed) is dropped.
+      if (ctx.open && ext) {
+        this.endQuery(ext.TIME_ELAPSED_EXT);
+        this.deleteQuery(ctx.open.query);
+        ctx.open = null;
       }
-      c.probes.push({ on: c.on, hash: hash >>> 0, mean: sum / ((pixels.length / 4) * 3) });
+      const disjoint = !!ext && !!this.getParameter(ext.GPU_DISJOINT_EXT);
+      if (disjoint) {
+        c.disjoint++;
+        for (const p of pending) this.deleteQuery(p.query);
+        pending.length = 0;
+      }
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const p = pending[i]!;
+        if (!this.getQueryParameter(p.query, this.QUERY_RESULT_AVAILABLE)) continue;
+        const ms = Number(this.getQueryParameter(p.query, this.QUERY_RESULT)) / 1e6;
+        if (Number.isFinite(ms) && ms > 0) c.samples.push({ block: p.block, ms });
+        this.deleteQuery(p.query);
+        pending.splice(i, 1);
+      }
+      if (ext && this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY))
+        c.errors.push('Unexpected nested elapsed query');
+      const query =
+        ext &&
+        !disjoint &&
+        c.block >= 0 &&
+        (c.issued[c.block] ?? 0) < 30 &&
+        pending.length < 8 &&
+        !this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY)
+          ? this.createQuery()
+          : null;
+      if (query && ext) {
+        this.beginQuery(ext.TIME_ELAPSED_EXT, query);
+        ctx.open = { query, block: c.block };
+      }
+      draw.call(this, mode, first, count);
+    } else {
+      draw.call(this, mode, first, count);
+      if (ctx.open && ext) {
+        this.endQuery(ext.TIME_ELAPSED_EXT);
+        pending.push(ctx.open);
+        c.issued[ctx.open.block] = (c.issued[ctx.open.block] ?? 0) + 1;
+        ctx.open = null;
+      }
+      if (c.probe) {
+        c.probe = false;
+        const viewport = this.getParameter(this.VIEWPORT) as Int32Array;
+        const pixels = new Uint8Array(viewport[2]! * viewport[3]! * 4);
+        this.readPixels(0, 0, viewport[2]!, viewport[3]!, this.RGBA, this.UNSIGNED_BYTE, pixels);
+        let hash = 2166136261,
+          sum = 0;
+        for (let i = 0; i < pixels.length; i++) {
+          hash = Math.imul(hash ^ pixels[i]!, 16777619);
+          if (i % 4 !== 3) sum += pixels[i]!;
+        }
+        c.probes.push({ on: c.on, hash: hash >>> 0, mean: sum / ((pixels.length / 4) * 3) });
+      }
     }
     const error = this.getError();
     if (error !== this.NO_ERROR) c.errors.push(`WebGL error ${error}`);
@@ -258,12 +285,12 @@ try {
       const deadline = performance.now() + 30_000;
       while (performance.now() < deadline) {
         const capture = await page.evaluate(
-          () => (window as unknown as CaptureWindow).cloudCapture,
+          () => (window as unknown as CaptureWindow).lightCapture,
         );
         if (capture && ready(capture)) return;
         await page.waitForTimeout(50);
       }
-      throw new Error('Cloud capture did not become ready within 30 seconds');
+      throw new Error('Light capture did not become ready within 30 seconds');
     };
     try {
       await waitCapture((c) => c.renderer !== null);
@@ -283,18 +310,18 @@ try {
               height: innerHeight,
               canvas: rect && { width: rect.width, height: rect.height },
               visibility: document.visibilityState,
-              capture: (window as unknown as CaptureWindow).cloudCapture,
+              capture: (window as unknown as CaptureWindow).lightCapture,
             };
           }),
         }),
       );
     }
     await page.waitForTimeout(3000);
-    const capture = () => page.evaluate(() => (window as unknown as CaptureWindow).cloudCapture);
+    const capture = () => page.evaluate(() => (window as unknown as CaptureWindow).lightCapture);
     const probe = async (on: boolean) => {
       const before = (await capture()).probes.length;
       await page.evaluate((on) => {
-        const c = (window as unknown as CaptureWindow).cloudCapture;
+        const c = (window as unknown as CaptureWindow).lightCapture;
         c.on = on;
         c.block = -1;
         c.probe = true;
@@ -329,7 +356,7 @@ try {
       blocks.push({ id: current, label, on, pair, control, warmup });
       await page.evaluate(
         ({ id, on }) => {
-          const c = (window as unknown as CaptureWindow).cloudCapture;
+          const c = (window as unknown as CaptureWindow).lightCapture;
           c.on = on;
           c.block = id;
           window.dispatchEvent(new Event('resize'));
@@ -341,7 +368,7 @@ try {
       } catch {
         return false;
       }
-      console.log(`z${zoom} ${label}: 30 valid glyph timings`);
+      console.log(`z${zoom} ${label}: 30 valid select+glyph timings`);
       return true;
     };
     let complete = hardware && initial.supported;
