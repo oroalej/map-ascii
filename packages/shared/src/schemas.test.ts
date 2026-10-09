@@ -298,6 +298,17 @@ describe('landmark facts', () => {
 });
 
 describe('Landmark', () => {
+  it('accepts a heritage landmark attached to an OSM footprint', () => {
+    expect(Landmark.parse({ ...landmark, type: 'heritage' }).type).toBe('heritage');
+  });
+
+  it('lets a listed church or school join the heritage category without changing its type', () => {
+    expect(Landmark.parse({ ...landmark, heritage: true })).toMatchObject({ type: 'church' });
+    expect(Landmark.safeParse({ ...landmark, type: 'heritage', heritage: true }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts a valid landmark', () => {
     expect(Landmark.safeParse(landmark).success).toBe(true);
   });
@@ -314,6 +325,28 @@ describe('Landmark', () => {
   it('requires osm_id or geometry', () => {
     const { osm_id: _unused, ...rest } = landmark;
     expect(Landmark.safeParse(rest).success).toBe(false);
+  });
+
+  it('lets curated geometry replace an OSM feature, but not alongside an osm_id', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces }).success).toBe(true);
+    expect(Landmark.safeParse({ ...landmark, replaces }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, geometry }).success).toBe(false);
+    const units = ['osm:way/1', 'osm:way/2'];
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: units }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: [replaces] }).success).toBe(false);
+  });
+
+  it('lets a standalone curated outline stand alone only with its height', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    expect(Landmark.safeParse({ ...rest, geometry, height_m: 3 }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry }).success).toBe(false);
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces, height_m: 3 }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, height_m: 3 }).success).toBe(false);
   });
 
   it('requires at least one source', () => {

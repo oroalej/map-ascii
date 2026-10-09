@@ -1,0 +1,76 @@
+{
+  "id": "landmark/socorro-abella-building",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [123.184424, 13.622323],
+        [123.184455, 13.622324],
+        [123.184438, 13.622276],
+        [123.184502, 13.622246],
+        [123.184492, 13.622201],
+        [123.184481, 13.622197],
+        [123.184472, 13.622142],
+        [123.184386, 13.622157],
+        [123.184395, 13.62221],
+        [123.184393, 13.622223],
+        [123.184403, 13.622268],
+        [123.184411, 13.622285],
+        [123.184424, 13.622323]
+      ]
+    ]
+  },
+  "replaces": ["osm:way/23677687", "osm:way/23664825", "osm:way/23671921"],
+  "name": {
+    "en": "Socorro Abella Building"
+  },
+  "type": "heritage",
+  "start_year": 1929,
+  "certainty": "circa",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprints way/23677687, way/23664825 and way/23671921",
+      "url": "https://www.openstreetmap.org/way/23677687",
+      "note": "ODbL. The three street-front units on the east side of General Luna Street between the lettered No. 2 bay and the corner (also way/23664825 and way/23671921), joined into one outline from their own vertices; their depth and the gaps between them are as mapped. Edit dates are not construction dates. Generated subdivision: Dinaga."
+    },
+    {
+      "title": "Owner request: Socorro Abella Building",
+      "url": "https://www.google.com/maps/place/Socorro+Abella+Building/@13.6223465,123.1842563,292m/data=!3m1!1e3",
+      "note": "October 9, 2026. Supplied by the owner as the Google Maps place Socorro Abella Building at 13.62230, 123.18440, on General Luna Street near New China Restaurant."
+    },
+    {
+      "title": "Google Street View: Socorro Abella Building, General Luna Street",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=2fRArrYiXANTAh2RdyAgwg&heading=75&pitch=15",
+      "note": "August 2025 panorama inspected October 9, 2026. The two-storey facade is lettered SOCORRO ABELLA BUILDING with 1929 and No. 2 over its northern bay, and again with 1929 near the southern end above the corner pharmacy, with arched upper windows over ground-floor shops. The lettered 1929 is taken as an approximate construction year. Capture dates are not construction dates; no image is saved or distributed."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the structures of the rows of the Abella Business Building on General Luna Street for preservation; it does not name the Socorro Abella Building, which is not claimed as a listed member."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Its facade is lettered Socorro Abella Building, with the year 1929."
+      },
+      "source": 2,
+      "year": 1929,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "The two-storey row runs along General Luna Street to the corner, with arched upper windows over ground-floor shops."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The city listed General Luna Street's rows of Abella business buildings for preservation in 2003."
+      },
+      "source": 3,
+      "year": 2003,
+      "certainty": "exact"
+    }
+  ]
+}

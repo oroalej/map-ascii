@@ -1087,7 +1087,7 @@ export function glyphPass(
     u_time: time,
     u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
     u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
-    u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
+    u_pulse: reducedMotion ? [-1, -1] : [classId('marker_landmark'), classId('marker_heritage')],
     u_lifeTime: lifeTime,
     ...hauntUniforms(
       folklore,

@@ -180,6 +180,7 @@ export const LandmarkType = z.enum([
   'bridge',
   'station',
   'monument',
+  'heritage',
   'other',
 ]);
 export type LandmarkType = z.infer<typeof LandmarkType>;
@@ -792,8 +793,17 @@ export function contentSchemas(languages?: readonly string[]) {
       id: LandmarkId,
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
+      /**
+       * OSM building(s) that curated `geometry` supersedes: one way mapped over two ruins, or one
+       * building mapped as several street-front units (then listed, first one setting its style).
+       */
+      replaces: z.union([OsmId, z.array(OsmId).min(2)]).optional(),
+      /** Height of a standalone curated outline (an arch, a gate), drawn as its own structure. */
+      height_m: z.number().positive().max(60).optional(),
       name: text,
       type: LandmarkType,
+      /** A listed heritage site of another type (a church, a school): joins the Heritage legend. */
+      heritage: z.literal(true).optional(),
       start_year: Year.optional(),
       end_year: Year.optional(),
       certainty: Certainty,
@@ -812,6 +822,30 @@ export function contentSchemas(languages?: readonly string[]) {
     .refine((v) => v.osm_id !== undefined || v.geometry !== undefined, {
       message: 'a landmark needs either osm_id or geometry',
       path: ['osm_id'],
+    })
+    .refine((v) => v.osm_id === undefined || v.geometry === undefined, {
+      message: 'a landmark has either osm_id or geometry, not both',
+      path: ['geometry'],
+    })
+    .refine((v) => v.replaces === undefined || v.geometry !== undefined, {
+      message: 'replaces requires curated geometry',
+      path: ['replaces'],
+    })
+    .refine(
+      (v) =>
+        v.geometry?.type !== 'Polygon' || (v.replaces === undefined) !== (v.height_m === undefined),
+      {
+        message: 'a curated outline either replaces an OSM building or stands alone with height_m',
+        path: ['height_m'],
+      },
+    )
+    .refine((v) => v.height_m === undefined || v.geometry?.type === 'Polygon', {
+      message: 'height_m belongs to a curated Polygon outline',
+      path: ['height_m'],
+    })
+    .refine((v) => v.heritage === undefined || v.type !== 'heritage', {
+      message: 'a heritage-type landmark is already heritage',
+      path: ['heritage'],
     })
     .superRefine((landmark, ctx) => {
       for (const field of ['signatures', 'pasalubong'] as const)

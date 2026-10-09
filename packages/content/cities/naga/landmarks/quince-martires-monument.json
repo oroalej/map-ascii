@@ -1,0 +1,44 @@
+{
+  "id": "landmark/quince-martires-monument",
+  "osm_id": "osm:node/642912170",
+  "name": {
+    "en": "Quince Martires Monument"
+  },
+  "type": "monument",
+  "heritage": true,
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap",
+      "url": "https://www.openstreetmap.org/node/642912170",
+      "note": "Location and name only. The memorial at the centre of Plaza Quince Martires; the plaza stays its own landmark."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 9, 2026. Quince Martires del Bicolandia Monument (Labinlimang Martir ng Bikol): NHCP marked structure, marker unveiled 1982, with the marker text. The registry listing is the basis for this landmark's Heritage legend membership."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Its NHCP marker, unveiled in 1982, recalls the Bicol ilustrados arrested and tried by a Spanish military commission on December 29, 1896."
+      },
+      "source": 1,
+      "year": 1896,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The marker calls them innocent of the charge of plotting to kill every Spaniard in the Bicol region."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "Eleven were shot at Luneta in Manila; two died in prison and two in exile, and their remains lie in a single grave that was never found."
+      },
+      "source": 1
+    }
+  ]
+}

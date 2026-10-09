@@ -1,0 +1,69 @@
+{
+  "id": "landmark/badiola-house",
+  "osm_id": "osm:way/23668592",
+  "name": {
+    "en": "Badiola House"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23668592",
+      "url": "https://www.openstreetmap.org/way/23668592",
+      "note": "ODbL. Existing building footprint on the east corner of Barlin and Dimasalang streets, retained unchanged. Edit dates are not construction dates; no construction year is assigned. Generated subdivision: Santa Cruz."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Badiola home among the Barlin Street houses declared for preservation, separately from the home at the Barlin–Dimasalang corner."
+    },
+    {
+      "title": "Ateneo de Naga High School Class of 1969: updates",
+      "url": "https://www.geocities.ws/Tokyo/5979/updates.htm",
+      "note": "Alumni page. Says Edgardo \"Eddieboy\" Badiola operated a small pub called \"Harong\" in his house on Barlin Street. This is the family-name tie used to identify the house."
+    },
+    {
+      "title": "Stay, Stray, Play and Feast: Calle Barlin at Andrew and Hillary Hostel (June 8, 2014)",
+      "url": "https://camsurstaystray.blogspot.com/2014/06/casa-barlin-at-andrew-and-hillary-hotel.html",
+      "note": "Firsthand blog. Describes the old ancestral house as \"Sa Harong\" in the mid-1990s, then \"Our House\", then Hillary and Andrew Hostel with Café Barlin. Hostel listings give 32 Barlin Street, corner Dimasalang."
+    },
+    {
+      "title": "Naga City Tourism: Jikka Hostel",
+      "url": "https://tourism.naga.gov.ph/tr-establishments/jikka-hostel/",
+      "note": "Official listing of the current occupant on Barlin Street, Santa Cruz. Foodpanda gives 32 Barlin Street, corner Dimasalang."
+    },
+    {
+      "title": "Google Street View",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=fQXrxeyzB9AZ--gJ1siDGw&heading=90&pitch=0",
+      "note": "August 2025 panorama inspected October 8, 2026. From the Barlin–Dimasalang junction, the white old house with JIKKA hostel and diner signs stands on the east corner, matching the 2009 Our House and 2014 hostel facades (porch, upper windows, perforated fence). Identifying it as the Badiola home rests on the Harong/Sa Harong name. Capture dates are not construction dates. No image is saved or distributed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Badiola home on Barlin Street was listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "An alumni page says Edgardo \"Eddieboy\" Badiola ran a small pub called Harong in his house on Barlin Street."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "A 2014 visitor's account says this ancestral house was the dining spot Sa Harong in the mid-1990s, then Our House, before reopening as a hostel with Café Barlin."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "The house now holds Jikka Hostel and Diner, at the corner of Barlin and Dimasalang streets."
+      },
+      "source": 4
+    }
+  ]
+}

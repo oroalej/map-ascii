@@ -1,0 +1,71 @@
+{
+  "id": "landmark/holy-rosary-minor-seminary-building",
+  "osm_id": "osm:relation/2418001",
+  "name": {
+    "en": "Holy Rosary Minor Seminary Building"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint relation/2418001",
+      "url": "https://www.openstreetmap.org/relation/2418001",
+      "note": "ODbL. The mapped courtyard building west of the Cathedral grounds, retained unchanged. Edit dates are not construction dates. Generated subdivision: Santa Cruz. The seminary grounds stay the separate Holy Rosary Minor Seminary landmark."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Holy Rosary Minor Seminary Building and its original stone walls or fences for preservation."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 9, 2026. Holy Rosary Minor Seminary: NHCP National Historical Landmark under National Historical Institute Resolution No. 1, s. 1988, and local cultural property under Ordinance No. 2003-003. Quotes the NHCP marker text, unveiled 1988."
+    },
+    {
+      "title": "Wikipedia: Holy Rosary Seminary",
+      "url": "https://en.wikipedia.org/wiki/Holy_Rosary_Seminary",
+      "note": "Describes the two-storey brick building: rectangular, a symmetrical central block with indented wings, and a ground floor of brick arches. Matched to relation/2418001, the arcaded building facing the Cathedral grounds (Google Street View, July 2015). Its fire and rebuilding dates differ from the NHCP marker's; the marker is followed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The seminary began as the Casa de Clérigos, founded by Bishop Andrés González."
+      },
+      "source": 2,
+      "year": 1700,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "Bishop Juan Antonio de Orbigo built a new seminary house in 1785, the Seminario Conciliar de Nueva Cáceres, which Bishop Domingo Collantes inaugurated in 1793."
+      },
+      "source": 2,
+      "year": 1793,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "After a typhoon in 1856 and a fire in 1860, Bishop Francisco Gainza rebuilt and enlarged it in 1862; the Vincentian Fathers took charge in 1865."
+      },
+      "source": 2,
+      "year": 1862,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Its alumni include Bishop Jorge Barlin, the first Filipino bishop, the propagandist José María Panganiban, and eight of the fifteen Bicol martyrs."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The National Historical Institute declared the seminary a National Historical Landmark under Resolution No. 1 of 1988."
+      },
+      "source": 2,
+      "year": 1988,
+      "certainty": "exact"
+    }
+  ]
+}

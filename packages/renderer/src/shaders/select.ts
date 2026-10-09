@@ -81,7 +81,7 @@ uniform bool u_pavingVisible;    // the cell pass can draw paving at the camera 
 uniform float u_cellAspect;       // cell height / width, for ridge directions
 uniform uint u_hover;             // feature index under the pointer (0 = none)
 uniform uint u_selected;          // selected feature index (0 = none)
-uniform uint u_highlight[${MAX_HIGHLIGHT}];
+uniform uvec4 u_highlight[${MAX_HIGHLIGHT / 4}]; // highlighted feature indices, four per entry
 uniform int u_highlightCount;
 uniform sampler2D u_subClass;     // the cell pass at SUB samples per cell
 uniform sampler2D u_subAttr;
@@ -152,7 +152,7 @@ float stateOf(uint fid) {
   if (fid == u_selected) return ${CellState.selected}.0;
   for (int i = 0; i < ${MAX_HIGHLIGHT}; i++) {
     if (i >= u_highlightCount) break;
-    if (u_highlight[i] == fid) return ${CellState.highlight}.0;
+    if (u_highlight[i >> 2][i & 3] == fid) return ${CellState.highlight}.0;
   }
   return fid == u_hover ? ${CellState.hover}.0 : 0.0;
 }

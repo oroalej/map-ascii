@@ -12,7 +12,21 @@ import {
   pavingOverrideBase,
   pavingOverrideDepth,
   renderClasses,
+  MAX_CLASSES,
 } from './classes';
+
+it('fits heritage and all see-through classes in their masks without losing building parts', () => {
+  expect(renderClasses.length).toBeLessThan(MAX_CLASSES - 5);
+  expect(new Set(renderClasses).size).toBe(renderClasses.length);
+  const heritage = classId('marker_heritage');
+  expect(heritage).toBeLessThan(32);
+  expect((seeThroughMask() >>> heritage) & 1).toBe(1);
+  expect(classDepths()[heritage]).toBe(classDepths()[classId('marker_landmark')]);
+  expect(classId('building_part')).toBeGreaterThan(31);
+  expect(subcellAreas()[classId('building_part')]).toBe(1);
+  expect(classDepths()[classId('building_part')]).toBe(classDepths()[classId('building')]);
+  expect(classVisibility(7)[heritage]).toBe(1);
+});
 
 it('treats hospital roofs as buildings and keeps their marker within the connectivity mask', () => {
   const roof = classId('building_hospital');

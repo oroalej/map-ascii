@@ -445,6 +445,7 @@ export const seeThrough: readonly RenderClass[] = [
   'marker_market',
   'marker_station',
   'marker_landmark',
+  'marker_heritage',
   // Admin boundaries cross buildings and roads without being part of either.
   'admin_city',
   'admin_subdivision',

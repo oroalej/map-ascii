@@ -308,6 +308,13 @@ it('shows sourced facts, follows the camera, hides offscreen and remeasures on r
   expect(useUiStore.getState().factsVisible).toBe(true);
   expect(useAtlasStore.getState().selectedId).toBe(landmark.osm_id);
 });
+it('labels a listed site of another type as heritage too', () => {
+  testLandmarks = [{ ...landmark, heritage: true }, other];
+  clickSelection();
+  render();
+  flush();
+  expect(dialog()!.querySelector('header p')?.textContent).toBe('Monument · Heritage');
+});
 it('constrains the measured box to the canvas/visual viewport and responds to resize without a camera event', () => {
   viewport.width = 240;
   viewport.height = 180;
