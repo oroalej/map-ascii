@@ -5,6 +5,7 @@
     "en": "Our Lady of the Immaculate Conception Parish Church"
   },
   "type": "church",
+  "heritage": true,
   "certainty": "unknown",
   "sources": [
     {
@@ -20,6 +21,10 @@
       "title": "Naga City Tourism: Immaculate Conception Parish Church",
       "url": "https://tourism.naga.gov.ph/attractions/immaculate-conception-parish-church/",
       "note": "Supports the facts listed here; historical events do not date the current mapped geometry."
+    },
+    {
+      "title": "Owner request: Our Lady of the Immaculate Conception Parish Church",
+      "note": "October 9, 2026. Added to the Heritage legend at the owner's request; the church is not listed in Ordinance No. 2003-003 or the national registry. It keeps its church record, facts and site detail."
     }
   ],
   "facts": [

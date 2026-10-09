@@ -158,9 +158,10 @@ describe('Naga heritage scope', () => {
     expect(row.sources[0]!.note).toContain('representative');
   });
 
-  it('lists registered churches, the martyrs monument and the station as heritage while keeping their type', () => {
+  it('lists registered and owner-added churches, the martyrs monument and the station as heritage while keeping their type', () => {
     const listed = landmarks.filter((landmark) => landmark.heritage);
     expect(listed.map((landmark) => landmark.id.replace('landmark/', '')).sort()).toEqual([
+      'immaculate-conception-parish',
       'naga-metropolitan-cathedral',
       'naga-station',
       'penafrancia-basilica',
@@ -171,7 +172,10 @@ describe('Naga heritage scope', () => {
     for (const landmark of listed) {
       expect(landmark.type).not.toBe('heritage');
       expect(
-        landmark.sources.some((source) => source.url?.includes('talapamana.ncca.gov.ph')),
+        landmark.sources.some(
+          (source) =>
+            source.url?.includes('talapamana.ncca.gov.ph') || /owner.*request/i.test(source.title),
+        ),
       ).toBe(true);
     }
   });
