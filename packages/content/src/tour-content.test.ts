@@ -28,6 +28,16 @@ describe('city tour content', () => {
     }
   });
 
+  it('qualifies the Villafrancia facade date in the heritage house narration', () => {
+    const houses = tours.find(
+      ({ city, tour }) => city.slug === 'naga' && tour.id === 'tour/heritage-houses',
+    );
+    const step = houses?.tour.steps.find((step) => step.select === 'osm:way/23669833');
+    expect(step?.narration.en).toMatch(
+      /\b(?:circa|approximately|around|about)[ -]*1927\b|\b1927\b.*\bapproximate\b/i,
+    );
+  });
+
   it.each(tours)(
     '$file references city-local groups and landmarks and cites verified steps',
     ({ file, city, tour }) => {
