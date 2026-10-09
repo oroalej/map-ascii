@@ -6,7 +6,7 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for thirty Naga landmarks besides food places, including heritage sites and the museum statue', () => {
+it('curates facts for thirty-one Naga landmarks besides food places, including heritage sites and the museum statue', () => {
   // Food places carry their own sourced facts (food-content.test.ts).
   const clickable = Object.values(landmarks).filter(
     (landmark) => landmark.facts && landmark.type !== 'food',
@@ -40,6 +40,7 @@ it('curates facts for thirty Naga landmarks besides food places, including herit
       'roco-ancestral-house',
       'san-francisco-old-belfry',
       'san-francisco-parish',
+      'socorro-abella-building',
       'universidad-de-santa-isabel',
       'usi-main-building',
       'villafrancia-house',

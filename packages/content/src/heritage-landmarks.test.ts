@@ -28,6 +28,7 @@ const sites = [
   'naga-central-school-gabaldon-building',
   'csnhs-gabaldon-building',
   'san-francisco-old-belfry',
+  'socorro-abella-building',
   'elias-angeles-dimasalang-corner-house',
   'abella-business-buildings',
   'de-la-rosa-buildings',
@@ -92,11 +93,11 @@ describe('Naga heritage scope', () => {
         ).toBe(true);
         continue;
       }
-      const way = landmark.osm_id ?? landmark.replaces;
-      expect(way).toMatch(/^osm:(way|relation)\/\d+$/);
+      const ways = [landmark.osm_id ?? landmark.replaces!].flat();
+      for (const way of ways) expect(way).toMatch(/^osm:(way|relation)\/\d+$/);
       // Curated outlines replace an OSM building; every other site keeps its OSM footprint.
       expect(landmark.geometry?.type ?? 'osm').toBe(landmark.replaces ? 'Polygon' : 'osm');
-      expect(landmark.sources[0]!.url).toBe(`https://www.openstreetmap.org/${way!.slice(4)}`);
+      expect(landmark.sources[0]!.url).toBe(`https://www.openstreetmap.org/${ways[0]!.slice(4)}`);
       expect(
         landmark.sources.some(
           (source) => source.url === ordinance || /owner.*request/i.test(source.title),
@@ -105,9 +106,7 @@ describe('Naga heritage scope', () => {
     }
     const attached = landmarks.flatMap((landmark) => (landmark.osm_id ? [landmark.osm_id] : []));
     expect(new Set(attached).size).toBe(attached.length);
-    const replaced = landmarks.flatMap((landmark) =>
-      landmark.replaces ? [landmark.replaces] : [],
-    );
+    const replaced = landmarks.flatMap((landmark) => [landmark.replaces ?? []].flat());
     expect(replaced.filter((id) => attached.includes(id))).toEqual([]);
   });
 
