@@ -913,7 +913,7 @@ export function lightPass(
   const [cellMeters] = sunUniforms(view, null).u_cellMeters;
   const clocks = buffers.clocks;
   clocks?.begin(1);
-  packCandles(lightTexels, grid, agents, 1 / cellMeters!, clocks?.pool);
+  packCandles(lightTexels, grid, agents, 1 / cellMeters, clocks?.pool);
   clocks?.finish(1);
   uploadLights(gl, targets, lightTexels);
   effectClockPass(gl, targets);

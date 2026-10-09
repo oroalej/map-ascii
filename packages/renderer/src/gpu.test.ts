@@ -257,17 +257,20 @@ it('creates the cell light as a filtered R8 second attachment of the glyph targe
     if (!constants.has(key)) constants.set(key, 0x1000 + constants.size);
     return constants.get(key)!;
   };
-  const gl = new Proxy({} as Record<string, unknown>, {
-    get(_, key: string) {
-      if (/^[A-Z0-9_]+$/.test(key)) return constant(key);
-      return (...args: unknown[]) => {
-        calls.push({ name: key, args });
-        if (key === 'checkFramebufferStatus') return constant('FRAMEBUFFER_COMPLETE');
-        if (key.startsWith('create')) return { handle: ++made, kind: key };
-        return undefined;
-      };
+  const gl = new Proxy(
+    {},
+    {
+      get(_, key: string) {
+        if (/^[A-Z0-9_]+$/.test(key)) return constant(key);
+        return (...args: unknown[]) => {
+          calls.push({ name: key, args });
+          if (key === 'checkFramebufferStatus') return constant('FRAMEBUFFER_COMPLETE');
+          if (key.startsWith('create')) return { handle: ++made, kind: key };
+          return undefined;
+        };
+      },
     },
-  }) as unknown as GL;
+  ) as unknown as GL;
   const k = (name: string) => (gl as unknown as Record<string, number>)[name]!;
   const targets = createCellTargets(gl, 12, 7, 4, 3);
   // Its storage: one RED byte per cell.

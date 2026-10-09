@@ -658,17 +658,17 @@ it('draws the glyphs and the cell light together, resetting the sun each pass', 
 it('steps toward the sun and across it in cells', () => {
   // A 10 x 18 px cell at z18: cells are taller in meters than they are wide.
   const [w, h] = sunUniforms(view, null).u_cellMeters;
-  expect(h! / w!).toBeCloseTo(1.8);
+  expect(h / w).toBeCloseTo(1.8);
   const east = sunUniforms(view, { azimuth: 90, altitude: 45 });
   expect(east.u_sun[0]).toBeCloseTo(1);
   expect(east.u_sun[2]).toBeCloseTo(1);
   // A meter east is 1 / w cells east; a penumbra ray sits SHADOW.spread cell widths south.
-  expect(east.u_sunStep[0]).toBeCloseTo(1 / w!);
+  expect(east.u_sunStep[0]).toBeCloseTo(1 / w);
   expect(east.u_sunStep[1]).toBeCloseTo(0);
   expect(east.u_sunSide[0]).toBeCloseTo(0);
-  expect(east.u_sunSide[1]).toBeCloseTo((SHADOW.spread * w!) / h!);
+  expect(east.u_sunSide[1]).toBeCloseTo((SHADOW.spread * w) / h);
   const south = sunUniforms(view, { azimuth: 180, altitude: 30 });
-  expect(south.u_sunStep[1]).toBeCloseTo(1 / h!);
+  expect(south.u_sunStep[1]).toBeCloseTo(1 / h);
   expect(south.u_sunSide[0]).toBeCloseTo(-SHADOW.spread);
   // The altitude floor keeps the tangent positive while the sun is up.
   expect(sunUniforms(view, { azimuth: 0, altitude: 0.2 }).u_sun[2]).toBeGreaterThan(0);
