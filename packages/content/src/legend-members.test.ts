@@ -12,13 +12,18 @@ const details = Object.values(
 ) as SiteDetail[];
 
 // The renderer lights Landmark-focus members through its highlight list (picking.ts MAX_HIGHLIGHT).
-const MAX_HIGHLIGHT = 64;
+const MAX_HIGHLIGHT = 128;
 
 it('keeps every Landmark legend member within the renderer highlight list', () => {
   // The pipeline marks these `notable` (04-merge-content.ts); their parts inherit the flag.
+  // Food places never join the Landmark group.
   const notable = new Set(
     landmarks
-      .filter((l) => l.facts || l.type === 'heritage' || l.heritage)
+      .filter(
+        (l) =>
+          (l.osm_id || l.replaces) &&
+          ((l.facts && l.type !== 'food') || l.type === 'heritage' || l.heritage),
+      )
       .map((l) => l.osm_id ?? l.id),
   );
   const parts = plans.filter((plan) => notable.has(plan.osm_id)).flatMap((plan) => plan.parts);

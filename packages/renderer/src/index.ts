@@ -433,7 +433,7 @@ export type Atlas = {
   setTheme(theme: ThemeName): void;
   /** Select a feature by id (accent color and shimmer), or clear the selection. */
   setSelected(featureId: string | null): void;
-  /** Highlight features by id (accent color), e.g. the ways of a street; at most 64. */
+  /** Highlight features by id (accent color), e.g. the ways of a street; at most MAX_HIGHLIGHT. */
   setHighlighted(featureIds: readonly string[]): void;
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
