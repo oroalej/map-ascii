@@ -42,6 +42,7 @@ it('uses explicit stable label anchors for searchable areas instead of an exteri
     landcover: [],
     details: [],
     cemeteries: [],
+    dishes: [],
     processions: [],
   } satisfies ContentBundle;
   expect(searchEntries([feature], [], content)[0]).toMatchObject({

@@ -1,0 +1,51 @@
+{
+  "id": "landmark/mang-koks",
+  "name": {
+    "en": "Mang Kok’s Kinalas"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The city tourism profile dates its home-based beginnings to 2015."
+      },
+      "source": 0,
+      "year": 2015
+    },
+    {
+      "text": {
+        "en": "The directory gives its address as No. 2 Solid Street, Dayangdang."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its menu includes beef, special and lechon kinalas."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Tourism: Mang Kok’s Kinalas",
+      "url": "https://tourism.naga.gov.ph/tr-establishments/mang-koks-kinalas/"
+    },
+    {
+      "title": "City tourism: linked map position",
+      "url": "https://maps.app.goo.gl/6zuReT8R9Y8vXMFU7",
+      "note": "Point from the map linked by the city tourism listing; approximate business location, not a surveyed entrance or footprint."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1908121, 13.6275653]
+  },
+  "known_for": ["dish/kinalas"],
+  "signatures": [
+    {
+      "name": "Beef, special and lechon kinalas",
+      "source": 0
+    }
+  ]
+}

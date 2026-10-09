@@ -1,7 +1,9 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
-import { SubdivisionAreas } from '@atlas/shared/schemas';
+import { Landmark, SubdivisionAreas } from '@atlas/shared/schemas';
+import type { SubdivisionArea } from '@atlas/shared';
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
 import type { AtlasFeature } from './03-normalize';
@@ -18,6 +20,7 @@ import { readFeatures, readJson, writeFeatures, writeJson } from './lib/io';
 import { files, type Step } from './step';
 import { writeDetailLayouts } from './lib/detail-layout';
 import { Territory, inTerritory, removeVoid } from './lib/territory';
+import { shopAnchor } from './lib/frontage';
 
 /**
  * Swap each OSM building that curated landmark outlines `replace` for those outlines, in place.
@@ -28,12 +31,8 @@ function replaceWithCuratedOutlines(
   features: AtlasFeature[],
   landmarks: ContentBundle['landmarks'],
 ) {
-  const curated = landmarks.filter((l) => l.geometry);
+  const curated = landmarks.filter((l) => l.replaces);
   if (curated.length === 0) return;
-  const loose = curated.filter((l) => !l.replaces).map((l) => l.id);
-  if (loose.length > 0) {
-    throw new Error(`Standalone landmark geometry is not supported yet: ${loose.join(', ')}`);
-  }
   const attached = new Set(landmarks.map((l) => l.osm_id));
   const targets = new Map<string, AtlasFeature>();
   for (const landmark of curated) {
@@ -64,12 +63,62 @@ function replaceWithCuratedOutlines(
 
 /**
  * Join curated landmarks onto features: by `osm_id`, or as curated outlines replacing an OSM
- * building. Curated names and dates win over OSM's. Fails if a landmark's feature isn't in the
- * data, or if a landmark has standalone geometry that replaces nothing (supported from Phase 5).
+ * building. Curated names and dates win over OSM's. Present-day food tenants can have independent
+ * Point identities; other standalone geometry remains outside this merge.
  */
-export function mergeContent(features: AtlasFeature[], content: ContentBundle): AtlasFeature[] {
+export function mergeContent(
+  features: AtlasFeature[],
+  content: ContentBundle,
+  placement?: { territory: Territory; subdivisions: readonly SubdivisionArea[] },
+): AtlasFeature[] {
   replaceWithCuratedOutlines(features, content.landmarks);
-  const byOsmId = new Map(content.landmarks.map((l) => [l.osm_id ?? l.id, l]));
+  const byOsmId = new Map<string, ContentBundle['landmarks'][number]>();
+  const points: AtlasFeature[] = [];
+  for (const raw of content.landmarks) {
+    const landmark = Landmark.parse(raw);
+    if (landmark.replaces) {
+      byOsmId.set(landmark.id, landmark);
+      continue;
+    }
+    if (landmark.osm_id) {
+      if (byOsmId.has(landmark.osm_id))
+        throw new Error(`Duplicate landmark osm_id: ${landmark.osm_id}`);
+      byOsmId.set(landmark.osm_id, landmark);
+      continue;
+    }
+    if (landmark.type !== 'food' || landmark.geometry?.type !== 'Point')
+      throw new Error(`Standalone landmark geometry is not supported yet: ${landmark.id}`);
+    if (!placement) throw new Error(`Point landmark ${landmark.id} requires territory admission`);
+    const [lng, lat] = landmark.geometry.coordinates as [number, number];
+    if (!inTerritory(lng, lat, placement.territory))
+      throw new Error(`Point landmark ${landmark.id} is outside the territory`);
+    if (features.some((f) => f.properties.id === landmark.id))
+      throw new Error(`Duplicate feature identity: ${landmark.id}`);
+    const area = placement.subdivisions.find(
+      (a) =>
+        (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
+        booleanPointInPolygon(
+          [lng, lat],
+          a.geometry as Parameters<typeof booleanPointInPolygon>[1],
+        ),
+    );
+    const feature: AtlasFeature = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: {
+        id: landmark.id,
+        class: 'furniture',
+        variant: 'shop_food',
+        name: landmark.name.en,
+        landmark: true,
+        landmark_id: landmark.id,
+        ...(area && { subdivision: area.name, subdivision_approx: area.approximate }),
+      },
+      tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
+    };
+    Object.assign(feature.properties, shopAnchor(feature));
+    points.push(feature);
+  }
   const joined = new Set<string>();
   for (const feature of features) {
     const landmark = byOsmId.get(feature.properties.id);
@@ -81,8 +130,9 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     if (landmark.type === 'heritage' || landmark.heritage) p.heritage = true;
     else delete p.heritage;
     // Curated landmarks (with facts) and heritage sites draw the ◆ and join the Landmark legend;
-    // other records only carry site details and keep their own class marker.
-    if (landmark.facts || p.heritage) p.notable = true;
+    // other records only carry site details and keep their own class marker. Food places keep
+    // their facts dialog but stay out of the Landmark group.
+    if ((landmark.facts && landmark.type !== 'food') || p.heritage) p.notable = true;
     else delete p.notable;
     if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;
@@ -95,14 +145,15 @@ export function mergeContent(features: AtlasFeature[], content: ContentBundle): 
     }
   }
 
-  const missing = content.landmarks.filter((l) => !joined.has(l.id));
+  const missing = content.landmarks.filter((l) => l.osm_id && !joined.has(l.id));
   if (missing.length > 0) {
     const list = missing.map((l) => `${l.id} (${l.osm_id})`).join(', ');
     throw new Error(`Landmarks not found in the OSM data (outside the detail bbox?): ${list}`);
   }
 
-  for (const feature of features) addLabelAnchor(feature);
-  return features;
+  const merged = [...features, ...points];
+  for (const feature of merged) addLabelAnchor(feature);
+  return merged;
 }
 
 /**
@@ -165,6 +216,7 @@ export const step: Step = {
     features = applyRoadExclusions(features, city.streets?.exclusions);
     const { regionBounds } = await readJson<Geography>(join(buildDir, files.geography));
     const territory = Territory.parse(await readJson(join(buildDir, files.territory)));
+    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
     const cameraProblems = checkTourCameras(content.tours, territory);
     if (cameraProblems.length > 0)
       throw new Error(`Tours don't match the data:\n  ${cameraProblems.join('\n  ')}`);
@@ -174,7 +226,11 @@ export const step: Step = {
     }
     const merged = applyLandcoverTreeOverrides(
       mergeTraffic(
-        mergeLifeSites(mergeContent(features, content), city.life?.sites, regionBounds),
+        mergeLifeSites(
+          mergeContent(features, content, { territory, subdivisions }),
+          city.life?.sites,
+          regionBounds,
+        ),
         city.life?.signals,
         city.streets,
         (stats) => console.log(`  streets: ${JSON.stringify(stats)}`),
@@ -185,7 +241,6 @@ export const step: Step = {
     const { parts, warnings } = planParts(merged, content.plans);
     // Curated trees and land cover that OSM doesn't have yet.
     const landcover = landcoverFeatures(merged, content.landcover);
-    const subdivisions = SubdivisionAreas.parse(await readJson(join(buildDir, files.subdivisions)));
     // Standing detail parts and approaches reserve their ground before representative
     // burial rows are placed, including memorials added inside a mapped cemetery.
     const detail = mergeSiteDetails(

@@ -1,0 +1,37 @@
+{
+  "id": "dish/halo-halo",
+  "name": {
+    "en": "Halo-halo"
+  },
+  "origin": "elsewhere",
+  "description": {
+    "en": "A shaved-ice dessert with milk and mixed sweet ingredients."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "Its layers can include sweet beans, fruit and ube beneath milk and shaved ice."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Histories connect it to Japanese migrants and kakigōri before the Second World War."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its Manila history is linked to Quinta Market near the Insular Ice Plant, built in 1902."
+      },
+      "source": 0,
+      "year": 1902
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikipedia: Halo-halo",
+      "url": "https://en.wikipedia.org/wiki/Halo-halo"
+    }
+  ]
+}

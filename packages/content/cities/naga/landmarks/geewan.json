@@ -1,0 +1,55 @@
+{
+  "id": "landmark/geewan",
+  "name": {
+    "en": "Geewan"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Graceland group opened Geewan."
+      },
+      "source": 0,
+      "year": 1996
+    },
+    {
+      "text": {
+        "en": "It uses turo-turo: diners point to dishes."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its menu centers on Bicolano cooking."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Graceland at 50 (2026)",
+      "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+    },
+    {
+      "title": "Langyaw: Where to eat in Naga (2016)",
+      "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/748759046",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.185317, 13.624318]
+  },
+  "known_for": ["dish/laing-pinangat", "dish/bicol-express", "dish/kinunot"],
+  "signatures": [
+    {
+      "name": "Pinangat and kinunot",
+      "source": 1
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "id": "landmark/cha-kamot",
+  "name": {
+    "en": "Cha Kamot — Cordova’s Kinalas"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Corregidor Street kinalasan is credited with helping popularize kinalas."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Dateline Ibalon describes a following across roughly two generations."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its owner, Fe Solis Cordova, died in 2025."
+      },
+      "source": 0,
+      "year": 2025
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Naga City 360, part 4 (2025)",
+      "url": "https://dateline-ibalon.com/2025/02/naga-city-360-arts-culture-and-heritage-in-28-days-28-ways-part-4-dennis-b-gonzaga/"
+    },
+    {
+      "title": "Restaurant Guru: location",
+      "url": "https://restaurantguru.com/Cordovas-Kinalas-Cha-Kamot-Naga",
+      "note": "Approximate business coordinate from listing metadata, checked against the published street/subdivision address; no entrance or footprint precision implied."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1905938, 13.6270831]
+  },
+  "known_for": ["dish/kinalas"],
+  "signatures": [
+    {
+      "name": "Kinalas",
+      "source": 0
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "id": "dish/sili-ice-cream",
+  "name": {
+    "en": "Sili ice cream"
+  },
+  "origin": "regional",
+  "description": {
+    "en": "A chili-spiced ice cream created in Albay."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "1st Colonial Grill created the flavor in Albay in 2004."
+      },
+      "source": 0,
+      "year": 2004
+    },
+    {
+      "text": {
+        "en": "Its ingredients include labuyo chili, coconut milk, puréed strawberries and sugar."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Its pairing of chili and coconut reflects Bicol’s regional cooking."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Wikipedia: Sili ice cream",
+      "url": "https://en.wikipedia.org/wiki/Sili_ice_cream"
+    }
+  ]
+}

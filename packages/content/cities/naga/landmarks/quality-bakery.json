@@ -1,0 +1,61 @@
+{
+  "id": "landmark/quality-bakery",
+  "name": { "en": "Quality Bakery (Ruivivar's Quality Cafe)" },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "A 2014 visit described Quality Bakery's chiffon and marble cakes as local favorites."
+      },
+      "source": 0,
+      "year": 2014
+    },
+    {
+      "text": {
+        "en": "That visit paired tablea tsokolate with pan Legaspi served with cheese and butter."
+      },
+      "source": 0,
+      "year": 2014
+    },
+    {
+      "text": {
+        "en": "The same account lists small and large panramona, plus lemon and chocolate cookies."
+      },
+      "source": 0,
+      "year": 2014
+    },
+    {
+      "text": {
+        "en": "The cafe is also listed as Ruivivar's Quality Cafe in the Diaz Building on Elias Angeles Street."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Deck: Tsokolate and pan Legaspi at Quality Bakery (2014)",
+      "url": "https://www.nagacitydeck.com/2014/06/happy-finds-in-naga-tsokolate-at.html",
+      "note": "Firsthand visit published June 22, 2014; menu items are documented at that time and availability may change."
+    },
+    {
+      "title": "Restaurant Guru: Quality Bakery (Ruivivar's Quality Cafe)",
+      "url": "https://restaurantguru.com/Quality-Cafe-Naga-2",
+      "note": "Directory name, address and published business coordinates checked on 2026-10-08. Point is an approximate business location; its precise footprint and entrance are unconfirmed."
+    }
+  ],
+  "geometry": { "type": "Point", "coordinates": [123.1855013, 13.6238706] },
+  "signatures": [
+    { "name": "Chiffon cake", "source": 0 },
+    { "name": "Marble cake", "source": 0 },
+    { "name": "Pan Legaspi with cheese and butter", "source": 0 },
+    { "name": "Tablea tsokolate", "source": 0 }
+  ],
+  "pasalubong": [
+    {
+      "name": "Lemon and chocolate cookies",
+      "note": "The 2014 account recalls bringing these as school snacks.",
+      "source": 0
+    }
+  ]
+}

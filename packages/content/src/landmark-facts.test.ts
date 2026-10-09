@@ -6,8 +6,11 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for twenty-five Naga landmarks, including heritage sites and the museum statue', () => {
-  const clickable = Object.values(landmarks).filter((landmark) => landmark.facts);
+it('curates facts for twenty-six Naga landmarks besides food places, including heritage sites and the museum statue', () => {
+  // Food places carry their own sourced facts (food-content.test.ts).
+  const clickable = Object.values(landmarks).filter(
+    (landmark) => landmark.facts && landmark.type !== 'food',
+  );
   expect(clickable.map((landmark) => landmark.id).sort()).toEqual(
     [
       'abella-business-buildings',
@@ -20,6 +23,7 @@ it('curates facts for twenty-five Naga landmarks, including heritage sites and t
       'holy-rosary-minor-seminary-building',
       'immaculate-conception-parish',
       'jesse-robredo-monument',
+      'naga-city-peoples-mall',
       'naga-metropolitan-cathedral',
       'old-abella-mansion-arch',
       'old-provincial-jail',

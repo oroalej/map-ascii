@@ -19,6 +19,7 @@ export const contentRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 type Schemas = ReturnType<typeof contentSchemas>;
 
 const collections = {
+  dishes: 'Dish',
   landmarks: 'Landmark',
   events: 'Event',
   'name-history': 'NameHistory',
@@ -143,6 +144,7 @@ export async function loadCityPacks(
 
     const schemas = contentSchemas(city.languages);
     const content: ContentBundle = {
+      dishes: [],
       landmarks: [],
       events: [],
       'name-history': [],
@@ -198,6 +200,15 @@ export async function loadCityPacks(
     }
 
     const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
+    const dishes = new Set(content.dishes.map((dish) => dish.id));
+    for (const landmark of content.landmarks)
+      landmark.known_for?.forEach((id, index) => {
+        if (!dishes.has(id))
+          errors.push({
+            file: seenIds.get(landmark.id) ?? configFile,
+            message: `known_for.${index}: no dish "${id}" in this city`,
+          });
+      });
     for (const [index, season] of (city.life?.seasons ?? []).entries())
       for (const id of season.congregations?.landmarks ?? [])
         if (!landmarks.has(id))

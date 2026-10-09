@@ -1,0 +1,36 @@
+{
+  "id": "dish/kinalas",
+  "name": {
+    "en": "Kinalas"
+  },
+  "origin": "local",
+  "description": {
+    "en": "Naga’s noodle soup with scraped head meat and a rich gravy."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "The name refers to meat scraped off a pig or cow head."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The head meat is served over noodles with brown gravy."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Langyaw records a local origin story about an early Dayangdang seller; it remains an oral account."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Langyaw: Kinalas Twin (2010)",
+      "url": "https://langyaw.com/2010/10/29/kinalas-is-comfort-food-brain-slices-optional/"
+    }
+  ]
+}

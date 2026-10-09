@@ -57,6 +57,8 @@ Tour 2 is in the city pack (`packages/content/cities/naga/tours/`) as a draft: i
 
 Tour narration must be fact-checked against sources before shipping. Draft text may use placeholders marked `TODO(verify)`.
 
+Five verified food tours extend the Centro walk: **Kinalas crawl** (Cathedral neighborhood, Dayangdang, Carolina), **Centro old-timers** (New China, Crown Park, Quality Bakery, mami, bakeries and halo-halo), **Market breakfast** (People's Mall, 3N, Face the Wall), **Magsaysay nights** (grills, cakes, coffee and family recipes), and **Pili and pasalubong** (Graceland, Casa Moderna, RPM Pili Nut Candies, People’s Mall dried goods, J. Emmanuel at SM and FSJ at the bus terminal). Each step cites its research. Twenty-three food landmarks and the People's Mall have clickable facts; nine dishes are searchable and appear under Known for. Sourced products appear under Pasalubong. Tenant Points and overview cameras state their placement limits; inaccessible sources or unestablished locations are omitted.
+
 ## 4. Research backlog (content team)
 
 Heritage identification: twelve of twenty requested sites are mapped; the eight omitted requested sites and three conditional properties in the October 8, 2026 data note below need a name tie (sign, lettering or sourced address) or a surviving building footprint before they can be added. Leads: the unattributed old house at 47 Barlin, the Balintawak stone ruin, the New Camarines Lumber lane, and the old houses logged along J. Hernandez Avenue and the former Liboton streets. Almeda keeps no construction year while its 1938/1941 accounts conflict.

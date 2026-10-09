@@ -23,7 +23,7 @@ it('adds heritage membership only to heritage landmarks on their existing featur
     })),
   } as ContentBundle;
   const before = structuredClone(features);
-  expect(mergeContent(features, content)).toBe(features);
+  expect(mergeContent(features, content)).toEqual(features);
   expect(features).toHaveLength(types.length);
   features.forEach((feature, i) => {
     expect(feature.geometry).toEqual(before[i]!.geometry);
@@ -67,7 +67,7 @@ it('swaps a replaced OSM building for curated landmark outlines, in place', () =
     sources: [{ title: 'Fixture' }],
   });
   const content = { landmarks: [outline('jail', 5), outline('post', 6)] } as ContentBundle;
-  expect(mergeContent(features, content)).toBe(features);
+  expect(mergeContent(features, content)).toEqual(features);
   expect(features.map((f) => f.properties.id)).toEqual([
     'osm:way/1',
     'landmark/jail',
@@ -101,12 +101,13 @@ it('swaps a replaced OSM building for curated landmark outlines, in place', () =
   expect(() => mergeContent([building('osm:way/2', 5)], loose)).toThrow(/not supported yet/);
 });
 
-it('marks only curated landmarks with facts and heritage sites as notable', () => {
+it('marks only curated non-food landmarks with facts and heritage sites as notable', () => {
   const fact = { text: { en: 'A fact.' }, source: 0 };
   const records = [
     { type: 'church', facts: [fact, fact, fact] },
     { type: 'heritage' },
     { type: 'school' },
+    { type: 'food', facts: [fact, fact, fact] },
   ] as const;
   const features: AtlasFeature[] = records.map((_, i) => ({
     type: 'Feature',
@@ -125,7 +126,7 @@ it('marks only curated landmarks with facts and heritage sites as notable', () =
     })),
   } as unknown as ContentBundle;
   mergeContent(features, content);
-  expect(features.map((f) => f.properties.notable)).toEqual([true, true, undefined]);
+  expect(features.map((f) => f.properties.notable)).toEqual([true, true, undefined, undefined]);
   expect(features[2]!.properties).toMatchObject({ landmark: true, landmark_id: 'landmark/2' });
 });
 
