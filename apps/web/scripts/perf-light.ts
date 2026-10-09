@@ -301,6 +301,21 @@ try {
     page.on('requestfailed', (request) =>
       failedRequests.push(`${request.url()}: ${request.failure()?.errorText}`),
     );
+    // Tile reads (range requests into the archive) still in flight, and when the last one ended.
+    const tiles = { inFlight: 0, lastAt: performance.now() };
+    const tileRequest = (url: string) => url.includes('.pmtiles');
+    page.on('request', (request) => {
+      if (!tileRequest(request.url())) return;
+      tiles.inFlight++;
+      tiles.lastAt = performance.now();
+    });
+    const tileDone = (url: string) => {
+      if (!tileRequest(url)) return;
+      tiles.inFlight = Math.max(0, tiles.inFlight - 1);
+      tiles.lastAt = performance.now();
+    };
+    page.on('requestfinished', (request) => tileDone(request.url()));
+    page.on('requestfailed', (request) => tileDone(request.url()));
     await page.addInitScript({
       content: `globalThis.__name = (value) => value; (${installCapture.toString()})();`,
     });
@@ -360,8 +375,15 @@ try {
       }, on);
       await waitCapture((c) => c.probes.length > before);
     };
-    // Settle: tiles keep arriving for a few seconds after the map is ready. Measure once two
-    // consecutive off frames match (at most 20 tries); stability counts from there.
+    // Settle: tiles keep arriving in bursts after the map is ready. Wait until no tile read has
+    // been in flight for 3 s (at most 60 s), then until two consecutive off frames match (at most
+    // 20 tries); stability counts from there.
+    const quietBy = performance.now() + 60_000;
+    while (
+      (tiles.inFlight > 0 || performance.now() - tiles.lastAt < 3000) &&
+      performance.now() < quietBy
+    )
+      await page.waitForTimeout(250);
     await probe(false);
     for (let i = 0; i < 20; i++) {
       await probe(false);
