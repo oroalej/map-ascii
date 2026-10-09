@@ -1,0 +1,84 @@
+{
+  "id": "landmark/san-francisco-old-belfry",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [123.1861819, 13.6244158],
+        [123.1861788, 13.6244045],
+        [123.1861704, 13.6243962],
+        [123.1861588, 13.6243932],
+        [123.1861472, 13.6243962],
+        [123.1861388, 13.6244045],
+        [123.1861357, 13.6244158],
+        [123.1861388, 13.6244271],
+        [123.1861472, 13.6244354],
+        [123.1861588, 13.6244384],
+        [123.1861704, 13.6244354],
+        [123.1861788, 13.6244271],
+        [123.1861819, 13.6244158]
+      ]
+    ]
+  },
+  "height_m": 8,
+  "name": {
+    "en": "San Francisco Church Old Belfry"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "Belfry outline traced from satellite and Street View",
+      "note": "Traced October 9, 2026: a round outline about 5 m across at the vegetated round crown in Google satellite (z21), just off the southwest corner of the San Francisco Parish facade (way/23662997) on Peñafrancia Avenue, confirmed by the October 2025 Street View panorama qdpOHOxc53Q1fgP1Cp8bWQ, which shows the round brick tower in front of that corner. Its height, about 8 m, is estimated against the facade. Dimensions are estimates; capture dates are not construction dates; no image is saved or distributed."
+    },
+    {
+      "title": "Owner request: San Francisco Church belfry",
+      "note": "October 9, 2026. Added at the owner's request; the belfry is not listed on its own in Ordinance No. 2003-003 or the national registry. The church, already a heritage landmark, keeps its own record and plan."
+    },
+    {
+      "title": "SmarterTravel: Naga City Things to Do",
+      "url": "https://www.smartertravel.com/things-naga-city/",
+      "note": "States that only the bell tower of the old San Francisco Church building remains."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 9, 2026. Church of San Francisco NHCP marker texts (1950 marker, re-unveiled February 20, 2025; 1972 marker): first built of light materials in 1578, enlarged by Fray Gregorio Salinas in 1883, damaged in 1915 and unused until the present church of 1957, and the site of the September 18, 1898 surrender."
+    },
+    {
+      "title": "Wikimedia Commons: Simbahan ng San Francisco historical marker vicinity",
+      "url": "https://commons.wikimedia.org/wiki/File:Simbahan_ng_San_Francisco_historical_marker_vicinity.jpg",
+      "note": "Shows the Simbahan ng San Francisco NHCP marker mounted on the round brick tower beside the church facade. With the photographs titled San Francisco Church Old Belfry (Ralff Nestor Nacor, April 2024) and Base of the old bell tower of San Francisco de Asis Church in Naga (Kej Andrés, April 2025), CC BY-SA 4.0; viewed, not redistributed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "This round brick tower is the base of the old church's bell tower, the only part of the old building that remains."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "Fray Gregorio Salinas enlarged the old church in 1883; damaged in 1915, it stood unused until the present church was built in 1957."
+      },
+      "source": 3,
+      "year": 1883,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Here the last Spanish governor of Ambos Camarines surrendered to Filipino forces led by Corporals Elias Angeles and Felix Plazo on September 18, 1898."
+      },
+      "source": 3,
+      "year": 1898,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The church's NHCP historical marker is mounted on the tower."
+      },
+      "source": 4
+    }
+  ]
+}

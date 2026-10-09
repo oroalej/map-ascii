@@ -36,6 +36,7 @@ vi.mock('./Attribution', () => ({ Attribution: () => null }));
 vi.mock('@/state/useTourPlayer', () => ({ useTourPlayer: () => {} }));
 vi.mock('@/state/useUrlSync', () => ({ useUrlSync: () => {} }));
 vi.mock('@/state/useAtlasEvents', () => ({ useAtlasEvents: () => {} }));
+vi.mock('./InteractionDetails', () => ({}));
 const props: CityAtlasProps = {
   slug: 'fixture',
   name: 'Fixture City',

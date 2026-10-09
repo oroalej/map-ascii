@@ -1,0 +1,149 @@
+{
+  "id": "tour/bridges-and-terminals",
+  "group": "infrastructure",
+  "title": { "en": "Bridges and terminals" },
+  "description": {
+    "en": "River crossings, a railway station and two transport terminals, through their documented names and history."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": { "lng": 123.1839451, "lat": 13.620126, "zoom": 18 },
+      "duration_ms": 12000,
+      "select": "osm:way/30518288",
+      "narration": {
+        "en": "Begin at the General Luna Street crossing, identified here with Tabuco Bridge from the city's boundary descriptions and mapped geography. Ordinance 582 uses Tabuco Bridge and General Luna Street to describe Dinaga's edge along the river."
+      },
+      "sources": [
+        {
+          "title": "Naga Ordinance 582: codified barangay boundaries",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord1977-582.pdf",
+          "note": "Section 2(12) connects Tabuco Bridge and General Luna Street. Matching the crossing to way 30518288 is a geographic inference."
+        },
+        {
+          "title": "OpenStreetMap: General Luna Street crossing",
+          "url": "https://www.openstreetmap.org/way/30518288",
+          "note": "Present-day geometry only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1888486, "lat": 13.6273165, "zoom": 18 },
+      "duration_ms": 14000,
+      "select": "osm:way/23540251",
+      "narration": {
+        "en": "Colgante is remembered for the September 16, 1972 disaster. Naga Tourism records that the bridge collapsed beneath spectators watching the Peñafrancia fluvial procession, killing more than a hundred people. The map shows today's Santonja Street crossing, not the lost structure."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: The Colgante Bridge Tragedy",
+          "url": "https://tourism.naga.gov.ph/the-colgante-bridge-tragedy/"
+        },
+        {
+          "title": "Naga Ordinance 582: Colgante and Santonja",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord1977-582.pdf",
+          "note": "Section 2(23) connects Santonja Street to Colgante Bridge; the current mapped way is the location match."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.186818, "lat": 13.6230444, "zoom": 18 },
+      "duration_ms": 12000,
+      "select": "osm:way/23540253",
+      "narration": {
+        "en": "Return to Panganiban Bridge. In 2014, the city named the Dinaga street from the Danlugan corner to this bridge Calle del Rio: a road by the river. The ordinance documents the connection between the crossing and the riverside street."
+      },
+      "sources": [
+        {
+          "title": "Naga Ordinance 2014-011: Calle del Rio",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord2014-011.pdf",
+          "note": "Names the street, not the bridge; no bridge opening date is claimed."
+        },
+        {
+          "title": "OpenStreetMap: Panganiban Drive bridge",
+          "url": "https://www.openstreetmap.org/way/23540253"
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1952823, "lat": 13.6327685, "zoom": 17.8 },
+      "duration_ms": 12000,
+      "select": "osm:way/30518281",
+      "narration": {
+        "en": "Magsaysay Bridge also connects road transport with the river festival. The official September 2026 fluvial advisory included this bridge among the road closures, alongside nearby junctions on Magsaysay and Peñafrancia avenues."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: 2026 fluvial traffic advisory",
+          "url": "https://tourism.naga.gov.ph/traffic-advisory-2026-penafrancia-festival-fluvial-procession/",
+          "note": "Lists Magsaysay Bridge as a closed road for that event, not a permanent traffic restriction."
+        },
+        {
+          "title": "OpenStreetMap: Magsaysay Avenue bridge",
+          "url": "https://www.openstreetmap.org/way/30518281"
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1858792, "lat": 13.6196175, "zoom": 17.8 },
+      "fly_ms": 5000,
+      "duration_ms": 14000,
+      "select": "osm:way/23662289",
+      "narration": {
+        "en": "Fly south to Naga railway station. The city reported the Naga–Legazpi service resuming on February 26, 2025 after storm damage in October 2024, and listed Naga among its station stops. This is a dated account of the railway's recovery, not a current timetable."
+      },
+      "sources": [
+        {
+          "title": "Naga City: PNR resumes Naga-Legazpi train service",
+          "url": "https://www2.naga.gov.ph/pnr-resumes-naga-legazpi-train-service/",
+          "note": "Published March 3, 2025; documents the resumption and station stops. No station opening date is inferred."
+        },
+        {
+          "title": "OpenStreetMap: Naga station building",
+          "url": "https://www.openstreetmap.org/way/23662289"
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1899905, "lat": 13.6192046, "zoom": 17.5 },
+      "duration_ms": 14000,
+      "select": "osm:way/293702439",
+      "narration": {
+        "en": "Bicol Central Station is the bus terminal in CBD II, Triangulo. The city's 2014 naming ordinance records that it became operational in 1999. The same ordinance gave the formerly unnamed central bus terminal its Bicol Central Station name."
+      },
+      "sources": [
+        {
+          "title": "Naga Ordinance 2014-007: Bicol Central Station",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2014-007/",
+          "note": "The ordinance's explanatory note establishes 1999 operation; section 2 names the terminal in 2014."
+        },
+        {
+          "title": "OpenStreetMap: Bicol Central Station",
+          "url": "https://www.openstreetmap.org/way/293702439",
+          "note": "Selects the terminal, not a particular bus bay."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1849067, "lat": 13.6344492, "zoom": 17.5 },
+      "fly_ms": 5000,
+      "duration_ms": 14000,
+      "select": "osm:node/4545731100",
+      "narration": {
+        "en": "Finish at Queborac's Integrated Northbound Terminal. Ordinance 98-116, enacted on November 18, 1998, designated this area of Bagumbayan Sur as the permanent location of the Integrated Northbound Jeepney Terminal. That is a legal location designation, rather than evidence of an opening day."
+      },
+      "sources": [
+        {
+          "title": "Naga Ordinance 98-116: Integrated Northbound Jeepney Terminal",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2021/06/ord1998-116.pdf",
+          "note": "Section 1 locates the terminal in Sitio Queborac along the Magsaysay Avenue extension."
+        },
+        {
+          "title": "OpenStreetMap: Naga Integrated Northbound Terminal",
+          "url": "https://www.openstreetmap.org/node/4545731100",
+          "note": "The terminal point supplies the present-day camera and selection."
+        }
+      ]
+    }
+  ]
+}

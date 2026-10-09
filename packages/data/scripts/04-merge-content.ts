@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
 import { Landmark, SubdivisionAreas } from '@atlas/shared/schemas';
 import type { SubdivisionArea } from '@atlas/shared';
+import type { Polygon } from 'geojson';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
@@ -22,24 +23,125 @@ import { writeDetailLayouts } from './lib/detail-layout';
 import { Territory, inTerritory, removeVoid } from './lib/territory';
 import { shopAnchor } from './lib/frontage';
 
+/** The OSM buildings a curated outline replaces, first one first. */
+const replacedBy = (landmark: ContentBundle['landmarks'][number]) => [landmark.replaces!].flat();
+
 /**
- * Join curated landmarks onto features by `osm_id`. Curated names and dates win over OSM's.
- * Present-day food tenants can have independent Point identities; historical standalone
- * geometry remains outside this merge.
+ * Swap each OSM building that curated landmark outlines `replace` for those outlines, in place.
+ * An outline inherits its first replaced building's normalized properties and tile layer, so it
+ * is drawn, roofed and lit like any other building; its feature id is the landmark id.
+ */
+function replaceWithCuratedOutlines(
+  features: AtlasFeature[],
+  landmarks: ContentBundle['landmarks'],
+) {
+  const curated = landmarks.filter((l) => l.replaces);
+  if (curated.length === 0) return;
+  const attached = new Set(landmarks.map((l) => l.osm_id));
+  const targets = new Map<string, AtlasFeature>();
+  for (const landmark of curated) {
+    if (landmark.geometry!.type !== 'Polygon')
+      throw new Error(`Curated landmark outline is not a Polygon: ${landmark.id}`);
+    for (const target of replacedBy(landmark)) {
+      if (attached.has(target))
+        throw new Error(`Replaced feature ${target} also hosts a landmark (${landmark.id})`);
+      const feature = features.find((f) => f.properties.id === target);
+      if (
+        !feature ||
+        feature.properties.class !== 'building' ||
+        feature.geometry.type !== 'Polygon'
+      )
+        throw new Error(`Replaced feature is not a building polygon in the data: ${target}`);
+      targets.set(target, feature);
+    }
+  }
+  for (let i = features.length - 1; i >= 0; i--) {
+    if (targets.has(features[i]!.properties.id)) features.splice(i, 1);
+  }
+  for (const landmark of curated) {
+    const { properties, tippecanoe } = targets.get(replacedBy(landmark)[0]!)!;
+    const { name: _name, osm_name: _osmName, ...inherited } = properties;
+    features.push({
+      type: 'Feature',
+      geometry: landmark.geometry as AtlasFeature['geometry'],
+      properties: { ...inherited, id: landmark.id },
+      tippecanoe: { ...tippecanoe },
+    });
+  }
+}
+
+type Placement = { territory: Territory; subdivisions: readonly SubdivisionArea[] };
+
+/** The subdivision containing a point, for features the pipeline places itself. */
+function subdivisionAt(lng: number, lat: number, subdivisions: readonly SubdivisionArea[]) {
+  const area = subdivisions.find(
+    (a) =>
+      (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
+      booleanPointInPolygon([lng, lat], a.geometry as Parameters<typeof booleanPointInPolygon>[1]),
+  );
+  return area && { subdivision: area.name, subdivision_approx: area.approximate };
+}
+
+/**
+ * A curated outline that stands alone (an arch, a gate) rather than replacing an OSM building:
+ * a small building of its curated height, whose feature id is the landmark id.
+ */
+function curatedStructure(
+  landmark: ContentBundle['landmarks'][number],
+  placement: Placement | undefined,
+): AtlasFeature {
+  if (!placement) throw new Error(`Curated outline ${landmark.id} requires territory admission`);
+  const ring = (landmark.geometry as Polygon).coordinates[0]!;
+  if (ring.some(([lng, lat]) => !inTerritory(lng!, lat!, placement.territory)))
+    throw new Error(`Curated outline ${landmark.id} is outside the territory`);
+  const [lng, lat] = turfCentroid(landmark.geometry as Polygon).geometry.coordinates as [
+    number,
+    number,
+  ];
+  return {
+    type: 'Feature',
+    geometry: landmark.geometry as Polygon,
+    properties: {
+      id: landmark.id,
+      class: 'building',
+      height: landmark.height_m!,
+      ...subdivisionAt(lng, lat, placement.subdivisions),
+    },
+    tippecanoe: { layer: 'buildings', minzoom: 12, maxzoom: 16 },
+  };
+}
+
+/**
+ * Join curated landmarks onto features: by `osm_id`, as curated outlines replacing an OSM
+ * building, or as standalone curated outlines. Curated names and dates win over OSM's.
+ * Present-day food tenants can have independent Point identities; other standalone geometry
+ * remains outside this merge.
  */
 export function mergeContent(
   features: AtlasFeature[],
   content: ContentBundle,
-  placement?: { territory: Territory; subdivisions: readonly SubdivisionArea[] },
+  placement?: Placement,
 ): AtlasFeature[] {
+  replaceWithCuratedOutlines(features, content.landmarks);
   const byOsmId = new Map<string, ContentBundle['landmarks'][number]>();
   const points: AtlasFeature[] = [];
   for (const raw of content.landmarks) {
     const landmark = Landmark.parse(raw);
+    if (landmark.replaces) {
+      byOsmId.set(landmark.id, landmark);
+      continue;
+    }
     if (landmark.osm_id) {
       if (byOsmId.has(landmark.osm_id))
         throw new Error(`Duplicate landmark osm_id: ${landmark.osm_id}`);
       byOsmId.set(landmark.osm_id, landmark);
+      continue;
+    }
+    if (landmark.height_m !== undefined) {
+      if (features.some((f) => f.properties.id === landmark.id))
+        throw new Error(`Duplicate feature identity: ${landmark.id}`);
+      features.push(curatedStructure(landmark, placement));
+      byOsmId.set(landmark.id, landmark);
       continue;
     }
     if (landmark.type !== 'food' || landmark.geometry?.type !== 'Point')
@@ -50,14 +152,6 @@ export function mergeContent(
       throw new Error(`Point landmark ${landmark.id} is outside the territory`);
     if (features.some((f) => f.properties.id === landmark.id))
       throw new Error(`Duplicate feature identity: ${landmark.id}`);
-    const area = placement.subdivisions.find(
-      (a) =>
-        (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
-        booleanPointInPolygon(
-          [lng, lat],
-          a.geometry as Parameters<typeof booleanPointInPolygon>[1],
-        ),
-    );
     const feature: AtlasFeature = {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [lng, lat] },
@@ -68,7 +162,7 @@ export function mergeContent(
         name: landmark.name.en,
         landmark: true,
         landmark_id: landmark.id,
-        ...(area && { subdivision: area.name, subdivision_approx: area.approximate }),
+        ...subdivisionAt(lng, lat, placement.subdivisions),
       },
       tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
     };
@@ -83,6 +177,13 @@ export function mergeContent(
     const p = feature.properties;
     p.landmark = true;
     p.landmark_id = landmark.id;
+    if (landmark.type === 'heritage' || landmark.heritage) p.heritage = true;
+    else delete p.heritage;
+    // Curated landmarks (with facts) and heritage sites draw the ◆ and join the Landmark legend;
+    // other records only carry site details and keep their own class marker. Food places keep
+    // their facts dialog but stay out of the Landmark group.
+    if ((landmark.facts && landmark.type !== 'food') || p.heritage) p.notable = true;
+    else delete p.notable;
     if (p.name && p.name !== landmark.name.en) p.osm_name = p.name;
     p.name = landmark.name.en;
     if (landmark.start_year !== undefined || landmark.end_year !== undefined) {

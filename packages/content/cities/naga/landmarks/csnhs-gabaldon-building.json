@@ -1,0 +1,73 @@
+{
+  "id": "landmark/csnhs-gabaldon-building",
+  "osm_id": "osm:way/23677020",
+  "name": {
+    "en": "Camarines Sur National High School Gabaldon Building"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23677020 (Gabaldon Building)",
+      "url": "https://www.openstreetmap.org/way/23677020",
+      "note": "ODbL. The hip-roofed building mapped and named Gabaldon Building on the Camarines Sur National High School campus, retained unchanged. Edit dates are not construction dates. The campus grounds stay the separate Camarines Sur National High School landmark."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the main building and the Gabaldon building of Camarines Sur National High School for preservation. Only the Gabaldon building is mapped here: no source reviewed locates the historic main building on the campus (owner request, October 9, 2026, to light only the schools' heritage buildings)."
+    },
+    {
+      "title": "Wikipedia: Camarines Sur National High School",
+      "url": "https://en.wikipedia.org/wiki/Camarines_Sur_National_High_School",
+      "note": "School history: opened in 1902 as the Provincial High School of Nueva Caceres under Frank Crone; moved to its present site on Gainza (now Peñafrancia Avenue) in 1915. Shows the Gabaldon building without a construction date, so none is set."
+    },
+    {
+      "title": "Wikipedia: Gabaldon School Buildings",
+      "url": "https://en.wikipedia.org/wiki/Gabaldon_School_Buildings",
+      "note": "Act No. 1801 (1907), the prototype plans by William E. Parsons, and Republic Act No. 11194 (2019)."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The school opened in 1902 as the Provincial High School of Nueva Cáceres, under its first principal, Frank Crone."
+      },
+      "source": 2,
+      "year": 1902,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "It moved to its present site on Calle Gainza, today Peñafrancia Avenue, in 1915."
+      },
+      "source": 2,
+      "year": 1915,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Gabaldon schoolhouses take their name from the 1907 Gabaldon Law, Act No. 1801, which funded public schools on prototype plans by the American architect William E. Parsons."
+      },
+      "source": 3,
+      "year": 1907,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The Gabaldon building was listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Republic Act No. 11194, the Gabaldon School Buildings Conservation Act of 2019, prohibits altering, demolishing or moving Gabaldon buildings."
+      },
+      "source": 3,
+      "year": 2019,
+      "certainty": "exact"
+    }
+  ]
+}

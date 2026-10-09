@@ -1,0 +1,449 @@
+[
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1887281, 13.6280866],
+          [123.1888397, 13.6282792],
+          [123.1887436, 13.6283318],
+          [123.188656, 13.6281807],
+          [123.1885324, 13.628241],
+          [123.1886708, 13.6285127],
+          [123.1885842, 13.6285544],
+          [123.188446, 13.6282831],
+          [123.1883924, 13.6283092],
+          [123.1884336, 13.6283987],
+          [123.1883983, 13.6284141],
+          [123.1884689, 13.6285579],
+          [123.1883713, 13.6286031],
+          [123.1882794, 13.6284155],
+          [123.1882562, 13.6284275],
+          [123.1880588, 13.6280473],
+          [123.1878709, 13.6281353],
+          [123.188148, 13.6286941],
+          [123.1880508, 13.6287396],
+          [123.1877161, 13.6280646],
+          [123.1885093, 13.6276931],
+          [123.18856, 13.6277953],
+          [123.1885014, 13.6278228],
+          [123.1886527, 13.6281279],
+          [123.1886789, 13.6281135],
+          [123.1887281, 13.6280866]
+        ],
+        [
+          [123.1883817, 13.627901],
+          [123.1881858, 13.6279922],
+          [123.1882587, 13.6281402],
+          [123.1884546, 13.628049],
+          [123.1883817, 13.627901]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:relation/2418000",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Francisco",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1820901, 13.6225916],
+          [123.1821371, 13.6228666],
+          [123.1819691, 13.6228936],
+          [123.1819451, 13.6227546],
+          [123.1819701, 13.6227506],
+          [123.1819461, 13.6226156],
+          [123.1820901, 13.6225916]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23664606",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Abella"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1868965, 13.6268613],
+          [123.1869756, 13.6269831],
+          [123.1869664, 13.6269887],
+          [123.1869897, 13.6270246],
+          [123.1868345, 13.6271197],
+          [123.1867716, 13.6270226],
+          [123.1868468, 13.6269765],
+          [123.1868075, 13.6269159],
+          [123.1868965, 13.6268613]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668101",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.186146, 13.626886],
+          [123.186215, 13.62698],
+          [123.18611, 13.627054],
+          [123.186041, 13.626959],
+          [123.186146, 13.626886]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668511",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.186273, 13.626518],
+          [123.186332, 13.6266],
+          [123.186201, 13.626689],
+          [123.186142, 13.626608],
+          [123.186273, 13.626518]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23668592",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1899014, 13.6287709],
+          [123.1899724, 13.6288319],
+          [123.1898864, 13.6289269],
+          [123.1898154, 13.6288659],
+          [123.1899014, 13.6287709]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669321",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Francisco",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1898064, 13.6286049],
+          [123.1898774, 13.6286719],
+          [123.1897664, 13.6287819],
+          [123.1896964, 13.6287129],
+          [123.1898064, 13.6286049]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23669833",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Francisco",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1843234, 13.6226094],
+          [123.1843565, 13.6227558],
+          [123.1838568, 13.6228626],
+          [123.1838237, 13.6227161],
+          [123.1843234, 13.6226094]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671040",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.1840901,
+      "shop_lat": 13.622735975,
+      "shop_radius_m": 28.90966220719809,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Abella"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1865662, 13.6264245],
+          [123.1866182, 13.6265155],
+          [123.1865002, 13.6265805],
+          [123.1864823, 13.6265645],
+          [123.1864384, 13.6265883],
+          [123.1864058, 13.6265337],
+          [123.1864416, 13.6265139],
+          [123.1864522, 13.6264846],
+          [123.1865662, 13.6264245]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671359",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1874516, 13.6230045],
+          [123.1875056, 13.6231515],
+          [123.1873996, 13.6231885],
+          [123.1873456, 13.6230415],
+          [123.1874516, 13.6230045]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671432",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Lerma",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1860301, 13.6267169],
+          [123.1861031, 13.6268339],
+          [123.1859931, 13.6268989],
+          [123.1859201, 13.6267829],
+          [123.1860301, 13.6267169]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23671546",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Santa Cruz"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.187528, 13.625291],
+          [123.187666, 13.625525],
+          [123.18757, 13.625578],
+          [123.187566, 13.62557],
+          [123.187432, 13.625345],
+          [123.187528, 13.625291]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23672266",
+      "class": "building",
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "San Francisco",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.184542, 13.622473],
+          [123.184556, 13.622534],
+          [123.184478, 13.622551],
+          [123.184465, 13.622489],
+          [123.184542, 13.622473]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23674415",
+      "class": "building",
+      "frontage": "food",
+      "shop_lng": 123.18451025,
+      "shop_lat": 13.622511750000001,
+      "shop_radius_m": 5.591468659146283,
+      "kind": "building=yes",
+      "height": 6,
+      "subdivision": "Dinaga"
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  },
+  {
+    "type": "Feature",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [123.1848918, 13.6301948],
+          [123.1849805, 13.6303946],
+          [123.1850373, 13.6303708],
+          [123.1850896, 13.6304888],
+          [123.1850424, 13.6305086],
+          [123.1851499, 13.6307509],
+          [123.1850723, 13.6307856],
+          [123.1850489, 13.6307335],
+          [123.1847012, 13.6308844],
+          [123.184656, 13.6307867],
+          [123.1849968, 13.6306434],
+          [123.1849597, 13.6305598],
+          [123.1848719, 13.6305967],
+          [123.1848073, 13.6304511],
+          [123.1848966, 13.6304137],
+          [123.1848685, 13.6303505],
+          [123.1847518, 13.6303994],
+          [123.1846972, 13.6302764],
+          [123.1848918, 13.6301948]
+        ]
+      ]
+    },
+    "properties": {
+      "id": "osm:way/23675846",
+      "class": "building",
+      "name": "Administration Building",
+      "kind": "building=yes",
+      "building:levels": "2",
+      "height": 6,
+      "subdivision": "Bagumbayan Sur",
+      "subdivision_approx": true
+    },
+    "tippecanoe": {
+      "layer": "buildings",
+      "minzoom": 12,
+      "maxzoom": 16
+    }
+  }
+]

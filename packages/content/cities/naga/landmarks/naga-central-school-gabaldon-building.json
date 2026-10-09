@@ -1,0 +1,70 @@
+{
+  "id": "landmark/naga-central-school-gabaldon-building",
+  "osm_id": "osm:way/23662977",
+  "name": {
+    "en": "Naga Central School Gabaldon Building"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23662977",
+      "url": "https://www.openstreetmap.org/way/23662977",
+      "note": "ODbL. The L-shaped, hip-roofed building directly behind the mapped José María Panganiban monument (node/14055634305) on the Naga Central School I campus, retained unchanged. Identified by the monument, which stands in front of the Gabaldon building, and by the L-shaped Gabaldon plan; satellite imagery inspected October 9, 2026. Edit dates are not construction dates. The school grounds stay the separate Naga Central School I and II landmarks."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Gabaldon building of Naga Central School 1 for preservation."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 9, 2026. Naga Central School Gabaldon Building: local cultural property under Ordinance No. 2003-003. The José Ma. Panganiban NHCP marker on the same grounds was unveiled February 1, 2016."
+    },
+    {
+      "title": "Wikipedia: Jose Maria Panganiban Monument",
+      "url": "https://en.wikipedia.org/wiki/Jose_Maria_Panganiban_Monument",
+      "note": "Places the monument in front of the Gabaldon building at Naga Central School 1; erected in 1930 by the school's Parents-Teachers Association and identified in 2013. Gives no date for the Gabaldon building, so none is set."
+    },
+    {
+      "title": "Wikipedia: Gabaldon School Buildings",
+      "url": "https://en.wikipedia.org/wiki/Gabaldon_School_Buildings",
+      "note": "Act No. 1801 (1907), the prototype plans by William E. Parsons in straight, L- and U-shaped forms, and Republic Act No. 11194 (2019)."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Gabaldon schoolhouses take their name from the 1907 Gabaldon Law, Act No. 1801; their prototype plans, by William E. Parsons, came in straight, L- and U-shaped forms."
+      },
+      "source": 4,
+      "year": 1907,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The school's Parents-Teachers Association erected a monument to José María Panganiban in front of the building in 1930."
+      },
+      "source": 3,
+      "year": 1930,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Long unmarked and nearly demolished, the monument was identified as Panganiban's in 2013, during a city inspection of the heritage building."
+      },
+      "source": 3,
+      "year": 2013,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The Gabaldon building was listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    }
+  ]
+}

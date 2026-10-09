@@ -298,6 +298,17 @@ describe('landmark facts', () => {
 });
 
 describe('Landmark', () => {
+  it('accepts a heritage landmark attached to an OSM footprint', () => {
+    expect(Landmark.parse({ ...landmark, type: 'heritage' }).type).toBe('heritage');
+  });
+
+  it('lets a listed church or school join the heritage category without changing its type', () => {
+    expect(Landmark.parse({ ...landmark, heritage: true })).toMatchObject({ type: 'church' });
+    expect(Landmark.safeParse({ ...landmark, type: 'heritage', heritage: true }).success).toBe(
+      false,
+    );
+  });
+
   it('accepts a valid landmark', () => {
     expect(Landmark.safeParse(landmark).success).toBe(true);
   });
@@ -314,6 +325,28 @@ describe('Landmark', () => {
   it('requires osm_id or geometry', () => {
     const { osm_id: _unused, ...rest } = landmark;
     expect(Landmark.safeParse(rest).success).toBe(false);
+  });
+
+  it('lets curated geometry replace an OSM feature, but not alongside an osm_id', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces }).success).toBe(true);
+    expect(Landmark.safeParse({ ...landmark, replaces }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, geometry }).success).toBe(false);
+    const units = ['osm:way/1', 'osm:way/2'];
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: units }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: [replaces] }).success).toBe(false);
+  });
+
+  it('lets a standalone curated outline stand alone only with its height', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    expect(Landmark.safeParse({ ...rest, geometry, height_m: 3 }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry }).success).toBe(false);
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces, height_m: 3 }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, height_m: 3 }).success).toBe(false);
   });
 
   it('requires at least one source', () => {
@@ -503,6 +536,13 @@ describe('Tour', () => {
     expect(Tour.safeParse(tour).success).toBe(true);
   });
 
+  it('accepts an optional slug group and rejects malformed groups', () => {
+    expect(Tour.parse(tour).group).toBeUndefined();
+    expect(Tour.parse({ ...tour, group: 'built-heritage' }).group).toBe('built-heritage');
+    for (const group of ['', 'Food', 'food tours', 'food/tours', 1])
+      expect(Tour.safeParse({ ...tour, group }).success).toBe(false);
+  });
+
   it('requires a status', () => {
     const { status: _unused, ...rest } = tour;
     expect(Tour.safeParse(rest).success).toBe(false);
@@ -567,6 +607,36 @@ describe('City', () => {
   it('accepts a valid config', () => {
     expect(City.safeParse(city).success).toBe(true);
     expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
+  });
+
+  it('accepts ordered tour groups with optional declared translations', () => {
+    const tour_groups = [
+      { id: 'food', label: { en: 'Food' } },
+      { id: 'heritage', label: { en: 'Heritage', xx: 'Heritage translation' } },
+    ];
+    expect(City.parse({ ...city, tour_groups }).tour_groups).toEqual(tour_groups);
+    expect(City.parse(city).tour_groups).toBeUndefined();
+    expect(City.safeParse({ ...city, tour_groups: [] }).success).toBe(false);
+  });
+
+  it('rejects duplicate or malformed tour group ids', () => {
+    const group = { id: 'food', label: { en: 'Food' } };
+    expect(City.safeParse({ ...city, tour_groups: [group, group] }).error?.issues[0]?.path).toEqual(
+      ['tour_groups', 1, 'id'],
+    );
+    expect(City.safeParse({ ...city, tour_groups: [{ ...group, id: 'Food' }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('requires English and rejects undeclared tour group label languages', () => {
+    expect(
+      City.safeParse({ ...city, tour_groups: [{ id: 'food', label: { xx: 'Food' } }] }).success,
+    ).toBe(false);
+    expect(
+      City.safeParse({ ...city, tour_groups: [{ id: 'food', label: { en: 'Food', de: 'Essen' } }] })
+        .error?.issues[0]?.path,
+    ).toEqual(['tour_groups', 0, 'label', 'de']);
   });
 
   it('opts a bbox region into the whole boundary while retaining strict keys', () => {

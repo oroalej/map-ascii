@@ -1,0 +1,31 @@
+{
+  "id": "landmark/elias-angeles-dimasalang-corner-house",
+  "osm_id": "osm:way/23671359",
+  "name": {
+    "en": "Elias Angeles–Dimasalang Corner House"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23671359",
+      "url": "https://www.openstreetmap.org/way/23671359",
+      "note": "ODbL. Existing building footprint on the north corner of Elias Angeles and Dimasalang streets, retained unchanged. Edit dates are not construction dates; no construction year is assigned. Generated subdivision: Santa Cruz."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the home at the corner of Elias Angeles and Dimasalang streets, unnamed."
+    },
+    {
+      "title": "Google Street View",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=NheFEjICzBD66uGHo2RX6w&heading=345&pitch=0",
+      "note": "August 2025 panorama inspected October 8, 2026. An old wooden two-storey house behind a stone wall and mature trees stands on the north corner. It is the only old house at the junction: the east corner is under construction, the south corner holds a shop and a modern bank building, and the west corner a modern commercial block. Capture dates are not construction dates. No image is saved or distributed."
+    },
+    {
+      "title": "Google Maps satellite",
+      "url": "https://www.google.com/maps/@13.62651,123.1865,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected October 8, 2026 with the frozen OSM outlines. The blue-green roof and tree-filled yard occupy way/23671359. Imagery date is unknown; no age is inferred and no bitmap ships."
+    }
+  ]
+}

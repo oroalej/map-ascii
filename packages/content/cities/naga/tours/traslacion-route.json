@@ -1,0 +1,178 @@
+{
+  "id": "tour/traslacion-route",
+  "group": "heritage",
+  "title": { "en": "Traslación route" },
+  "description": {
+    "en": "The Shrine-to-Cathedral street procession, followed days later by the river return to the Basilica."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": { "lng": 123.1956796, "lat": 13.6343873, "zoom": 18 },
+      "duration_ms": 12000,
+      "select": "osm:way/606888524",
+      "narration": {
+        "en": "Start at the old Peñafrancia Shrine. The Traslación transfers the images of Our Lady of Peñafrancia and El Divino Rostro from here to the Naga Metropolitan Cathedral. Bicol Mail reports that the 2026 procession left the Shrine at noon on September 11."
+      },
+      "sources": [
+        {
+          "title": "Bicol Mail: 2026 Traslación streets",
+          "url": "https://www.bicolmail.net/single-post/bicol-devotees-flock-to-naga-for-pe%C3%B1afrancia-traslacion",
+          "note": "Documents the departure, street sequence and Cathedral novena."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1952076, "lat": 13.6342449, "zoom": 18.4 },
+      "duration_ms": 14000,
+      "select": "osm:way/724187419",
+      "narration": {
+        "en": "Beside the Shrine, Plaza Miguel de Covarrubias honors the priest associated with the devotion's beginnings. Naga Tourism's account, citing the Archdiocese of Caceres, places his chapel and commissioned wooden image around 1710. The plaza is also a gathering place for the Traslación departure."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: Plaza Miguel de Covarrubias",
+          "url": "https://tourism.naga.gov.ph/attractions/plaza-miguel-de-covarrubias/",
+          "note": "The devotion's origin is approximate; it does not date today's plaza or church footprint."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1902, "lat": 13.6295, "zoom": 16 },
+      "duration_ms": 14000,
+      "highlight": [
+        "osm:way/23519386",
+        "osm:way/23521401",
+        "osm:way/23521917",
+        "osm:way/1529540511",
+        "osm:way/1529540512",
+        "osm:way/596568237",
+        "osm:way/596568243",
+        "osm:way/1529540510",
+        "osm:way/936923544",
+        "osm:way/1560123986",
+        "osm:way/23519131"
+      ],
+      "narration": {
+        "en": "The reported 2026 street sequence follows Peñafrancia Avenue, P. Burgos, Elias Angeles and Iglesia Road toward the Cathedral. The highlighted ways trace that sequence on present-day OSM geography; the final mapped Paz/Callejon segment represents the reported Iglesia Road approach."
+      },
+      "sources": [
+        {
+          "title": "Bicol Mail: 2026 Traslación streets",
+          "url": "https://www.bicolmail.net/single-post/bicol-devotees-flock-to-naga-for-pe%C3%B1afrancia-traslacion",
+          "note": "Named streets are reported; individual way identities follow the pack's OSM route reconstruction."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.186674, "lat": 13.6274298, "zoom": 19 },
+      "duration_ms": 14000,
+      "select": "osm:way/358807129",
+      "narration": {
+        "en": "Porta Mariae marks the Cathedral approach. Naga Tourism dates the commemorative arch's opening to September 9, 2010, for the devotion's tercentenary. Daily Tribune reports that both images entered this arch around 6:30 p.m. at the end of the 2026 Traslación."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: Religious and Heritage Sites",
+          "url": "https://tourism.naga.gov.ph/religious-and-historic-sites/"
+        },
+        {
+          "title": "Daily Tribune: 2026 Traslación arrival",
+          "url": "https://tribune.net.ph/2026/09/11/traslacion-procession-draws-over-800000-devotees-to-naga-city-as-opinions-clash-over-no-liquor-ban-decision",
+          "note": "Documents arrival at Porta Mariae and the following Mass."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1873571, "lat": 13.6283515, "zoom": 18 },
+      "duration_ms": 14000,
+      "select": "osm:way/23666715",
+      "narration": {
+        "en": "At the Cathedral, the images remain for the novena. The street transfer and the homeward river procession are separate events: in 2026 the Traslación was on September 11, and the fluvial return on September 19. Our next stops explore that later journey."
+      },
+      "sources": [
+        {
+          "title": "Bicol Mail: Traslación and the later fluvial return",
+          "url": "https://www.bicolmail.net/single-post/bicol-devotees-flock-to-naga-for-pe%C3%B1afrancia-traslacion"
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.18411, "lat": 13.6201735, "zoom": 18 },
+      "fly_ms": 5000,
+      "duration_ms": 14000,
+      "select": "osm:node/6791580317",
+      "narration": {
+        "en": "Danlugan ni Ina is the river departure point. Naga Tourism records the 2026 pagoda leaving the Danlugan near Tabuco Bridge around 9 p.m., after shallow water delayed departure. It carried Our Lady of Peñafrancia and El Divino Rostro toward the Basilica."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: 2026 nighttime fluvial procession",
+          "url": "https://tourism.naga.gov.ph/1-2-million-strong-historic-nighttime-fluvial-procession-illuminates-naga-river/",
+          "note": "Documents the departure and Dagsaan destination for September 19, 2026."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1919, "lat": 13.6297, "zoom": 16.5 },
+      "duration_ms": 16000,
+      "select": "osm:way/23540251",
+      "highlight": ["osm:way/23540251", "osm:way/30518281"],
+      "narration": {
+        "en": "Colgante's place on the fluvial passage is independently described in Dennis Marpuri's eyewitness recollection. Beyond it, the mapped river leads toward Magsaysay Bridge and the Basilica landing. That intervening bridge sequence is an OSM-based reconstruction, rather than a fully reported 2026 route."
+      },
+      "sources": [
+        {
+          "title": "Dennis T. Marpuri: Colgante eyewitness account",
+          "url": "https://dateline-ibalon.com/2026/01/padamlagan-an-eyewitness-account-of-the-colgante-bridge-tragedy-dennis-t-marpuri-with-movie-review/",
+          "note": "The recollection describes the fluvial procession passing beneath Colgante; it does not establish every bridge on the 2026 route."
+        },
+        {
+          "title": "OpenStreetMap: Colgante crossing",
+          "url": "https://www.openstreetmap.org/way/23540251"
+        },
+        {
+          "title": "OpenStreetMap: Magsaysay Bridge",
+          "url": "https://www.openstreetmap.org/way/30518281"
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1987292, "lat": 13.6332905, "zoom": 18 },
+      "duration_ms": 12000,
+      "select": "osm:way/1203053284",
+      "narration": {
+        "en": "Dagsaan is the landing near the Basilica. The city's account says the 2026 nighttime voyage ended here after roughly ninety minutes. The selection marks the mapped landing footway; it does not locate the pagoda's precise mooring."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: 2026 Dagsaan arrival",
+          "url": "https://tourism.naga.gov.ph/1-2-million-strong-historic-nighttime-fluvial-procession-illuminates-naga-river/"
+        },
+        {
+          "title": "OpenStreetMap: landing footway",
+          "url": "https://www.openstreetmap.org/way/1203053284",
+          "note": "Approximate landing selection from present-day geography."
+        }
+      ]
+    },
+    {
+      "camera": { "lng": 123.1999336, "lat": 13.6320831, "zoom": 17.8 },
+      "duration_ms": 14000,
+      "select": "osm:way/23670362",
+      "narration": {
+        "en": "The river return brings the images home to the Peñafrancia Basilica. Naga Tourism records a late-night Pontifical Mass concluding the 2026 arrival. The journey links the old Shrine, the Cathedral's novena and the Basilica through two distinct processions."
+      },
+      "sources": [
+        {
+          "title": "Naga Tourism: 2026 fluvial return and concluding Mass",
+          "url": "https://tourism.naga.gov.ph/1-2-million-strong-historic-nighttime-fluvial-procession-illuminates-naga-river/"
+        },
+        {
+          "title": "Naga Tourism: fluvial return after the Cathedral novena",
+          "url": "https://tourism.naga.gov.ph/traffic-advisory-2026-penafrancia-festival-fluvial-procession/"
+        }
+      ]
+    }
+  ]
+}

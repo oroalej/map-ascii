@@ -46,7 +46,10 @@ export function LandmarkDetails({
   return (
     <>
       <header className={styles.header}>
-        <p className={styles.type}>{capitalize(landmark.type)}</p>
+        <p className={styles.type}>
+          {capitalize(landmark.type)}
+          {landmark.heritage && ' · Heritage'}
+        </p>
         <button
           type="button"
           className={styles.close}

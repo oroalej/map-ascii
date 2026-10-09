@@ -1,0 +1,68 @@
+{
+  "id": "landmark/ateneo-de-naga-main-building",
+  "osm_id": "osm:way/23675846",
+  "name": {
+    "en": "Ateneo de Naga Main Building"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23675846 (Administration Building)",
+      "url": "https://www.openstreetmap.org/way/23675846",
+      "note": "ODbL. The mapped Administration Building outline covers the central block and both wooden wings on the Ateneo campus, retained unchanged. Edit dates are not construction dates. Generated subdivision: Bagumbayan Sur. The campus grounds stay the separate Ateneo de Naga University landmark."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the Ateneo de Naga main building with its old wooden classrooms and wooden faculty house for preservation; only the main building is mapped here (owner decision, October 9, 2026)."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 8, 2026. Ateneo de Naga main building, wooden classrooms and old wooden faculty house: local cultural property under Ordinance No. 2003-003."
+    },
+    {
+      "title": "Dateline Ibalon: Ateneo de Naga University, 85 years of academic excellence in Bicol (June 2025)",
+      "url": "https://dateline-ibalon.com/2025/06/ateneo-de-naga-university-85-years-of-academic-excellence-in-bicol/",
+      "note": "Archbishop Santos began the main building on diocesan land near the Cathedral; it and the Jesuit residence were nearing completion in December 1941, with a four-pillar facade, when war broke out and Japanese forces made it a prison camp."
+    },
+    {
+      "title": "Dateline Ibalon: Ateneo's iconic wooden building falls silent (January 2026)",
+      "url": "https://dateline-ibalon.com/2026/01/ateneos-iconic-wooden-building-falls-silent-greg-s-castilla/",
+      "note": "Reports farewell rites on December 18, 2025 for the main building's wooden two-storey wings, which stood for more than eight decades and are being demolished for a new administration building. The map keeps the mapped outline; no end year is set until demolition is confirmed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Ateneo de Naga main building was listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "Archbishop Santos began the main building on diocesan land near the Cathedral; with its four-pillar facade, it was nearly finished in December 1941."
+      },
+      "source": 3,
+      "year": 1941,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "World War II broke out before classes could move in, and Japanese forces turned the new building into a prison camp."
+      },
+      "source": 3
+    },
+    {
+      "text": {
+        "en": "Farewell rites for its wooden two-storey wings were held on December 18, 2025, ahead of their demolition for a new administration building."
+      },
+      "source": 4,
+      "year": 2025,
+      "certainty": "exact"
+    }
+  ]
+}

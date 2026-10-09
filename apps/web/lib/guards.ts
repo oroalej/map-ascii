@@ -114,6 +114,7 @@ export function isCityTours(v: unknown): v is Tour[] {
         t.id.startsWith('tour/') &&
         isLocalized(t.title) &&
         optional(t.description, isLocalized) &&
+        optional(t.group, (g) => typeof g === 'string' && /^[a-z0-9-]+$/.test(g)) &&
         ['draft', 'verified'].includes(String(t.status)) &&
         Array.isArray(t.steps) &&
         t.steps.length > 0 &&

@@ -103,7 +103,7 @@ import { captureTap } from './life/tap-capture';
 import { tapSignalFixture, tapCarnivalFixture, tapCandleFixture } from './life/tap-fixtures';
 import { CarnivalBoosts, carnivalKey } from './life/carnival-boost';
 import { CandleFlare } from './life/candle-flare';
-import { normalizeFocus, type LegendFocus } from './focus';
+import { focusHighlights, normalizeFocus, type LegendFocus } from './focus';
 import { atCityMinutes, cityTime, type ClockZone } from './life/clock';
 import {
   activityChanged,
@@ -445,7 +445,7 @@ export type Atlas = {
   setTheme(theme: ThemeName): void;
   /** Select a feature by id (accent color and shimmer), or clear the selection. */
   setSelected(featureId: string | null): void;
-  /** Highlight features by id (accent color), e.g. the ways of a street; at most 64. */
+  /** Highlight features by id (accent color), e.g. the ways of a street; at most MAX_HIGHLIGHT. */
   setHighlighted(featureIds: readonly string[]): void;
   /** What the renderer knows about a feature, once a tile containing it has loaded. */
   getFeature(featureId: string): FeatureInfo | undefined;
@@ -1797,9 +1797,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   const highlights = () => {
     let highlightCount = 0;
-    for (const id of highlightedIds) {
-      const index = source.indexOf(id);
-      if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+    // While a legend entry is focused, highlighted cells are its members (the glyph pass lights
+    // them like a focused class), so tour highlights step aside.
+    const members = focusHighlights(focus, source);
+    if (members) {
+      for (const index of members)
+        if (highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+    } else {
+      for (const id of highlightedIds) {
+        const index = source.indexOf(id);
+        if (index > 0 && highlightCount < MAX_HIGHLIGHT) highlightIndices[highlightCount++] = index;
+      }
     }
     return {
       hover: hoverIndex,

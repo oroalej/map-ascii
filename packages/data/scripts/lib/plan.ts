@@ -92,7 +92,10 @@ export function partOutline(part: Pick<PlanPart, 'shape' | 'size_m'>, center: Ve
   return ring;
 }
 
-type Placed = Feature<Geometry, { id: string; class?: string; height?: number }>;
+type Placed = Feature<
+  Geometry,
+  { id: string; class?: string; height?: number; heritage?: boolean; notable?: boolean }
+>;
 
 /**
  * Turn landmark plans into `building_part` features: each part a small footprint with its own
@@ -166,6 +169,9 @@ export function planParts(
           class: 'building_part',
           height: part.height_m,
           variant: part.kind,
+          // Parts of a landmark light with it under Landmark and Heritage legend focus.
+          ...(feature.properties.heritage && { heritage: true }),
+          ...(feature.properties.notable && { notable: true }),
         },
         tippecanoe: { layer: 'buildings', ...band },
       });

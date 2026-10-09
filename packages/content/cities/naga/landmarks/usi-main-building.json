@@ -1,0 +1,59 @@
+{
+  "id": "landmark/usi-main-building",
+  "osm_id": "osm:relation/2418000",
+  "name": {
+    "en": "Universidad de Santa Isabel Main Building"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint relation/2418000",
+      "url": "https://www.openstreetmap.org/relation/2418000",
+      "note": "ODbL. The mapped courtyard building in the south of the USI campus, retained unchanged; the site detail's roof wings over it light with it. Edit dates are not construction dates. Generated subdivision: San Francisco. The campus grounds stay the separate Universidad de Santa Isabel landmark."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists the original main building of Universidad de Santa Isabel and its stone walls for preservation."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 8, 2026. Universidad de Santa Isabel: NHCP National Historical Landmark and historical marker, and local cultural property under Ordinance No. 2003-003."
+    },
+    {
+      "title": "Owner identification: USI original main building",
+      "note": "October 9, 2026. The owner identified the courtyard building (relation/2418000) as the original main building; the public sources reviewed name a main building but do not locate it on the campus."
+    },
+    {
+      "title": "PTV News: Century-old university listed as national historical landmark",
+      "url": "https://ptvnews.ph/?p=105092",
+      "note": "Reports that the NHCP granted national historical landmark recognition at a January 30 marker unveiling, under NHCP Resolution No. 3 of February 26, 2018, and that the university was established in 1868."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The original main building of Universidad de Santa Isabel and its stone walls were listed for preservation by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The university, established in 1868, was declared a national historical landmark under NHCP Resolution No. 3 of February 26, 2018."
+      },
+      "source": 4,
+      "year": 2018,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The NHCP formally granted the recognition at the unveiling of its marker on the campus."
+      },
+      "source": 4
+    }
+  ]
+}

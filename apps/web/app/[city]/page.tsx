@@ -6,6 +6,7 @@ import { loadCity, loadRegistry } from '@/lib/cities';
 import { tilesVersion } from '@/lib/tiles-version';
 import { readCityMeta } from '@/lib/city-meta';
 import { encodeInlineRuntime } from '@/lib/inline-runtime-server';
+import { assertPublishedTourGroups } from '@/lib/published-tour-groups';
 
 /** Only registered cities have pages (static export: one page per city pack). */
 export const dynamicParams = false;
@@ -25,6 +26,7 @@ export default async function CityPage({ params }: Props) {
   const pack = await loadCity((await params).city);
   if (!pack) notFound();
   const { city, content } = pack;
+  if (content.tours.length) await assertPublishedTourGroups(city);
   return (
     <main>
       <CityAtlas
@@ -44,6 +46,7 @@ export default async function CityPage({ params }: Props) {
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
         hasTours={content.tours.length > 0}
+        tourGroups={city.tour_groups?.map((group) => ({ id: group.id, label: group.label.en }))}
       />
     </main>
   );

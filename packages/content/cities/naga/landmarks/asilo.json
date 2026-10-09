@@ -1,0 +1,55 @@
+{
+  "id": "landmark/asilo",
+  "osm_id": "osm:way/23665710",
+  "name": {
+    "en": "Asilo"
+  },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap footprint way/23665710",
+      "url": "https://www.openstreetmap.org/way/23665710",
+      "note": "ODbL. The old two-storey house on the southeast side of Peñafrancia Avenue about 50 m northeast of San Francisco Church, beside the San Francisco Food Court arch, retained unchanged (building=yes from Naga City GIS data, with no name). Matched to the house at bearing 121 degrees, 26 m, from Street View panorama UKoPLCQDE1TML_TH92h7Ng. Edit dates are not construction dates. Generated subdivision: San Francisco."
+    },
+    {
+      "title": "Owner request: Asilo beside San Francisco Church",
+      "note": "October 9, 2026. The owner identified this house, from a Street View capture with a Google Maps place marker on it, as Asilo, while unsure of the name. The house is not listed in Ordinance No. 2003-003 or the national registry. The facts about the restaurant rest on that identification."
+    },
+    {
+      "title": "Threads: Where to eat in Naga: Asilo by Jimmy & Tang",
+      "url": "https://www.threads.com/@karasantos/post/DXbUWiNlInk/where-to-eat-in-naga-asilo-by-jimmy-tang-formerly-a-neglected-ancestral-house",
+      "note": "April 22, 2026 post. Describes Asilo as a formerly neglected ancestral house in downtown Naga, adaptively reused as a restaurant serving Filipino and Bicolano dishes. Gives no address."
+    },
+    {
+      "title": "Bicol Mail: The Historic Streets of the City of Naga",
+      "url": "https://www.bicolmail.net/single-post/the-historic-streets-of-the-city-of-naga",
+      "note": "Lists an ancestral house converted into a restaurant called Asilo by Jimmy and Tang among the landmarks reached from Elias Angeles Street, with the Casa Tribunal and Casino Español districts and the Old Provincial Jail. Gives no address."
+    },
+    {
+      "title": "Google Street View: Peñafrancia Avenue beside San Francisco Church",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=UKoPLCQDE1TML_TH92h7Ng&heading=150&pitch=5",
+      "note": "August 2025 panorama inspected October 9, 2026: a gated two-storey house with twin gables, an outside stair and sunburst-patterned balcony panels, then still unrestored. Capture dates are not construction dates; no image is saved or distributed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Asilo is a long-neglected ancestral house reused as a restaurant serving Filipino and Bicolano dishes."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The two-storey house has twin gables, an outside stair and a balcony with sunburst-patterned panels."
+      },
+      "source": 4
+    },
+    {
+      "text": {
+        "en": "Bicol Mail counts it among the ancestral landmarks of the old civic district around Elias Angeles Street, near the former Casa Tribunal and Casino Español."
+      },
+      "source": 3
+    }
+  ]
+}
