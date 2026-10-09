@@ -22,6 +22,7 @@ import { SearchBox } from './SearchBox';
 
 import { useTourStore } from '@/state/tour';
 import { isDebugRequested } from '@/lib/debug';
+import { afterFirstTileFrame } from '@/lib/startup';
 import { useLifeShown } from './useProcessionPlayback';
 import { TourMenu } from './TourMenu';
 
@@ -122,6 +123,9 @@ export function CityAtlas({
   useEffect(() => {
     useAtlasStore.getState().setCity(slug);
   }, [slug]);
+  // Warm the lazy facts and tour-list chunk once the map draws, so a search, a click or the
+  // Tours menu does not wait for it behind busy rendering frames.
+  useEffect(() => afterFirstTileFrame(slug, () => void import('./InteractionDetails')), [slug]);
   useTourPlayer(slug, hasTours);
   useUrlSync();
   useAtlasEvents();

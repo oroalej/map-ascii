@@ -210,11 +210,12 @@ for (const city of cities) {
           city.smokeLandmark,
         );
         await box.press('Enter');
+        await expect.poll(() => query(page).sel).toBeTruthy();
+        // The flight ends at the place, close in; the facts open there (the flight's frames can
+        // hold the dialog's first render until it lands on a loaded CI runner).
+        await expect.poll(() => Number(query(page).z), { timeout: 10_000 }).toBeGreaterThan(16);
         const panel = page.getByRole('dialog', { name: city.smokeLandmark });
         await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
-        await expect.poll(() => query(page).sel).toBeTruthy();
-        // The flight ends at the place, close in.
-        await expect.poll(() => Number(query(page).z), { timeout: 10_000 }).toBeGreaterThan(16);
       });
 
       test(
