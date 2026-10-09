@@ -1,132 +1,146 @@
 {
   "id": "tour/heritage-centro-walk",
   "group": "heritage",
-  "title": { "en": "Heritage Centro walk" },
-  "description": {
-    "en": "The plazas, the churches, and the old commercial streets of the Centro, ending with a view across its rooftops."
+  "title": {
+    "en": "Heritage Centro walk"
   },
-  "status": "draft",
+  "description": {
+    "en": "Plazas, church history and General Luna heritage frontages, ending at the Cathedral."
+  },
+  "status": "verified",
   "steps": [
     {
-      "camera": { "lat": 13.6255, "lng": 123.1862, "zoom": 16 },
-      "duration_ms": 6000,
+      "camera": {
+        "lat": 13.624504,
+        "lng": 123.1859192,
+        "zoom": 18.2
+      },
+      "duration_ms": 11000,
       "narration": {
-        "en": "TODO(verify) The Centro, Naga's historic core, between the Naga River and the Cathedral."
-      }
-    },
-    {
-      "camera": { "lat": 13.6245, "lng": 123.1859, "zoom": 18.2 },
-      "duration_ms": 8000,
-      "narration": {
-        "en": "TODO(verify) Plaza Quince Martires, named for fifteen Bicolanos executed during the Philippine Revolution. Its monument stands at the center."
+        "en": "Plaza Quince Martires remembers fifteen Bicolano patriots. Eleven were executed at Bagumbayan on January 4, 1897; the others died in prison or exile. Naga City Tourism dates the memorial to November 29, 1926."
       },
       "select": "osm:way/201276957",
       "sources": [
         {
-          "title": "OpenStreetMap: Plaza Quince Martires",
-          "url": "https://www.openstreetmap.org/way/201276957"
+          "title": "Naga City Tourism: Plaza Quince Martires",
+          "url": "https://tourism.naga.gov.ph/attractions/plaza-quince-martires/"
         }
-      ]
+      ],
+      "highlight": ["osm:node/642912170"]
     },
     {
-      "camera": { "lat": 13.6234, "lng": 123.1849, "zoom": 18.2 },
-      "duration_ms": 7000,
-      "narration": {
-        "en": "TODO(verify) Plaza Rizal, with its monument to José Rizal."
+      "camera": {
+        "lat": 13.624504,
+        "lng": 123.1859192,
+        "zoom": 19
       },
-      "select": "osm:way/201276956",
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The monument’s historical marker, unveiled in 1982, records the military trial of December 29, 1896. It names eleven men shot in Manila, two who died in prison and two in exile, and rejects the accusation against them."
+      },
+      "select": "osm:node/642912170",
       "sources": [
         {
-          "title": "OpenStreetMap: Plaza Rizal",
-          "url": "https://www.openstreetmap.org/way/201276956"
+          "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+          "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9"
         }
       ]
     },
     {
-      "camera": { "lat": 13.624, "lng": 123.1851, "zoom": 18.4 },
-      "duration_ms": 6000,
-      "narration": {
-        "en": "TODO(verify) Plaza Quezon, between the two, the city's main gathering place."
+      "camera": {
+        "lat": 13.6245,
+        "lng": 123.1863,
+        "zoom": 18.2
       },
-      "select": "osm:way/201276958",
-      "sources": [
-        {
-          "title": "OpenStreetMap: Plaza Quezon",
-          "url": "https://www.openstreetmap.org/way/201276958"
-        }
-      ]
-    },
-    {
-      "camera": { "lat": 13.6245, "lng": 123.1863, "zoom": 18.2 },
-      "duration_ms": 7000,
+      "duration_ms": 11000,
       "narration": {
-        "en": "TODO(verify) San Francisco Parish, the Parish of St. Francis of Assisi, facing the plazas."
+        "en": "San Francisco Parish faces the martyrs’ plaza. Franciscan missionaries established its first church in 1578 using light materials, with Fray Geronimo de Aguilar as its first priest."
       },
       "select": "osm:way/23662997",
       "sources": [
         {
-          "title": "OpenStreetMap: Parish of St. Francis of Assisi",
-          "url": "https://www.openstreetmap.org/way/23662997"
+          "title": "Naga City Tourism: San Francisco Church",
+          "url": "https://tourism.naga.gov.ph/attractions/san-francisco-church-2/"
         }
       ]
     },
     {
-      "camera": { "lat": 13.6262, "lng": 123.1862, "zoom": 16.8 },
-      "duration_ms": 8000,
-      "narration": {
-        "en": "TODO(verify) General Luna, P. Burgos, and Elias Angeles streets: the old commercial streets of the Centro."
+      "camera": {
+        "lat": 13.6244158,
+        "lng": 123.1861588,
+        "zoom": 19.5
       },
-      "highlight": [
-        "osm:way/1553212757",
-        "osm:way/1373537377",
-        "osm:way/1053485826",
-        "osm:way/596568242",
-        "osm:way/596568240",
-        "osm:way/724187423",
-        "osm:way/596568229",
-        "osm:way/30518290",
-        "osm:way/30518288",
-        "osm:way/23520861",
-        "osm:way/755073153",
-        "osm:way/1553212754",
-        "osm:way/596568234",
-        "osm:way/596568241",
-        "osm:way/596568238",
-        "osm:way/596568237",
-        "osm:way/724187422",
-        "osm:way/1560123986",
-        "osm:way/1553212756",
-        "osm:way/1553212755",
-        "osm:way/1529540510",
-        "osm:way/936923544",
-        "osm:way/596568243",
-        "osm:way/1553218896",
-        "osm:way/1553218895",
-        "osm:way/596568239",
-        "osm:way/23520905"
+      "duration_ms": 11000,
+      "narration": {
+        "en": "At the old San Francisco belfry, the church marker recalls the surrender of Ambos Camarines’ last Spanish governor to Filipino forces led by Corporals Elias Angeles and Felix Plazo on September 18, 1898."
+      },
+      "select": "landmark/san-francisco-old-belfry",
+      "sources": [
+        {
+          "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+          "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9"
+        }
       ]
     },
     {
-      "camera": { "lat": 13.6283, "lng": 123.1873, "zoom": 17.8 },
-      "duration_ms": 8000,
+      "camera": {
+        "lat": 13.6233503,
+        "lng": 123.1848614,
+        "zoom": 18.2
+      },
+      "duration_ms": 11000,
       "narration": {
-        "en": "TODO(verify) The Naga Metropolitan Cathedral, seat of the Archdiocese of Caceres, with its belfries at the front."
+        "en": "Plaza Rizal and its monument honor José Rizal. The city’s tourism office describes this downtown park as a place for public discussion, family picnics and recreation."
+      },
+      "select": "osm:way/201276956",
+      "sources": [
+        {
+          "title": "Naga City Tourism: Plaza Rizal",
+          "url": "https://tourism.naga.gov.ph/attractions/plaza-rizal/"
+        }
+      ],
+      "highlight": ["osm:node/642910590"]
+    },
+    {
+      "camera": {
+        "lat": 13.622512,
+        "lng": 123.1845105,
+        "zoom": 18.5
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "General Luna’s Abella business rows appear in the city’s 2003 preservation list. This identified member represents that row. Nearby, the separately named Socorro Abella Building bears 1929 lettering, treated as an approximate date; the ordinance does not name it."
+      },
+      "select": "osm:way/23674415",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        },
+        {
+          "title": "Google Street View: Socorro Abella Building, General Luna Street",
+          "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=2fRArrYiXANTAh2RdyAgwg&heading=75&pitch=15"
+        }
+      ],
+      "highlight": ["landmark/socorro-abella-building"]
+    },
+    {
+      "camera": {
+        "lat": 13.6283,
+        "lng": 123.1873,
+        "zoom": 17.8
+      },
+      "duration_ms": 13000,
+      "narration": {
+        "en": "The Cathedral’s historical marker dates the start of the present cathedral’s construction to 1808 under Bishop Bernardo de la Concepción, and its completion and blessing to 1843 under Tomás Ladron de Guevara. An 1887 earthquake brought damage, followed by repairs in 1890."
       },
       "select": "osm:way/23666715",
       "sources": [
         {
-          "title": "OpenStreetMap: Naga Metropolitan Cathedral",
-          "url": "https://www.openstreetmap.org/way/23666715"
+          "title": "NHCP historical marker: Cathedral of Naga",
+          "url": "https://philhistoricsites.nhcp.gov.ph/registry_database/cathedral-of-naga/"
         }
       ]
-    },
-    {
-      "camera": { "lat": 13.6262, "lng": 123.1866, "zoom": 16 },
-      "fly_ms": 5000,
-      "duration_ms": 9000,
-      "narration": {
-        "en": "TODO(verify) The Centro from above: the plazas to the south, the Cathedral to the north."
-      }
     }
   ]
 }

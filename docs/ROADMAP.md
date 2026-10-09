@@ -4,14 +4,13 @@ ASCII Atlas is a generic engine for ASCII city maps. **This roadmap focuses on N
 
 Work phase by phase. Each phase ends with its acceptance criteria met, tests green, and a short note appended to the "Log" at the bottom of this file.
 
-**Status reviewed 2026-10-09.** Phases 0–2 are implemented, Phase 3 has seven verified tours and one draft, and Phases 4–5 remain open. Living city extensions have shipped alongside the core phases.
+**Status reviewed 2026-10-09.** Phases 0–2 are implemented, Phase 3 has eleven verified tours with no drafts, and Phases 4–5 remain open. Living city extensions have shipped alongside the core phases.
 
 ## Next steps
 
-1. Close out Phase 3: verify the Heritage Centro walk and add the sourced Campus belt, Monuments and martyrs, and Heritage houses tours. Heritage-house content and tour groups are merged, so their implementation dependencies are satisfied.
-2. Prepare Phase 4: audit the dates in the published tiles. Historical facts and institutional founding dates do not automatically date the current mapped footprint.
-3. Finish Phase 4 with the legend note about undated features before starting Phase 5.
-4. Keep additional Life features queued while completing the tours and timeline.
+1. Prepare Phase 4: audit the dates in the published tiles. Historical facts and institutional founding dates do not automatically date the current mapped footprint.
+2. Finish Phase 4 with the legend note about undated features before starting Phase 5.
+3. Keep additional Life features queued while completing the timeline.
 
 ## Phase 0 — Scaffold
 
@@ -88,8 +87,8 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 - [x] Tours live in the city pack (`cities/<slug>/tours/`).
 - [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced). "From Isarog to the river" was removed when the map was limited to downtown and remains historical. A replacement tour needs a separate task; the boundary-inclusive Naga extension does not restore it.
 - [x] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Checked tilted at z17.5–19: the parts sit and rise where their plans put them, so no numbers changed. Plans and art stay `draft` until someone who knows the places reviews them.
-- [ ] **(Naga)** Verify the existing Heritage Centro walk: replace its `TODO(verify)` narration with sourced claims.
-- [ ] **(Naga)** Add verified present-day Campus belt, Monuments and martyrs, and Heritage houses tours. Cut unsupported stops; keep historical year-setting for Phase 5.
+- [x] **(Naga)** Verify the existing Heritage Centro walk: replace its `TODO(verify)` narration with sourced claims.
+- [x] **(Naga)** Add verified present-day Campus belt, Monuments and martyrs, and Heritage houses tours. Cut unsupported stops; keep historical year-setting for Phase 5.
 
 **Accept when**
 - ~~**(Naga)** Tilting to 60° shows the Centro skyline in ASCII.~~ Removed 2026-09-30 with orbit mode.
@@ -102,7 +101,11 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 
 **Completed tour-group and route extension (2026-10-09)**
 
-- [x] City-pack menu groups and two verified present-day Naga tours: **Bridges and terminals** and **Traslación route**. Food, Heritage and Infrastructure sections preserve tour order and sourced narration. The existing Centro walk remains draft. The route tour distinguishes the September street departure from the later fluvial return and identifies reconstructed geography. This Phase 3 content extension adds no timeline behavior and does not advance Phase 4 or Phase 5 acceptance.
+- [x] City-pack menu groups and two verified present-day Naga tours: **Bridges and terminals** and **Traslación route**. Food, Heritage and Infrastructure sections preserve tour order and sourced narration. The Centro walk was still draft at this extension's completion. The route tour distinguishes the September street departure from the later fluvial return and identifies reconstructed geography. This Phase 3 content extension adds no timeline behavior and does not advance Phase 4 or Phase 5 acceptance.
+
+**Completed heritage-tour extension (2026-10-09)**
+
+- [x] Verified **Heritage Centro walk**, **Campus belt**, **Monuments and martyrs** and **Heritage houses** bring Heritage to five tours and the pack to eleven, all verified. Every step cites a non-OSM source; raw-content tests reject unresolved wording anywhere in a tour file. Unsupported City Hall memorial claims and overview steps are omitted, facade dates stay approximate, and institutional milestones do not date current footprints. Historical/year-setting tours remain in Phase 5.
 
 ## Phase 4 — Timeline v1
 
@@ -311,3 +314,5 @@ Performance budgets and hardware measurements are documented in `ARCHITECTURE.md
 - **2026-10-08 — Rice-field seasons and eastern agricultural coverage.** Optional sourced illustrative city calendars resolve six rice stages from real city time, preserve growing-start/no-calendar cells and attendance, and keep static field appearance with Life off or reduced motion. Existing farm workers vary by stage; spawn counts and carabao ownership stay unchanged. Naga receives two independently Sentinel-derived draft farmland packs in the owner-requested eastern areas, retaining exclusion holes and clipped territory. The legend discloses illustrative rice assumptions. Calendar, CPU/GLSL contracts, atlas parity, attendance, clock integration and actual pack geometry have targeted tests; final publication and validation are recorded in the task report. River life remains out of scope.
 - **2026-10-09 — Light ink.** Shadows fade at their edges across three penumbra rays, low suns reach up to 60 m, and ground beside taller buildings and trees takes contact shade. The select pass writes the light to an RG8 target that the glyph pass samples once per pixel: crisply for standing things and filtered for the ground. Grass and planting thin by up to one tuft rank in shade, cloud and darkness, and fill in under lit streetlight pools. With the shadows knob off the map draws as before without shadows; Life and its lights now pack before select.
 - **2026-10-09 — Smooth frames.** Idle animation holds 30 fps on 60 Hz displays (4 ms pacing slack) and interaction draws at most 60 fps, taking the latest pending camera; picks and surface reads use the drawn camera. Quality tiers cap the drawing pixel ratio at 2/1.5/1.5/1.25, and a severe hold may step down mid-gesture only without a resize. Parallel shader links warm during interaction, one per rendered frame. Map and label targets keep a 1/8 pan margin per side: in-margin pans only move a frozen window's offset, labels re-admit from cached geometry, and fixture visibility and visible classes follow the screen. Zoom side work is throttled to 10 Hz with a settle refresh. Life replies transfer packed agent columns that decode into fresh immutable frames, and packing reuses a typed journal. `perf:browser --scene` captures matched idle, pan, zoom, night and fiesta scenes. Returning Life tiles reuse retained worker geometry and fixture repacks skip fixtures beyond the window; all browser gates are met (ARCHITECTURE.md §8).
+
+- **2026-10-09 — Heritage tours.** Promoted the Centro walk and added Campus belt, Monuments and martyrs, and an exterior Heritage houses walk. Eleven Naga tours are verified, including five Heritage tours, with a non-OSM source per step and raw-JSON checks against unresolved wording. The offline pipeline admitted all selections and cameras; the tours sidecar is published in tiles-naga-20261009-1308 while PMTiles and both standing church fixtures stay unchanged. Related unit tests, content validation/typecheck, lint and desktop automatic-playback smoke pass. Historical/year-setting tours and the remaining timeline work stay open; full/mobile checks remain with CI.

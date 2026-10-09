@@ -1,0 +1,154 @@
+{
+  "id": "tour/campus-belt",
+  "group": "heritage",
+  "title": {
+    "en": "Campus belt"
+  },
+  "description": {
+    "en": "Seven stops through Naga’s educational history, from post-war colleges to protected school buildings."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": {
+        "lat": 13.6249059,
+        "lng": 123.1825439,
+        "zoom": 17.3
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Begin at the University of Nueva Caceres. Naga’s 75th-anniversary newsletter traces the institution to 1948 and records its university recognition on December 15, 1954. These are institutional milestones, rather than dates for the buildings shown here."
+      },
+      "select": "osm:way/383244706",
+      "sources": [
+        {
+          "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+          "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.6305396,
+        "lng": 123.184903,
+        "zoom": 18
+      },
+      "duration_ms": 13000,
+      "narration": {
+        "en": "Ateneo began as a Jesuit boys’ school in 1940. Its college opened with 87 men on June 5, 1947, and admitted its first five women in 1953. Farewell rites for the main building’s wooden wings took place in December 2025, ahead of their demolition."
+      },
+      "select": "osm:way/23675846",
+      "sources": [
+        {
+          "title": "Ateneo de Naga University: History",
+          "url": "https://www.adnu.edu.ph/history/"
+        },
+        {
+          "title": "Dateline Ibalon: Ateneo's iconic wooden building falls silent (January 2026)",
+          "url": "https://dateline-ibalon.com/2026/01/ateneos-iconic-wooden-building-falls-silent-greg-s-castilla/"
+        }
+      ],
+      "highlight": ["osm:way/222268858"]
+    },
+    {
+      "camera": {
+        "lat": 13.6281579,
+        "lng": 123.1864497,
+        "zoom": 18.4
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "The Holy Rosary Minor Seminary’s 1988 marker records the inauguration of its new seminary house in 1793 under Bishop Domingo Collantes. Its alumni include Jorge Barlin, José María Panganiban and eight of the fifteen Bicol martyrs."
+      },
+      "select": "osm:relation/2418001",
+      "sources": [
+        {
+          "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+          "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.6282163,
+        "lng": 123.1882779,
+        "zoom": 18.1
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "A royal decree created the Escuela-Colegio de Sta. Isabel in November 1867; it opened on April 12, 1868. Teacher training followed, with eleven graduates in 1877. USI’s own history records its national historical landmark recognition in 2018."
+      },
+      "select": "osm:relation/2418000",
+      "sources": [
+        {
+          "title": "Universidad de Sta. Isabel: History",
+          "url": "https://www.usi.edu.ph/history"
+        }
+      ],
+      "highlight": ["osm:way/276457427"]
+    },
+    {
+      "camera": {
+        "lat": 13.630186,
+        "lng": 123.1904502,
+        "zoom": 18.5
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Camarines Sur National High School began as the Provincial High School of Nueva Caceres in 1902 and moved to its present site in 1915. Its Gabaldon building is on the city’s preservation list; those school milestones do not establish this building’s construction date."
+      },
+      "select": "osm:way/23677020",
+      "sources": [
+        {
+          "title": "Wikipedia: Camarines Sur National High School",
+          "url": "https://en.wikipedia.org/wiki/Camarines_Sur_National_High_School"
+        },
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lat": 13.631273,
+        "lng": 123.18951,
+        "zoom": 18.5
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Naga Central School I’s Gabaldon building is also listed for preservation. In front stands the José María Panganiban monument, erected by the school’s Parents-Teachers Association in 1930 to honor the propagandist and writer."
+      },
+      "select": "osm:way/23662977",
+      "sources": [
+        {
+          "title": "Naga City Ordinance No. 2003-003, Section 6",
+          "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/"
+        },
+        {
+          "title": "Naga City Tourism: Jose Maria Panganiban Monument",
+          "url": "https://tourism.naga.gov.ph/attractions/jose-maria-panganiban-monument/"
+        }
+      ],
+      "highlight": ["osm:node/14055634305"]
+    },
+    {
+      "camera": {
+        "lat": 13.6328102,
+        "lng": 123.1923333,
+        "zoom": 17.7
+      },
+      "duration_ms": 11000,
+      "narration": {
+        "en": "Naga College Foundation traces its beginnings to Melchor T. Villanueva’s Naga Teachers College in 1947, offering a two-year education course to 114 students in a rented Peñafrancia Avenue house. It became Naga College in 1951 and Naga College Foundation in 1985."
+      },
+      "select": "osm:way/1314530225",
+      "sources": [
+        {
+          "title": "Naga College Foundation: History",
+          "url": "https://ncf.edu.ph/history/"
+        }
+      ]
+    }
+  ]
+}
