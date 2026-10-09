@@ -40,14 +40,7 @@ import {
   groundDepth,
   TIER_STEP,
 } from './classes';
-import {
-  roadMask,
-  seeThroughMask,
-  SHADOW,
-  standingClasses,
-  SUB,
-  subcellAreas,
-} from './glyphs/select';
+import { roadMask, seeThroughMask, SHADOW, SUB, subcellAreas } from './glyphs/select';
 import type { Programs, ThemeResources } from './gpu-context';
 import { glyphProgram } from './gpu-context';
 import {
@@ -1112,15 +1105,6 @@ export function fixturePass(
   return cache.packed.visibility;
 }
 
-/** The standing classes of a theme's kind table (glyphs/select.ts standingClasses), once. */
-const standingMasks = new WeakMap<Int32Array, Uint32Array>();
-const standingOf = (kinds: Int32Array | undefined) => {
-  if (!kinds) return new Uint32Array(2);
-  let mask = standingMasks.get(kinds);
-  if (!mask) standingMasks.set(kinds, (mask = standingClasses(kinds)));
-  return mask;
-};
-
 /**
  * Draw the glyphs at full resolution: the map, the life layer's agents over it, and the
  * overlay's labels on top, all lit for the time of day (`daylight`, 0 night – 1 day).
@@ -1182,7 +1166,6 @@ export function glyphPass(
   twgl.setUniforms(program, {
     u_glyphs: targets.glyphTex,
     u_shade: targets.shadeTex,
-    u_standing: standingOf(tables.kinds),
     u_atlas: themeRes.map.atlasTex,
     u_cell: [cellDev.w, cellDev.h],
     u_shift: [grid.shiftX, grid.shiftY],

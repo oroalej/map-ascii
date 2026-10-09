@@ -3,8 +3,9 @@
  * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output 0 (RGBA8): glyph atlas
  * index, class id, the cell's state (picking.ts `cellState`: hover, highlighted, selected; plus
  * `EDGE_STATE` for a sub-cell edge, and vegetation's wind level and tone; see glyphs/select.ts),
- * and the class whose fill is the cell's background. Output 1 (R8, `shadeTex`): the cell's light
- * from soft shadows and contact shade (glyphs/select.ts `cellLight`).
+ * and the class whose fill is the cell's background. Output 1 (RG8, `shadeTex`): the light from
+ * soft shadows and contact shade, red the ground's and green the cell's own (glyphs/select.ts
+ * `shadeTexel`).
  *
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
@@ -24,6 +25,7 @@ import {
   EDGE_STATE,
   LIGHT_INK,
   SHADOW,
+  STANDING_STATE,
   DEFAULT_SUN,
   GUST_STEPS,
   Tone,
@@ -120,9 +122,11 @@ int g_bg = 0;
 // A vegetation cell's wind level (windLevel) and tone (Tone), which the glyph pass lights and tints.
 int g_wind = 0;
 int g_tone = 0;
+// STANDING_STATE where something stands in the cell, so the glyph pass reads its own light.
+float g_standing = 0.0;
 
 void emit(vec2 glyph, int cls) {
-  float state = g_state + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
+  float state = g_state + g_standing + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
   o_glyph = vec4(glyph.x, float(cls + (int(glyph.y * 255.0 + 0.5) << 6)) / 255.0, state / 255.0, float(g_bg) / 255.0);
 }
 
@@ -395,14 +399,15 @@ float castsAt(ivec2 q) {
 
 // How much of the cell is in shadow, 0–1 (glyphs/select.ts shadowAmount): three rays toward the
 // sun, each taking its strongest blocker over the near cells and, at a low sun, a few far ones.
-float shadowAmount(ivec2 p, float self) {
-  if (u_sun.z <= 0.0) return 0.0;
+// x for the cell as it stands (self tall), y for the ground there, from the same samples.
+vec2 shadowAmount(ivec2 p, float self) {
+  if (u_sun.z <= 0.0) return vec2(0.0);
   float nearEnd = ${float(SHADOW.steps)} * u_cellMeters.x;
   float farEnd = min(${float(SHADOW.reach)}, ${float(SHADOW.tall)} / u_sun.z);
-  float sum = 0.0;
+  vec2 sum = vec2(0.0);
   for (int side = -1; side <= 1; side++) {
     vec2 across = u_sunSide * float(side);
-    float ray = 0.0;
+    vec2 ray = vec2(0.0);
     for (int i = 1; i <= ${SHADOW.steps + SHADOW.farSteps}; i++) {
       float d = i <= ${SHADOW.steps} ? float(i) * u_cellMeters.x
         : nearEnd + (farEnd - nearEnd) * float(i - ${SHADOW.steps}) / ${float(SHADOW.farSteps)};
@@ -413,24 +418,25 @@ float shadowAmount(ivec2 p, float self) {
       }
       float h = castsAt(p + ivec2(floor(u_sunStep * d + across + 0.5)));
       // Only something taller casts on the cell: one roof's cells never shade each other.
-      if (h > self) ray = max(ray, smoothstep(${float(-SHADOW.soft)}, ${float(SHADOW.soft)}, h - self - d * u_sun.z));
+      vec2 above = vec2(h - self, h) - d * u_sun.z;
+      vec2 fade = smoothstep(vec2(${float(-SHADOW.soft)}), vec2(${float(SHADOW.soft)}), above);
+      ray = max(ray, vec2(h > self ? fade.x : 0.0, h > 0.0 ? fade.y : 0.0));
     }
     sum += ray;
   }
   return sum / 3.0;
 }
 
-// Ground at the foot of something tall, 0–1 (glyphs/select.ts contactShade).
-float contactShade(ivec2 p, float self) {
-  if (self > 0.0) return 0.0;
+// Ground at the foot of something tall, 0–1 (glyphs/select.ts contactShade, as ground).
+float contactShade(ivec2 p) {
   float near = 0.0;
   float far = 0.0;
   for (int dy = -1; dy <= 1; dy++) {
     for (int dx = -1; dx <= 1; dx++) {
       if (dx == 0 && dy == 0) continue;
       ivec2 d = ivec2(dx, dy);
-      if (castsAt(p + d) - self >= ${float(SHADOW.aoRise)}) near += 1.0;
-      if (castsAt(p + 2 * d) - self >= ${float(SHADOW.aoRise)}) far += 1.0;
+      if (castsAt(p + d) >= ${float(SHADOW.aoRise)}) near += 1.0;
+      if (castsAt(p + 2 * d) >= ${float(SHADOW.aoRise)}) far += 1.0;
     }
   }
   return (near + 0.5 * far) / 8.0 * ${float(SHADOW.ao)};
@@ -446,8 +452,8 @@ float lampInk(ivec2 p) {
   if (t.a <= 0.5 || brakeGlow) return 0.0;
   float clock = (g & 7) == ${LampState.candle} ? effectTime(p, 1) : u_lifeTime;
   float lit = lampOn(g, clock, vec2(p) + 0.5) * switchedOn(g) * u_lampShow;
-  float pool = texture(u_light, (vec2(p) + 0.5) / vec2(textureSize(u_light, 0))).r;
-  return clamp(pool * lit * ${float(LIGHT_INK.lampGain)}, 0.0, 1.0);
+  // The filtered pool at the cell's own centre is its texel's.
+  return clamp(t.r * lit * ${float(LIGHT_INK.lampGain)}, 0.0, 1.0);
 }
 
 // The light grass ink follows (glyphs/select.ts densityLight): sun, shade and cloud by day, the
@@ -460,11 +466,14 @@ float densityLight(ivec2 p, float light) {
   return clamp(mix(lamp, sun, day), 0.0, 1.0);
 }
 
-// The cell's light, 0–1 (glyphs/select.ts cellLight); 1 with shadows off.
-float cellLight(ivec2 p) {
-  if (!u_shadows) return 1.0;
-  float self = castsAt(p);
-  return (1.0 - ${float(SHADOW.dark)} * shadowAmount(p, self)) * (1.0 - contactShade(p, self));
+// The cell's light texel (glyphs/select.ts shadeTexel): x the ground's, y its own; 1 with shadows
+// off.
+vec2 cellLight(ivec2 p, float self) {
+  if (!u_shadows) return vec2(1.0);
+  vec2 shadow = shadowAmount(p, self);
+  float contact = contactShade(p);
+  float ground = (1.0 - ${float(SHADOW.dark)} * shadow.y) * (1.0 - contact);
+  return vec2(ground, self > 0.0 ? 1.0 - ${float(SHADOW.dark)} * shadow.x : ground);
 }
 
 void main() {
@@ -472,8 +481,11 @@ void main() {
   int cls = classAt(p);
   int kind = u_kind[cls];
   // Every path below writes the glyph; the light is written once, here.
-  float light = cellLight(p);
-  o_shade = vec4(light, 0.0, 0.0, 1.0);
+  float self = castsAt(p);
+  g_standing = self > 0.0 ? ${STANDING_STATE}.0 : 0.0;
+  vec2 shade = cellLight(p, self);
+  float light = shade.y;
+  o_shade = vec4(shade, 0.0, 1.0);
   if (cls == 0 || kind == 0) {
     // An empty cell may still hold part of an area's edge; its light is the ground's.
     if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0);

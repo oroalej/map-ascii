@@ -36,6 +36,7 @@ import {
   CROP_STAGE,
   EDGE_INK,
   EDGE_STATE,
+  STANDING_STATE,
   SUB,
   Tone,
   TONE,
@@ -168,7 +169,6 @@ precision highp usampler2D;
 
 uniform sampler2D u_glyphs;
 uniform sampler2D u_shade;
-uniform uvec2 u_standing;
 uniform sampler2D u_atlas;
 uniform vec2 u_cell;
 uniform vec2 u_shift;
@@ -631,15 +631,6 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
 
 int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
 
-// Whether the pixel shows something standing (glyphs/select.ts standing): a crown, or a class of a
-// standing kind with a height. A sub-cell edge asks the sample under the pixel.
-bool standingAt(int cls, ivec2 cell, ivec2 subAt, bool edge) {
-  int surface = edge ? int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5) : cls;
-  if (surface == u_crownClass) return true;
-  if (surface <= 0 || surface >= 64 || (u_standing[surface >> 5] & (1u << uint(surface & 31))) == 0u) return false;
-  return (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).r > 0.0;
-}
-
 bool focusedClass(int cls) {
   return cls > 0 && cls < 64 && (u_focusClasses[cls >> 5] & (1u << uint(cls & 31))) != 0u;
 }
@@ -742,11 +733,13 @@ void main() {
   float night = darkness();
   // The cell's background: its fill class's color, faint (theme.ts ClassStyle.fill).
   vec3 back = fillOf(bgClass, daylit(cropPigment(bgClass, bgClass == cls ? tone : ${Tone.light})));
-  // Shadows and contact shade (glyphs/select.ts cellLight, pixelLight): standing things read
-  // their own cell, crisp; the ground reads the light filtered, never lighter than its own cell.
-  float shade = texelFetch(u_shade, cell, 0).r;
-  if (!standingAt(cls, cell, subAt, edge))
-    shade = min(shade, texture(u_shade, grid / u_cell / vec2(textureSize(u_shade, 0))).r);
+  // Shadows and contact shade (glyphs/select.ts shadeTexel, pixelLight), one sample: standing
+  // things read their own light at their cell's centre, crisp; the ground reads the ground's light
+  // filtered at the pixel.
+  bool standing = (rawState & ${STANDING_STATE}) != 0;
+  vec2 shadeAt = standing ? vec2(cell) + 0.5 : grid / u_cell;
+  vec2 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rg;
+  float shade = standing ? shadeTexel.g : shadeTexel.r;
   back *= shade;
 
   // Streetlights (life/lights.ts): a pool of light on the ground around each lamp, once it has

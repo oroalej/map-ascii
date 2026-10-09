@@ -28,7 +28,7 @@ import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { LampState } from './life/lights';
 import { normalizeFocus } from './focus';
-import { kindCodes, SHADOW, standingClasses } from './glyphs/select';
+import { SHADOW } from './glyphs/select';
 
 it('dims map cells for folklore-only focus and restores the ordinary glyph program on clear', () => {
   const setters = {
@@ -674,7 +674,7 @@ it('steps toward the sun and across it in cells', () => {
   expect(sunUniforms(view, { azimuth: 0, altitude: 0.2 }).u_sun[2]).toBeGreaterThan(0);
 });
 
-it('binds the cell light and the standing classes to every glyph program', () => {
+it('binds the cell light to every glyph program', () => {
   const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
   const choose = vi.spyOn(gpuContext, 'glyphProgram');
   const gl = Object.fromEntries(
@@ -689,12 +689,8 @@ it('binds the cell light and the standing classes to every glyph program', () =>
     glyphVariants: new Map([0, 1, 2, 3, 4, 5, 6, 7].map((key) => [key, program])),
     emptyVao: null,
   } as unknown as Programs;
-  const kinds = new Int32Array(64);
-  kinds[classId('building')] = kindCodes.building;
-  kinds[classId('tree_crown')] = kindCodes.foliage;
-  kinds[classId('grass')] = kindCodes.grass;
   const resources = {
-    map: { atlas: { columns: 16, index: () => 1 }, tables: { kinds } },
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
     label: { cellDev: view.labelDev, atlas: { columns: 16 } },
     uniforms: themeUniforms(themes.dark),
   } as unknown as ThemeResources;
@@ -730,7 +726,6 @@ it('binds the cell light and the standing classes to every glyph program', () =>
       );
       const fields = uniforms.mock.calls.at(-1)![1] as Record<string, unknown>;
       expect(fields.u_shade).toBe(shadeTex);
-      expect(fields.u_standing).toEqual(standingClasses(kinds));
     }
     expect(new Set(choose.mock.calls.map((call) => `${call[2]}/${call[3]}`))).toEqual(
       new Set(['false/false', 'true/false', 'false/true', 'true/true']),

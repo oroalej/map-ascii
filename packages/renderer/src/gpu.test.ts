@@ -273,11 +273,11 @@ it('creates the cell light as a filtered R8 second attachment of the glyph targe
   ) as unknown as GL;
   const k = (name: string) => (gl as unknown as Record<string, number>)[name]!;
   const targets = createCellTargets(gl, 12, 7, 4, 3);
-  // Its storage: one RED byte per cell.
+  // Its storage: a RED and a GREEN byte per cell.
   const image = calls.find(
     (c, i) => c.name === 'texImage2D' && calls[i - 2]?.args[1] === targets.shadeTex,
   );
-  expect(image?.args.slice(2, 8)).toEqual([k('R8'), 12, 7, 0, k('RED'), k('UNSIGNED_BYTE')]);
+  expect(image?.args.slice(2, 8)).toEqual([k('RG8'), 12, 7, 0, k('RG'), k('UNSIGNED_BYTE')]);
   // Linear, edge-clamped: the parameters set while it is bound, after its storage.
   const bound = calls.findIndex((c) => c.name === 'bindTexture' && c.args[1] === targets.shadeTex);
   const next = calls.findIndex((c, i) => i > bound && c.name === 'createTexture');

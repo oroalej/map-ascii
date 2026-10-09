@@ -195,9 +195,9 @@ export const isEdgeMask = (mask: number): boolean => mask !== 0 && mask !== 63;
 
 /**
  * The select pass's state byte (glyph texture, blue): bits 0–1 the picking.ts `CellState`, then
- * `EDGE_STATE`, a free bit (`FREE_STATE`), the wind level (2 bits from `WIND_SHIFT`,
- * `windLevel`), and the tone (2 bits from `TONE_SHIFT`, `Tone`). Light no longer takes a bit:
- * the select pass writes it to its own target (`cellLight`).
+ * `EDGE_STATE`, `STANDING_STATE`, the wind level (2 bits from `WIND_SHIFT`, `windLevel`), and the
+ * tone (2 bits from `TONE_SHIFT`, `Tone`). All 8 bits are used. The light itself goes to its own
+ * target (`shadeTexel`).
  */
 
 /** Bit in the select pass's state byte for a sub-cell edge (above picking.ts `CellState`). */
@@ -223,8 +223,11 @@ export const SHADOW = {
   ao: 0.25,
   aoRise: 3,
 } as const;
-/** The state byte's unused bit (it held the binary shadow before `cellLight`). */
-export const FREE_STATE = 8;
+/**
+ * Bit in the state byte for a cell where something stands (`standing`): the glyph pass reads its
+ * own light there, and the ground's light, filtered, everywhere else.
+ */
+export const STANDING_STATE = 8;
 
 /** Where the wind level (0–3) and the tone (`Tone`) sit in the state byte. */
 export const WIND_SHIFT = 4;
@@ -318,7 +321,11 @@ export function contactShade(selfHeight: number, neighbours: readonly number[]):
 }
 
 /** Kinds that stand up from the ground (with a height): they cast shadows and read light crisply. */
-export const STANDING_KINDS = [kindCodes.building, kindCodes.foliage, kindCodes.variant] as const;
+const STANDING_KINDS: readonly number[] = [
+  kindCodes.building,
+  kindCodes.foliage,
+  kindCodes.variant,
+];
 
 /**
  * Whether a cell of glyph `kind` and `height` meters stands up from the ground: a building, a
@@ -326,25 +333,39 @@ export const STANDING_KINDS = [kindCodes.building, kindCodes.foliage, kindCodes.
  * height byte is its band) are ground.
  */
 export const standing = (kind: number, height: number): boolean =>
-  height > 0 && (STANDING_KINDS as readonly number[]).includes(kind);
+  height > 0 && STANDING_KINDS.includes(kind);
 
-/** The classes whose kind can stand (`standing`), as two 32-bit words for the glyph pass. */
-export function standingClasses(kinds: ArrayLike<number>): Uint32Array {
-  const mask = new Uint32Array(2);
-  for (let c = 1; c < Math.min(kinds.length, 64); c++) {
-    if ((STANDING_KINDS as readonly number[]).includes(kinds[c]!)) mask[c >> 5]! |= 1 << (c & 31);
-  }
-  return mask;
+/**
+ * A cell's light texel (`shadeTex`, RG8), what the select pass writes from one set of samples:
+ * green is the cell's own light (`cellLight`), which a standing cell's pixels read at its centre,
+ * so outlines stay crisp; red is the light the ground would get there, which ground pixels read
+ * filtered across cells. On ground the two are the same; under a roof or crown, red is that
+ * cell's light as ground (shaded by the building's own height and walls), so filtering toward a
+ * sunlit roof never lifts the shade at its foot. `heightAt` and `neighbours` are as for
+ * `shadowAmount` and `contactShade`.
+ */
+export function shadeTexel(
+  selfHeight: number,
+  heightAt: (distance: number, side: number) => number,
+  neighbours: readonly number[],
+  sunTan: number,
+  stepMeters: number,
+): { ground: number; own: number } {
+  const contact = contactShade(0, neighbours);
+  const ground = cellLight(shadowAmount(0, heightAt, sunTan, stepMeters), contact);
+  if (selfHeight <= 0) return { ground, own: ground };
+  return { ground, own: cellLight(shadowAmount(selfHeight, heightAt, sunTan, stepMeters), 0) };
 }
 
 /**
- * The light the glyph pass shades a cell's pixel with: standing things take their own cell's
- * light (`own`), so their outlines stay crisp; the ground takes the light filtered across cells
- * (`filtered`), but never lighter than its own cell, so a sunlit roof never lifts the shade at its
- * foot.
+ * The light the glyph pass shades a pixel with: a standing cell's own light (`texel.own`, read at
+ * its centre), or the ground's light filtered across cells at the pixel (`filteredGround`).
  */
-export const pixelLight = (isStanding: boolean, own: number, filtered: number): number =>
-  isStanding ? own : Math.min(own, filtered);
+export const pixelLight = (
+  isStanding: boolean,
+  texel: { own: number },
+  filteredGround: number,
+): number => (isStanding ? texel.own : filteredGround);
 
 /** A cell's light, 0–1, from its shadow and contact shade: what the select pass writes. */
 export const cellLight = (shadow: number, contact: number): number =>

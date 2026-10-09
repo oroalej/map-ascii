@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CellState } from '../picking';
 import { selectFragment } from '../shaders/select';
-import { classId } from '../classes';
+import { glyphFragment } from '../shaders/glyph';
 import {
   cellLight,
   contactShade,
   kindCodes,
   pixelLight,
+  shadeTexel,
   standing,
-  standingClasses,
   EDGE_STATE,
-  FREE_STATE,
+  STANDING_STATE,
   SHADOW,
   shadowAmount,
   shadowSamples,
@@ -121,12 +121,12 @@ describe('shadows', () => {
     expect(cellLight(1, 0.2)).toBeCloseTo((1 - SHADOW.dark) * 0.8);
   });
 
-  it('leaves a free bit in the state byte', () => {
+  it('marks standing cells with their own bit in the state byte', () => {
     // Nothing else in the byte overlaps it: not the picking state, the edge, the wind level
     // (2 bits) or the tone (2 bits, the top of the byte).
     const others = [EDGE_STATE, 3 << WIND_SHIFT, 3 << TONE_SHIFT, ...Object.values(CellState)];
-    for (const bit of others) expect(bit & FREE_STATE).toBe(0);
-    expect(FREE_STATE + EDGE_STATE + (3 << WIND_SHIFT) + (3 << TONE_SHIFT) + 3).toBe(255);
+    for (const bit of others) expect(bit & STANDING_STATE).toBe(0);
+    expect(STANDING_STATE + EDGE_STATE + (3 << WIND_SHIFT) + (3 << TONE_SHIFT) + 3).toBe(255);
   });
 
   it('writes the light on every select path, before any return', () => {
@@ -151,25 +151,41 @@ describe('light on standing things and the ground', () => {
     // Terrain's height byte is its band, not something standing.
     expect(standing(kindCodes.ramp, 3)).toBe(false);
     expect(standing(kindCodes.grass, 0)).toBe(false);
-    const kinds = new Int32Array(64);
-    kinds[classId('building')] = kindCodes.building;
-    kinds[classId('tree_crown')] = kindCodes.foliage;
-    kinds[classId('grass')] = kindCodes.grass;
-    const mask = standingClasses(kinds);
-    const has = (cls: number) => (mask[cls >> 5]! & (1 << (cls & 31))) !== 0;
-    expect(has(classId('building'))).toBe(true);
-    expect(has(classId('tree_crown'))).toBe(true);
-    expect(has(classId('grass'))).toBe(false);
   });
 
-  it('reads standing things exactly and the ground filtered, never lighter than its cell', () => {
-    // A sunny roof beside shaded ground: the roof stays crisp, the ground keeps its shade.
-    expect(pixelLight(true, 1, 0.6)).toBe(1);
-    expect(pixelLight(false, 0.5, 0.75)).toBe(0.5);
-    // Sunny ground beside a shadow fades into it.
-    expect(pixelLight(false, 1, 0.75)).toBe(0.75);
-    // Shadows off: every cell is 1, as on main.
-    expect(pixelLight(false, cellLight(0, 0), cellLight(0, 0))).toBe(1);
-    expect(pixelLight(true, cellLight(0, 0), 0.4)).toBe(1);
+  /** A 10 m building from 3 m toward the sun on, and the ring of a wall along that side. */
+  const wall = (d: number) => (d >= 3 ? 10 : 0);
+  const wallRing = [10, 10, 10, 0, 0, 0, 0, 0, 10, 10, 10, 0, 0, 0, 0, 0];
+  const inside = Array<number>(16).fill(10);
+
+  it('writes the same light for both channels on the ground', () => {
+    const open = shadeTexel(0, () => 0, Array<number>(16).fill(0), 1, 3);
+    expect(open).toEqual({ ground: 1, own: 1 });
+    const foot = shadeTexel(0, wall, wallRing, 1, 3);
+    expect(foot.own).toBe(foot.ground);
+    expect(foot.ground).toBeCloseTo(cellLight(1, contactShade(0, wallRing)));
+  });
+
+  it("keeps a roof's own light and gives its neighbours the ground's", () => {
+    // A sunlit roof: its own light is full; as ground it is shaded by its building and walls,
+    // so filtering from the shaded ground at its foot toward it stays dark.
+    const roof = shadeTexel(10, wall, inside, 1, 3);
+    expect(roof.own).toBe(1);
+    expect(roof.ground).toBeLessThan(0.5);
+    const foot = shadeTexel(0, wall, wallRing, 1, 3);
+    expect((foot.ground + roof.ground) / 2).toBeLessThanOrEqual(foot.ground);
+    // A lower roof under a taller neighbour keeps that shadow as its own light.
+    expect(shadeTexel(4, wall, inside, 1, 3).own).toBe(1 - SHADOW.dark);
+  });
+
+  it('reads standing things at their own light and the ground filtered, in one sample', () => {
+    expect(pixelLight(true, { own: 1 }, 0.4)).toBe(1);
+    expect(pixelLight(false, { own: 1 }, 0.4)).toBe(0.4);
+    // Shadows off: every channel is 1, as on main.
+    expect(pixelLight(false, { own: 1 }, 1)).toBe(1);
+    // The glyph pass takes one sample of the light and no standing table.
+    const main = glyphFragment.slice(glyphFragment.indexOf('void main()'));
+    expect(main.split('u_shade').length - 1).toBe(2);
+    expect(glyphFragment).not.toContain('u_standing');
   });
 });

@@ -116,8 +116,9 @@ export type CellTargets = {
   idTex: WebGLTexture;
   glyphTex: WebGLTexture;
   /**
-   * R8 per-cell light from the select pass (glyphs/select.ts `cellLight`), `glyphFbo`'s second
-   * attachment; LINEAR, so the ground can read it filtered.
+   * RG8 per-cell light from the select pass (glyphs/select.ts `shadeTexel`: red the ground's,
+   * green the cell's own), `glyphFbo`'s second attachment; LINEAR, so the ground can read it
+   * filtered.
    */
   shadeTex: WebGLTexture;
   /** RGBA8 overlay on the label grid: 16-bit label glyph code, color index (labels.ts). */
@@ -238,7 +239,7 @@ export function createCellTargets(
   const base = createRasterTargets(gl, cols, rows, 'cell base');
   const subBase = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell base');
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
-  const shadeTex = createTexture(gl, gl.R8, gl.RED, cols, rows);
+  const shadeTex = createTexture(gl, gl.RG8, gl.RG, cols, rows);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
