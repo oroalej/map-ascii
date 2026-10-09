@@ -18,6 +18,8 @@ function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
 }
 import { LifeWorld } from './life/simulate';
 import * as TapCapture from './life/tap-capture';
+import * as LabelCandidates from './label-candidates';
+import { LifePreparation } from './life/preparation';
 import type { ProcessionRun } from './life/simulate';
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
 import { CROP_STAGE } from './glyphs/select';
@@ -2859,6 +2861,46 @@ describe('label focus in the renderer frame', () => {
     draw(200);
     expect(cellPass).toHaveBeenCalledTimes(passes + 1);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![6].originCol).not.toBe(before.originCol);
+  });
+
+  it('guards an in-margin pan: no cell pass, label projection, Life sync or static repack', async () => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    await vi.dynamicImportSettled();
+    draw(1000);
+    const project = vi.spyOn(LabelCandidates, 'labelCandidate');
+    const sync = vi.spyOn(LifePreparation.prototype, 'sync');
+    vi.mocked(cellPass).mockClear();
+    vi.mocked(fixturePass).mockClear();
+    vi.mocked(overlayPass).mockClear();
+    const classReads = () =>
+      labelFixture.requests.mock.calls.filter(([, , rect]) => (rect as { width: number }).width > 1)
+        .length;
+    const reads = classReads();
+    // Three map cells within 100 ms of the last sync: inside the margin, same Life tiles.
+    let shift = vi.mocked(glyphPass).mock.calls.at(-1)![6].shiftX;
+    for (const at of [1020, 1040, 1060]) {
+      input.intents!.pan(-10, 0);
+      draw(at);
+      const next = vi.mocked(glyphPass).mock.calls.at(-1)![6].shiftX;
+      expect(next).toBe(shift + 10);
+      shift = next;
+    }
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(project).not.toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
+    expect(vi.mocked(fixturePass).mock.calls.every((call) => call[7] === false)).toBe(true);
+    // What the screen shows is still reported: labels re-admitted, classes read again.
+    expect(overlayPass).toHaveBeenCalled();
+    draw(1400);
+    expect(classReads()).toBeGreaterThan(reads);
+    // The view's Life tiles change: Life hears of it on the next in-margin pan.
+    labelFixture.loaded = undefined;
+    input.intents!.pan(-10, 0);
+    draw(1420);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(sync).toHaveBeenCalledOnce();
+    expect(sync.mock.lastCall![0]).toEqual([]);
   });
 
   it('asks for tiles over the whole drawn window', () => {

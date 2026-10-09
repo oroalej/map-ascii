@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gridArraysBuilt } from './testing/allocations';
 import { unpackGlyph } from '../glyphs/select';
 import { tileToLngLat } from '../raster/geometry';
 import { mapGlyphs, themes } from '../theme';
@@ -6,6 +7,7 @@ import { LifeBuilder } from './geometry';
 import { lightByte, LampState } from './lights';
 import {
   FixturePart,
+  createFixturePackingScratch,
   packFixtures,
   tileFixtures,
   updateFixtureSignals,
@@ -57,6 +59,18 @@ const cells = (out: Uint8Array) => {
   }
   return result;
 };
+
+describe('packFixtures allocations', () => {
+  it('constructs no grid-sized typed array on a repeat call with its scratch', () => {
+    const scratch = createFixturePackingScratch();
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const repack = () =>
+      packFixtures(out, grid, [lamp, signal], 19, glyph, 0, undefined, undefined, scratch);
+    // A fresh scratch sizes its owner buffer once.
+    expect(gridArraysBuilt(grid.cols * grid.rows, repack)).toBeGreaterThan(0);
+    expect(gridArraysBuilt(grid.cols * grid.rows, repack)).toBe(0);
+  });
+});
 
 describe('street fixtures', () => {
   it('packs and updates lamps from the same pressed offset snapshot', () => {

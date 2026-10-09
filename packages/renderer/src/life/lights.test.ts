@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { gridArraysBuilt } from './testing/allocations';
 import type { TilePoint } from '../raster/geometry';
 import { BEAM, BULB, CANDLE, FLOOD, SHOP, STREETLIGHT } from './config';
 import {
@@ -180,6 +181,15 @@ describe('lightByte', () => {
   it('packs the state in the low 3 bits and the seed above', () => {
     expect(lightByte(LampState.flood, 31)).toBe(5 | (31 << 3));
     expect(lightByte(LampState.candle, 33)).toBe(4 | (1 << 3));
+  });
+});
+
+describe('packLights allocations', () => {
+  it('constructs no grid-sized typed array on a repeat call', () => {
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const lamps = [lamp(5.5, 5.5, LampState.working, 3), lamp(12.5, 9.5, LampState.flicker, 9)];
+    packLights(out, grid, lamps);
+    expect(gridArraysBuilt(grid.cols * grid.rows, () => packLights(out, grid, lamps))).toBe(0);
   });
 });
 
