@@ -33,6 +33,12 @@ it('distinguishes folklore focus and matches the shared shader pulse with motion
 it('separates vendor attendants, pets, paddlers and carabao from their drawing classes', () => {
   const base: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 };
   expect(lifeFocusOf({ ...base, vehicle: 'cart' })).toBe('vendors');
+  expect(
+    lifeFocusOf({
+      ...base,
+      peddler: { id: 'generic', label: 'Local vendor', prop: 'basket', parasol: 0, lamp: 0 },
+    }),
+  ).toBe('vendors');
   expect(lifeFocusOf({ ...base, vehicle: 'carabao' })).toBe('traffic');
   expect(lifeFocusOf({ ...base, aboard: true })).toBe('people');
   expect(lifeFocusOf({ ...base, kind: 'dog' })).toBe('pets');

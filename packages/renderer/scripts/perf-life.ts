@@ -1,5 +1,5 @@
 /** Reproducible CPU comparison; results are not browser FPS or phone GPU measurements. */
-import { deepStrictEqual } from 'node:assert';
+import { deepStrictEqual, ok } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -13,6 +13,16 @@ import { tileToLngLat } from '../src/raster/geometry';
 import type { LngLatBounds } from '../src/life/procession';
 import { snapshotRevision, snapshotWorkingTree, currentSourceHash } from './snapshot';
 import { pairedRuns, pooledSummary, summary, withinControl } from './paired';
+import {
+  makePeddlerPerfWorld,
+  peddlerPerfCounts,
+  peddlerPerfCenter,
+  peddlerPerfWeather,
+  peddlerPerfGrid,
+} from './peddler-fixture';
+import { adaptPuffPacking } from './puff-packing';
+import type * as drawModule from '../src/life/draw';
+import type * as themeModule from '../src/theme';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const revision =
@@ -213,7 +223,58 @@ try {
     changed = (await import(pathToFileURL(prototypePath).href)) as Simulation;
     changedSource = prototype;
   }
-  const rows: { name: string; timings: ReturnType<typeof compare> }[] = [];
+  const rows: {
+    name: string;
+    timings: ReturnType<typeof compare>;
+    counts?: Record<string, number>;
+  }[] = [];
+  if ('peddlers/hot-afternoon'.startsWith(casePrefix)) {
+    if (!frozen) throw new Error('Peddler acceptance requires complete frozen source graphs');
+    const counts = peddlerPerfCounts(makePeddlerPerfWorld(changed));
+    ok(counts.sorbetes && counts['bote-dyaryo'], 'Required peddlers did not spawn');
+    if (control) deepStrictEqual(peddlerPerfCounts(makePeddlerPerfWorld(baseline)), counts);
+    const factory = async (
+      module: Simulation,
+      graph: typeof frozenCurrent,
+      configured: boolean,
+    ) => {
+      const draw = (await import(graph.path('life/draw.ts'))) as typeof drawModule;
+      const theme = (await import(graph.path('theme.ts'))) as typeof themeModule;
+      const glyphs = ['', ...theme.mapGlyphs(theme.themes.dark)];
+      const indices = new Map(glyphs.map((glyph, index) => [glyph, index]));
+      const glyphIndex = (glyph: string) => indices.get(glyph) ?? 0;
+      const prepared = draw.buildLifeGlyphs(glyphIndex);
+      const pack = adaptPuffPacking(
+        draw.packLife,
+        await readFile(fileURLToPath(graph.path('life/draw.ts')), 'utf8'),
+      );
+      return () => {
+        const world = makePeddlerPerfWorld(module, configured),
+          out = new Uint8Array(peddlerPerfGrid.cols * peddlerPerfGrid.rows * 4);
+        return () => {
+          world.step(1 / 30, undefined, 19, undefined, undefined, peddlerPerfWeather);
+          const agents = world.visible(19, 1, peddlerPerfCenter, peddlerPerfWeather);
+          return pack(
+            out,
+            peddlerPerfGrid,
+            agents,
+            theme.themes.dark,
+            glyphIndex,
+            undefined,
+            prepared,
+            world.visiblePuffs,
+          );
+        };
+      };
+    };
+    const old = await factory(baseline, frozen, control),
+      next = await factory(changed, frozenCurrent, true);
+    const timings = compare(old, next);
+    rows.push({ name: 'peddlers/hot-afternoon', timings, counts });
+    console.log(
+      `peddlers/hot-afternoon: ${JSON.stringify(counts)}; median ${(-timings.medianGain * 100).toFixed(1)}% cost change; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
   for (const count of [1, 4, 16, 64]) {
     for (const view of ['desktop', 'mobile', 'over-cap'] as const) {
       if (!`visible/${view}/${count}`.startsWith(casePrefix)) continue;
@@ -348,7 +409,9 @@ try {
     processPriority: getPriority(),
     platform: process.platform,
     arch: process.arch,
-    fixture: 'seeded plazas and mixed traffic; over-cap duplicates tile positions deliberately',
+    fixture: casePrefix.startsWith('peddlers/')
+      ? 'validated Naga peddlers on eight wide safe paths; dry 13:00, sun altitude 60; combined step/visible/pack; identical seeded ordinary population'
+      : 'seeded plazas and mixed traffic; over-cap duplicates tile positions deliberately',
     repetitions: runs,
     samples,
     calibration:

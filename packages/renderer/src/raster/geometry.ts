@@ -19,6 +19,7 @@ import {
   LIFE_SITE_KINDS,
   type ZoomBand,
   FRONTAGE_KINDS,
+  vendorAccessRestricted,
   type FrontageKind,
 } from '@atlas/shared';
 import { parseSignalLayout } from '@atlas/shared';
@@ -799,6 +800,7 @@ export function buildTileGeometry(
   const crownSurface: number[] = [];
   const labels: TileLabel[] = [];
   const life = new LifeBuilder();
+  life.peddlerStreet();
   // Append new walking lines after the original lines to retain their stable indices/seeds.
   const walkingLines: { points: TilePoint[]; width: number; id: number }[] = [];
   const inTileAt = (p: TilePoint) => p.x >= 0 && p.x < EXTENT && p.y >= 0 && p.y < EXTENT;
@@ -839,6 +841,8 @@ export function buildTileGeometry(
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
       const featureId = String(feature.properties.id ?? `${name}/${f}`);
+      const vendorRestricted =
+        feature.properties.vendor_restricted === true || vendorAccessRestricted(feature.properties);
       let burialHash: number | undefined;
       // A site's building or monument may be in another tile on a cold direct-URL load.
       // Register its real metadata without assigning its id to the surface's outline.
@@ -992,6 +996,7 @@ export function buildTileGeometry(
         .map((ring) => ring.map((p) => ({ x: p.x * scale, y: p.y * scale })));
 
       if (!isRegion && feature.properties.detail_route) {
+        if (vendorRestricted) life.restrictVendors(id);
         for (const line of rings) life.line(line, LifeLine.path, width, id);
         continue;
       }
@@ -1284,6 +1289,13 @@ export function buildTileGeometry(
               ? LifeLine.canal
               : lifeLineFor[className];
         if (!isRegion && unitMeters && lifeLine !== undefined && lifeLine <= LifeLine.roadMinor) {
+          const kind = String(feature.properties.kind ?? '');
+          if (
+            !/^highway=(service|motorway|trunk)/.test(kind) &&
+            !kind.endsWith('_link') &&
+            !vendorRestricted
+          )
+            life.peddlerStreet(hashString(featureId));
           for (const line of rings) {
             for (let i = 1; i < line.length; i++) {
               const ring = stripRing(
@@ -1303,6 +1315,8 @@ export function buildTileGeometry(
                   2,
               );
               if (!(sidewalkWidth > 0)) continue;
+              if (vendorRestricted)
+                life.restrictVendors(hashString(`${featureId}/sidewalk-${side}`));
               walkingLines.push({
                 points: sidewalkLine(
                   line,
@@ -1316,6 +1330,7 @@ export function buildTileGeometry(
           }
         }
         if (lifeLine !== undefined) {
+          if (vendorRestricted) life.restrictVendors(hashString(featureId));
           const oneway =
             feature.properties.oneway === -1 ? -1 : feature.properties.oneway === 1 ? 1 : 0;
           for (const line of rings) life.line(line, lifeLine, width, hashString(featureId), oneway);
@@ -1325,6 +1340,18 @@ export function buildTileGeometry(
           (className === 'barrier' || className === 'water_river' || className === 'water_stream')
         ) {
           for (const line of rings) life.obstacle(line, false);
+          if (
+            className === 'barrier' &&
+            ['barrier=fence', 'barrier=wall', 'barrier=hedge'].includes(
+              String(feature.properties.kind),
+            )
+          )
+            for (const ring of rings) {
+              const first = ring[0],
+                last = ring.at(-1);
+              if (ring.length >= 4 && first && last && first.x === last.x && first.y === last.y)
+                life.area('peddler-exclusion', [ring]);
+            }
         }
         // Streetlights line major and secondary roads (life/lights.ts), placed once all are in.
         if (isLitRoad(className, isRegion)) {
@@ -1401,6 +1428,18 @@ export function buildTileGeometry(
             if (site) compactRoofs.push(site);
           }
           if (!isRegion) {
+            // Compound grounds stay walkable for their own population, but never host peddlers.
+            if (
+              vendorRestricted ||
+              (className === 'barrier' &&
+                ['barrier=fence', 'barrier=wall', 'barrier=hedge'].includes(
+                  String(feature.properties.kind),
+                )) ||
+              (isRoofBuilding(className) && height === 0) ||
+              ['parking', 'pitch', 'park', 'paving', 'farmland'].includes(className) ||
+              ['landuse=cemetery', 'amenity=grave_yard'].includes(String(feature.properties.kind))
+            )
+              life.area('peddler-exclusion', polygon);
             if (className === 'parking') life.area('parking', polygon);
             // A curb ring encloses its island: vehicles keep off all of it, not just the curb.
             else if (walkableStep) life.area('vehicle-blocked', [polygon[0]!]);

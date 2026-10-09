@@ -13,6 +13,7 @@ export const SCENE_PROFILES: readonly DialogueProfile[] = [
   'vendor-thanks',
   'transit',
   'companion',
+  'peddler-call',
 ];
 export const LOOK_ANCHORS: readonly DialogueAnchor[] = ['monument', 'fountain', 'plaza'];
 export const DIALOGUE_WEATHER = {
