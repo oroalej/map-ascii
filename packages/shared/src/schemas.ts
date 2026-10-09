@@ -928,6 +928,10 @@ export function contentSchemas(languages?: readonly string[]) {
       id: z.string().regex(/^tour\/[a-z0-9-]+$/, 'expected tour/<slug>'),
       title: text,
       description: text.optional(),
+      group: z
+        .string()
+        .regex(/^[a-z0-9-]+$/)
+        .optional(),
       status: z.enum(['draft', 'verified']),
       steps: z.array(TourStep).min(1),
     })
@@ -2118,6 +2122,11 @@ export const City = z
       /** Local term shown in the UI, e.g. "barangay". */
       label: LocalizedText,
     }),
+    /** Menu sections, in display order; tour group references are checked by the pack loader. */
+    tour_groups: z
+      .array(z.object({ id: z.string().regex(/^[a-z0-9-]+$/), label: LocalizedText }))
+      .min(1)
+      .optional(),
     /** Content languages besides English, which is always required. */
     languages: z
       .array(LanguageCode)
@@ -2159,6 +2168,22 @@ export const City = z
       for (const issue of text.safeParse(value).error?.issues ?? []) {
         ctx.addIssue({ code: 'custom', path: [...path, ...issue.path], message: issue.message });
       }
+    }
+    const groupIds = new Set<string>();
+    for (const [index, group] of (city.tour_groups ?? []).entries()) {
+      if (groupIds.has(group.id))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tour_groups', index, 'id'],
+          message: `duplicate tour group "${group.id}"`,
+        });
+      groupIds.add(group.id);
+      for (const issue of text.safeParse(group.label).error?.issues ?? [])
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tour_groups', index, 'label', ...issue.path],
+          message: issue.message,
+        });
     }
     for (const [index, season] of (city.life?.seasons ?? []).entries()) {
       for (const issue of text.safeParse(season.title).error?.issues ?? [])

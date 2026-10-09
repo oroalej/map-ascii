@@ -155,6 +155,7 @@ City {                           // cities/<slug>/city.json
   region: { name: string; osm_relation?: string } | { bbox: [number, number, number, number]; include_boundary?: true };
   subdivision: { admin_level: number; label: LocalizedText };        // e.g. 10, "barangay"
   languages: string[];           // extra content languages besides "en", e.g. ["fil", "bcl"]
+  tour_groups?: { id: string; label: LocalizedText }[]; // nonempty, unique slug ids, menu order
   smoke_landmark: string;        // name the e2e test searches for
   focus?: { osm_id: string; zoom: number };  // where the city opens, e.g. its main plaza
   // The life layer's vehicle mix: per road class, relative weights of car, motorcycle,
@@ -288,6 +289,7 @@ Tour {                           // cities/<slug>/tours/*.json
   id: string;                    // "tour/<slug>"
   title: LocalizedText;
   description?: LocalizedText;
+  group?: string;                // required declared group when city.tour_groups exists; omitted otherwise
   status: 'draft' | 'verified';  // verified: no "TODO(verify)", and sources on every step
   steps: {
     camera: { lat: number; lng: number; zoom: number };  // flat and north-up; no other keys

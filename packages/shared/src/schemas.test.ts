@@ -536,6 +536,13 @@ describe('Tour', () => {
     expect(Tour.safeParse(tour).success).toBe(true);
   });
 
+  it('accepts an optional slug group and rejects malformed groups', () => {
+    expect(Tour.parse(tour).group).toBeUndefined();
+    expect(Tour.parse({ ...tour, group: 'built-heritage' }).group).toBe('built-heritage');
+    for (const group of ['', 'Food', 'food tours', 'food/tours', 1])
+      expect(Tour.safeParse({ ...tour, group }).success).toBe(false);
+  });
+
   it('requires a status', () => {
     const { status: _unused, ...rest } = tour;
     expect(Tour.safeParse(rest).success).toBe(false);
@@ -600,6 +607,36 @@ describe('City', () => {
   it('accepts a valid config', () => {
     expect(City.safeParse(city).success).toBe(true);
     expect(City.safeParse({ ...city, region: { bbox: [120, 10, 125, 15] } }).success).toBe(true);
+  });
+
+  it('accepts ordered tour groups with optional declared translations', () => {
+    const tour_groups = [
+      { id: 'food', label: { en: 'Food' } },
+      { id: 'heritage', label: { en: 'Heritage', xx: 'Heritage translation' } },
+    ];
+    expect(City.parse({ ...city, tour_groups }).tour_groups).toEqual(tour_groups);
+    expect(City.parse(city).tour_groups).toBeUndefined();
+    expect(City.safeParse({ ...city, tour_groups: [] }).success).toBe(false);
+  });
+
+  it('rejects duplicate or malformed tour group ids', () => {
+    const group = { id: 'food', label: { en: 'Food' } };
+    expect(City.safeParse({ ...city, tour_groups: [group, group] }).error?.issues[0]?.path).toEqual(
+      ['tour_groups', 1, 'id'],
+    );
+    expect(City.safeParse({ ...city, tour_groups: [{ ...group, id: 'Food' }] }).success).toBe(
+      false,
+    );
+  });
+
+  it('requires English and rejects undeclared tour group label languages', () => {
+    expect(
+      City.safeParse({ ...city, tour_groups: [{ id: 'food', label: { xx: 'Food' } }] }).success,
+    ).toBe(false);
+    expect(
+      City.safeParse({ ...city, tour_groups: [{ id: 'food', label: { en: 'Food', de: 'Essen' } }] })
+        .error?.issues[0]?.path,
+    ).toEqual(['tour_groups', 0, 'label', 'de']);
   });
 
   it('opts a bbox region into the whole boundary while retaining strict keys', () => {

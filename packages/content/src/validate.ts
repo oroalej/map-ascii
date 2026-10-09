@@ -201,6 +201,19 @@ export async function loadCityPacks(
 
     const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
     const dishes = new Set(content.dishes.map((dish) => dish.id));
+    const tourGroups = new Set(city.tour_groups?.map((group) => group.id));
+    for (const tour of content.tours) {
+      const message = city.tour_groups
+        ? tour.group === undefined
+          ? 'group: required when the city declares tour_groups'
+          : !tourGroups.has(tour.group)
+            ? `group: no tour group "${tour.group}" in this city`
+            : undefined
+        : tour.group !== undefined
+          ? 'group: the city does not declare tour_groups'
+          : undefined;
+      if (message) errors.push({ file: seenIds.get(tour.id) ?? configFile, message });
+    }
     for (const landmark of content.landmarks)
       landmark.known_for?.forEach((id, index) => {
         if (!dishes.has(id))

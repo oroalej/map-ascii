@@ -292,6 +292,8 @@ A tour is an ordered list of steps. Each step has:
 
 Tours belong to a city and live in its city pack. Each city brief lists that city's launch set (for Naga, see `docs/cities/naga.md` §3). Every city should ship at least one establishing tour that flies from Region level down to street level.
 
+The menu displays nonempty sections in the order of the city's declared `tour_groups`, using the pack's localized labels. Tours keep their pack order within each section. Cities without groups keep a flat list; the menu scrolls when its content exceeds the viewport.
+
 Tour narration must be fact-checked against sources before shipping; draft text may be written as placeholders marked `TODO(verify)`. A tour is `draft` or `verified`: a verified tour has no `TODO(verify)` left and cites sources on every step (the validator enforces this). Draft tours play, marked "draft", with their placeholders showing.
 
 **Player behavior**
