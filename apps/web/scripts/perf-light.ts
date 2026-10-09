@@ -71,7 +71,9 @@ function installCapture() {
     upload = proto.texSubImage2D,
     draw = proto.drawArrays;
   // The glyph pass's fixture texture: flag cloth is re-packed from renderer time each frame
-  // (life/fixtures.ts updateFixtureFlags), which no uniform override can hold still.
+  // (life/fixtures.ts updateFixtureFlags), which no uniform override can hold still. Textures are
+  // recorded only before the freeze, which follows the tile-quiet settle: a fixture texture made
+  // after it (say, a late tile adding fixtures) would upload freely and show up as unstable.
   const fixtureTextures = new WeakSet<WebGLTexture>();
   proto.texSubImage2D = function (this: WebGL2RenderingContext, ...args: unknown[]) {
     const bound = this.getParameter(this.TEXTURE_BINDING_2D) as WebGLTexture | null;
@@ -135,7 +137,10 @@ function installCapture() {
     );
   };
   proto.uniform1ui = function (at, value) {
-    unsigned.call(this, at, at && names.get(at) === 'u_cloudSeed' ? 1234567 : value);
+    const name = at && names.get(at);
+    // The window is shown on a shared desktop: a real pointer resting on the map would hover a
+    // feature (select pass u_hover) and brighten its cells between probes.
+    unsigned.call(this, at, name === 'u_cloudSeed' ? 1234567 : name === 'u_hover' ? 0 : value);
   };
   proto.uniform2fv = function (at, value, offset, length) {
     const name = at && names.get(at);
