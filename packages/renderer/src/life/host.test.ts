@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eventOccurrence, eventTime, type ProcessionRoute } from '@atlas/shared';
 import { FrameProfiler } from '../profile';
 import { createWorkerHost } from './host';
+import { RecentKeys } from './recent-keys';
 import { createInlineHost } from './inline-host';
 import * as Inline from './inline-host';
 import { makeScenario } from './testing/scenarios';
@@ -99,6 +100,21 @@ const route: ProcessionRoute = {
     timezone: 'UTC',
   },
 };
+
+describe('retained Life geometry', () => {
+  it('keeps the most recently synchronized keys up to the cap, never the current ones', () => {
+    const keys = new RecentKeys(3);
+    expect(keys.touch(['a', 'b'])).toEqual([]);
+    expect(keys.touch(['c'])).toEqual([]);
+    expect(keys.touch(['b', 'd'])).toEqual(['a']);
+    expect(['a', 'b', 'c', 'd'].map((k) => keys.has(k))).toEqual([false, true, true, true]);
+    // A sync larger than the cap keeps all of its own keys.
+    expect(keys.touch(['e', 'f', 'g', 'h'])).toEqual(['c', 'b', 'd']);
+    expect(['e', 'f', 'g', 'h'].every((k) => keys.has(k))).toBe(true);
+    keys.clear();
+    expect(keys.has('e')).toBe(false);
+  });
+});
 
 describe('pipelined Life host', () => {
   it.each(['inline', 'worker'] as const)(
@@ -968,10 +984,15 @@ describe('pipelined Life host', () => {
     profiler.end();
     expect(profiler.snapshot().samples[0]).toMatchObject({ checks: 2, ms: { step: 3 } });
     expect(profiler.snapshot().stages.syncPost.count).toBe(1);
+    // A tile that leaves and returns is still held by the worker: identity only.
     host.sync([]);
     host.sync(s.tiles);
-    expect(mock.sync.mock.calls.at(-1)![0][0]!.life).toBe(s.tiles[0]!.life);
+    expect(mock.sync.mock.calls.at(-1)![0][0]).not.toHaveProperty('life');
     expect(host.latest()?.signalClock).toBe(1);
+    // Clearing drops what the worker holds, so the geometry goes again.
+    host.clearTiles();
+    host.sync(s.tiles);
+    expect(mock.sync.mock.calls.at(-1)![0][0]!.life).toBe(s.tiles[0]!.life);
     host.dispose();
     expect(mock.release).toHaveBeenCalledOnce();
     expect(mock.terminate).toHaveBeenCalledOnce();

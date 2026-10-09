@@ -19,6 +19,7 @@ import type { LifeGeometry } from './geometry';
 import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { packAgents, packedTransferables, unpackAgents, type PackedAgents } from './agent-frame';
+import { RecentKeys } from './recent-keys';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
@@ -194,6 +195,8 @@ export function createLifeWorkerApi(
   let lastTerrain: object | undefined;
   let terrainSent = false;
   const geometries = new Map<string, LifeGeometry>();
+  /** Mirrors the host's record of which geometry is held here (recent-keys.ts). */
+  const held = new RecentKeys();
   return {
     init(options: LifeInit) {
       preparation?.clear();
@@ -203,18 +206,18 @@ export function createLifeWorkerApi(
       preparation = new LifePreparation(world, profiler, preparationClock);
       configureLifeWorld(world, options);
       geometries.clear();
+      held.clear();
       lastTerrain = undefined;
       terrainSent = false;
     },
     sync(tiles: readonly SyncTile[], focus?: readonly [number, number], view?: LifeViewContext) {
-      const keep = new Set(tiles.map((t) => t.key));
       const resolved = tiles.map(({ key, tile, life }) => {
         const geometry = life ?? geometries.get(key);
         if (!geometry) throw new Error(`Missing Life geometry for ${key}`);
         geometries.set(key, geometry);
         return { key, tile, life: geometry };
       });
-      for (const key of geometries.keys()) if (!keep.has(key)) geometries.delete(key);
+      for (const key of held.touch(tiles.map((t) => t.key))) geometries.delete(key);
       // Sync happens between frame requests. Carry its timing into the next frame result.
       profiler?.begin(0);
       preparation.sync(resolved, focus, view);
@@ -226,6 +229,7 @@ export function createLifeWorkerApi(
       world.clearTiles();
       preparation.clear();
       geometries.clear();
+      held.clear();
       lastTerrain = undefined;
       terrainSent = false;
     },

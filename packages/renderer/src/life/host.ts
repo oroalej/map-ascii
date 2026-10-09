@@ -14,6 +14,7 @@ import type { FrameProfiler } from '../profile';
 import type { LifeWorld, LifeTile, ProcessionRun, VisibleAgent } from './simulate';
 import type { FrameInput, LifeWorkerApi } from './worker-api';
 import { unpackAgents } from './agent-frame';
+import { RecentKeys } from './recent-keys';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import type { LifeViewContext } from './births';
@@ -265,7 +266,9 @@ export function createWorkerHost(
   let live: { id: string | undefined; progress?: number; occurrence?: string } = { id: undefined };
   let played: string | undefined;
   let playedTiming: EventTiming | undefined;
-  const sent = new Set<string>();
+  /** Geometry the worker holds (recent-keys.ts), and the keys of the last sync. */
+  const sent = new RecentKeys();
+  let synced = new Set<string>();
   const release = () => {
     remote[Comlink.releaseProxy]();
     worker.terminate();
@@ -333,7 +336,7 @@ export function createWorkerHost(
         return;
       }
       const keep = new Set(next.map((tile) => tile.key));
-      if (keep.size !== sent.size || [...keep].some((key) => !sent.has(key))) {
+      if (keep.size !== synced.size || [...keep].some((key) => !synced.has(key))) {
         if (!nextView || !keep.size) {
           generation = allocateLifeGeneration();
           terrain = undefined;
@@ -349,12 +352,11 @@ export function createWorkerHost(
             cellGuard: () => undefined,
           };
       }
-      const payload = next.map(({ key, tile, life }) => {
-        const entry = sent.has(key) ? { key, tile } : { key, tile, life };
-        sent.add(key);
-        return entry;
-      });
-      for (const key of sent) if (!keep.has(key)) sent.delete(key);
+      const payload = next.map(({ key, tile, life }) =>
+        sent.has(key) ? { key, tile } : { key, tile, life },
+      );
+      sent.touch(next.map((tile) => tile.key));
+      synced = keep;
       // Structured clone: lamps and fixtures still own these buffers on the main thread.
       const postStart = profiler?.time();
       void remote.sync(payload, nextFocus, nextView).catch(fail);
@@ -370,6 +372,7 @@ export function createWorkerHost(
       profiler?.clearContinuity();
       terrain = undefined;
       sent.clear();
+      synced = new Set();
       if (view)
         view = {
           ...view,
