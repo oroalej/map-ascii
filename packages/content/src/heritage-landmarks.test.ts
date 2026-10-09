@@ -27,6 +27,7 @@ const sites = [
   'holy-rosary-minor-seminary-building',
   'naga-central-school-gabaldon-building',
   'csnhs-gabaldon-building',
+  'san-francisco-old-belfry',
   'elias-angeles-dimasalang-corner-house',
   'abella-business-buildings',
   'de-la-rosa-buildings',
@@ -79,12 +80,16 @@ describe('Naga heritage scope', () => {
 
   it('sources each heritage identity and attaches it to a unique OSM footprint or outline', () => {
     for (const landmark of heritage) {
-      // A standalone outline (the arch) is traced, not taken from an OSM feature.
+      // A standalone outline (the arch, the old belfry) is traced, not taken from an OSM feature.
       if (landmark.height_m !== undefined) {
         expect(landmark.osm_id ?? landmark.replaces).toBeUndefined();
         expect(landmark.geometry?.type).toBe('Polygon');
         expect(landmark.sources[0]!.title).toMatch(/traced/);
-        expect(landmark.sources.some((source) => source.url === ordinance)).toBe(true);
+        expect(
+          landmark.sources.some(
+            (source) => source.url === ordinance || /owner.*request/i.test(source.title),
+          ),
+        ).toBe(true);
         continue;
       }
       const way = landmark.osm_id ?? landmark.replaces;
