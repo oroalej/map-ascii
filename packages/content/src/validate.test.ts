@@ -138,6 +138,9 @@ describe('loadCityPacks', () => {
     const speech = packs.find((pack) => pack.city.slug === 'naga')?.dialogue;
     expect(speech?.native.code).toBe('bcl');
     expect(speech?.translations.map((entry) => entry.code)).toEqual(['en', 'fil']);
+    expect(
+      speech!.exchanges.filter((e) => ['transit-call', 'procession-cheer'].includes(e.profile!)),
+    ).toEqual([]);
     const legacy = speech!.exchanges.filter((e) => e.profile !== 'peddler-call');
     const peddlers = speech!.exchanges.filter((e) => e.profile === 'peddler-call');
     expect(legacy).toHaveLength(110);

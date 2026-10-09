@@ -68,6 +68,15 @@ export type EmojiCue = {
   pair?: string;
   order?: 0 | 1;
 };
+export type EmojiRequest = {
+  owner: object;
+  subject: EmojiSubject;
+  mood: EmojiMood;
+  eligible: boolean;
+  speaking: boolean;
+  duration?: number;
+  expires: number;
+};
 export type PointerEvent = { owner: object; mood: 'scared' | 'happy' | 'relaxed' | 'mosquito' };
 export type Temperament = 'neutral' | 'cheerful' | 'grumpy' | 'sleepy';
 export const TEMPERAMENT: Record<
@@ -298,6 +307,7 @@ const CONDITIONS = {
 } as const;
 const CONDITION_MOODS = Object.keys(CONDITIONS) as (keyof typeof CONDITIONS)[];
 type Track = {
+  requestedAt?: number;
   cooldownUntil: number;
   attemptAt?: number;
   clock?: number;
@@ -562,6 +572,47 @@ export class EmojiObserver {
   private chance(o: EmojiObservation, mood: EmojiMood) {
     return TEMPERAMENT[temperament(o.owner.rank)].chances[mood] ?? EMOJI.chance;
   }
+  /** Explicit cues do not use observer chance, ambient priorities or cooldown. */
+  request(
+    requests: readonly EmojiRequest[],
+    zoom: number,
+    clock: number,
+    observations: readonly EmojiObservation[] = [],
+  ) {
+    if (!this.observes(zoom)) return;
+    for (const r of requests.slice(0, 32)) {
+      const o = observations.find((candidate) => candidate.owner === r.owner);
+      const t = this.memory.get(r.owner);
+      if (
+        !r.eligible ||
+        r.speaking ||
+        o?.eligible === false ||
+        o?.speaking ||
+        r.expires < clock ||
+        t?.group ||
+        this.size >= EMOJI.capacity ||
+        (t?.requestedAt !== undefined && clock - t.requestedAt < 1)
+      )
+        continue;
+      // New event/train owners need a track, without drawing from any existing stream.
+      const state = t ?? this.memory.track(r.owner, this.epoch, () => 0, random(0x71a5));
+      const g: Group = {
+        index: this,
+        members: [
+          {
+            owner: r.owner,
+            cue: { id: this.memory.id(), subject: r.subject, mood: r.mood, order: 0 },
+          },
+        ],
+        end: clock + Math.max(0, r.duration ?? EMOJI.duration),
+      };
+      this.groups.add(g);
+      state.group = g;
+      state.requestedAt = clock;
+      state.eligible = true;
+      state.speaking = false;
+    }
+  }
   private admit(
     o: EmojiObservation,
     mood: EmojiMood,
@@ -637,6 +688,7 @@ export class EmojiObserver {
     completions: readonly { token: object; owners: readonly object[] }[] = [],
     startled: readonly object[] = [],
     pointerEvents: readonly PointerEvent[] = [],
+    requested: readonly EmojiRequest[] = [],
   ) {
     dt = env.emojiTime?.dt ?? dt;
     this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
@@ -874,6 +926,7 @@ export class EmojiObserver {
         })
       )
         this.memory.retire(g);
+    this.request(requested, zoom, this.clock, observations);
     if (this.clock + 1e-8 < this.nextTick) return;
     this.nextTick = (Math.floor((this.clock + 1e-8) / EMOJI.tick) + 1) * EMOJI.tick;
     // Pair opportunities precede all solo admissions. Cat scans are deliberately bounded.

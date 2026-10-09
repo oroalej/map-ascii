@@ -65,6 +65,7 @@ export const EMOJI_MOODS = [
   'beg',
   'tired',
   'bell',
+  'bark',
 ] as const;
 export type EmojiMood = (typeof EMOJI_MOODS)[number];
 export const DRINKING_MOODS = ['cheers', 'beer'] as const;
@@ -137,12 +138,13 @@ export const MOOD_GLYPHS: Readonly<Record<EmojiMood, string>> = {
   beg: '🥺',
   tired: '😩',
   bell: '🔔',
+  bark: '📢',
 };
 export const SUBJECT_GLYPHS: Readonly<Record<EmojiSubject, Partial<Record<EmojiMood, string>>>> = {
   person: {},
   bird: {},
   driver: { rained: '😣' },
-  dog: { angry: '💢', happy: '💕', hot: '💦', scared: '❗' },
+  dog: { angry: '💢', happy: '💕', hot: '💦', scared: '❗', bark: '💢' },
   cat: { angry: '😾', happy: '😺', hot: '💦', scared: '🙀' },
 };
 export const emojiGlyph = (subject: EmojiSubject, mood: EmojiMood): string =>

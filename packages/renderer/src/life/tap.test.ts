@@ -1,0 +1,700 @@
+import { describe, expect, it, vi } from 'vitest';
+import { resolveTap, TapQueue, TapSources, type LifeTap, type TapHandlers } from './tap';
+import type { VisibleAgent } from './simulate';
+import { makeScenario, completeScenarioState } from './testing/scenarios';
+import { LifeWorld } from './simulate';
+import { continuityTile, continuityMover, left } from './testing/continuity';
+import { LifeLine, LifeBuilder } from './geometry';
+import { folkloreTile, folkloreConfig, folkloreCenter, calendar } from './testing/folklore';
+import { lngLatToTile, tileToLngLat } from '../raster/geometry';
+import { activityLevels } from './config';
+import { signalState } from './signals';
+
+function signalWorld() {
+  const builder = new LifeBuilder();
+  builder.line(
+    [
+      { x: 0, y: 2048 },
+      { x: 4096, y: 2048 },
+    ],
+    LifeLine.roadMajor,
+    14,
+  );
+  builder.line(
+    [
+      { x: 2048, y: 0 },
+      { x: 2048, y: 4096 },
+    ],
+    LifeLine.roadMinor,
+    6,
+  );
+  builder.signal({ x: 2048, y: 2048 }, 8, 90, 0, true, undefined, { seed: 0 });
+  const world = new LifeWorld(undefined, undefined, { enabled: false }, false);
+  world.enableTaps();
+  world.sync([{ key: 'signal', tile: left, life: builder.finish() }]);
+  const life = world.resident('signal')!;
+  life.movers.length = 0;
+  life.gatherers.length = 0;
+  const signal = life.signals.signals[0]!;
+  const at = tileToLngLat(left, signal);
+  world.setEmojiView([19, 1, at]);
+  world.visible(19, 1, at);
+  const tap: LifeTap = {
+    id: 1,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at,
+    pointer: 'touch',
+    cellMeters: 1,
+  };
+  return { world, life, signal, tap, at };
+}
+
+it('only presses signal hardware admitted by the drawn-frame capture', () => {
+  const f = signalWorld();
+  const before = signalState(f.signal.seed, f.world.signalClock);
+  expect(before.a).toBe('green');
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
+  expect(f.world.tapReceipts![0]!.action).not.toBe('signal');
+  expect(f.world.signalOffsets).toBeUndefined();
+  expect(signalState(f.signal.seed, f.world.signalClock)).toEqual(before);
+  f.world.visible(19, 1, f.at);
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        id: 2,
+        frame: f.world.tapSources!.frame,
+        signal: { seed: f.signal.seed, midBlock: false },
+      },
+    ],
+  );
+  expect(f.world.tapReceipts).toEqual([{ id: 2, action: 'signal' }]);
+  expect(signalState(f.signal.seed, f.world.signalClock, false, f.world.signalOffsets).a).toBe(
+    'amber',
+  );
+});
+it('requests anger from four stoppable drivers before the signal, excluding a driver past it', () => {
+  const f = signalWorld();
+  const drivers = Array.from({ length: 6 }, (_, i) => {
+    const x = 2048 - (25 + i * 4) * f.life.perMeter;
+    const driver = continuityMover(f.life, x);
+    driver.d = x;
+    driver.v = f.life.perMeter;
+    return driver;
+  });
+  const past = continuityMover(f.life, 2048 + 20 * f.life.perMeter);
+  past.d = past.x;
+  past.v = f.life.perMeter;
+  f.life.movers.push(past, ...drivers);
+  f.world.visible(19, 1, f.at);
+  const request = vi.spyOn(f.life, 'requestEmoji');
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        frame: f.world.tapSources!.frame,
+        signal: { seed: f.signal.seed, midBlock: false },
+      },
+    ],
+  );
+  expect(f.world.tapReceipts).toEqual([{ id: 1, action: 'signal' }]);
+  const angry = request.mock.calls.filter((call) => call[2] === 'angry');
+  expect(angry.map((call) => call[0])).toEqual(drivers.slice(0, 4));
+  expect(angry.some((call) => call[0] === past)).toBe(false);
+  expect(
+    drivers.slice(0, 4).every((driver) => f.world.emojiMemory.cue(driver)?.mood === 'angry'),
+  ).toBe(true);
+});
+it('a candle tap reaches nearby seasonal grave visitors only while their season is active', () => {
+  const builder = new LifeBuilder();
+  builder.grave({ x: 2000, y: 2000 }, 'grave', 1);
+  builder.place({ x: 1000, y: 1000 }, 'worship', 30);
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.enableTaps();
+  world.setSeasons([
+    {
+      id: 'memorial',
+      visitors: {
+        label: 'Visitors',
+        share: 1,
+        per_grave_family: [2, 2],
+        max_per_tile: 8,
+        hours: [
+          [0, 1],
+          [23, 1],
+        ],
+      },
+    },
+  ]);
+  world.sync([{ key: 'grave', tile: left, life: builder.finish() }]);
+  world.step(0, undefined, 19, undefined, undefined, { season: 'memorial', rain: 0 });
+  const life = world.resident('grave')!,
+    at = tileToLngLat(left, { x: 2000, y: 2000 });
+  const levels = { ...activityLevels(1), season: { visitors: 1, congregations: 1 } };
+  expect(life.gatherers.some((g) => g.seasonal === 'visitors')).toBe(true);
+  world.visible(19, levels, at);
+  const request = vi.spyOn(life, 'requestEmoji');
+  const tap: LifeTap = {
+    id: 1,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at,
+    pointer: 'touch',
+    cellMeters: 1,
+    candle: { key: 'grave', at },
+  };
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { season: 'memorial', rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [tap],
+  );
+  expect(request).toHaveBeenCalled();
+  expect(
+    request.mock.calls.every(
+      (c) => c[2] === 'pray' && life.gatherers.some((g) => g === c[0] && g.seasonal === 'visitors'),
+    ),
+  ).toBe(true);
+  request.mockClear();
+  world.step(0, undefined, 19, undefined, undefined, { season: null, rain: 0 });
+  world.visible(19, levels, at);
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { season: null, rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...tap, frame: world.tapSources!.frame }],
+  );
+  expect(request).not.toHaveBeenCalled();
+});
+it('a chosen carnival tap requests party from at most eight people within fifteen metres', () => {
+  const f = vehicleWorld();
+  const at = f.world.visible(19, 1, [0, 0]).find((a) => a.kind === 'person')!;
+  f.life.movers.splice(
+    0,
+    f.life.movers.length,
+    ...Array.from({ length: 10 }, (_, i) => {
+      const person = continuityMover(f.life, f.person.x + i * f.life.perMeter * 2, 'person');
+      person.y = f.person.y;
+      person.group = f.person.group;
+      return person;
+    }),
+  );
+  f.world.visible(19, 1, [0, 0]);
+  const request = vi.spyOn(f.life, 'requestEmoji');
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    undefined,
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        ...f.tap,
+        frame: f.world.tapSources!.frame,
+        agent: undefined,
+        carnival: { key: 'ride', at: [at.lng, at.lat] },
+      },
+    ],
+  );
+  expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'carnival' }]);
+  expect(request.mock.calls.length).toBeGreaterThan(0);
+  expect(request.mock.calls.length).toBeLessThanOrEqual(8);
+  expect(request.mock.calls.every((c) => c[2] === 'party')).toBe(true);
+});
+it('a ghost tap requests fear from at most six nearby visible people', () => {
+  const world = new LifeWorld(undefined, undefined, { enabled: false });
+  world.enableTaps();
+  world.setFolklore(folkloreConfig);
+  const source = folkloreTile();
+  world.sync([{ key: source.key, tile: source.tile, life: source.geo }]);
+  for (let i = 0; i < 2; i++)
+    world.step(6, undefined, 19, undefined, undefined, {
+      minutes: 1320,
+      folkloreDate: calendar(),
+      rain: 0,
+    });
+  const ghost = world
+    .visibleFolklore(19, folkloreCenter)
+    .sprites.find((s) => s.id.includes('/hospital/'))!;
+  const life = world.resident(source.key)!;
+  const at = lngLatToTile(source.tile, ghost.lng, ghost.lat);
+  const people = Array.from({ length: 8 }, (_, i) => {
+    const person = continuityMover(life, at.x + i * life.perMeter * 0.5, 'person');
+    person.y = at.y;
+    person.group = [
+      { figure: 'adult', shirt: 0, umbrella: 1, canopy: 0, lateral: 0, back: 0, step: 0 },
+    ];
+    return person;
+  });
+  life.movers.splice(0, life.movers.length, ...people);
+  world.visible(19, 1, folkloreCenter);
+  const request = vi.spyOn(life, 'requestEmoji');
+  world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { minutes: 1320, folkloreDate: calendar(), rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [
+      {
+        id: 1,
+        generation: 1,
+        frame: world.tapSources!.frame,
+        at: [ghost.lng, ghost.lat],
+        pointer: 'touch',
+        cellMeters: 1,
+        folklore: ghost.id,
+      },
+    ],
+  );
+  expect(world.tapReceipts![0]!.action).toBe('folklore');
+  expect(request).toHaveBeenCalledTimes(6);
+  expect(request.mock.calls.every((args) => args[2] === 'scared')).toBe(true);
+});
+
+function vehicleWorld(kind: 'vehicle' | 'train' | 'dog' | 'cat' = 'vehicle') {
+  const world = new LifeWorld(undefined, undefined, undefined, false);
+  world.enableTaps();
+  const entry = continuityTile(
+    left,
+    kind === 'train' ? LifeLine.rail : kind === 'vehicle' ? LifeLine.roadMajor : LifeLine.path,
+  );
+  world.sync([entry]);
+  const life = world.resident(entry.key)!;
+  life.stalls.length = 0;
+  life.gatherers.length = 0;
+  life.flocks.length = 0;
+  const vehicle = continuityMover(life, 1800, kind);
+  if (vehicle.train) vehicle.train.trail = [1800 - 100 * life.perMeter, vehicle.y];
+  const person = continuityMover(life, 1800 + 10 * life.perMeter, 'person');
+  person.group = [
+    { figure: 'adult', shirt: 0, umbrella: 0.1, canopy: 0, lateral: 0, back: 0, step: 0 },
+  ];
+  person.speed = life.perMeter;
+  person.y += 2 * life.perMeter;
+  life.movers.splice(0, life.movers.length, vehicle, person);
+  world.setEmojiView([19, 1, [0, 0]]);
+  const agents = world.visible(19, 1, [0, 0]);
+  const index = agents.findIndex(
+    (a) => a.kind === kind && (!vehicle.train || a.vehicle === 'coach'),
+  );
+  const selected = agents[index]!;
+  const tap: LifeTap = {
+    id: 11,
+    generation: 1,
+    frame: world.tapSources!.frame,
+    at: [selected.lng, selected.lat],
+    pointer: 'touch',
+    cellMeters: 1,
+    agent: index,
+  };
+  return { world, life, vehicle, person, tap };
+}
+it.each(['car', 'jeepney'] as const)(
+  'honks a %s and requests a guarded two-second hurry without riders',
+  (craft) => {
+    const f = vehicleWorld();
+    f.vehicle.vehicle = craft;
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [f.tap],
+    );
+    expect(f.world.tapReceipts).toEqual([{ id: 11, action: 'agent' }]);
+    expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('honk');
+    expect(f.world.emojiMemory.cue(f.person)?.mood).toBe('rushing');
+    expect(f.person.pause).toBe(0);
+  },
+);
+it('resolves a coach to its consist, but renders the requested horn only on the locomotive', () => {
+  const f = vehicleWorld('train');
+  expect(f.world.visible(19, 1, [0, 0]).filter((a) => a.emoji)).toEqual([]);
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [f.tap],
+  );
+  const cues = f.world.visible(19, 1, [0, 0]).filter((a) => a.kind === 'train' && a.emoji);
+  expect(cues).toHaveLength(1);
+  expect(cues[0]!.vehicle).toBe('locomotive');
+  expect(cues[0]!.emoji?.mood).toBe('honk');
+});
+it.each(['dog', 'cat'] as const)(
+  'wakes a sleeping %s through the normal guarded movement path',
+  (kind) => {
+    const f = vehicleWorld(kind);
+    f.vehicle.pause = 20;
+    f.vehicle.lying = kind === 'dog';
+    f.vehicle.grooming = kind === 'cat';
+    const agents = f.world.visible(19, 1, [0, 0]);
+    const agent = agents.findIndex((a) => a.kind === kind);
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+    );
+    expect(f.vehicle.pause).toBe(0);
+    expect(f.vehicle.lying || f.vehicle.grooming).toBe(false);
+    expect(f.world.emojiMemory.cue(f.vehicle)?.mood).toBe('yawn');
+  },
+);
+it('answers a bark nearest-first with deterministic delays, six dogs maximum and no restart', () => {
+  const f = vehicleWorld();
+  f.life.movers.length = 0;
+  const dogs = Array.from({ length: 8 }, (_, i) =>
+    continuityMover(f.life, 1800 + i * 2 * f.life.perMeter, 'dog'),
+  );
+  f.life.movers.push(...dogs);
+  const agents = f.world.visible(19, 1, [0, 0]);
+  const spy = vi.spyOn(f.life, 'requestEmoji');
+  const tap = {
+    ...f.tap,
+    frame: f.world.tapSources!.frame,
+    agent: agents.findIndex((a) => a.kind === 'dog'),
+  };
+  f.world.step(
+    0,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [tap, { ...tap, id: 12 }],
+  );
+  expect(spy.mock.calls.map(([owner]) => owner)).toEqual(dogs.slice(0, 6));
+  spy.mock.calls.forEach((args, i) => expect(args[5]).toBeCloseTo([0, 0.4, 0.6, 0.8, 1, 1.2][i]!));
+});
+it.each([false, true])('consumes a closed/rainy cart without a visit or wave (rain=%s)', (rain) => {
+  const f = vehicleWorld();
+  const stall = {
+    x: 1800,
+    y: f.vehicle.y,
+    hx: 1,
+    hy: 0,
+    paint: 0,
+    shirt: 0,
+    side: 1 as const,
+    rank: 0,
+    open: true,
+  };
+  f.life.stalls.push(stall);
+  f.life.scenes.addStall(stall);
+  const agents = f.world.visible(19, 1, [0, 0]);
+  const agent = agents.findIndex((a) => a.vehicle === 'cart');
+  expect(agent).toBeGreaterThanOrEqual(0);
+  stall.open = rain;
+  f.world.step(
+    0.01,
+    undefined,
+    19,
+    undefined,
+    undefined,
+    { rain: rain ? 1 : 0 },
+    1,
+    1.8,
+    1,
+    undefined,
+    undefined,
+    undefined,
+    [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+  );
+  expect(f.world.tapReceipts![0]!.action).toBe('agent');
+  expect(f.life.scenes.visits.size).toBe(0);
+  expect(f.world.emojiMemory.cue(stall)?.mood).not.toBe('wave');
+});
+it.each([true, false])(
+  'an open dry cart reserves one buyer or waves when capacity is unavailable (capacity=%s)',
+  (capacity) => {
+    const f = vehicleWorld('dog');
+    const stall = {
+      x: 1800,
+      y: f.vehicle.y,
+      hx: 1,
+      hy: 0,
+      paint: 0,
+      shirt: 0,
+      side: 1 as const,
+      rank: 0,
+      open: true,
+    };
+    f.person.y = f.vehicle.y;
+    f.life.stalls.push(stall);
+    f.life.scenes.addStall(stall);
+    const site = f.life.scenes.sites.find((site) => site.stall === stall)!;
+    if (!capacity) site.capacity = 0;
+    const agents = f.world.visible(19, 1, [0, 0]);
+    const agent = agents.findIndex((a) => a.vehicle === 'cart');
+    expect(agent).toBeGreaterThanOrEqual(0);
+    f.world.step(
+      0.01,
+      undefined,
+      19,
+      undefined,
+      undefined,
+      { rain: 0 },
+      1,
+      1.8,
+      1,
+      undefined,
+      undefined,
+      undefined,
+      [{ ...f.tap, frame: f.world.tapSources!.frame, agent }],
+    );
+    expect(f.world.tapReceipts![0]!.action).toBe('agent');
+    expect(f.life.scenes.visits.size).toBe(capacity ? 1 : 0);
+    if (capacity) expect(f.life.scenes.visits.has(f.person)).toBe(true);
+    else expect(f.world.emojiMemory.cue(stall)?.mood).toBe('wave');
+  },
+);
+it('leaves tap-free physical state and visible records identical with frame targeting enabled', () => {
+  const a = makeScenario('sparse', 1, true),
+    b = makeScenario('sparse', 1, true);
+  b.world.enableTaps();
+  for (let i = 0; i < 20; i++) {
+    a.step(1 / 30);
+    b.step(1 / 30);
+    expect(b.world.visible(19, 1, b.center)).toEqual(a.world.visible(19, 1, a.center));
+  }
+  expect(completeScenarioState(b.world)).toEqual(completeScenarioState(a.world));
+  expect(b.world.tapReceipts).toBeUndefined();
+});
+
+const agent: VisibleAgent = { kind: 'cat', lng: 0, lat: 0, flap: 0, ahead: [1, 0] };
+function fixture() {
+  const sources = new TapSources();
+  sources.begin();
+  sources.present({}, agent);
+  sources.finish([agent]);
+  const tap: LifeTap = {
+    id: 1,
+    generation: 1,
+    frame: sources.frame,
+    at: [0, 0],
+    pointer: 'touch',
+    cellMeters: 1,
+  };
+  const handlers: TapHandlers = {
+    folklore: vi.fn(() => false),
+    agent: vi.fn(),
+    signal: vi.fn(() => false),
+    procession: vi.fn(() => false),
+    carnival: vi.fn(),
+    candle: vi.fn(),
+    tree: vi.fn(() => false),
+    rice: vi.fn(() => true),
+  };
+  return { sources, tap, handlers };
+}
+describe('tap arbitration', () => {
+  it.each([false, true])('consumes crowd taps with an active procession=%s', (running) => {
+    const f = fixture();
+    f.handlers.procession = vi.fn(() => running);
+    expect(resolveTap({ ...f.tap, crowd: true, firework: true }, f.sources, f.handlers)).toEqual({
+      id: 1,
+      ...(running && { action: 'procession' }),
+    });
+    expect(f.handlers.signal).not.toHaveBeenCalled();
+    expect(f.handlers.tree).not.toHaveBeenCalled();
+    expect(f.handlers.rice).not.toHaveBeenCalled();
+  });
+  it('consumes a matched inactive cat instead of reaching a firework or feed', () => {
+    const f = fixture();
+    expect(resolveTap({ ...f.tap, agent: 0, firework: true }, f.sources, f.handlers).action).toBe(
+      'agent',
+    );
+    expect(f.handlers.rice).not.toHaveBeenCalled();
+    expect(f.handlers.signal).not.toHaveBeenCalled();
+  });
+  it.each(['folklore', 'signal', 'procession', 'tree'] as const)(
+    'stops at the first accepted %s',
+    (kind) => {
+      const f = fixture();
+      f.handlers[kind] = vi.fn(() => true);
+      const receipt = resolveTap(
+        { ...f.tap, folklore: 'ghost', firework: true },
+        f.sources,
+        f.handlers,
+      );
+      expect(receipt.action).toBe(kind);
+      expect(f.handlers.rice).not.toHaveBeenCalled();
+    },
+  );
+  it('puts fixture choices ahead of trees and fireworks, and never uses a second worker tap', () => {
+    const f = fixture();
+    const receipt = resolveTap(
+      {
+        ...f.tap,
+        carnival: { key: 'ride', at: [0, 0] },
+        candle: { key: 'candle', at: [0, 0] },
+        firework: true,
+      },
+      f.sources,
+      f.handlers,
+    );
+    expect(receipt.action).toBe('carnival');
+    expect(f.handlers.carnival).toHaveBeenCalledOnce();
+    expect(f.handlers.candle).not.toHaveBeenCalled();
+    expect(f.handlers.tree).not.toHaveBeenCalled();
+  });
+  it('drops stale frame handles and invalid candidate indices without selecting an owner', () => {
+    const f = fixture();
+    f.sources.finish([]);
+    expect(resolveTap({ ...f.tap, agent: 0 }, f.sources, f.handlers).action).toBe('agent');
+    for (let i = 0; i < 7; i++) f.sources.finish([]);
+    expect(resolveTap(f.tap, f.sources, f.handlers).action).toBeUndefined();
+    expect(
+      resolveTap({ ...f.tap, frame: f.sources.frame, agent: 5 }, f.sources, f.handlers).action,
+    ).toBeUndefined();
+    expect(agent.inspectionId).toBeUndefined();
+  });
+  it('retains a surface-read target across two GPU frames, worker pipelining and a busy rejection', () => {
+    const f = fixture();
+    const queue = new TapQueue();
+    // Surface callback arrives after two draws; a worker request already in flight rejects it.
+    for (let i = 0; i < 3; i++) f.sources.finish([]);
+    queue.add({ ...f.tap, agent: 0 });
+    const batch = queue.batch(1)!;
+    f.sources.finish([]);
+    expect(queue.batch(1)).toEqual(batch);
+    queue.accepted(batch);
+    const receipt = resolveTap(batch[0]!, f.sources, f.handlers);
+    expect(receipt.action).toBe('agent');
+    expect(queue.consume([receipt], 1)).toHaveLength(1);
+    expect(f.handlers.agent).toHaveBeenCalledOnce();
+    f.sources.clear();
+    expect(resolveTap(batch[0]!, f.sources, f.handlers).action).toBeUndefined();
+  });
+});
+describe('tap queue', () => {
+  it('retains rejected batches, bounds outstanding work, and consumes cached receipts once', () => {
+    const f = fixture(),
+      queue = new TapQueue();
+    for (let i = 0; i < 5; i++) queue.add(f.tap);
+    const batch = queue.batch(1)!;
+    expect(batch).toHaveLength(4);
+    expect(queue.batch(1)).toEqual(batch);
+    queue.accepted(batch);
+    expect(queue.batch(1)).toBeUndefined();
+    const receipts = batch.map((tap) => ({ id: tap.id, action: 'rice' as const }));
+    expect(queue.consume(receipts, 1)).toHaveLength(4);
+    expect(queue.consume(receipts, 1)).toEqual([]);
+  });
+  it('drops pending commands and replies across resets and generation changes', () => {
+    const f = fixture(),
+      queue = new TapQueue();
+    queue.add(f.tap);
+    expect(queue.batch(2)).toBeUndefined();
+    queue.add(f.tap);
+    const batch = queue.batch(1)!;
+    queue.accepted(batch);
+    queue.clear();
+    expect(queue.consume([{ id: batch[0]!.id, action: 'rice' }], 1)).toEqual([]);
+  });
+});

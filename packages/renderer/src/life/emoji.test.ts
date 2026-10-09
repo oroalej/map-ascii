@@ -44,6 +44,36 @@ function fixture(kind: 'person' | 'vehicle' | 'dog' | 'cat' = 'person', rng = ()
   return { observer, o, m, tile, step };
 }
 describe('read-only emoji observer', () => {
+  it('admits explicit cues without chance or cooldown, retaining capacity, speech and a separate owner rate limit', () => {
+    const draws = vi.fn(() => 0.99);
+    const f = fixture('person', draws);
+    const request = {
+      owner: f.m,
+      subject: 'person' as const,
+      mood: 'wave' as const,
+      eligible: true,
+      speaking: false,
+      duration: 0.2,
+      expires: 8,
+    };
+    f.observer.request([request], 19, 0);
+    expect(draws).not.toHaveBeenCalled();
+    expect(f.observer.cue(f.m)?.mood).toBe('wave');
+    f.step(0.3);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.observer.memory.get(f.m)!.cooldownUntil = 100;
+    f.observer.request([request], 19, 0.3);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.observer.request([request], 19, 1);
+    expect(f.observer.cue(f.m)?.mood).toBe('wave');
+    expect(f.observer.groups.values().next().value?.end).toBe(1.2);
+    f.step(1);
+    f.observer.request([{ ...request, speaking: true }], 19, 2);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+    f.observer.request([request], 17, 3);
+    f.observer.request([request], 19, 9);
+    expect(f.observer.cue(f.m)).toBeUndefined();
+  });
   it('admits explicit cursor relief and suppresses heat only while classified shaded', () => {
     const f = fixture('person', () => 0.999);
     f.o.cursorShaded = true;

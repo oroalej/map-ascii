@@ -23,6 +23,8 @@ import { eventBodySize } from './event-actors';
 import { runtimeFolklore } from './folklore-config';
 import { EMPTY_FOLKLORE, type FolklorePacket } from './folklore';
 import { isEmergencyCraft } from './emergency';
+import type { TapReceipt } from './tap';
+import type { SignalOffsets } from './signals';
 let nextGeneration = 0;
 export const allocateLifeGeneration = () => ++nextGeneration;
 
@@ -51,6 +53,7 @@ export function retainOrdinary(
     folklore: EMPTY_FOLKLORE,
     puffs: EMPTY_PUFFS,
     procession: undefined,
+    tapFrame: undefined,
     throngRun: undefined,
     agents: view.agents.filter((agent) => {
       if (agent.event || agent.eventGround || agent.prop === 'event') return false;
@@ -85,6 +88,9 @@ export type FrameView = {
   /** Run and terrain accepted together; HUD may display a newer optimistic command. */
   throngRun?: ProcessionRun;
   signalClock: number;
+  signalOffsets?: SignalOffsets;
+  tapFrame?: number;
+  tapReceipts?: readonly TapReceipt[];
   cellGuard: LifeWorld['groundCellGuard'];
 };
 export interface LifeHost {
@@ -286,6 +292,7 @@ export function createWorkerHost(
       peddlers: options.cityLife?.peddlers,
       folklore: runtimeFolklore(options.cityLife),
       itemInspection: options.itemInspection,
+      tapTargets: true,
       emojiObserver: options.emojiObserver,
       dialogue: options.moments?.dialogue,
       periods: options.moments?.periods,
@@ -300,7 +307,15 @@ export function createWorkerHost(
       agentEpoch++;
       acceptedPost = undefined;
       if (fallback) fallback.invalidateFrame();
-      if (view) view = { ...view, agents: [], throngRun: undefined, folklore: EMPTY_FOLKLORE };
+      if (view)
+        view = {
+          ...view,
+          agents: [],
+          folklore: EMPTY_FOLKLORE,
+          tapReceipts: undefined,
+          tapFrame: undefined,
+          throngRun: undefined,
+        };
     },
     invalidateFolklore() {
       folkloreEpoch++;
@@ -377,7 +392,15 @@ export function createWorkerHost(
       const frame = ++frames;
       const posted = profiler?.time();
       void remote
-        .frame(input)
+        .frame({
+          ...input,
+          step: {
+            ...input.step,
+            ...(input.step.taps && {
+              taps: input.step.taps.filter((tap) => tap.generation === generation),
+            }),
+          },
+        })
         .then((result) => {
           if (disposed || generation !== requestedGeneration) return;
           if (result.terrain !== undefined) {
@@ -387,14 +410,18 @@ export function createWorkerHost(
           }
           if (agentEpoch !== requestedAgentEpoch) {
             const cellTerrain = terrain;
-            if (view || result.terrain !== undefined)
+            if (view || result.terrain !== undefined || result.tapReceipts?.length)
               view = {
                 agents: view?.agents ?? [],
                 folklore: EMPTY_FOLKLORE,
                 puffs: EMPTY_PUFFS,
                 generation,
                 procession: view?.procession,
-                signalClock: view?.signalClock ?? 0,
+                signalClock: result.signalClock,
+                ...(result.signalOffsets && { signalOffsets: result.signalOffsets }),
+                // Retained agents are not the drawables for the rejected result's tapFrame.
+                tapFrame: undefined,
+                tapReceipts: result.tapReceipts,
                 cellGuard: (toCell, terrainOnly) =>
                   cellTerrain &&
                   makeCellGuard(
@@ -428,6 +455,9 @@ export function createWorkerHost(
             procession: result.procession,
             throngRun: result.procession,
             signalClock: result.signalClock,
+            ...(result.signalOffsets && { signalOffsets: result.signalOffsets }),
+            tapFrame: result.tapFrame,
+            tapReceipts: result.tapReceipts,
             cellGuard: (toCell, terrainOnly) =>
               cellTerrain &&
               makeCellGuard(
@@ -492,6 +522,7 @@ export function createWorkerHost(
           ...view,
           agents: view.agents.filter((agent) => !isEmergencyCraft(agent.vehicle)),
           puffs: EMPTY_PUFFS,
+          tapFrame: undefined,
         };
       if (fallback) fallback.setEmergency(data);
       else void remote.setEmergency(data).catch(fail);
@@ -519,6 +550,7 @@ export function createWorkerHost(
         folklore: EMPTY_FOLKLORE,
         puffs: EMPTY_PUFFS,
         signalClock: view?.signalClock ?? 0,
+        ...(view?.signalOffsets && { signalOffsets: view.signalOffsets }),
         cellGuard: retained?.cellGuard ?? (() => undefined),
         procession,
       };

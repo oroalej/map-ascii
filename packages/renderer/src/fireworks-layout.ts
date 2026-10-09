@@ -1,9 +1,9 @@
 import type { FireworksConfig } from '@atlas/shared';
 import { FIREWORK_VARIANTS } from '@atlas/shared';
-import { MAX_ZOOM } from './camera';
+import { MAX_ZOOM, project } from './camera';
 import type { Grid, View } from './grid';
 import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
-import { random } from './life/random';
+import { hashString, random } from './life/random';
 
 const REGULAR_SHELLS = 49;
 
@@ -121,7 +121,55 @@ export type FireworkDisplay = {
   siteView: Float64Array;
   sites?: FireworkSiteSampler;
   reduced?: boolean;
+  /** Tap-only overrides borrow the last four regular slots; ambient launches stay intact. */
+  requested?: Map<number, FireworkLaunch>;
 };
+
+export type FireworkRequest = {
+  id: number;
+  at: readonly [number, number];
+  zoom: number;
+  time: number;
+};
+
+export const fireworkTapEligible = (config: FireworksConfig | undefined, altitude: number) =>
+  !!config?.variants.length && altitude < 0;
+
+export function clearRequestedFireworks(display: FireworkDisplay) {
+  if (!display.requested) return;
+  for (const slot of display.requested.keys()) display.retained[slot] = 0;
+  delete display.requested;
+}
+
+/** Explicit launches need no residential reservation and consume no ambient random draws. */
+export function requestFirework(display: FireworkDisplay, request: FireworkRequest): boolean {
+  if (!Number.isFinite(request.time) || !request.at.every(Number.isFinite)) return false;
+  const requested = (display.requested ??= new Map<number, FireworkLaunch>());
+  for (const [slot, launch] of requested)
+    if (request.time >= launch.next) {
+      requested.delete(slot);
+      display.retained[slot] = 0;
+    }
+  let slot = FIREWORKS.regularShells - 4;
+  while (slot < FIREWORKS.regularShells && requested.has(slot)) slot++;
+  if (slot === FIREWORKS.regularShells) return false;
+  const seed = hashString(`${request.id}/${request.at[0]}/${request.at[1]}`) & 65535;
+  const height = Math.min(160, fireworkCameraHeight(request.zoom) * (0.4 + (seed / 65535) * 0.15));
+  const rise = fireworkRise(height);
+  const [x, y] = project(request.at[0], request.at[1], FIREWORKS.referenceZoom);
+  requested.set(slot, {
+    site: -1,
+    x,
+    y,
+    seed,
+    height,
+    rise,
+    start: request.time,
+    next: request.time + rise + FIREWORKS.smokeLife,
+  });
+  display.retained[slot] = 0;
+  return true;
+}
 
 /** Seed once per context, never per frame. An explicit seed makes behavior testable. */
 export function createFireworkDisplay(
@@ -187,11 +235,22 @@ export function fireworkShells(
   display.flights.fill(0);
   display.appearance.fill(0);
   display.admitted.fill(-1);
-  if (!limit) return 0;
+  const clock = reduced || !Number.isFinite(time) ? 0 : Math.max(0, time);
+  if (display.requested) {
+    if (reduced || clock < display.lastTime) clearRequestedFireworks(display);
+    else {
+      for (const [slot, launch] of display.requested)
+        if (clock >= launch.next) {
+          display.requested.delete(slot);
+          display.retained[slot] = 0;
+        }
+      if (!display.requested.size) delete display.requested;
+    }
+  }
+  if (!limit && !display.requested?.size) return 0;
   const slots =
     FIREWORKS.regularShells +
     (fireworkCameraHeight(view.camera.zoom) > FIREWORKS.largeHeight ? 1 : 0);
-  const clock = reduced || !Number.isFinite(time) ? 0 : Math.max(0, time);
   if (display.reduced !== reduced || clock < display.lastTime) {
     display.launches.fill(undefined);
     display.retained.fill(0);
@@ -260,7 +319,9 @@ export function fireworkShells(
   let count = 0;
   for (let slot = 0; slot < slots; slot++) {
     const large = slot === FIREWORKS.regularShells;
-    let launch = display.launches[slot];
+    const requested = display.requested?.get(slot);
+    if (!limit && !requested) continue;
+    let launch = requested ?? display.launches[slot];
     if (!launch || clock >= launch.next) {
       if (clock < display.retryAt[slot]!) continue;
       // Prewarm on entry/long tab suspension, so opening a preview never waits for a show.
@@ -348,7 +409,10 @@ export function fireworkShells(
   }
   const high = count > 0 && display.admitted[count - 1] === FIREWORKS.regularShells ? 1 : 0;
   const candidates = count - high;
-  const regularLimit = limit - (slots - FIREWORKS.regularShells);
+  const regularLimit = Math.max(
+    limit - (slots - FIREWORKS.regularShells),
+    display.requested?.size ?? 0,
+  );
   if (regularLimit < candidates) {
     // Keep still-visible identities before admitting nearer replacements. This prevents
     // incremental zoom/pan from swapping a followed burst for a smaller nearby launch.
@@ -364,7 +428,12 @@ export function fireworkShells(
         const radius = out[candidate * 4 + 3]!;
         const visible =
           Math.abs(dx) <= view.width / 2 + radius && Math.abs(dy) <= view.height / 2 + radius;
-        const keep = visible && display.retained[display.admitted[candidate]!] ? 1 : 0;
+        const source = display.admitted[candidate]!;
+        const keep = display.requested?.has(source)
+          ? 2
+          : visible && display.retained[source]
+            ? 1
+            : 0;
         const next = dx * dx + dy * dy;
         if (keep > retained || (keep === retained && next < distance)) {
           nearest = candidate;

@@ -21,8 +21,11 @@ import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
+import type { SignalOffsets } from './signals';
 import type { RuntimeFolklore } from './folklore-config';
 import type { FolklorePacket } from './folklore';
+import type { LifeTap, TapReceipt } from './tap';
+import type { TapPointer } from './feed';
 
 type Step = Parameters<LifeWorld['step']>;
 export type FrameInput = {
@@ -47,6 +50,8 @@ export type FrameInput = {
     pointer?: readonly [number, number];
     pointerRest?: Step[10];
     gust?: Step[11];
+    taps?: readonly LifeTap[];
+    tapPointer?: TapPointer;
   };
   visible: Parameters<LifeWorld['visible']>;
 };
@@ -56,6 +61,9 @@ export type FrameResult = {
   puffs: Float64Array;
   procession: ProcessionRun | undefined;
   signalClock: number;
+  signalOffsets?: SignalOffsets;
+  tapFrame?: number;
+  tapReceipts?: readonly TapReceipt[];
   terrain?: TerrainSnapshot | null;
   profile?: ProfileSample;
 };
@@ -67,6 +75,7 @@ export type LifeInit = {
   seasons?: readonly SimulationSeason[];
   shopSchedule?: ShopSchedule;
   itemInspection?: boolean;
+  tapTargets?: boolean;
   /** Internal isolation switch; public emoji display preferences never reach it. */
   emojiObserver?: boolean;
   dialogue?: readonly DialogueChoice[];
@@ -134,6 +143,8 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     step.pointer,
     step.pointerRest,
     step.gust,
+    step.taps,
+    step.tapPointer,
   );
   if (start !== undefined) profiler!.add('step', profiler!.time() - start);
   const visibleStart = profiler?.time();
@@ -145,6 +156,9 @@ export function runLifeFrame(world: LifeWorld, input: FrameInput, profiler?: Fra
     puffs: world.visiblePuffs,
     procession: world.procession(),
     signalClock: world.signalClock,
+    ...(world.signalOffsets && { signalOffsets: world.signalOffsets }),
+    ...(world.tapSources && { tapFrame: world.tapSources.frame }),
+    ...(world.tapReceipts && { tapReceipts: world.tapReceipts }),
   };
 }
 
@@ -174,6 +188,7 @@ export function createLifeWorkerApi(
       preparation?.clear();
       profiler = options.profiling ? new FrameProfiler() : undefined;
       world = worldFactory(options, profiler);
+      if (options.tapTargets) world.enableTaps();
       preparation = new LifePreparation(world, profiler, preparationClock);
       configureLifeWorld(world, options);
       geometries.clear();

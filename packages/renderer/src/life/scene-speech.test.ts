@@ -9,6 +9,42 @@ const vendor: DialogueChoice = {
   turns: 2,
   speakers: [0, 1],
 };
+it.each(['morning', 'afternoon', 'evening'] as const)(
+  'explicit %s greetings bypass cooldown and always speak, retaining owner/capacity gates',
+  (period) => {
+    const owner = {},
+      choice: DialogueChoice = {
+        id: period,
+        kind: 'greet',
+        profile: 'greeting',
+        period,
+        delivery: 'utterance',
+        turns: 1,
+        speakers: [0],
+      };
+    const speech = new SceneSpeech(1, [choice]);
+    speech.selector.memory.reserve([owner], 1000);
+    const scene: SceneExchange = {
+      key: {},
+      requested: true,
+      kind: 'greet',
+      speakers: [{ owner, member: 0, figure: 'adult' }],
+      profiles: ['greeting'],
+      context: {
+        minutes: period === 'morning' ? 480 : period === 'afternoon' ? 780 : 1200,
+        rain: 0,
+        wind: 0,
+        figures: ['adult'],
+        delivery: 'utterance',
+      },
+      valid: () => true,
+    };
+    expect(speech.admit(scene, 0)).toBe(false);
+    expect(speech.admit({ ...scene, key: {} }, 12)).toBe(true);
+    expect(speech.speech(owner)?.exchangeId).toBe(period);
+    expect(speech.admit({ ...scene, key: {} }, 12)).toBe(false);
+  },
+);
 function fixture(choice = vendor) {
   const a = {},
     b = {},

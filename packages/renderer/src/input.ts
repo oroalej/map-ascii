@@ -10,8 +10,10 @@ export type InputIntents = {
   zoom: (delta: number, anchor: [number, number]) => void;
   /** The mouse is over (x, y) CSS pixels from the canvas's top left, or has left (null). */
   hover: (point: [number, number] | null) => void;
+  /** New idle mouse activity, distinct from pointerdown clearing hover. */
+  pointerActivity?: (left: boolean) => void;
   /** A click or tap at (x, y): a press and release that barely moved. */
-  tap: (point: [number, number]) => void;
+  tap: (point: [number, number], pointerType: string) => void;
 };
 
 /** A press that moves less than this (CSS px) and ends within `TAP_MS` is a tap. */
@@ -69,6 +71,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   const onPointerMove = (e: PointerEvent) => {
     if (!pointers.has(e.pointerId)) {
       if (e.pointerType === 'mouse' && pointers.size === 0) {
+        intents.pointerActivity?.(false);
         const p = local(e);
         intents.hover([p.x, p.y]);
       }
@@ -104,7 +107,7 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
         intents.zoom(1, fromCenter({ x, y }));
       } else {
         lastTap = { x, y, time: e.timeStamp };
-        intents.tap([x, y]);
+        intents.tap([x, y], e.pointerType);
       }
     } else if (press?.id === e.pointerId) {
       press = null;
@@ -112,7 +115,10 @@ export function attachInput(canvas: HTMLCanvasElement, intents: InputIntents): (
   };
 
   const onPointerLeave = (e: PointerEvent) => {
-    if (e.pointerType === 'mouse' && pointers.size === 0) intents.hover(null);
+    if (e.pointerType === 'mouse' && pointers.size === 0) {
+      intents.pointerActivity?.(true);
+      intents.hover(null);
+    }
   };
 
   const onWheel = (e: WheelEvent) => {
