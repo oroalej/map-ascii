@@ -7,6 +7,7 @@ import { tmpdir, getPriority } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { viewportFor } from '../src/camera';
+import { placeGrid, windowCells, windowMargin } from '../src/grid';
 import { LifeBuilder, LifeLine } from '../src/life/geometry';
 import type * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
@@ -273,6 +274,65 @@ try {
     rows.push({ name: 'peddlers/hot-afternoon', timings, counts });
     console.log(
       `peddlers/hot-afternoon: ${JSON.stringify(counts)}; median ${(-timings.medianGain * 100).toFixed(1)}% cost change; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
+  if ('pack/desktop'.startsWith(casePrefix)) {
+    // Identical immutable agents, grid and guard for each revision's own packer.
+    if (!frozen) throw new Error('Packing comparison requires complete frozen source graphs');
+    const bounds = boundsFor(1920, 1080);
+    const world = new current.LifeWorld();
+    world.sync(
+      Array.from({ length: 16 }, (_, i) => ({
+        key: `busy${i}`,
+        tile: { ...tile, x: tile.x + (i % 8), y: tile.y + Math.floor(i / 8) },
+        life: geometry,
+      })),
+    );
+    for (let frame = 0; frame < 40; frame++) world.step(1 / 30, undefined, 18, bounds);
+    const agents = Object.freeze(structuredClone(world.visible(18, 1, center, undefined, bounds)));
+    ok(agents.length > 0, 'No agents to pack');
+    const cell = { w: 5, h: 9 };
+    const view = { camera, dpr: 1, width: 1920, height: 1080 };
+    const size = windowCells(view, cell);
+    const placed = placeGrid(view, cell, size.cols, size.rows, windowMargin(view, cell));
+    const grid = {
+      cols: size.cols,
+      rows: size.rows,
+      cellWidth: cell.w,
+      cellHeight: cell.h,
+      toCell: placed.toCell,
+      allowsGroundCell: (_agent: unknown, col: number, row: number) => (col + row) % 7 !== 0,
+    };
+    const packer = async (graph: typeof frozenCurrent) => {
+      const draw = (await import(graph.path('life/draw.ts'))) as typeof drawModule;
+      const theme = (await import(graph.path('theme.ts'))) as typeof themeModule;
+      const glyphs = ['', ...theme.mapGlyphs(theme.themes.dark)];
+      const indices = new Map(glyphs.map((glyph, index) => [glyph, index]));
+      const glyphIndex = (glyph: string) => indices.get(glyph) ?? 0;
+      const prepared = draw.buildLifeGlyphs(glyphIndex);
+      const out = new Uint8Array(grid.cols * grid.rows * 4),
+        owners = new Uint32Array(grid.cols * grid.rows);
+      const pack = () =>
+        draw.packLife(out, grid, agents, theme.themes.dark, glyphIndex, null, prepared, {
+          owners,
+        });
+      return { pack, out, owners };
+    };
+    const old = await packer(frozen),
+      next = await packer(frozenCurrent);
+    old.pack();
+    next.pack();
+    if (!allowDiff) {
+      deepStrictEqual(next.out, old.out);
+      deepStrictEqual(next.owners, old.owners);
+    }
+    const timings = compare(
+      () => old.pack,
+      () => next.pack,
+    );
+    rows.push({ name: 'pack/desktop', timings, counts: { agents: agents.length } });
+    console.log(
+      `pack/desktop: ${agents.length} agents; median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
     );
   }
   for (const count of [1, 4, 16, 64]) {

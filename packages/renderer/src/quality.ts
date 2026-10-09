@@ -24,7 +24,8 @@ const high: Knobs = {
   waterDetail: true,
   fish: true,
   beams: true,
-  maxDpr: Infinity,
+  /** High-DPI screens draw at most 2× (cell targets and the glyph pass scale with it). */
+  maxDpr: 2,
 };
 const effects: Knobs = {
   ...high,
@@ -38,10 +39,12 @@ const effects: Knobs = {
   waterDetail: false,
   fish: false,
   beams: false,
+  // Never sharper than the tier above it.
+  maxDpr: 1.5,
 };
 export const TIERS = [
   { name: 'high', knobs: high },
-  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700 } },
+  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5 } },
   { name: 'effects', knobs: effects },
   { name: 'pixels', knobs: { ...effects, crowd: 0.3, maxDpr: 1.25 } },
 ] as const;
@@ -134,7 +137,16 @@ export class QualityController {
     remove = Math.max(remove, this.samples.length - this.cfg.capacity);
     if (remove > 0) this.samples.splice(0, remove);
   }
-  decide(at: number, quiet: boolean): number | undefined {
+  /**
+   * The tier to apply at `at`, if any. Changes wait for `quiet` (no input or flight), except a
+   * severe hold during interaction, which may step down to a tier drawing at the same pixel ratio
+   * (`dprOf`, the effective ratio of a tier), so nothing resizes mid-gesture.
+   */
+  decide(
+    at: number,
+    quiet: boolean,
+    dprOf: (tier: number) => number = (tier) => TIERS[tier]!.knobs.maxDpr,
+  ): number | undefined {
     if (this.forced !== undefined) {
       if (!quiet) return;
       const tier = this.forced;
@@ -161,14 +173,16 @@ export class QualityController {
       this.probeAt = undefined;
       this.probeWait = this.cfg.probeMs;
     }
-    if (!quiet || at - this.changedAt < this.cfg.cooldownMs) return;
-    if (down && this.tier < 3) {
+    if (at - this.changedAt < this.cfg.cooldownMs) return;
+    const severe = this.severeAt !== undefined && at - this.severeAt >= this.cfg.severeHoldMs;
+    if (down && this.tier < 3 && (quiet || (severe && dprOf(this.tier + 1) === dprOf(this.tier)))) {
       if (this.probeAt !== undefined && at - this.probeAt <= this.cfg.probeFailureMs) {
         this.probeWait = Math.min(this.probeWait * 2, this.cfg.maxProbeMs);
         this.probeAt = undefined;
       }
       return this.apply(this.tier + 1, at);
     }
+    if (!quiet) return;
     if (
       this.tier > 0 &&
       at - this.changedAt >= this.probeWait &&

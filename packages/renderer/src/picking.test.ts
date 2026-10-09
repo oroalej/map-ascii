@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isTap, TAP_SLOP } from './input';
 import { cellState, CellState, pointerCell } from './picking';
 import { packId, unpackId } from './raster/geometry';
+import { cellAt } from './grid';
 
 describe('pointerCell', () => {
   const grid = { shiftX: 7, shiftY: 4, cellWidth: 20, cellHeight: 36 };
@@ -12,6 +13,15 @@ describe('pointerCell', () => {
     // CSS (7, 16) → device (14, 32) → grid (21, 36): the first pixel of cell (1, 1).
     expect(pointerCell([7, 16], 2, grid)).toEqual([1, 1]);
     expect(pointerCell([6.4, 15.9], 2, grid)).toEqual([0, 0]);
+  });
+
+  it('maps through a pan margin offset the same way', () => {
+    // A frozen window three cells (plus 2 px) wider than the screen on the left.
+    const margin = { ...grid, shiftX: 3 * 20 + 2, shiftY: 2 * 36 + 5 };
+    expect(pointerCell([0, 0], 2, margin)).toEqual([3, 2]);
+    expect(pointerCell([9, 15.5], 2, margin)).toEqual([4, 3]);
+    expect(pointerCell([8.9, 15.4], 2, margin)).toEqual([3, 2]);
+    expect(cellAt([9, 15.5], 2, margin)).toEqual([(18 + 62) / 20, (31 + 77) / 36]);
   });
 });
 

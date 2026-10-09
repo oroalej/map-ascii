@@ -29,6 +29,7 @@ import { ProcessionGlyph, PROCESSION_GLYPHS } from './procession-glyphs';
 import { buildLifeGlyphs, packLife } from './draw';
 import { mapGlyphs, themes } from '../theme';
 import { BODY_KIND, Occupancy, type PolygonIndex, type Body } from './occupancy';
+import { deliver } from './testing/worker-reply';
 
 const tile = { z: 16, x: 55192, y: 30266 },
   pm = 1 / metersPerUnit(tile);
@@ -413,30 +414,30 @@ describe('street event simulation', () => {
     api.sync([{ key: 'road', tile, life: life.geo }]);
     api.setLive(street.id, 0.5);
     const center = point(1000 + 100 * pm);
-    const result = api.frame({
-      gust: {
-        camera: { lng: center[0], lat: center[1], zoom: 18 },
-        size: { width: 800, height: 600 },
-        cssCell: { w: 5, h: 7.5 },
-        time: 0,
-        wind: { dir: [1, 0], strength: 0 },
-      },
-      step: {
-        dt: 0.1,
-        zoom: 18,
-        bounds: undefined,
-        wind: undefined,
-        weather: undefined,
-        cellMeters: 0,
-      },
-      visible: [18, 1, center],
-    });
+    const result = deliver(
+      api.frame({
+        gust: {
+          camera: { lng: center[0], lat: center[1], zoom: 18 },
+          size: { width: 800, height: 600 },
+          cssCell: { w: 5, h: 7.5 },
+          time: 0,
+          wind: { dir: [1, 0], strength: 0 },
+        },
+        step: {
+          dt: 0.1,
+          zoom: 18,
+          bounds: undefined,
+          wind: undefined,
+          weather: undefined,
+          cellMeters: 0,
+        },
+        visible: [18, 1, center],
+      }),
+    );
     const actors = result.agents.filter((a) => a.eventGround);
     expect(actors.length).toBeGreaterThan(0);
-    expect(actors.every((a) => eventActor(a) && !Object.hasOwn(a, 'eventActor'))).toBe(true);
-    expect(
-      structuredClone(actors).every((a) => !eventActor(a) && !Object.hasOwn(a, 'eventActor')),
-    ).toBe(true);
+    // The delivered reply carries drawable fields only; identities stay in the worker.
+    expect(actors.every((a) => !eventActor(a) && !Object.hasOwn(a, 'eventActor'))).toBe(true);
     w.step(0.1, () => 0, 18);
     expect(w.visible(18, 1, center).some((a) => eventActor(a))).toBe(true);
   });

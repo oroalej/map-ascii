@@ -314,6 +314,11 @@ type CachedCone = {
 export type ConePackingScratch = {
   revision: number;
   toCell?: LightGrid['toCell'];
+  /**
+   * The projection the cones were cast in: the window's scale and origin (`LightGrid.world`)
+   * when known, so an in-margin pan's new placement wrapper keeps them.
+   */
+  world?: readonly [number, number, number, number];
   cols: number;
   rows: number;
   direction?: 1 | -1;
@@ -335,8 +340,12 @@ function prepareCones(
   cone: Readonly<{ length: number; spread: number; strength: number }>,
 ) {
   if (!scratch) return;
+  const world = grid.world;
+  const sameProjection = world
+    ? !!scratch.world && world.every((value, i) => value === scratch.world![i])
+    : scratch.toCell === grid.toCell && !scratch.world;
   if (
-    scratch.toCell !== grid.toCell ||
+    !sameProjection ||
     scratch.cols !== grid.cols ||
     scratch.rows !== grid.rows ||
     scratch.direction !== direction ||
@@ -344,6 +353,7 @@ function prepareCones(
   ) {
     scratch.revision++;
     scratch.toCell = grid.toCell;
+    scratch.world = world && [...world];
     scratch.cols = grid.cols;
     scratch.rows = grid.rows;
     scratch.direction = direction;

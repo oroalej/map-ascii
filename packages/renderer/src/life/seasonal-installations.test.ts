@@ -31,6 +31,7 @@ import { worldTiles } from './testing/scenarios';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
 import { activityLevels } from './config';
 import { metersPerUnit, tileToLngLat, lngLatToTile } from '../raster/geometry';
+import { deliver } from './testing/worker-reply';
 const tile = { z: 16, x: 55192, y: 30266 };
 const tree: SeasonalDisplayRecord = {
   version: 1,
@@ -701,7 +702,7 @@ it('keeps direct and worker frames equivalent through installation activation, e
       visible: [20, activityLevels(720), tree.at, { rain: 0, sunAltitude: 45 }],
     };
     const direct = runLifeFrame(world, input);
-    const result = api.frame(structuredClone(input));
+    const result = deliver(api.frame(structuredClone(input)));
     if (result.terrain !== undefined) snapshots++;
     expect(result.agents).toEqual(direct.agents);
   }

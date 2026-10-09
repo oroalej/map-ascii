@@ -92,7 +92,15 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
-import { screenArea } from './grid';
+import {
+  cellAt,
+  coreCells,
+  gridContains,
+  screenArea,
+  shiftGrid,
+  windowCells,
+  windowMargin,
+} from './grid';
 import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
@@ -161,7 +169,7 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
-import { animationDue, watchVisibility } from './pacing';
+import { animationDue, cameraDue, frameInterval, nextAnchor, watchVisibility } from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -172,7 +180,7 @@ import {
 } from './raster/geometry';
 import { Readback } from './readback';
 import { GpuTimer } from './gpu-timer';
-import { FrameProfiler, type AtlasProfile } from './profile';
+import { FrameProfiler, type AtlasProfile, type ProfileStage } from './profile';
 import { QualityController, TIERS, type QualityChoice, type QualityState } from './quality';
 import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
@@ -471,6 +479,10 @@ const sameCamera = (a: CameraState, b: CameraState) =>
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
 const SUN_MS = 1000;
+/** While the camera keeps moving, side work for unchanged tiles runs at most this often. */
+const SIDE_MS = 100;
+/** After a zoom stops this long, its throttled side work runs once more. */
+const SETTLE_MS = 150;
 /** Smoothing for the timing stats: each new sample's weight. */
 const STATS_WEIGHT = 0.1;
 const smooth = (average: number, sample: number) =>
@@ -611,6 +623,20 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
+  /** The ideal time of the last drawn frame, which pacing keeps to (pacing.ts `nextAnchor`). */
+  let frameAnchor = -Infinity;
+  /** Frames drawn since the map was created (shader warmup starts one link per frame). */
+  let drawnFrames = 0;
+  /**
+   * The camera moved since the last draw. It draws at the interactive rate (pacing.ts
+   * `cameraDue`); input arriving in between only updates it, so the next draw takes the latest.
+   */
+  let cameraPending = false;
+  /** Draw on the next frame whatever the pacing: a resize or a restored context. */
+  let drawNow = true;
+  /** The camera and CSS size of the last completed draw: picks and surface reads use them. */
+  let drawnCamera: CameraState | undefined;
+  let drawnSize = { width: 1, height: 1 };
   let lastInput = -Infinity;
   const start = performance.now();
   let lastPointerInput = start;
@@ -765,11 +791,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       canvas.width = width;
       canvas.height = height;
     }
-    const cols = Math.ceil(width / cellDev().w) + 3;
-    const rows = Math.ceil(height / cellDev().h) + 3;
-    const labelDev = view().labelDev;
-    const labelCols = Math.ceil(width / labelDev.w) + 3;
-    const labelRows = Math.ceil(height / labelDev.h) + 3;
+    // The view, its one-cell neighborhood and the pan margin (grid.ts `windowCells`).
+    const { cols, rows } = windowCells({ width, height }, cellDev());
+    const { cols: labelCols, rows: labelRows } = windowCells({ width, height }, view().labelDev);
     if (
       !targets ||
       targets.cols !== cols ||
@@ -793,10 +817,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     cellDirty = true;
     cellsFor = null;
+    drawNow = true;
   };
 
   // Tiles
   const profiler = options.profiling ? new FrameProfiler() : undefined;
+  /** Time `run` as `stage` when profiling (frame breakdown for `perf:browser`). */
+  const timed = <T>(stage: ProfileStage, run: () => T): T => {
+    if (!profiler) return run();
+    const start = profiler.time();
+    const result = run();
+    profiler.add(stage, profiler.time() - start);
+    return result;
+  };
   const archiveUrl = new URL(options.tilesUrl, canvas.ownerDocument.baseURI);
   if (options.tilesVersion) archiveUrl.searchParams.set('v', options.tilesVersion);
   const tileCache = new TileCache(
@@ -819,59 +852,145 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let labelsForReport: TileLabel[] | undefined;
   let labelVisibilityDirty = false;
 
-  const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
-    const a = screenArea(v, map.grid);
-    const b = screenArea(v, labels.grid, v.labelDev);
-    return [
-      v.camera.zoom,
-      map.grid.originCol,
-      map.grid.originRow,
-      labels.grid.originCol,
-      labels.grid.originRow,
-      a.left,
-      a.top,
-      a.right,
-      a.bottom,
-      b.left,
-      b.top,
-      b.right,
-      b.bottom,
-    ].join(' ');
+  /**
+   * The frozen window the cells were drawn for (grid.ts `PAN_MARGIN`): its zoom, pixel ratio and
+   * cell sizes, with the label window placed beside it. A pan that stays inside both windows
+   * only moves their offsets (`shiftCells`); anything else places and draws them again.
+   */
+  const windowKey = (v: View) =>
+    `${v.camera.zoom} ${v.dpr} ${v.cellDev.w} ${v.cellDev.h} ${v.labelDev.w} ${v.labelDev.h}`;
+  let labelWindow: GridPlacement | undefined;
+  /** The camera and CSS size the window's tiles were asked for, kept while it stays frozen. */
+  let windowTiles = { camera, size: { width: 1, height: 1 } };
+  const sameArea = (a: ReturnType<typeof screenArea>, b: ReturnType<typeof screenArea>) =>
+    a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom;
+  /** The view's own tiles, for Life (never the window's margin), without asking for any. */
+  const viewTiles = () => tileCache.tilesToDraw(camera, cssSize(), false);
+  /** The Life tiles the view held when Life was last synchronized. */
+  let lifeMembership = '';
+  const lifeMembershipOf = (tiles: readonly TileId[]) =>
+    tiles
+      .filter((tile) => tile.z >= LIFE_TILE_MIN_ZOOM && tileCache.get(tile))
+      .map(tileKey)
+      .join(',');
+  /**
+   * Side work that follows the view's tiles (Life membership and preparation focus, firework
+   * sites). While the camera keeps moving it runs at most every `SIDE_MS` for the same tiles,
+   * and once more `SETTLE_MS` after the camera stops; changed tiles, settings or tile arrivals
+   * run it at once. Life's bounds travel with every frame request regardless.
+   */
+  let sideAt = -Infinity;
+  let sideTiles = '';
+  let sideSettle = false;
+  /** The last camera move that left side work pending (a zoom or an in-margin pan). */
+  let movedAt = -Infinity;
+  let drawnZoom: number | undefined;
+  const syncView = (tiles: readonly TileId[], at: number) => {
+    syncLife(tiles);
+    syncResidentialSites(tiles);
+    lifeMembership = lifeMembershipOf(tiles);
+    sideAt = at;
+    sideSettle = false;
   };
-  /** Shift the cells for a pan within a cell, if that is all it takes; whether it was. */
-  const shiftCells = (): boolean => {
-    if (!targets || cellsFor === null || cellsTargets !== targets) return false;
+
+  /**
+   * Move the cells for a pan inside the frozen window, if that is all it takes; whether it was.
+   * Labels, visible classes and fixture visibility follow the new offset from what is already
+   * drawn; Life hears of the view's tiles when they change.
+   */
+  const shiftCells = (now: number): boolean => {
+    if (!targets || !placement || !labelWindow || cellsFor === null || cellsTargets !== targets)
+      return false;
     const v = view();
-    const next = placeGrid(v, v.cellDev, targets.cols, targets.rows);
-    const nextLabels = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
-    if (cellsKey(v, next, nextLabels) !== cellsFor) return false;
-    placement = next;
-    grid = next.grid;
-    labelGrid = nextLabels.grid;
+    if (windowKey(v) !== cellsFor) return false;
+    const next = shiftGrid(v, v.cellDev, placement.grid);
+    const nextLabels = shiftGrid(v, v.labelDev, labelWindow.grid);
+    if (
+      !gridContains(next, v.cellDev, v, targets.cols, targets.rows) ||
+      !gridContains(nextLabels, v.labelDev, v, targets.labelCols, targets.labelRows)
+    )
+      return false;
+    const moved =
+      !sameArea(screenArea(v, next), screenArea(v, grid)) ||
+      !sameArea(screenArea(v, nextLabels, v.labelDev), screenArea(v, labelGrid, v.labelDev));
+    // The window's projection (toCell, tile matrices) stays; only the offset in it changes.
+    placement = { ...placement, grid: next };
+    labelWindow = { ...labelWindow, grid: nextLabels };
+    grid = next;
+    labelGrid = nextLabels;
     labelVisibilityDirty = true;
-    // Coarse coverage can arrive and draw while the detailed view still loads.
-    tileCache.regionTilesForView(camera, cssSize());
-    // Keep asking for the view's tiles (one that arrives draws the cells again).
-    tileCache.tilesToDraw(camera, cssSize());
+    // Coarse coverage can arrive and draw while the detailed window still loads; keep asking
+    // for the window's tiles (one that arrives draws the cells again).
+    tileCache.regionTilesForView(windowTiles.camera, windowTiles.size);
+    tileCache.tilesToDraw(windowTiles.camera, windowTiles.size);
+    movedAt = now;
+    if (moved) {
+      // Whole cells came onto or left the screen: what it shows and names is worked out again.
+      classesStale = true;
+      if (themeRes && programs && timed('labels', () => names.readmit(targets!, v, labelWindow!))) {
+        labelsForReport = timed('labels', () =>
+          names.draw(
+            gl,
+            targets!,
+            themeRes!,
+            v,
+            labelWindow!,
+            programs!,
+            selectedIndex(),
+            hoverIndex,
+          ),
+        );
+        speechGeometry++;
+      }
+      const tiles = timed('sideWork', viewTiles);
+      if (lifeMembershipOf(tiles) !== lifeMembership || now - sideAt >= SIDE_MS)
+        timed('sideWork', () => syncView(tiles, now));
+      else sideSettle = true;
+    } else sideSettle = true;
     return true;
   };
 
-  const drawCells = () => {
+  /** Place the windows at the camera and draw them: the cell pass, labels, and their inputs. */
+  const drawCells = (now: number) => {
     if (!targets || !programs || !themeRes) return;
     const v = view();
-    placement = placeGrid(v, v.cellDev, targets.cols, targets.rows);
+    const invalidated = cellsFor === null;
+    placement = placeGrid(v, v.cellDev, targets.cols, targets.rows, windowMargin(v, v.cellDev));
     grid = placement.grid;
-    const labelPlacement = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
-    labelGrid = labelPlacement.grid;
-    cellsFor = cellsKey(v, placement, labelPlacement);
+    labelWindow = placeGrid(
+      v,
+      v.labelDev,
+      targets.labelCols,
+      targets.labelRows,
+      windowMargin(v, v.labelDev),
+    );
+    labelGrid = labelWindow.grid;
+    cellsFor = windowKey(v);
     cellsTargets = targets;
+    // The window's tiles: as many CSS pixels as either target spans, around the camera.
+    windowTiles = {
+      camera,
+      size: {
+        width: Math.max(targets.cols * v.cellDev.w, targets.labelCols * v.labelDev.w) / dpr,
+        height: Math.max(targets.rows * v.cellDev.h, targets.labelRows * v.labelDev.h) / dpr,
+      },
+    };
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
-    const regionTiles = tileCache.regionTilesForView(camera, cssSize());
-    const tiles = tileCache.tilesToDraw(camera, cssSize());
-    syncLife(tiles);
-    syncLamps(tiles);
-    syncFixtures(tiles);
-    syncResidentialSites(tiles);
+    const regionTiles = tileCache.regionTilesForView(windowTiles.camera, windowTiles.size);
+    const tiles = tileCache.tilesToDraw(windowTiles.camera, windowTiles.size);
+    const inView = viewTiles();
+    const zooming = drawnZoom !== undefined && drawnZoom !== camera.zoom;
+    drawnZoom = camera.zoom;
+    if (zooming) movedAt = now;
+    const membership = `${tiles.map(tileKey).join(',')}|${lifeMembershipOf(inView)}`;
+    if (invalidated || !zooming || membership !== sideTiles || now - sideAt >= SIDE_MS) {
+      sideTiles = membership;
+      timed('sideWork', () => syncView(inView, now));
+    } else sideSettle = true;
+    timed('sideWork', () => {
+      syncLamps(tiles);
+      syncFixtures(tiles);
+    });
     const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -887,18 +1006,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(regionTiles);
     crownTiles = layer(tiles);
     drawableBuffers = region.length > 0 || crownTiles.length > 0;
-    cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    names.collect(targets, v, labelPlacement, labels);
-    labelsForReport = names.draw(
-      gl,
-      targets,
-      themeRes,
-      v,
-      labelPlacement,
-      programs,
-      selectedIndex(),
-      hoverIndex,
+    timed('cellPass', () =>
+      cellPass(gl, programs!, targets!, v, placement!, { region, tiles: crownTiles }),
     );
+    timed('labels', () => {
+      names.collect(targets!, v, labelWindow!, labels);
+      labelsForReport = names.draw(
+        gl,
+        targets!,
+        themeRes!,
+        v,
+        labelWindow!,
+        programs!,
+        selectedIndex(),
+        hoverIndex,
+      );
+    });
     speechGeometry++;
     classesStale = true;
   };
@@ -1298,6 +1421,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             clock: drawnLife?.signalClock,
             guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
             pool: crowdPool,
+            bounds: coreCells(grid, cellDev(), view()),
           }
         : undefined,
     );
@@ -1324,6 +1448,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     const cell = cellDev(),
       label = themeRes!.label.cellDev;
+    // The raster belongs to the last drawn camera, even while a newer one waits to draw.
+    const shown = drawnCamera ?? camera;
     controller.update(
       {
         targets,
@@ -1332,15 +1458,19 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         owners: raster.owners,
         speakers: speechSpeakers,
         life: raster.life,
-        geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
+        geometry: `${targetsGeneration}/${speechGeometry}/${shown.lng}/${shown.lat}/${shown.zoom}`,
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
         toCell: placement.toCell,
         size: cssSize(),
-        labelsCover: ([x, y]) =>
+        labelsCover: (point) =>
           labelCovers(
             targets!,
-            (x * dpr + labelGrid.shiftX) / label.w,
-            (y * dpr + labelGrid.shiftY) / label.h,
+            ...cellAt(point, dpr, {
+              shiftX: labelGrid.shiftX,
+              shiftY: labelGrid.shiftY,
+              cellWidth: label.w,
+              cellHeight: label.h,
+            }),
           ),
       },
       now,
@@ -1458,11 +1588,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     tileLights.set(life, placed);
     return placed;
   };
+  /** The tiles' lamp inputs as last gathered, so an unchanged set keeps its arrays. */
+  let lampInputs: readonly LoadedTile['life'][] | undefined;
   const syncLamps = (tiles: readonly TileId[]) => {
+    const shown = lampShow() > 0;
+    const inputs: LoadedTile['life'][] = [];
+    if (shown)
+      for (const tile of tiles) {
+        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+        const loaded = tileCache.get(tile);
+        if (loaded) inputs.push(loaded.life);
+      }
+    if (lampInputs && sameReferenceMembers(inputs, lampInputs)) return;
+    lampInputs = inputs;
     lamps = [];
     shops = [];
     shopsKey = '';
-    if (lampShow() <= 0) return;
+    if (!shown) return;
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
       const loaded = tileCache.get(tile);
@@ -1841,6 +1983,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const step = stepFlight(flight, now, limits, cssSize());
     camera = step.camera;
     cellDirty = true;
+    cameraPending = true;
     lastInput = now;
     emit('camerachange', { ...camera });
     if (step.done) {
@@ -1875,12 +2018,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
 
   let raf = 0;
-  const canWarmGlyphs = () =>
+  /**
+   * Parallel links compile off the main thread, so they warm from the first drawn frame on,
+   * input or not; a synchronous compile waits for a second without input.
+   */
+  const canWarmGlyphs = (parallel: boolean) =>
     !destroyed &&
     !lost &&
     watch.watched() &&
-    !flight &&
-    performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
+    (parallel
+      ? lastDraw !== -Infinity
+      : !flight && performance.now() - Math.max(lastInput, lastPointerInput) >= 1000);
   const warmSeasonalPrograms = (clocks = false) => {
     if (!programs || lost || destroyed) return;
     const seasonal =
@@ -1898,6 +2046,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       seasonal,
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
       !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
+      () => drawnFrames,
     );
   };
   const frame = (now: number) => {
@@ -1922,10 +2071,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       resize();
     }
     advanceFlight(now);
-    const nextTier = quality.decide(now, !flight && now - lastInput >= 1000);
+    const deviceDpr = window.devicePixelRatio || 1;
+    const nextTier = quality.decide(now, !flight && now - lastInput >= 1000, (tier) =>
+      Math.min(deviceDpr, TIERS[tier]!.knobs.maxDpr),
+    );
     if (nextTier !== undefined) {
       const nextKnobs = TIERS[nextTier]!.knobs;
-      if (nextKnobs.maxDpr !== knobs.maxDpr) sizeDirty = true;
+      // Only a change in the pixel ratio actually drawn resizes the targets.
+      if (Math.min(deviceDpr, nextKnobs.maxDpr) !== dpr) sizeDirty = true;
       knobs = nextKnobs;
       drawDirty = true;
       resetQualitySamples();
@@ -1940,11 +2093,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     updateSun(now);
+    if (sideSettle && now - movedAt >= SETTLE_MS && !cellDirty) syncView(viewTiles(), now);
     if (!targets || !programs || !themeRes) {
       profiler?.end();
       return;
     }
-    const animating = animationDue(now, lastDraw, lastInput, {
+    const animating = animationDue(now, frameAnchor, lastInput, {
       reducedMotion,
       watched: watch.watched(),
     });
@@ -1964,15 +2118,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         ? cursorEffects.wind(placement, now, cellDev().h / cellDev().w)
         : undefined;
     cursorCrownDirty ||= cursorCrownActive && !cursor;
-    if (cellDirty || drawDirty || animating || cursorCrownDirty) {
+    // A moved camera waits for its interactive slot; discrete changes draw at once.
+    const paced =
+      cameraPending &&
+      !drawNow &&
+      !cameraDue(now, frameAnchor, { reducedMotion, watched: watch.watched() });
+    if (drawNow || drawDirty || (!paced && (cellDirty || animating || cursorCrownDirty))) {
+      drawNow = false;
+      cameraPending = false;
       const time = (now - start) / 1000;
       const frameStart = performance.now();
       gpuTimer.begin(now);
       let cellsDrawn = false;
       if (cellDirty) {
         cellDirty = false;
-        if (!shiftCells()) {
-          drawCells();
+        if (!shiftCells(now)) {
+          drawCells(now);
           cellsDrawn = true;
           cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
         }
@@ -2013,42 +2174,47 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
       if (placement && (cellsDrawn || cursorCrownDirty || (swaying && animating))) {
         const crownStart = performance.now();
-        crownPass(
-          gl,
-          programs,
-          targets,
-          v,
-          placement,
-          crownTiles,
-          time,
-          wind,
-          knobs.crownSway ? cursor : undefined,
+        timed('crowns', () =>
+          crownPass(
+            gl,
+            programs!,
+            targets!,
+            v,
+            placement!,
+            crownTiles,
+            time,
+            wind,
+            knobs.crownSway ? cursor : undefined,
+          ),
         );
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
       }
       cursorCrownActive = !!cursor && knobs.crownSway;
       cursorCrownDirty = false;
-      selectPass(
-        gl,
-        programs,
-        targets,
-        themeRes,
-        v,
-        grid,
-        reducedMotion ? 0 : time,
-        highlights(),
-        knobs.groundWind ? wind : { ...wind, strength: 0 },
-        sun,
-        knobs.shadows,
-        true,
-        cropPass,
-        knobs.groundWind ? cursor : undefined,
+      timed('select', () =>
+        selectPass(
+          gl,
+          programs!,
+          targets!,
+          themeRes!,
+          v,
+          grid,
+          reducedMotion ? 0 : time,
+          highlights(),
+          knobs.groundWind ? wind : { ...wind, strength: 0 },
+          sun,
+          knobs.shadows,
+          true,
+          cropPass,
+          knobs.groundWind ? cursor : undefined,
+        ),
       );
       const lifeStart = performance.now();
-      drawLife(now, wind);
+      timed('lifePass', () => drawLife(now, wind));
       lifeMs = smooth(lifeMs, performance.now() - lifeStart);
-      drawLights(cellsDrawn);
-      drawFixtures(cellsDrawn, time, wind);
+      timed('lights', () => drawLights(cellsDrawn));
+      timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));
+      const glyphStart = profiler?.time();
       glyphPass(
         gl,
         programs,
@@ -2086,6 +2252,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         placement && carnivalBoosts ? carnivalBoosts.uniforms(time, placement.toCell) : undefined,
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined,
       );
+      if (glyphStart !== undefined) profiler!.add('glyph', profiler!.time() - glyphStart);
       drawDirty = false;
       fireworksPass(
         gl,
@@ -2124,7 +2291,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         emit('ready', { firstTileFrame: readyMs });
       }
       gpuTimer.end();
+      if (programs.demandWaitMs) {
+        profiler?.add('shaderWait', programs.demandWaitMs);
+        programs.demandWaitMs = 0;
+      }
       lastDraw = now;
+      frameAnchor = nextAnchor(now, frameAnchor, frameInterval(now, lastInput));
+      drawnFrames++;
+      drawnCamera = camera;
+      drawnSize = cssSize();
       frameMs = smooth(frameMs, performance.now() - frameStart);
       if (!qualityWarmupDraw) previousDraw = { at: now, cpuMs: performance.now() - frameStart };
       qualityWarmupDraw = false;
@@ -2145,8 +2320,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         cellWidth: cellDev().w,
         cellHeight: cellDev().h,
       },
-      camera: { ...camera },
-      size: cssSize(),
+      camera: { ...(drawnCamera ?? camera) },
+      size: drawnCamera ? drawnSize : cssSize(),
       generation: targetsGeneration,
     });
     readClasses(now);
@@ -2171,7 +2346,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               cellHeight: cellDev().h,
             },
             dpr,
-            geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            geometry: `${targetsGeneration}/${speechGeometry}/${(drawnCamera ?? camera).lng}/${(drawnCamera ?? camera).lat}/${(drawnCamera ?? camera).zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
             revision: raster?.revision ?? 0,
             owners: raster?.owners ?? EMPTY_OWNERS,
             life: raster?.life ?? EMPTY_LIFE_CELLS,
@@ -2279,6 +2454,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     emoji.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
+    cameraPending = true;
     lastInput = performance.now();
     if (batched) cameraMoved = true;
     else emit('camerachange', { ...camera });
@@ -2340,7 +2516,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         drawnLife.tapFrame !== undefined;
       const target = targets;
       const source = drawnLife;
-      const at = viewportFor(camera, cssSize()).unproject([...point]);
+      // Where the tap lands on the map as drawn, even while a newer camera waits to draw.
+      const at = viewportFor(drawnCamera ?? camera, drawnCamera ? drawnSize : cssSize()).unproject([
+        ...point,
+      ]);
       const epoch = tapEpoch;
       const geometry = speechGeometry;
       const capturedCamera = camera;
