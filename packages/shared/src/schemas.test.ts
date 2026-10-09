@@ -334,6 +334,9 @@ describe('Landmark', () => {
     expect(Landmark.safeParse({ ...rest, geometry, replaces }).success).toBe(true);
     expect(Landmark.safeParse({ ...landmark, replaces }).success).toBe(false);
     expect(Landmark.safeParse({ ...landmark, geometry }).success).toBe(false);
+    const units = ['osm:way/1', 'osm:way/2'];
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: units }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry, replaces: [replaces] }).success).toBe(false);
   });
 
   it('lets a standalone curated outline stand alone only with its height', () => {

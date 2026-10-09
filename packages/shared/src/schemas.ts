@@ -792,8 +792,11 @@ export function contentSchemas(languages?: readonly string[]) {
       id: LandmarkId,
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
-      /** OSM feature that curated `geometry` supersedes, e.g. one outline mapped over two ruins. */
-      replaces: OsmId.optional(),
+      /**
+       * OSM building(s) that curated `geometry` supersedes: one way mapped over two ruins, or one
+       * building mapped as several street-front units (then listed, first one setting its style).
+       */
+      replaces: z.union([OsmId, z.array(OsmId).min(2)]).optional(),
       /** Height of a standalone curated outline (an arch, a gate), drawn as its own structure. */
       height_m: z.number().positive().max(60).optional(),
       name: text,

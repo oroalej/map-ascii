@@ -23,10 +23,13 @@ import { writeDetailLayouts } from './lib/detail-layout';
 import { Territory, inTerritory, removeVoid } from './lib/territory';
 import { shopAnchor } from './lib/frontage';
 
+/** The OSM buildings a curated outline replaces, first one first. */
+const replacedBy = (landmark: ContentBundle['landmarks'][number]) => [landmark.replaces!].flat();
+
 /**
  * Swap each OSM building that curated landmark outlines `replace` for those outlines, in place.
- * An outline inherits the replaced building's normalized properties and tile layer, so it is
- * drawn, roofed and lit like any other building; its feature id is the landmark id.
+ * An outline inherits its first replaced building's normalized properties and tile layer, so it
+ * is drawn, roofed and lit like any other building; its feature id is the landmark id.
  */
 function replaceWithCuratedOutlines(
   features: AtlasFeature[],
@@ -37,21 +40,26 @@ function replaceWithCuratedOutlines(
   const attached = new Set(landmarks.map((l) => l.osm_id));
   const targets = new Map<string, AtlasFeature>();
   for (const landmark of curated) {
-    const target = landmark.replaces!;
     if (landmark.geometry!.type !== 'Polygon')
       throw new Error(`Curated landmark outline is not a Polygon: ${landmark.id}`);
-    if (attached.has(target))
-      throw new Error(`Replaced feature ${target} also hosts a landmark (${landmark.id})`);
-    const feature = features.find((f) => f.properties.id === target);
-    if (!feature || feature.properties.class !== 'building' || feature.geometry.type !== 'Polygon')
-      throw new Error(`Replaced feature is not a building polygon in the data: ${target}`);
-    targets.set(target, feature);
+    for (const target of replacedBy(landmark)) {
+      if (attached.has(target))
+        throw new Error(`Replaced feature ${target} also hosts a landmark (${landmark.id})`);
+      const feature = features.find((f) => f.properties.id === target);
+      if (
+        !feature ||
+        feature.properties.class !== 'building' ||
+        feature.geometry.type !== 'Polygon'
+      )
+        throw new Error(`Replaced feature is not a building polygon in the data: ${target}`);
+      targets.set(target, feature);
+    }
   }
   for (let i = features.length - 1; i >= 0; i--) {
     if (targets.has(features[i]!.properties.id)) features.splice(i, 1);
   }
   for (const landmark of curated) {
-    const { properties, tippecanoe } = targets.get(landmark.replaces!)!;
+    const { properties, tippecanoe } = targets.get(replacedBy(landmark)[0]!)!;
     const { name: _name, osm_name: _osmName, ...inherited } = properties;
     features.push({
       type: 'Feature',

@@ -100,6 +100,20 @@ it('swaps a replaced OSM building for curated landmark outlines, in place', () =
   expect(() => mergeContent([building('osm:way/2', 5)], hosted)).toThrow(/also hosts a landmark/);
   const loose = { landmarks: [{ ...outline('lost', 5), replaces: undefined }] } as ContentBundle;
   expect(() => mergeContent([building('osm:way/2', 5)], loose)).toThrow(/stands alone/);
+
+  // One outline can replace several street-front units, styled like the first.
+  const units = [building('osm:way/1', 0), building('osm:way/2', 5), building('osm:way/3', 9)];
+  units[1]!.properties.height = 9;
+  const row = {
+    landmarks: [{ ...outline('row', 5), replaces: ['osm:way/2', 'osm:way/1'] }],
+  } as ContentBundle;
+  mergeContent(units, row);
+  expect(units.map((f) => f.properties.id)).toEqual(['osm:way/3', 'landmark/row']);
+  expect(units[1]!.properties).toMatchObject({ height: 9, heritage: true });
+  const partly = {
+    landmarks: [{ ...outline('row', 5), replaces: ['osm:way/2', 'osm:way/7'] }],
+  } as ContentBundle;
+  expect(() => mergeContent([building('osm:way/2', 5)], partly)).toThrow(/osm:way\/7/);
 });
 
 it('adds a standalone curated outline as its own small structure inside the territory', () => {
