@@ -109,6 +109,7 @@ import {
   updatePedestrianVisibility,
   type FixtureVisibility,
   FixtureSight,
+  cullFixtures,
 } from './life/fixtures';
 import type { TileId } from './tiles';
 
@@ -967,6 +968,18 @@ export function fixturePass(
     const cells = targets.cols * targets.rows;
     const sight = cache?.sight.length === cells ? cache.sight.fill(0) : new Uint8Array(cells);
     const cols = targets.cols;
+    // Only what can reach the window is projected (life/fixtures.ts `cullFixtures`).
+    const a = placement.fromCell?.(0, 0),
+      b = placement.fromCell?.(targets.cols, targets.rows);
+    const packing =
+      a && b
+        ? cullFixtures(fixtures, [
+            Math.min(a[0], b[0]),
+            Math.min(a[1], b[1]),
+            Math.max(a[0], b[0]),
+            Math.max(a[1], b[1]),
+          ])
+        : fixtures;
     const packed = packFixtures(
       cache?.packed.texels.length === targets.cols * targets.rows * 4
         ? cache.packed.texels
@@ -997,7 +1010,7 @@ export function fixturePass(
           return c >= area.left && c <= area.right && r >= area.top && r <= area.bottom;
         },
       },
-      fixtures,
+      packing,
       view.camera.zoom,
       (glyph) => resources.map.atlas.index(glyph),
       clock,

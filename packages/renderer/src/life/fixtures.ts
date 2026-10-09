@@ -65,6 +65,14 @@ export type StreetFixture = UtilityFixture | LegacyStreetFixture | SeasonalFixtu
 // Fixture inputs are replaced when tiles/config change. Retain the seasonal slice so
 // whole-row priority sorting is cached across camera repacks as well.
 const seasonalInputs = new WeakMap<readonly StreetFixture[], readonly SeasonalFixture[]>();
+function seasonalSlice(fixtures: readonly StreetFixture[]): readonly SeasonalFixture[] {
+  let seasonal = seasonalInputs.get(fixtures);
+  if (!seasonal) {
+    seasonal = fixtures.filter(isSeasonalFixture);
+    seasonalInputs.set(fixtures, seasonal);
+  }
+  return seasonal;
+}
 export type FixtureVisibility = {
   streetlights: boolean;
   trafficSignals: boolean;
@@ -464,6 +472,60 @@ export function updatePedestrianVisibility(
   );
   if (shown) packed.visibility.pedestrianSignals = true;
   else delete packed.visibility.pedestrianSignals;
+}
+
+/** Metres beyond the drawn window a culled fixture may still reach (arms, pools, ornaments). */
+export const FIXTURE_CULL_PAD_M = 60;
+const fixtureBoxes = new WeakMap<StreetFixture, readonly [number, number, number, number]>();
+/** [west, south, east, north] of a fixture's own points, for the kinds `cullFixtures` drops. */
+function fixtureBox(fixture: StreetFixture): readonly [number, number, number, number] | undefined {
+  let box = fixtureBoxes.get(fixture);
+  if (box) return box;
+  const points: readonly (readonly [number, number])[] =
+    fixture.kind === 'streetlight'
+      ? [fixture.base, fixture.tip, fixture.forward, fixture.right, fixture.roadCenter]
+      : fixture.kind === 'utility-pole'
+        ? [fixture.pole.at]
+        : fixture.kind === 'utility-span'
+          ? [fixture.span.from.at, fixture.span.to.at]
+          : [];
+  if (!points.length) return;
+  box = [
+    Math.min(...points.map((p) => p[0])),
+    Math.min(...points.map((p) => p[1])),
+    Math.max(...points.map((p) => p[0])),
+    Math.max(...points.map((p) => p[1])),
+  ];
+  fixtureBoxes.set(fixture, box);
+  return box;
+}
+
+/**
+ * The fixtures that can write into a window covering `bounds` ([west, south, east, north]):
+ * streetlights, utility poles and spans wholly beyond it, padded by `FIXTURE_CULL_PAD_M`,
+ * write nothing and are left out before packing, which projects every fixture it is given.
+ * Signals, pedestrian signals, flagpoles and seasonal decorations are kept: their packing
+ * pairs or ranks fixtures across the whole input.
+ */
+export function cullFixtures(
+  fixtures: readonly StreetFixture[],
+  [west, south, east, north]: readonly [number, number, number, number],
+): StreetFixture[] {
+  const lat = (FIXTURE_CULL_PAD_M / 111_320) * 1;
+  const lng = FIXTURE_CULL_PAD_M / (111_320 * Math.cos((((south + north) / 2) * Math.PI) / 180));
+  const kept = fixtures.filter((fixture) => {
+    const box = fixtureBox(fixture);
+    return (
+      !box ||
+      (box[2] >= west - lng &&
+        box[0] <= east + lng &&
+        box[3] >= south - lat &&
+        box[1] <= north + lat)
+    );
+  });
+  // Seasonal fixtures are never culled: keep the cached slice (and its sorted orders).
+  seasonalInputs.set(kept, seasonalSlice(fixtures));
+  return kept;
 }
 
 /**
@@ -882,11 +944,7 @@ export function packFixtures(
   // Animated cloth must retain the utility cells stamped after legacy hardware.
   for (const cell of packed.utilityCells) owners[cell] = -2;
   updateFixtureFlags(packed, motion);
-  let seasonal = seasonalInputs.get(fixtures);
-  if (!seasonal) {
-    seasonal = fixtures.filter(isSeasonalFixture);
-    seasonalInputs.set(fixtures, seasonal);
-  }
+  const seasonal = seasonalSlice(fixtures);
   if (seasonal.length) {
     // Reserve every possible cloth position for decoration admission, while leaving
     // the real cloth owners free for subsequent animation frames.

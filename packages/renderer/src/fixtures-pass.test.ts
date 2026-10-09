@@ -204,8 +204,10 @@ it('caches viewport utility visibility and updates it when only the visible boun
   };
   const project = vi.fn((x: number, y: number): [number, number] => [x, y]);
   const original = placeGrid(view, view.cellDev, 100, 100);
+  // A forward-only placement: its identity projection has no geographic inverse.
   const placement = {
     ...original,
+    fromCell: undefined,
     grid: { ...original.grid, shiftX: 0, shiftY: 0 },
     toCell: project,
   };
