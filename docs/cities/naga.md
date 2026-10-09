@@ -327,4 +327,6 @@ Trade sources:
 - kakanin: [Bicol DA assorted kakanin procurement](https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf).
 - takatak: [Takatak: Sa Kahon ng Paglimot, Sa Laylayan ng Pag-usad](https://newsroom-pacesetter.medium.com/takatak-sa-kahon-ng-paglimot-sa-laylayan-ng-pag-usad-b8207d62d1a8); [Naga Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/).
 
-For owner review in `pnpm dev`: `/naga?lat=13.618246&lng=123.191733&z=19` at 09:00 has a decoded street-side taho vendor; `/naga?lat=13.618320&lng=123.191145&z=19` has a terminal-constrained street-side takatak candidate. These coordinates were checked through the simulation, without screenshots or visual claims.
+Stationary generated cart vendors use the same compound exclusions, including later shopfront additions and carts restored after seasonal closures. Ateneo's complete mapped campus boundary excludes both stationary vendors and walking peddlers.
+
+For owner review in `pnpm dev`: `/naga?lat=13.618246&lng=123.191733&z=19` at 09:00 has a decoded street-side taho vendor; `/naga?lat=13.618320&lng=123.191145&z=19` has a terminal-constrained street-side takatak candidate. Check the Ateneo campus at `/naga?lat=13.631430&lng=123.184370&z=19`. These coordinates were checked through the simulation, without screenshots or visual claims.

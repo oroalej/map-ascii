@@ -3469,6 +3469,12 @@ export class TileLife {
    */
   private *spawnStalls(): Generator<void, void, void> {
     const { geo, looks, perMeter } = this;
+    const grounds = new PolygonIndex();
+    for (const area of geo.areas ?? [])
+      if (area.kind === 'peddler-exclusion')
+        grounds.add(
+          area.rings.map((ring) => ring.map((p) => ({ x: p.x / perMeter, y: p.y / perMeter }))),
+        );
     const reach = VENDORS.marketReach * perMeter;
     const nearMarket = (x: number, y: number) => {
       for (let i = 0; i < geo.markets.length; i += 2) {
@@ -3507,9 +3513,11 @@ export class TileLife {
           side,
           rank: looks(),
         };
+        const bodies = this.groundBodies(stall);
         if (
           kind !== LifeLine.roadMinor &&
-          this.roadTerrain.access.allows(this.groundBodies(stall), false)
+          this.roadTerrain.access.allows(bodies, false) &&
+          !grounds.hits(bodies)
         )
           this.stalls.push(stall);
       }
@@ -8587,9 +8595,9 @@ export class LifeWorld {
   private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
   private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
   private peddlerGeneration = 0;
-  private readonly peddlerGrounds = new WeakMap<GroundTerrain, PolygonIndex>();
-  private peddlerGroundIndex(terrain: GroundTerrain) {
-    const saved = this.peddlerGrounds.get(terrain);
+  private readonly vendorGrounds = new WeakMap<GroundTerrain, PolygonIndex>();
+  private vendorGroundIndex(terrain: GroundTerrain) {
+    const saved = this.vendorGrounds.get(terrain);
     if (saved) return saved;
     const index = new PolygonIndex();
     for (const [life, frame] of terrain.origins)
@@ -8603,7 +8611,7 @@ export class LifeWorld {
               })),
             ),
           );
-    this.peddlerGrounds.set(terrain, index);
+    this.vendorGrounds.set(terrain, index);
     return index;
   }
   private peddlerOrdinarySnapshot?: {
@@ -8711,7 +8719,7 @@ export class LifeWorld {
                 terrain.water,
                 terrain.seasonal,
                 terrain.roadAccess.roads,
-                this.peddlerGroundIndex(terrain),
+                this.vendorGroundIndex(terrain),
               ].filter((index) => index.polygons.length);
               if (!indexes.length) return true;
               const frame = metricFrame(life, terrain.ref),
@@ -10112,7 +10120,8 @@ export class LifeWorld {
         for (const body of sample) toRef(o, body);
         if (
           !this.groundTerrain!.roadAccess.allows(sample, false) ||
-          this.groundTerrain!.seasonal.hits(sample)
+          this.groundTerrain!.seasonal.hits(sample) ||
+          this.vendorGroundIndex(this.groundTerrain!).hits(sample)
         ) {
           life.scenes.removeStall(stall);
           life.stalls.splice(i, 1);
@@ -10186,6 +10195,16 @@ export class LifeWorld {
       },
       terrain.seasonal.polygons.length > 0 || !!closure,
     );
+    // Also check later admissions and carts restored when seasonal closures end.
+    for (let i = life.stalls.length - 1; i >= 0; i--) {
+      const stall = life.stalls[i]!;
+      const bodies = life.groundBodies(stall, 0, this.groundSample);
+      for (const body of bodies) transform(body);
+      if (this.vendorGroundIndex(terrain).hits(bodies)) {
+        life.scenes.removeStall(stall);
+        life.stalls.splice(i, 1);
+      }
+    }
     this.reconciledActors.set(life, {
       terrain,
       closure,
@@ -10780,6 +10799,13 @@ export class LifeWorld {
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
+      // All cart admission paths, including shopfront commerce, share campus exclusion.
+      if (
+        !('kind' in owner) &&
+        !('walker' in owner) &&
+        this.vendorGroundIndex(this.groundTerrain!).hits(next)
+      )
+        return false;
       const previous = before ? bodies(previousLife, before, this.groundPrevious, identity) : next;
       let physical: Body[] | undefined;
       const endScore = occupied.conflicts(identity, next, ignore);
