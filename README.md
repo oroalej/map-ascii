@@ -44,6 +44,7 @@ packages/shared     zod schemas and shared types
 - [`docs/SPEC.md`](docs/SPEC.md): product behavior
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): renderer pipeline, data model, state
 - [`docs/DATA.md`](docs/DATA.md): sources, pipeline, licensing, adding a city
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md): Vercel setup, preview checks, production and rollback
 - [`docs/ROADMAP.md`](docs/ROADMAP.md): phased plan
 - [`docs/cities/`](docs/cities/): per-city briefs ([Naga](docs/cities/naga.md))
 
