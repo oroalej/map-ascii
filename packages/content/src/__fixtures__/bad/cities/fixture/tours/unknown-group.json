@@ -1,0 +1,13 @@
+{
+  "id": "tour/unknown-group",
+  "title": { "en": "Unknown group" },
+  "group": "unknown",
+  "status": "draft",
+  "steps": [
+    {
+      "camera": { "lat": 0.5, "lng": 0.5, "zoom": 16 },
+      "duration_ms": 4000,
+      "narration": { "en": "A fixture tour." }
+    }
+  ]
+}

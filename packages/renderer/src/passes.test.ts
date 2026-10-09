@@ -34,6 +34,7 @@ it('dims map cells for folklore-only focus and restores the ordinary glyph progr
     u_focus: vi.fn(),
     u_focusClasses: vi.fn(),
     u_focusLife: vi.fn(),
+    u_pulse: vi.fn(),
   };
   const ordinary = { program: {} as WebGLProgram, uniformSetters: setters };
   const focused = { program: {} as WebGLProgram, uniformSetters: setters };
@@ -59,7 +60,7 @@ it('dims map cells for folklore-only focus and restores the ordinary glyph progr
     uniforms: themeUniforms(themes.dark),
   } as unknown as ThemeResources;
   const grid = placeGrid(view, view.cellDev, 80, 34).grid;
-  const draw = (focus: ReturnType<typeof normalizeFocus>) =>
+  const draw = (focus: ReturnType<typeof normalizeFocus>, reducedMotion = false) =>
     glyphPass(
       gl,
       programs,
@@ -70,7 +71,7 @@ it('dims map cells for folklore-only focus and restores the ordinary glyph progr
       grid,
       grid,
       0,
-      false,
+      reducedMotion,
       1,
       undefined,
       0,
@@ -83,9 +84,15 @@ it('dims map cells for folklore-only focus and restores the ordinary glyph progr
   expect(setters.u_focus).toHaveBeenLastCalledWith(true);
   expect(setters.u_focusClasses).toHaveBeenLastCalledWith(new Uint32Array(2));
   expect(setters.u_focusLife).toHaveBeenLastCalledWith(false);
+  expect(setters.u_pulse).toHaveBeenLastCalledWith([
+    classId('marker_landmark'),
+    classId('marker_heritage'),
+  ]);
   draw(normalizeFocus(null));
   expect(useProgram).toHaveBeenLastCalledWith(ordinary.program);
   expect(setters.u_focus).toHaveBeenLastCalledWith(false);
+  draw(normalizeFocus(null), true);
+  expect(setters.u_pulse).toHaveBeenLastCalledWith([-1, -1]);
 });
 
 const view: View = {

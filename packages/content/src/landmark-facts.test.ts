@@ -6,26 +6,47 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for owner-selected Naga landmarks, including the museum statue and falls', () => {
-  const clickable = Object.values(landmarks).filter((landmark) => landmark.facts);
+it('curates facts for thirty-three Naga landmarks besides food places, including heritage sites, the museum statue and falls', () => {
+  // Food places carry their own sourced facts (food-content.test.ts).
+  const clickable = Object.values(landmarks).filter(
+    (landmark) => landmark.facts && landmark.type !== 'food',
+  );
   expect(clickable.map((landmark) => landmark.id).sort()).toEqual(
-    expect.arrayContaining(
-      [
-        'ateneo-de-naga-university',
-        'immaculate-conception-parish',
-        'jesse-robredo-monument',
-        'malabsay-falls',
-        'naga-metropolitan-cathedral',
-        'padre-jorge-barlin-plaza',
-        'penafrancia-basilica',
-        'penafrancia-shrine',
-        'people-power-monument',
-        'plaza-quince-martires',
-        'plaza-rizal',
-        'san-francisco-parish',
-        'universidad-de-santa-isabel',
-      ].map((slug) => `landmark/${slug}`),
-    ),
+    [
+      'abella-business-buildings',
+      'administracion-de-correo',
+      'almeda-ancestral-house',
+      'asilo',
+      'ateneo-de-naga-main-building',
+      'ateneo-de-naga-university',
+      'badiola-house',
+      'bichara-theatre',
+      'csnhs-gabaldon-building',
+      'holy-rosary-minor-seminary-building',
+      'immaculate-conception-parish',
+      'jesse-robredo-monument',
+      'malabsay-falls',
+      'naga-central-school-gabaldon-building',
+      'naga-city-peoples-mall',
+      'naga-metropolitan-cathedral',
+      'naga-station',
+      'old-abella-mansion-arch',
+      'old-provincial-jail',
+      'padre-jorge-barlin-plaza',
+      'penafrancia-basilica',
+      'penafrancia-shrine',
+      'people-power-monument',
+      'plaza-quince-martires',
+      'plaza-rizal',
+      'quince-martires-monument',
+      'roco-ancestral-house',
+      'san-francisco-old-belfry',
+      'san-francisco-parish',
+      'socorro-abella-building',
+      'universidad-de-santa-isabel',
+      'usi-main-building',
+      'villafrancia-house',
+    ].map((slug) => `landmark/${slug}`),
   );
   expect(
     clickable.find((landmark) => landmark.id === 'landmark/jesse-robredo-monument')?.osm_id,

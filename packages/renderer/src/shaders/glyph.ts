@@ -98,7 +98,7 @@ uniform vec3 u_haunts[8];
 uniform int u_hauntCount;
 uniform vec2 u_hauntOrigin;
 uniform vec2 u_hauntCell;
-uniform int u_pulse;
+uniform ivec2 u_pulse;
 uniform sampler2D u_overlay;
 uniform sampler2D u_labelAtlas;
 uniform vec2 u_labelCell;
@@ -846,7 +846,7 @@ void main() {
     color *= light * variation;
     back *= light;
   }
-  if (cls == u_pulse) color *= 0.7 + 0.3 * sin(u_time * 3.0);
+  if (cls == u_pulse.x || cls == u_pulse.y) color *= 0.7 + 0.3 * sin(u_time * 3.0);
   int bits = u_cellBits[cls];
   // Zoomed out, major and secondary roads glow as a lit corridor; it hands over to the streetlights.
   if ((bits & ${CellBit.streetlight}) != 0) {
@@ -894,8 +894,10 @@ void main() {
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {
-    color = focusedClass(cls) ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
-    if (!edge && bgClass == cls) back = (focusedClass(cls) ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
+    // A highlighted feature is a member of the focused entry (index.ts focusHighlights).
+    bool member = focusedClass(cls) || state == ${CellState.highlight};
+    color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
+    if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
   o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
 }

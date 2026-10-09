@@ -31,8 +31,11 @@ export function pointerCell(
   return [Math.floor(col), Math.floor(row)];
 }
 
-/** Most features `setHighlighted` can light up at once (e.g. the ways of one street). */
-export const MAX_HIGHLIGHT = 64;
+/**
+ * Most features that can light up at once: the ways of one street, or a legend entry's members
+ * with their parts. A multiple of 4, since the select shader packs four indices per uniform.
+ */
+export const MAX_HIGHLIGHT = 128;
 
 /** Per-cell highlight state, written by the select pass and read by the glyph pass. */
 export const CellState = { none: 0, hover: 1, highlight: 2, selected: 3 } as const;

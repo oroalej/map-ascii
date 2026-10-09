@@ -6,6 +6,7 @@ import { contentRoot, loadCityPacks } from './validate';
 const eventRoot = fileURLToPath(new URL('./__fixtures__/event-references', import.meta.url));
 import.meta.glob('./__fixtures__/event-references/**/*.json');
 const badRoot = fileURLToPath(new URL('./__fixtures__/bad', import.meta.url));
+import.meta.glob('./__fixtures__/bad/**/*.json');
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on pack edits.
 import.meta.glob('../cities/**/*.json');
 vi.mock('node:fs/promises', async (load) => {
@@ -14,6 +15,51 @@ vi.mock('node:fs/promises', async (load) => {
 });
 
 describe('loadCityPacks', () => {
+  it.each(['declared', 'unknown', 'missing', 'ungrouped'] as const)(
+    'checks the %s tour group against its city declaration',
+    async (kind) => {
+      const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
+      vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+        const text = await original(...args);
+        if (typeof args[0] !== 'string') return text;
+        const path = args[0].replaceAll('\\', '/');
+        if (!path.includes('/cities/naga/')) return text;
+        const value = JSON.parse(String(text)) as Record<string, unknown>;
+        if (path.endsWith('/city.json')) {
+          if (kind === 'ungrouped') delete value.tour_groups;
+          else value.tour_groups = [{ id: 'food', label: { en: 'Food' } }];
+        } else if (path.includes('/cities/naga/tours/')) {
+          if (kind === 'ungrouped') delete value.group;
+          else value.group = 'food';
+          if (path.endsWith('/heritage-centro-walk.json')) {
+            if (kind === 'missing') delete value.group;
+            if (kind === 'unknown') value.group = 'unknown';
+          }
+        } else return text;
+        return JSON.stringify(value);
+      });
+      try {
+        const { packs, errors } = await loadCityPacks(contentRoot, { only: 'naga' });
+        if (kind === 'declared' || kind === 'ungrouped') {
+          expect(errors).toEqual([]);
+          expect(packs).toHaveLength(1);
+        } else {
+          expect(packs).toEqual([]);
+          expect(errors).toEqual([
+            {
+              file: 'cities/naga/tours/heritage-centro-walk.json',
+              message:
+                kind === 'unknown'
+                  ? 'group: no tour group "unknown" in this city'
+                  : 'group: required when the city declares tour_groups',
+            },
+          ]);
+        }
+      } finally {
+        vi.mocked(fs.readFile).mockImplementation(original);
+      }
+    },
+  );
   it('reports an unknown city-local dish at the referring landmark file', async () => {
     const original = (await vi.importActual<typeof fs>('node:fs/promises')).readFile;
     vi.mocked(fs.readFile).mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
@@ -233,6 +279,10 @@ describe('loadCityPacks', () => {
       {
         file: 'cities/fixture/tours/verified-placeholder.json',
         message: 'steps.0.narration: a verified tour cannot contain TODO(verify)',
+      },
+      {
+        file: 'cities/fixture/tours/unknown-group.json',
+        message: 'group: the city does not declare tour_groups',
       },
       {
         file: 'cities/fixture/city.json',

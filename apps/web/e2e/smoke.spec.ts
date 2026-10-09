@@ -211,7 +211,11 @@ for (const city of cities) {
         );
         await box.press('Enter');
         const panel = page.getByRole('dialog', { name: city.smokeLandmark });
-        await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark);
+        // Like the click test below, the panel's first render waits behind software-WebGL frames
+        // (several seconds of native GPU work on a loaded runner), not behind app code.
+        await expect(panel.getByRole('heading', { level: 2 })).toHaveText(city.smokeLandmark, {
+          timeout: 20_000,
+        });
         await expect.poll(() => query(page).sel).toBeTruthy();
         // The flight ends at the place, close in.
         await expect.poll(() => Number(query(page).z), { timeout: 10_000 }).toBeGreaterThan(16);

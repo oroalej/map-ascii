@@ -5,6 +5,7 @@
     "en": "Naga Station"
   },
   "type": "station",
+  "heritage": true,
   "certainty": "unknown",
   "sources": [
     {
@@ -15,7 +16,44 @@
     {
       "title": "Naga station (Wikipedia)",
       "url": "https://en.wikipedia.org/wiki/Naga_station",
-      "note": "Linked from the OSM feature (wikidata Q6958301). No opening year taken from it yet."
+      "note": "Linked from the OSM feature (wikidata Q6958301). Opening on April 1, 1920, the 1938 merger into the Main Line South, and the rebuilt building opened in 2009; these statements carry no inline citations there."
+    },
+    {
+      "title": "Philippine Registry of Cultural Property (NCCA): Naga City entries",
+      "url": "https://talapamana.ncca.gov.ph/index.php/component/content/article/tluz?Itemid=101&catid=9",
+      "note": "Inspected October 9, 2026. Naga Station (Himpilan ng Naga): Work of National Artist for Architecture Pablo S. Antonio, citing The Architectural Legacy of Pablo S. Antonio: 1901-1975. The registry listing is the basis for this landmark's Heritage legend membership. Street View (October 2024) shows the rebuilt station without Antonio's river-stone walls, so no construction year is set."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "Naga station opened on April 1, 1920, on the Manila Railroad Company's Legazpi Division line."
+      },
+      "source": 1,
+      "year": 1920,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "By 1938, the Legazpi Division had merged into the Main Line South."
+      },
+      "source": 1,
+      "year": 1938,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The national registry lists the station among the works of National Artist for Architecture Pablo S. Antonio, whose terminals were built of large stacked river stones."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The present station building was rebuilt and opened in 2009."
+      },
+      "source": 1,
+      "year": 2009,
+      "certainty": "exact"
     }
   ]
 }

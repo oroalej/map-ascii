@@ -22,6 +22,7 @@ export const covers = readCollection('landcover').map((data) => Landcover.parse(
 export const plans = readCollection('plans').map((data) => LandmarkPlan.parse(data));
 const landmarks = readCollection('landmarks').map((data) => Landmark.parse(data));
 const fixtureNames = [
+  'heritage-parents.json',
   'landmark-parents.json',
   'seven-site-parents.json',
   'additional-site-parents.json',

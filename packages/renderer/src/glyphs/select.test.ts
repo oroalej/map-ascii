@@ -295,6 +295,24 @@ describe('glyph tables', () => {
     expect(tables.colors[classId('marker_landmark') * 3]).toBeCloseTo(0xff / 255);
   });
 
+  it.each(['dark', 'light'] as const)(
+    'keeps Heritage marker ink identical in the %s table',
+    (theme) => {
+      const table = buildGlyphTables(themes[theme], index);
+      const heritage = classId('marker_heritage'),
+        landmark = classId('marker_landmark');
+      expect(table.kinds[heritage]).toBe(table.kinds[landmark]);
+      expect(table.counts[heritage]).toBe(table.counts[landmark]);
+      expect(table.fills[heritage]).toBe(0);
+      expect(
+        table.table.slice(heritage * MAX_VARIANTS * 2, (heritage + 1) * MAX_VARIANTS * 2),
+      ).toEqual(table.table.slice(landmark * MAX_VARIANTS * 2, (landmark + 1) * MAX_VARIANTS * 2));
+      expect(table.colors.slice(heritage * 3, heritage * 3 + 3)).toEqual(
+        table.colors.slice(landmark * 3, landmark * 3 + 3),
+      );
+    },
+  );
+
   it('records each class fill, none for lines and markers', () => {
     expect(tables.fills[classId('building')]).toBeGreaterThan(0);
     expect(tables.fills[classId('water_sea')]).toBeGreaterThan(0);

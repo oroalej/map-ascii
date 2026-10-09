@@ -180,6 +180,7 @@ export const LandmarkType = z.enum([
   'bridge',
   'station',
   'monument',
+  'heritage',
   'other',
 ]);
 export type LandmarkType = z.infer<typeof LandmarkType>;
@@ -792,8 +793,17 @@ export function contentSchemas(languages?: readonly string[]) {
       id: LandmarkId,
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
+      /**
+       * OSM building(s) that curated `geometry` supersedes: one way mapped over two ruins, or one
+       * building mapped as several street-front units (then listed, first one setting its style).
+       */
+      replaces: z.union([OsmId, z.array(OsmId).min(2)]).optional(),
+      /** Height of a standalone curated outline (an arch, a gate), drawn as its own structure. */
+      height_m: z.number().positive().max(60).optional(),
       name: text,
       type: LandmarkType,
+      /** A listed heritage site of another type (a church, a school): joins the Heritage legend. */
+      heritage: z.literal(true).optional(),
       start_year: Year.optional(),
       end_year: Year.optional(),
       certainty: Certainty,
@@ -812,6 +822,30 @@ export function contentSchemas(languages?: readonly string[]) {
     .refine((v) => v.osm_id !== undefined || v.geometry !== undefined, {
       message: 'a landmark needs either osm_id or geometry',
       path: ['osm_id'],
+    })
+    .refine((v) => v.osm_id === undefined || v.geometry === undefined, {
+      message: 'a landmark has either osm_id or geometry, not both',
+      path: ['geometry'],
+    })
+    .refine((v) => v.replaces === undefined || v.geometry !== undefined, {
+      message: 'replaces requires curated geometry',
+      path: ['replaces'],
+    })
+    .refine(
+      (v) =>
+        v.geometry?.type !== 'Polygon' || (v.replaces === undefined) !== (v.height_m === undefined),
+      {
+        message: 'a curated outline either replaces an OSM building or stands alone with height_m',
+        path: ['height_m'],
+      },
+    )
+    .refine((v) => v.height_m === undefined || v.geometry?.type === 'Polygon', {
+      message: 'height_m belongs to a curated Polygon outline',
+      path: ['height_m'],
+    })
+    .refine((v) => v.heritage === undefined || v.type !== 'heritage', {
+      message: 'a heritage-type landmark is already heritage',
+      path: ['heritage'],
     })
     .superRefine((landmark, ctx) => {
       for (const field of ['signatures', 'pasalubong'] as const)
@@ -894,6 +928,10 @@ export function contentSchemas(languages?: readonly string[]) {
       id: z.string().regex(/^tour\/[a-z0-9-]+$/, 'expected tour/<slug>'),
       title: text,
       description: text.optional(),
+      group: z
+        .string()
+        .regex(/^[a-z0-9-]+$/)
+        .optional(),
       status: z.enum(['draft', 'verified']),
       steps: z.array(TourStep).min(1),
     })
@@ -2084,6 +2122,11 @@ export const City = z
       /** Local term shown in the UI, e.g. "barangay". */
       label: LocalizedText,
     }),
+    /** Menu sections, in display order; tour group references are checked by the pack loader. */
+    tour_groups: z
+      .array(z.object({ id: z.string().regex(/^[a-z0-9-]+$/), label: LocalizedText }))
+      .min(1)
+      .optional(),
     /** Content languages besides English, which is always required. */
     languages: z
       .array(LanguageCode)
@@ -2125,6 +2168,22 @@ export const City = z
       for (const issue of text.safeParse(value).error?.issues ?? []) {
         ctx.addIssue({ code: 'custom', path: [...path, ...issue.path], message: issue.message });
       }
+    }
+    const groupIds = new Set<string>();
+    for (const [index, group] of (city.tour_groups ?? []).entries()) {
+      if (groupIds.has(group.id))
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tour_groups', index, 'id'],
+          message: `duplicate tour group "${group.id}"`,
+        });
+      groupIds.add(group.id);
+      for (const issue of text.safeParse(group.label).error?.issues ?? [])
+        ctx.addIssue({
+          code: 'custom',
+          path: ['tour_groups', index, 'label', ...issue.path],
+          message: issue.message,
+        });
     }
     for (const [index, season] of (city.life?.seasons ?? []).entries()) {
       for (const issue of text.safeParse(season.title).error?.issues ?? [])

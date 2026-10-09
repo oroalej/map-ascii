@@ -127,6 +127,25 @@ describe('planParts', () => {
     expect(parts[0]!.tippecanoe.layer).toBe('buildings');
   });
 
+  it('passes a landmark heritage and notable flags to its parts', () => {
+    const part = {
+      kind: 'belfry' as const,
+      shape: 'hexagon' as const,
+      size_m: 6,
+      height_m: 20,
+      at: { along: 0.5, across: 0 },
+    };
+    const flagged = {
+      ...building,
+      properties: { ...building.properties, heritage: true, notable: true },
+    };
+    const [lit] = planParts([flagged], [plan({ parts: [part] })]).parts;
+    expect(lit!.properties).toMatchObject({ heritage: true, notable: true });
+    const [plain] = planParts([building], [plan({ parts: [part] })]).parts;
+    expect(plain!.properties).not.toHaveProperty('heritage');
+    expect(plain!.properties).not.toHaveProperty('notable');
+  });
+
   it('places point parts by offset in meters', () => {
     const { parts } = planParts(
       [statue],

@@ -1,0 +1,76 @@
+{
+  "id": "landmark/roco-ancestral-house",
+  "osm_id": "osm:way/23668511",
+  "name": { "en": "Roco Ancestral House" },
+  "type": "heritage",
+  "certainty": "unknown",
+  "sources": [
+    {
+      "title": "OpenStreetMap Roco house footprint",
+      "url": "https://www.openstreetmap.org/way/23668511",
+      "note": "ODbL. Existing building footprint west of Barlin Street, south of Santa Cruz Street, retained unchanged. Edit dates are not construction dates; no construction year is assigned. Generated subdivision: Santa Cruz."
+    },
+    {
+      "title": "Naga City Ordinance No. 2003-003, Section 6",
+      "url": "https://www2.naga.gov.ph/prev-ordinance/ordinance-no-2003-003/",
+      "note": "Enacted January 15, 2003. Lists Roco Home among the Barlin Street houses declared for preservation and restoration."
+    },
+    {
+      "title": "Naga City 75th-anniversary newsletter (2023), pages 20–21",
+      "url": "https://www2.naga.gov.ph/wp-content/uploads/2024/01/ANNNewsLetter-75TH-YEAR-CITY-OF-NAGA-2023_CEPPIO1.pdf",
+      "note": "Official CEPPIO newsletter, James Z. Carpio's tourist-spots feature. Identifies Senator Raul Roco's ancestral family house on Barlin Street and describes its wooden upper floor. Inspected October 8, 2026."
+    },
+    {
+      "title": "Philippine Star: Roco expects to rake in Bicolano vote",
+      "url": "https://www.philstar.com/headlines/2004/02/12/238612/roco-expects-rake-bicolano-vote",
+      "note": "Sheila Crisostomo's February 12, 2004 report locates Roco's ancestral home on Barlin Street a few metres from Naga Cathedral."
+    },
+    {
+      "title": "Planet Naga: Old Houses in Naga (2009)",
+      "url": "https://planetnaga.wordpress.com/2009/01/05/old-houses-in-naga/",
+      "note": "Blog published January 5, 2009. Named Roco photograph shows horizontal wooden siding, a raised porch, fan-shaped grille at its right post, and an external stair descending to the right. Inspected in memory October 8, 2026. No image is distributed."
+    },
+    {
+      "title": "Marcos Detourist: Raul Roco Ancestral House, September 2010",
+      "url": "https://www.flickr.com/photos/iloilocity/5241767687/",
+      "note": "Named firsthand photograph independently matches the porch, fan grille, wooden siding and external stairs in the 2009 and December 2025 references. Inspected in memory October 8, 2026; no image is distributed."
+    },
+    {
+      "title": "Philippine Panorama Project: Barlin ancestral house, December 2025",
+      "url": "https://commons.wikimedia.org/wiki/File:An_ancestral_house_in_Barlin_St.,_Naga_City,_Dec_2025.jpg",
+      "note": "Recent photograph matches the named 2009 and 2010 Roco facade, including the porch, external stair railing and fan grille. Camera location 13.626975, 123.186296 is on Barlin Street, not the building centroid. This facade match provides survival evidence as of December 2025. Inspected in memory October 8, 2026; no image is distributed."
+    },
+    {
+      "title": "Google Maps satellite: Roco house and Barlin Street",
+      "url": "https://www.google.com/maps/@13.62697,123.186128,20z/data=!3m1!1e3",
+      "note": "Public satellite reference inspected October 8, 2026 with frozen OSM street/roof geometry and the published geotagged facade. The dark hipped roof and smaller street-facing porch roof occupy way/23668511 west of Barlin, south of Santa Cruz; the opposite east-side roof is a separate red-roofed building. Imagery date is unknown. No age or construction date is inferred, and no bitmap ships."
+    },
+    {
+      "title": "Google Street View: Roco facade at Barlin and Santa Cruz",
+      "url": "https://www.google.com/maps/@?api=1&map_action=pano&pano=1vknTrS5Vwc3BjKW55wtjg&heading=260&pitch=0",
+      "note": "August 2025 panorama at 13.626998855, 123.186332276, inspected in memory October 8, 2026 via the public Street View fallback. The named-photo facade, external stairs, fan grille and green wooden siding face Barlin on the west side, immediately south of the Santa Cruz junction, confirming way/23668511. Capture dates are not construction dates. No bitmap is saved or distributed."
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The Roco home on Barlin Street was listed for preservation and restoration by City Ordinance No. 2003-003."
+      },
+      "source": 1,
+      "year": 2003,
+      "certainty": "exact"
+    },
+    {
+      "text": {
+        "en": "The city's 75th-anniversary newsletter describes Senator Raul Roco's ancestral family home as a wooden house, with its upper floor visible from Barlin Street."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "The house stands near Naga Cathedral; a 2004 campaign report places the cathedral just a few metres from Roco's ancestral home."
+      },
+      "source": 3
+    }
+  ]
+}

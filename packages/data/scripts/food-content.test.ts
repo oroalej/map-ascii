@@ -93,7 +93,8 @@ it('keeps the shared market identity while giving a tenant its own selectable Po
   expect(checkTours([market], [tour])).toEqual([expect.stringContaining(landmark.id)]);
 });
 it('rejects duplicate OSM joins, invalid coordinates, and Points outside actual territory', () => {
-  const joined = { ...landmark, osm_id: market.properties.id };
+  const { geometry: _point, ...placed } = landmark;
+  const joined = { ...placed, osm_id: market.properties.id };
   expect(() =>
     mergeContent([market], {
       ...content,

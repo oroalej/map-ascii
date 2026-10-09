@@ -280,6 +280,10 @@ export class TileSource {
   private readonly features: FeatureInfo[] = [];
   /** Feature id string → index. */
   private readonly indices = new Map<string, number>();
+  /** Indices of loaded heritage features, in load order. */
+  private readonly heritageIndices: number[] = [];
+  /** Indices of loaded curated landmarks and heritage sites, in load order. */
+  private readonly notableIndices: number[] = [];
   private readonly requests: RequestQueue;
   private readonly worker: Worker;
   /** Decode times of the most recent tiles, for `decodeMsAverage`. */
@@ -312,6 +316,8 @@ export class TileSource {
         for (const info of message.newFeatures) {
           this.features.push(info);
           this.indices.set(info.id, this.features.length);
+          if (info.heritage) this.heritageIndices.push(this.features.length);
+          if (info.notable) this.notableIndices.push(this.features.length);
         }
         if (message.type === 'tile') handlers.tile(message.key, message.geometry);
         else handlers.residential?.(message.key, message.sites);
@@ -345,6 +351,16 @@ export class TileSource {
   /** A feature id's index in the id buffer, or 0 if no loaded tile has it yet. */
   indexOf(id: string): number {
     return this.indices.get(id) ?? 0;
+  }
+
+  /** Id-buffer indices of the heritage features loaded so far. */
+  get heritage(): readonly number[] {
+    return this.heritageIndices;
+  }
+
+  /** Id-buffer indices of the curated landmarks and heritage sites loaded so far. */
+  get notable(): readonly number[] {
+    return this.notableIndices;
   }
 
   /** A loaded feature by its id. */
