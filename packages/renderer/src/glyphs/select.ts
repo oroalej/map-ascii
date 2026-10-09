@@ -321,7 +321,7 @@ export function contactShade(selfHeight: number, neighbours: readonly number[]):
 }
 
 /** Kinds that stand up from the ground (with a height): they cast shadows and read light crisply. */
-const STANDING_KINDS: readonly number[] = [
+export const STANDING_KINDS: readonly number[] = [
   kindCodes.building,
   kindCodes.foliage,
   kindCodes.variant,
@@ -334,6 +334,28 @@ const STANDING_KINDS: readonly number[] = [
  */
 export const standing = (kind: number, height: number): boolean =>
   height > 0 && STANDING_KINDS.includes(kind);
+
+/** The classes whose kind can stand (`standing`), as two 32-bit words for the glyph pass. */
+export function standingClasses(kinds: ArrayLike<number>): Uint32Array {
+  const mask = new Uint32Array(2);
+  for (let c = 1; c < Math.min(kinds.length, 64); c++)
+    if (STANDING_KINDS.includes(kinds[c]!)) mask[c >> 5]! |= 1 << (c & 31);
+  return mask;
+}
+
+/**
+ * Whether a glyph pixel reads its cell's own light (`shadeTexel` green) rather than the ground's:
+ * the select pass marks standing cells (`STANDING_STATE`); on a sub-cell edge, only the pixels
+ * whose sample stands too (the crown, or a standing kind with a height: `sampleKind`,
+ * `sampleHeight`), so the ground sextants of a roof's edge cell keep the ground's light.
+ */
+export const pixelStands = (
+  cellStanding: boolean,
+  edge: boolean,
+  sampleKind: number,
+  sampleHeight: number,
+  crown = false,
+): boolean => cellStanding && (!edge || crown || standing(sampleKind, sampleHeight));
 
 /**
  * A cell's light texel (`shadeTex`, RG8), what the select pass writes from one set of samples:

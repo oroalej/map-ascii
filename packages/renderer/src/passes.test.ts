@@ -733,6 +733,7 @@ it('binds the cell light to every glyph program', () => {
       );
       const fields = uniforms.mock.calls.at(-1)![1] as Record<string, unknown>;
       expect(fields.u_shade).toBe(shadeTex);
+      expect(fields.u_standing).toEqual(new Uint32Array(2));
     }
     expect(new Set(choose.mock.calls.map((call) => `${call[2]}/${call[3]}`))).toEqual(
       new Set(['false/false', 'true/false', 'false/true', 'true/true']),

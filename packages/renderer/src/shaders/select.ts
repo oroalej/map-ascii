@@ -25,6 +25,7 @@ import {
   EDGE_STATE,
   LIGHT_INK,
   SHADOW,
+  STANDING_KINDS,
   STANDING_STATE,
   DEFAULT_SUN,
   GUST_STEPS,
@@ -393,7 +394,7 @@ int waterStroke(ivec2 p, ivec2 w) {
 float castsAt(ivec2 q) {
   q = clamp(q, ivec2(0), textureSize(u_class, 0) - 1);
   int k = u_kind[classAt(q)];
-  bool standing = k == ${kindCodes.building} || k == ${kindCodes.foliage} || k == ${kindCodes.variant};
+  bool standing = ${STANDING_KINDS.map((kind) => `k == ${kind}`).join(' || ')};
   return standing ? texelFetch(u_attr, q, 0).r * 255.0 : 0.0;
 }
 

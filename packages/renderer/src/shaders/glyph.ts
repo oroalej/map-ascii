@@ -169,6 +169,7 @@ precision highp usampler2D;
 
 uniform sampler2D u_glyphs;
 uniform sampler2D u_shade;
+uniform uvec2 u_standing;
 uniform sampler2D u_atlas;
 uniform vec2 u_cell;
 uniform vec2 u_shift;
@@ -733,10 +734,16 @@ void main() {
   float night = darkness();
   // The cell's background: its fill class's color, faint (theme.ts ClassStyle.fill).
   vec3 back = fillOf(bgClass, daylit(cropPigment(bgClass, bgClass == cls ? tone : ${Tone.light})));
-  // Shadows and contact shade (glyphs/select.ts shadeTexel, pixelLight), one sample: standing
-  // things read their own light at their cell's centre, crisp; the ground reads the ground's light
-  // filtered at the pixel.
+  // Shadows and contact shade (glyphs/select.ts shadeTexel, pixelStands, pixelLight), one sample:
+  // standing things read their own light at their cell's centre, crisp; the ground reads the
+  // ground's light filtered at the pixel. On a sub-cell edge only the standing samples stand.
   bool standing = (rawState & ${STANDING_STATE}) != 0;
+  if (standing && edge) {
+    int sampled = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+    standing = sampled == u_crownClass || (sampled > 0 && sampled < 64 &&
+      (u_standing[sampled >> 5] & (1u << uint(sampled & 31))) != 0u &&
+      texelFetch(u_subAttr, subAt, 0).r > 0.0);
+  }
   vec2 shadeAt = standing ? vec2(cell) + 0.5 : grid / u_cell;
   vec2 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rg;
   float shade = standing ? shadeTexel.g : shadeTexel.r;

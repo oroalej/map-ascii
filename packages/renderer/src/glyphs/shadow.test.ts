@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { CellState } from '../picking';
 import { selectFragment } from '../shaders/select';
 import { glyphFragment } from '../shaders/glyph';
+import { classId } from '../classes';
 import {
   cellLight,
   contactShade,
   kindCodes,
   pixelLight,
+  pixelStands,
   shadeTexel,
+  standingClasses,
   standing,
   EDGE_STATE,
   STANDING_STATE,
@@ -173,7 +176,7 @@ describe('light on standing things and the ground', () => {
     expect(roof.own).toBe(1);
     expect(roof.ground).toBeLessThan(0.5);
     const foot = shadeTexel(0, wall, wallRing, 1, 3);
-    expect((foot.ground + roof.ground) / 2).toBeLessThanOrEqual(foot.ground);
+    expect(roof.ground).toBeLessThanOrEqual(foot.ground);
     // A lower roof under a taller neighbour keeps that shadow as its own light.
     expect(shadeTexel(4, wall, inside, 1, 3).own).toBe(1 - SHADOW.dark);
   });
@@ -183,9 +186,33 @@ describe('light on standing things and the ground', () => {
     expect(pixelLight(false, { own: 1 }, 0.4)).toBe(0.4);
     // Shadows off: every channel is 1, as on main.
     expect(pixelLight(false, { own: 1 }, 1)).toBe(1);
-    // The glyph pass takes one sample of the light and no standing table.
+    // The glyph pass takes one sample of the light; only edge pixels look at the standing table.
     const main = glyphFragment.slice(glyphFragment.indexOf('void main()'));
     expect(main.split('u_shade').length - 1).toBe(2);
-    expect(glyphFragment).not.toContain('u_standing');
+    expect(main.slice(main.indexOf('if (standing && edge)')).indexOf('u_standing')).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it('lets only the standing samples of an edge cell read its own light', () => {
+    // A whole standing cell, edge or not where its sample stands.
+    expect(pixelStands(true, false, kindCodes.grass, 0)).toBe(true);
+    expect(pixelStands(true, true, kindCodes.building, 9)).toBe(true);
+    expect(pixelStands(true, true, kindCodes.foliage, 0, true)).toBe(true);
+    // The ground sextants of a roof's edge cell keep the ground's light.
+    expect(pixelStands(true, true, kindCodes.grass, 0)).toBe(false);
+    expect(pixelStands(true, true, kindCodes.building, 0)).toBe(false);
+    expect(pixelStands(true, true, kindCodes.ramp, 3)).toBe(false);
+    // Ground cells never read a standing light (their two channels match anyway).
+    expect(pixelStands(false, true, kindCodes.building, 9)).toBe(false);
+    const kinds = new Int32Array(64);
+    kinds[classId('building')] = kindCodes.building;
+    kinds[classId('tree_crown')] = kindCodes.foliage;
+    kinds[classId('grass')] = kindCodes.grass;
+    const mask = standingClasses(kinds);
+    const has = (cls: number) => (mask[cls >> 5]! & (1 << (cls & 31))) !== 0;
+    expect(has(classId('building'))).toBe(true);
+    expect(has(classId('tree_crown'))).toBe(true);
+    expect(has(classId('grass'))).toBe(false);
   });
 });
