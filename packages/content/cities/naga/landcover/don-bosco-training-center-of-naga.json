@@ -1,0 +1,386 @@
+{
+  "id": "landcover/don-bosco-training-center-of-naga",
+  "title": "Don Bosco Training Center of Naga grounds",
+  "trees": [
+    {
+      "at": [123.28842820791, 13.66489463619],
+      "crown_m": 2.7,
+      "height_m": 4
+    },
+    {
+      "at": [123.28880365652, 13.66515997838],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2888451423, 13.66515955995],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28888671691, 13.66515914062],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28874100998, 13.66512564684],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28878249576, 13.66512522841],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28882398154, 13.66512480997],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28886555615, 13.66512439064],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28890713077, 13.66512397131],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28871985014, 13.66509098319],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28876133592, 13.66509056475],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28880291053, 13.66509014542],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28884439631, 13.66508972699],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28888597093, 13.66508930766],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28892745671, 13.66508888922],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28896903132, 13.66508846989],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28874026399, 13.66505581388],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28878174977, 13.66505539545],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28882323555, 13.66505497701],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28886481017, 13.66505455768],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28890638478, 13.66505413835],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28894787056, 13.66505371992],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28898935634, 13.66505330148],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28871910323, 13.66502106391],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28876058901, 13.66502064547],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28880216363, 13.66502022614],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28884364941, 13.66501980771],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28888522402, 13.66501938838],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2889267098, 13.66501896994],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28896828442, 13.66501855061],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2890097702, 13.66501813218],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28873951709, 13.6649858946],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28878100287, 13.66498547617],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28882248865, 13.66498505773],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28886406326, 13.6649846384],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28890563788, 13.66498421907],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28894712366, 13.66498380064],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28898860944, 13.6649833822],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28871835633, 13.66495114462],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28875984211, 13.66495072619],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28880141672, 13.66495030686],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2888429025, 13.66494988843],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28888447712, 13.6649494691],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2889259629, 13.66494905066],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28896753751, 13.66494863133],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28900902329, 13.6649482129],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28873877018, 13.66491597532],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28878025596, 13.66491555688],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28882174174, 13.66491513845],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28886331636, 13.66491471912],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28890489097, 13.66491429979],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28894637675, 13.66491388136],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28898786253, 13.66491346292],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28880066982, 13.66488038758],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2888421556, 13.66487996914],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28888373021, 13.66487954981],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.28892464153, 13.66531605027],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28896248508, 13.66531566857],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28900015097, 13.66531528867],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28898750915, 13.66528421603],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28899947138, 13.66525167075],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.2889935247, 13.66522128865],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28901805383, 13.66521971411],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28896112682, 13.66518851907],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.28899879271, 13.66518813916],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.28846070253, 13.66506273249],
+        [123.28869425534, 13.66506037683],
+        [123.28870701779, 13.66500848893],
+        [123.28871035671, 13.66490484796],
+        [123.28877838637, 13.66486962122],
+        [123.28877421922, 13.66447952656],
+        [123.28845450694, 13.66448275124],
+        [123.28846070253, 13.66506273249]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.28849693094, 13.66529372988],
+        [123.28874379881, 13.66529123992],
+        [123.28874324651, 13.66523953768],
+        [123.28849637863, 13.66524202764],
+        [123.28849693094, 13.66529372988]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.28843272747, 13.665099273],
+        [123.28844180052, 13.66509918149],
+        [123.28844199739, 13.66509130916],
+        [123.28844284051, 13.66509000117],
+        [123.28844434166, 13.66508950972],
+        [123.28867238948, 13.66509363979],
+        [123.28867205595, 13.66506241716],
+        [123.28846067571, 13.66506454918],
+        [123.28846051883, 13.66505419124],
+        [123.28843170787, 13.66505448183],
+        [123.28843272747, 13.665099273]
+      ],
+      "cover": "shrubs"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/833125855",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6648880,123.2888103,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied don-bosco-training-center-of-naga.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-08), registered by hand to OSM roofs and the covered court (checks 2.3/2.8/2.0 m). The mapped pitch is the large covered court roof on the east side. The open field west of it is lawn; a clipped hedge row lines the field's north edge below the hipped roof; a dirt walk runs along the field's west side beside the classroom column; the paved apron runs along the south frontage to the gate. Canopy fills the yard north-east of the covered court and the north-east corner; a small lawn surrounds the north solar array (the array itself is not drawn). Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 2.33 m, 2.82 m, 1.96 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

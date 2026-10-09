@@ -1,0 +1,1157 @@
+{
+  "reference": "16 owner-supplied PNGs inspected on 2026-10-08 and hand re-traced; image-pixel canopy groups, exposed-yard, turf and opaque-canopy points mapped through the hand re-registration; no image ships",
+  "sites": [
+    {
+      "slug": "villa-grande-homes-elementary-school",
+      "minimumTrees": 38,
+      "canopyGroups": [
+        {
+          "name": "east perimeter belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.220071807, 13.612993267],
+                [123.220274955, 13.612960227],
+                [123.220122326, 13.612424537],
+                [123.219919177, 13.612457577],
+                [123.220071807, 13.612993267]
+              ]
+            ]
+          },
+          "minimumCrowns": 10
+        },
+        {
+          "name": "west interior crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.219433833, 13.612926435],
+                [123.219714656, 13.612880762],
+                [123.219625069, 13.612566336],
+                [123.219344246, 13.612612009],
+                [123.219433833, 13.612926435]
+              ]
+            ]
+          },
+          "minimumCrowns": 7
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.219883938, 13.612926341],
+          "imagePixel": [395, 170],
+          "observation": "The flat north classroom apron strip is lawn with scattered small crowns, not a formal bed. Keep the three distinct parallel southwest planting strips and broad central lawn."
+        },
+        {
+          "at": [123.21976776, 13.612935488],
+          "imagePixel": [300, 178],
+          "observation": "The flat north classroom apron strip is lawn with scattered small crowns, not a formal bed. Keep the three distinct parallel southwest planting strips and broad central lawn."
+        },
+        {
+          "at": [123.219753175, 13.612752647],
+          "imagePixel": [330, 330],
+          "observation": "Hand re-trace: the central field is lawn."
+        },
+        {
+          "at": [123.219753175, 13.612752647],
+          "imagePixel": [330, 330],
+          "observation": "Hand re-trace: the central field is lawn."
+        },
+        {
+          "at": [123.219753175, 13.612752647],
+          "imagePixel": [330, 330],
+          "observation": "Hand re-trace: the central field is lawn."
+        }
+      ]
+    },
+    {
+      "slug": "concepcion-grande-elementary-school",
+      "minimumTrees": 10,
+      "canopyGroups": [
+        {
+          "name": "south/east crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.220593173, 13.619774966],
+                [123.220918844, 13.619490819],
+                [123.220669262, 13.619220625],
+                [123.22034359, 13.619504772],
+                [123.220593173, 13.619774966]
+              ]
+            ]
+          },
+          "minimumCrowns": 6
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The green clump between the dark and green/yellow roofs is a tree crown, not a distinguishable ground bed. The western green pocket beside the restaurant falls outside the mapped campus; no hedge is inferred from roof shadows.",
+      "bareYardChecks": [],
+      "surfaceConnections": [
+        {
+          "name": "exposed strip below central green roof",
+          "cover": "paving",
+          "points": [
+            [123.220217231, 13.619725158],
+            [123.220320492, 13.619635063]
+          ]
+        }
+      ],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "san-rafael-elementary-school",
+      "minimumTrees": 9,
+      "canopyGroups": [
+        {
+          "name": "compact west strip",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.227327961, 13.632611416],
+                [123.227450817, 13.632588826],
+                [123.227386614, 13.632259069],
+                [123.227263759, 13.63228166],
+                [123.227327961, 13.632611416]
+              ]
+            ]
+          },
+          "minimumCrowns": 4
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The hand re-trace finds only roofs, shadowed gaps and separate crowns; the earlier bed outlines sat on a roof edge and a dark gap, so no low bed is drawn.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "villa-corazon-elementary-school",
+      "minimumTrees": 5,
+      "canopyGroups": [
+        {
+          "name": "compact eastern edge",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.231259369, 13.623570883],
+                [123.231305977, 13.62357655],
+                [123.231337975, 13.623328113],
+                [123.231291367, 13.623322446],
+                [123.231259369, 13.623570883]
+              ]
+            ]
+          },
+          "minimumCrowns": 3
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "pacol-elementary-school",
+      "minimumTrees": 25,
+      "canopyGroups": [
+        {
+          "name": "south frontage belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.231751776, 13.651094288],
+                [123.232724094, 13.651471239],
+                [123.232762885, 13.651376754],
+                [123.231790567, 13.650999804],
+                [123.231751776, 13.651094288]
+              ]
+            ]
+          },
+          "minimumCrowns": 8
+        },
+        {
+          "name": "north belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.231592198, 13.651644466],
+                [123.232507321, 13.651999243],
+                [123.232592509, 13.651791747],
+                [123.231677386, 13.651436969],
+                [123.231592198, 13.651644466]
+              ]
+            ]
+          },
+          "minimumCrowns": 8
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [[123.232291121, 13.651503102]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.232220916, 13.651426492],
+          "imagePixel": [304, 215],
+          "observation": "Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn."
+        },
+        {
+          "at": [123.23237714, 13.651368944],
+          "imagePixel": [364, 270],
+          "observation": "Dry/patchy low turf borders the yard on its west/south sides and below the north apron. The smooth eastern Educare-side low strip is grass with small plants, rather than a continuous formal bed. Preserve north apron planting and the visibly worn central bare yard; no whole-yard lawn."
+        }
+      ]
+    },
+    {
+      "slug": "ateneo-pacol",
+      "minimumTrees": 90,
+      "canopyGroups": [
+        {
+          "name": "northern campus belt inside mapped boundary",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.232396836, 13.646992082],
+                [123.234505934, 13.64700304],
+                [123.234524903, 13.646604593],
+                [123.232415805, 13.646593635],
+                [123.232396836, 13.646992082]
+              ]
+            ]
+          },
+          "minimumCrowns": 14
+        },
+        {
+          "name": "southern court/parking rows",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.232921806, 13.646120053],
+                [123.233954385, 13.646125418],
+                [123.233982985, 13.645524683],
+                [123.232950406, 13.645519318],
+                [123.232921806, 13.646120053]
+              ]
+            ]
+          },
+          "minimumCrowns": 15
+        },
+        {
+          "name": "southwest grove",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.232035151, 13.645819093],
+                [123.232957881, 13.645823886],
+                [123.232976656, 13.645429526],
+                [123.232053925, 13.645424732],
+                [123.232035151, 13.645819093]
+              ]
+            ]
+          },
+          "minimumCrowns": 12
+        },
+        {
+          "name": "hand re-trace: north forest strip",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.232113174, 13.646949732],
+                [123.233651058, 13.646957722],
+                [123.233662732, 13.646712524],
+                [123.232124848, 13.646704534],
+                [123.232113174, 13.646949732]
+              ]
+            ]
+          },
+          "minimumCrowns": 20
+        },
+        {
+          "name": "hand re-trace: parcel north tip forest",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.234077807, 13.647225636],
+                [123.23484675, 13.647229631],
+                [123.234865233, 13.646841401],
+                [123.23409629, 13.646837406],
+                [123.234077807, 13.647225636]
+              ]
+            ]
+          },
+          "minimumCrowns": 25
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [[123.232547744, 13.645899421]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.232420182, 13.646501686],
+          "imagePixel": [330, 400],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        },
+        {
+          "at": [123.232646203, 13.646370012],
+          "imagePixel": [430, 465],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        },
+        {
+          "at": [123.232206548, 13.646003927],
+          "imagePixel": [222, 643],
+          "observation": "The western open field has continuous mottled low turf, including tan/dry grass and worn patches. Color alone did not establish bare soil. Add the exposed dry field and small fringes, preserving the distinct reddish bare patch south of the tree row, court, parking and drives. Flat south-courtyard green strips are grass; retain the shaped northern courtyard beds and dense frontage planting/shrubs."
+        },
+        {
+          "at": [123.234353927, 13.646041653],
+          "imagePixel": [1200, 630],
+          "observation": "Hand re-trace: dry lawn west of the grade-school stage."
+        },
+        {
+          "at": [123.234353927, 13.646041653],
+          "imagePixel": [1200, 630],
+          "observation": "Hand re-trace: dry lawn west of the grade-school stage."
+        },
+        {
+          "at": [123.234353927, 13.646041653],
+          "imagePixel": [1200, 630],
+          "observation": "Hand re-trace: dry lawn west of the grade-school stage."
+        }
+      ]
+    },
+    {
+      "slug": "naga-city-sports-complex",
+      "minimumTrees": 48,
+      "canopyGroups": [
+        {
+          "name": "eastern oval belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.236431873, 13.647495453],
+                [123.236857925, 13.647916259],
+                [123.237776981, 13.646857702],
+                [123.237289787, 13.646416155],
+                [123.236431873, 13.647495453]
+              ]
+            ]
+          },
+          "minimumCrowns": 12
+        },
+        {
+          "name": "southern oval belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.236321764, 13.645895668],
+                [123.237111092, 13.646624517],
+                [123.23750206, 13.646094029],
+                [123.236754596, 13.645380429],
+                [123.236321764, 13.645895668]
+              ]
+            ]
+          },
+          "minimumCrowns": 10
+        },
+        {
+          "name": "west/north stand-side canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.235224665, 13.647007627],
+                [123.236072147, 13.647822731],
+                [123.236402162, 13.647427391],
+                [123.235531771, 13.646622428],
+                [123.235224665, 13.647007627]
+              ]
+            ]
+          },
+          "minimumCrowns": 8
+        },
+        {
+          "name": "hand re-trace: south forest",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.236294739, 13.645735307],
+                [123.237031165, 13.646437936],
+                [123.23736917, 13.646034439],
+                [123.236633476, 13.645332077],
+                [123.236294739, 13.645735307]
+              ]
+            ]
+          },
+          "minimumCrowns": 30
+        },
+        {
+          "name": "close-up: forest east of the pool",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.236935591, 13.648636156],
+                [123.237526067, 13.649200656],
+                [123.238024177, 13.648599056],
+                [123.237433701, 13.648034556],
+                [123.236935591, 13.648636156]
+              ]
+            ]
+          },
+          "minimumCrowns": 20
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "Large contiguous crowns and ground shadows dominate the perimeter; no separately distinguishable low hedge or formal planting bed is visible in the supplied image.",
+      "bareYardChecks": [[123.236729935, 13.646761066]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [[123.236950642, 13.647457493]],
+      "grassChecks": []
+    },
+    {
+      "slug": "leon-q-mercado-high-school",
+      "minimumTrees": 30,
+      "canopyGroups": [
+        {
+          "name": "angled classroom row",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.249961649, 13.652980868],
+                [123.250766672, 13.653173866],
+                [123.250869904, 13.65276726],
+                [123.250064881, 13.652574261],
+                [123.249961649, 13.652980868]
+              ]
+            ]
+          },
+          "minimumCrowns": 10
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The row in front of the north classrooms is separate round crowns standing on bare soil, drawn as trees; no continuous low bed is visible.",
+      "bareYardChecks": [[123.250380185, 13.652757692]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "teodora-moscoso-elementary-school",
+      "minimumTrees": 2,
+      "canopyGroups": [
+        {
+          "name": "small courtyard crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.268077965, 13.663880104],
+                [123.268253037, 13.663903007],
+                [123.26826043, 13.663835133],
+                [123.268085357, 13.663812229],
+                [123.268077965, 13.663880104]
+              ]
+            ]
+          },
+          "minimumCrowns": 2
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The green clump at the yard's north-west corner is a tree crown, drawn as two crowns; no separate low bed is visible.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "del-rosario-elementary-school",
+      "minimumTrees": 16,
+      "canopyGroups": [
+        {
+          "name": "south frontage canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.236363258, 13.617836966],
+                [123.23680859, 13.617696516],
+                [123.236779498, 13.617603544],
+                [123.236334165, 13.617743993],
+                [123.236363258, 13.617836966]
+              ]
+            ]
+          },
+          "minimumCrowns": 6
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "del-rosario-high-school",
+      "minimumTrees": 9,
+      "canopyGroups": [
+        {
+          "name": "south/west crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.238854798, 13.618655593],
+                [123.239275123, 13.618509931],
+                [123.239216314, 13.618350028],
+                [123.238795989, 13.61849569],
+                [123.238854798, 13.618655593]
+              ]
+            ]
+          },
+          "minimumCrowns": 6
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The earlier bed outlines sat on bare yard earth and on a tree crown outside the parcel; the visible low green is lawn, drawn as grass.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.238834507, 13.618610412],
+          "imagePixel": [30, 310],
+          "observation": "The upper smooth green opening is low cover but falls outside the complete preserved source parent under the unchanged registration; that omission remains a parcel limit, not a claim of no grass. Add only exposed lower/west grass pockets inside the parent, excluding raised tree crowns, roofs and hard apron. Remaining mixed foliage/shadows are ambiguous draft observations."
+        },
+        {
+          "at": [123.238995044, 13.618480892],
+          "imagePixel": [200, 385],
+          "observation": "Hand re-trace: lawn covers the open ground south of the classroom blocks."
+        },
+        {
+          "at": [123.238995044, 13.618480892],
+          "imagePixel": [200, 385],
+          "observation": "Hand re-trace: lawn covers the open ground south of the classroom blocks."
+        },
+        {
+          "at": [123.238995044, 13.618480892],
+          "imagePixel": [200, 385],
+          "observation": "Hand re-trace: lawn covers the open ground south of the classroom blocks."
+        }
+      ]
+    },
+    {
+      "slug": "cararayan-national-high-school",
+      "minimumTrees": 30,
+      "canopyGroups": [
+        {
+          "name": "two interior canopy groups",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.237958761, 13.629892371],
+                [123.238256044, 13.629870697],
+                [123.238251379, 13.629739091],
+                [123.237954096, 13.629760765],
+                [123.237958761, 13.629892371]
+              ]
+            ]
+          },
+          "minimumCrowns": 5
+        },
+        {
+          "name": "eastern belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.238583773, 13.629886061],
+                [123.238744708, 13.629874327],
+                [123.238721383, 13.629216295],
+                [123.238560447, 13.629228029],
+                [123.238583773, 13.629886061]
+              ]
+            ]
+          },
+          "minimumCrowns": 7
+        },
+        {
+          "name": "hand re-trace: crown cluster north of the centre",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.237952325, 13.629900474],
+                [123.238209374, 13.629881733],
+                [123.238204748, 13.629751215],
+                [123.237947699, 13.629769955],
+                [123.237952325, 13.629900474]
+              ]
+            ]
+          },
+          "minimumCrowns": 10
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "don-manuel-i-abella-central-school",
+      "minimumTrees": 38,
+      "canopyGroups": [
+        {
+          "name": "northwest interior crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.239943449, 13.629747247],
+                [123.240436109, 13.629667075],
+                [123.240385033, 13.629402977],
+                [123.239892372, 13.629483149],
+                [123.239943449, 13.629747247]
+              ]
+            ]
+          },
+          "minimumCrowns": 5
+        },
+        {
+          "name": "southwest classroom crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.239743991, 13.629438742],
+                [123.240200023, 13.629364531],
+                [123.240150637, 13.629109178],
+                [123.239694606, 13.629183389],
+                [123.239743991, 13.629438742]
+              ]
+            ]
+          },
+          "minimumCrowns": 7
+        },
+        {
+          "name": "southeastern belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.240380288, 13.62926123],
+                [123.240713612, 13.629206986],
+                [123.240647652, 13.628865933],
+                [123.240314328, 13.628920176],
+                [123.240380288, 13.62926123]
+              ]
+            ]
+          },
+          "minimumCrowns": 8
+        },
+        {
+          "name": "hand re-trace: south-east canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.240286604, 13.629294516],
+                [123.240707837, 13.629225967],
+                [123.240640186, 13.628876168],
+                [123.240218953, 13.628944717],
+                [123.240286604, 13.629294516]
+              ]
+            ]
+          },
+          "minimumCrowns": 15
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The plaza-edge greenery is overhanging tree canopy and the strip below the front block is a pale wall line; no low bed is visible.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.23978815, 13.629159146],
+          "imagePixel": [80, 420],
+          "observation": "Hand re-trace: bright lawn west of the front classroom block."
+        },
+        {
+          "at": [123.23978815, 13.629159146],
+          "imagePixel": [80, 420],
+          "observation": "Hand re-trace: bright lawn west of the front classroom block."
+        },
+        {
+          "at": [123.23978815, 13.629159146],
+          "imagePixel": [80, 420],
+          "observation": "Hand re-trace: bright lawn west of the front classroom block."
+        }
+      ]
+    },
+    {
+      "slug": "san-isidro-national-high-school",
+      "minimumTrees": 12,
+      "canopyGroups": [
+        {
+          "name": "NHS forecourt/south belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.268174557, 13.6324162],
+                [123.268481905, 13.632636051],
+                [123.268616243, 13.632388153],
+                [123.268333715, 13.63219638],
+                [123.268174557, 13.6324162]
+              ]
+            ]
+          },
+          "minimumCrowns": 7
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The dark clump in the north-east turf patch is a crown, drawn as a tree; the garden plot beside it lies in the elementary school parcel.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.268398832, 13.63264775],
+          "imagePixel": [220, 73],
+          "observation": "Small dry/green low-turf fringe adjoining the existing north forecourt grass. Retain the raised green island as planting and the shared mature crowns; no ground is inferred beneath opaque foliage."
+        }
+      ]
+    },
+    {
+      "slug": "san-isidro-elementary-school",
+      "minimumTrees": 38,
+      "canopyGroups": [
+        {
+          "name": "ES east canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.268879346, 13.633083377],
+                [123.269328123, 13.633404556],
+                [123.269674765, 13.632845179],
+                [123.269221232, 13.632513651],
+                [123.268879346, 13.633083377]
+              ]
+            ]
+          },
+          "minimumCrowns": 12
+        },
+        {
+          "name": "ES southern belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.268318039, 13.632018202],
+                [123.269340819, 13.632740612],
+                [123.269421737, 13.632605495],
+                [123.268406875, 13.631890717],
+                [123.268318039, 13.632018202]
+              ]
+            ]
+          },
+          "minimumCrowns": 10
+        },
+        {
+          "name": "hand re-trace: north forest",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.268496767, 13.63291908],
+                [123.269321649, 13.633512721],
+                [123.269483702, 13.633252379],
+                [123.268658107, 13.632657571],
+                [123.268496767, 13.63291908]
+              ]
+            ]
+          },
+          "minimumCrowns": 20
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.268667602, 13.632305968],
+          "imagePixel": [240, 275],
+          "observation": "The flat strip beside the western classroom opening is continuous low grass, not a distinguishable formal bed. Preserve the raised courtyard planting island and east classroom-edge planting; retain the dry/green openings and all shared crowns."
+        }
+      ]
+    },
+    {
+      "slug": "carolina-elementary-school",
+      "minimumTrees": 22,
+      "canopyGroups": [
+        {
+          "name": "south perimeter belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.286834175, 13.663733175],
+                [123.288157265, 13.663735176],
+                [123.288157494, 13.663591885],
+                [123.286834404, 13.663589883],
+                [123.286834175, 13.663733175]
+              ]
+            ]
+          },
+          "minimumCrowns": 11
+        },
+        {
+          "name": "west/interior crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.286866364, 13.664095433],
+                [123.287288279, 13.664096072],
+                [123.287288878, 13.663721922],
+                [123.286866964, 13.663721284],
+                [123.286866364, 13.664095433]
+              ]
+            ]
+          },
+          "minimumCrowns": 5
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The earlier bed outlines sat on a dark roof edge, a shadowed corner and a tree crown; no distinct low bed is visible in the image.",
+      "bareYardChecks": [[123.287757561, 13.663933588]],
+      "surfaceConnections": [
+        {
+          "name": "narrow visible green tongue",
+          "cover": "grass",
+          "points": [
+            [123.287444128, 13.663976898],
+            [123.287481051, 13.66394113]
+          ]
+        }
+      ],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.287335676, 13.663915038],
+          "imagePixel": [282, 189],
+          "observation": "West-yard fringe shows patchy low cover including dry turf merging into the existing green tongue. Its north flat green continuation is lawn, not a separate planted bed. Keep the worn eastern orange/tan yard bare, roof-end beds, isolated crowns and narrow central approach."
+        },
+        {
+          "at": [123.287290524, 13.663972685],
+          "imagePixel": [260, 160],
+          "observation": "Hand re-trace: the yard's west half is patchy dry turf."
+        },
+        {
+          "at": [123.287290524, 13.663972685],
+          "imagePixel": [260, 160],
+          "observation": "Hand re-trace: the yard's west half is patchy dry turf."
+        },
+        {
+          "at": [123.287290524, 13.663972685],
+          "imagePixel": [260, 160],
+          "observation": "Hand re-trace: the yard's west half is patchy dry turf."
+        }
+      ]
+    },
+    {
+      "slug": "carolina-national-high-school",
+      "minimumTrees": 26,
+      "canopyGroups": [
+        {
+          "name": "interior crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.291015535, 13.661723627],
+                [123.291482668, 13.661650088],
+                [123.291425343, 13.661306263],
+                [123.29095821, 13.661379802],
+                [123.291015535, 13.661723627]
+              ]
+            ]
+          },
+          "minimumCrowns": 7
+        },
+        {
+          "name": "southern belt",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.290742785, 13.661385905],
+                [123.29186007, 13.661210015],
+                [123.291823642, 13.660991526],
+                [123.290706357, 13.661167415],
+                [123.290742785, 13.661385905]
+              ]
+            ]
+          },
+          "minimumCrowns": 12
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The earlier bed outlines sat on bare dirt beside the blue block and on crown edges; mature canopy and bare yard fill the open ground, so no low bed is drawn.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "don-bosco-training-center-of-naga",
+      "minimumTrees": 50,
+      "canopyGroups": [
+        {
+          "name": "north-east yard canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.288708539, 13.665146607],
+                [123.289010577, 13.665143561],
+                [123.289007811, 13.6648846],
+                [123.288705773, 13.664887647],
+                [123.288708539, 13.665146607]
+              ]
+            ]
+          },
+          "minimumCrowns": 25
+        }
+      ],
+      "hasLowPlanting": true,
+      "lowPlantingOmission": "",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.288579745, 13.664733525],
+          "imagePixel": [400, 800],
+          "observation": "Open field west of the covered court is lawn."
+        },
+        {
+          "at": [123.288579745, 13.664733525],
+          "imagePixel": [400, 800],
+          "observation": "Open field west of the covered court is lawn."
+        }
+      ]
+    },
+    {
+      "slug": "panicuason-elementary-school",
+      "minimumTrees": 250,
+      "canopyGroups": [
+        {
+          "name": "central canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.318705473, 13.663868293],
+                [123.31909366, 13.663855013],
+                [123.319082727, 13.663553252],
+                [123.31869454, 13.663566532],
+                [123.318705473, 13.663868293]
+              ]
+            ]
+          },
+          "minimumCrowns": 60
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "Dense canopy covers the campus; no separate low bed or hedge is visible in the image.",
+      "bareYardChecks": [[123.318471674, 13.663583598]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "sisters-sacred-heart-formation-center",
+      "minimumTrees": 150,
+      "canopyGroups": [
+        {
+          "name": "orchard rows",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.233557899, 13.650418882],
+                [123.234234112, 13.650548647],
+                [123.234346111, 13.64999752],
+                [123.233669898, 13.649867754],
+                [123.233557899, 13.650418882]
+              ]
+            ]
+          },
+          "minimumCrowns": 40
+        },
+        {
+          "name": "north garden canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.232450002, 13.650294371],
+                [123.233453415, 13.650486926],
+                [123.233505107, 13.65023256],
+                [123.232501694, 13.650040004],
+                [123.232450002, 13.650294371]
+              ]
+            ]
+          },
+          "minimumCrowns": 20
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The grounds show lawn, canopy and an orchard on bare soil; no separate low bed is visible.",
+      "bareYardChecks": [[123.233927901, 13.650159527]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": [
+        {
+          "at": [123.2333866, 13.649923508],
+          "imagePixel": [440, 250],
+          "observation": "Curved lawn east of the formation house."
+        },
+        {
+          "at": [123.233996823, 13.649820372],
+          "imagePixel": [700, 350],
+          "observation": "Lawn garden around the winding water course."
+        },
+        {
+          "at": [123.2333866, 13.649923508],
+          "imagePixel": [440, 250],
+          "observation": "Curved lawn east of the formation house."
+        },
+        {
+          "at": [123.233996823, 13.649820372],
+          "imagePixel": [700, 350],
+          "observation": "Lawn garden around the winding water course."
+        }
+      ]
+    },
+    {
+      "slug": "mary-coredemptrix-church",
+      "minimumTrees": 8,
+      "canopyGroups": [
+        {
+          "name": "forecourt crowns",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.215571647, 13.64710958],
+                [123.215747844, 13.647207962],
+                [123.216000944, 13.646779905],
+                [123.215824747, 13.646681523],
+                [123.215571647, 13.64710958]
+              ]
+            ]
+          },
+          "minimumCrowns": 4
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The walled forecourt is bare dirt with separate crowns; no low bed is visible.",
+      "bareYardChecks": [[123.215632391, 13.647006846]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "morada-ramos-elementary-school",
+      "minimumTrees": 40,
+      "canopyGroups": [
+        {
+          "name": "south-west canopy",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.277082507, 13.652713701],
+                [123.277392288, 13.652714465],
+                [123.277392667, 13.652569525],
+                [123.277082885, 13.652568761],
+                [123.277082507, 13.652713701]
+              ]
+            ]
+          },
+          "minimumCrowns": 15
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The yard is bare soil framed by canopy and roofs; no separate low bed is visible.",
+      "bareYardChecks": [[123.277530056, 13.652681357]],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    },
+    {
+      "slug": "grand-view-elementary-school",
+      "minimumTrees": 3,
+      "canopyGroups": [
+        {
+          "name": "crown cluster by the east yard",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [123.251554934, 13.656784786],
+                [123.251652064, 13.656783834],
+                [123.251651084, 13.656689451],
+                [123.251553955, 13.656690402],
+                [123.251554934, 13.656784786]
+              ]
+            ]
+          },
+          "minimumCrowns": 2
+        }
+      ],
+      "hasLowPlanting": false,
+      "lowPlantingOmission": "The campus is roofs and hardscape courtyards; no low bed or lawn is visible.",
+      "bareYardChecks": [],
+      "surfaceConnections": [],
+      "opaqueCanopyGroundChecks": [],
+      "grassChecks": []
+    }
+  ]
+}

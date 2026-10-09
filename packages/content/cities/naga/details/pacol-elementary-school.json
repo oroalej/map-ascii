@@ -1,0 +1,82 @@
+{
+  "id": "detail/pacol-elementary-school",
+  "osm_id": "osm:way/312531363",
+  "title": "Pacol Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23223828449, 13.6512764083],
+        [123.23228787111, 13.65115562789],
+        [123.23227455584, 13.65115055001],
+        [123.232271235, 13.65115912684],
+        [123.23226850045, 13.65116263229],
+        [123.23226564994, 13.65116444138],
+        [123.23226238626, 13.65116536787],
+        [123.23226010916, 13.65116545375],
+        [123.23225677715, 13.65116477429],
+        [123.23225379519, 13.65116318685],
+        [123.23225212256, 13.65116168291],
+        [123.23225026088, 13.65115891293],
+        [123.23224930745, 13.65115574144],
+        [123.23224957638, 13.65115134608],
+        [123.23225295211, 13.65114231127],
+        [123.23224591988, 13.65113962948],
+        [123.23219791818, 13.6512565351],
+        [123.23214071904, 13.65123438555],
+        [123.2320844639, 13.65137140876],
+        [123.23215136838, 13.6513971704],
+        [123.23215266287, 13.65139838917],
+        [123.23215273772, 13.65140001217],
+        [123.23217894719, 13.65141017312],
+        [123.23223445435, 13.65127497178],
+        [123.23223828449, 13.6512764083]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23225733363, 13.65117091896],
+        [123.23216942051, 13.65138505296],
+        [123.23214585671, 13.65138876742]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23227803367, 13.65115814888],
+        [123.23227685888, 13.65116118304],
+        [123.23227662949, 13.65116169875],
+        [123.23227635015, 13.65116219064],
+        [123.2322756111, 13.65116336551],
+        [123.23227497142, 13.65116427539],
+        [123.2322026127, 13.65126017973],
+        [123.23220222258, 13.65126060921],
+        [123.2320922767, 13.65136813638]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/312531363",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit); the mapped Educare footprint sits about 9 m off its image roof and is kept as mapped. The central field's reddish worn soil stays bare; its olive south-west part and west edge are dry turf (grass). A clipped hedge row lines the field's north edge below the north classrooms; vegetable-garden beds sit west; a small lawn west of the south-west classrooms; tree belts run along the north edge, the Pacol Road frontage and the east edge, with a column of small trees on the field's east side and crowns among the west classroom blocks. The yard south of the main building is hardscape; its short gate walk to Pacol Road under the roadside canopy is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 4.67 m, 2.82 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

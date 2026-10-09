@@ -1,0 +1,276 @@
+{
+  "id": "landcover/morada-ramos-elementary-school",
+  "title": "Morada-Ramos Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.27727501214, 13.65280894435],
+      "crown_m": 3.7,
+      "height_m": 4.3
+    },
+    {
+      "at": [123.27718570897, 13.65273625391],
+      "crown_m": 5.0,
+      "height_m": 5.8
+    },
+    {
+      "at": [123.2772602918, 13.65273420796],
+      "crown_m": 3.7,
+      "height_m": 4.3
+    },
+    {
+      "at": [123.27738524536, 13.65275012505],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.27721445066, 13.65271402625],
+      "crown_m": 3.0,
+      "height_m": 4
+    },
+    {
+      "at": [123.27710786903, 13.65271142209],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27720929375, 13.65271167218],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27726000612, 13.65271179723],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27731071848, 13.65271192228],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27736143084, 13.65271204732],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27713333672, 13.6526687832],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27718404908, 13.65266890824],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27723476144, 13.65266903329],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.2772854738, 13.65266915834],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27733618616, 13.65266928338],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27738545614, 13.65266940487],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27710809204, 13.65262601926],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.2771588044, 13.6526261443],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27720951676, 13.65262626935],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27726022913, 13.6526263944],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27731094149, 13.65262651944],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27736165385, 13.65262664449],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27713355944, 13.65258349186],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.2771842718, 13.6525836169],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27723498416, 13.65258374195],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27728569652, 13.652583867],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27733640888, 13.65258399204],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27738567886, 13.65258411353],
+      "crown_m": 6.5,
+      "height_m": 7.5
+    },
+    {
+      "at": [123.27765995754, 13.65261021018],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27768582181, 13.65261027395],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27772976488, 13.65261038231],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27777359321, 13.65261049038],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27781753627, 13.65261059873],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.2778613646, 13.65261070681],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27766400401, 13.65257331608],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27770791394, 13.65257428739],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27775168547, 13.65257587458],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.277795457, 13.65257746177],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27783934312, 13.65257905312],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27788322924, 13.65258064446],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27792444506, 13.65283942232],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27796838812, 13.65283953068],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27794645559, 13.65280257252],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27792463808, 13.65276550316],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27796858115, 13.65276561151],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27794632568, 13.65273556298],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27792483082, 13.65269169549],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27794220777, 13.65265463847],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27792502384, 13.65261777632],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.2779689669, 13.65261788468],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.27794695647, 13.65258295526],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1395444066",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6527325,123.2775267,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied morada-ramos-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-09), registered by hand to the mapped classroom roofs (checks 1.4/1.2 m). The central yard is bare reddish soil and stays bare. Large canopy fills the south-west of the campus and the strip south and east of the south-east classroom block; separate crowns and bushes stand along the apron in front of the north classroom row. The packed apron runs along the front of the north row and between it and the south-east block; the short link through the gap between the north roofs to the campus's north edge is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.36 m, 1.15 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

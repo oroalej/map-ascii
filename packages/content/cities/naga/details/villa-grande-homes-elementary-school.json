@@ -1,0 +1,60 @@
+{
+  "id": "detail/villa-grande-homes-elementary-school",
+  "osm_id": "osm:way/881073805",
+  "title": "Villa Grande Homes Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.21991086364, 13.61294637737],
+        [123.21991190462, 13.61294692225],
+        [123.21991252966, 13.61294785751],
+        [123.21993829323, 13.61302097137],
+        [123.2199382089, 13.61302229881],
+        [123.21993737624, 13.61302335955],
+        [123.21993101716, 13.61302558003],
+        [123.21993659283, 13.61304514917],
+        [123.21997389505, 13.61303597594],
+        [123.21994670557, 13.61294054807],
+        [123.21991086364, 13.61294637737]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.21995364021, 13.6130349339],
+        [123.21992924361, 13.61294930828]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.21996646562, 13.61303177992],
+        [123.21991992527, 13.61295082381]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881073805",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6126627,123.2197822,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied villa-grande-homes-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Dense canopy belts along the north-east, east, south-east and west edges, a crown clump west of the field, small bushes on the north apron, the lawn strip below the north classrooms (all the way east to the passage), the central field lawn and the open south-west lawn, and five garden-bed rows south-west. The pale passage beside the last north classroom, from the campus edge down to the lawn strip, is paved; the pale east strip stays bare. Registration: global affine; independent check errors 1.70 m, 0.53 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

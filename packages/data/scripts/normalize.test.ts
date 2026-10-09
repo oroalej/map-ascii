@@ -40,6 +40,33 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   type: 'FeatureCollection',
   features,
 });
+
+it('retains mapped waterfall point and crest geometry with water classes and source identities', () => {
+  const drop: Feature = {
+    type: 'Feature',
+    id: 'node/7',
+    properties: { waterway: 'waterfall', name: 'Fixture Falls' },
+    geometry: { type: 'Point', coordinates: [0.005, 0.005] },
+  };
+  const crest: Feature = {
+    ...road('way/8', 'path', 0.006),
+    properties: { waterway: 'waterfall' },
+  };
+  const area: Feature = { ...drop, id: 'way/9', geometry: square(0.003, 0.003, 0.004, 0.004) };
+  const input = [drop, crest, area];
+  const result = normalize(collection(...input), boundary, 10).features;
+  for (const [i, f] of input.entries()) {
+    const normalized = result.find((record) => record.properties.id === `osm:${f.id}`)!;
+    expect(normalized.geometry).toEqual(f.geometry);
+    expect(normalized.properties).toMatchObject({
+      class: i === 2 ? 'water_area' : 'water_stream',
+      kind: 'waterway=waterfall',
+    });
+    expect(normalized.tippecanoe.layer).toBe(i === 0 ? 'poi' : 'water');
+    expect(normalized.properties.height).toBeUndefined();
+  }
+});
+
 it('bakes vendor restrictions for private lawns, owned grounds and paths before tile tag removal', () => {
   const lawn: Feature = {
     type: 'Feature',

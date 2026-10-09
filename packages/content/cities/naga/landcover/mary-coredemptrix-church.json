@@ -1,0 +1,77 @@
+{
+  "id": "landcover/mary-coredemptrix-church",
+  "title": "Mary Co-Redemptrix Church grounds",
+  "trees": [
+    {
+      "at": [123.21565656243, 13.64712055318],
+      "crown_m": 5.7,
+      "height_m": 6.6
+    },
+    {
+      "at": [123.21571349046, 13.6469291431],
+      "crown_m": 4.0,
+      "height_m": 4.6
+    },
+    {
+      "at": [123.21581978293, 13.64685639699],
+      "kind": "palm",
+      "crown_m": 4.8,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.21587497826, 13.64675512009],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.21593874298, 13.64679637117],
+      "crown_m": 8.4,
+      "height_m": 9.7
+    },
+    {
+      "at": [123.2159232774, 13.64702234515],
+      "kind": "palm",
+      "crown_m": 3.1,
+      "height_m": 5.0
+    },
+    {
+      "at": [123.21597562467, 13.64698886523],
+      "kind": "palm",
+      "crown_m": 3.1,
+      "height_m": 5.0
+    },
+    {
+      "at": [123.2162428738, 13.64681793976],
+      "kind": "palm",
+      "crown_m": 3.5,
+      "height_m": 5.6
+    },
+    {
+      "at": [123.21628853493, 13.64678105865],
+      "kind": "palm",
+      "crown_m": 3.5,
+      "height_m": 5.6
+    },
+    {
+      "at": [123.21632771681, 13.64673461089],
+      "kind": "palm",
+      "crown_m": 3.5,
+      "height_m": 5.6
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/871438572",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6466439,123.2161514,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied mary-coredemptrix-church.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-08), registered by hand to the mapped church and its west wing (check 3.1 m); the mapped parcel's road-side corner sits about 13 m from the image's wall corner, so the church buildings set the frame. The walled forecourt toward Pacol Road is bare dirt with a tree clump, a bush and a palm group; a paved plaza and a paved band along its south end lead to the church facade, and a large crown pair stands west of the facade. The palm-lined walk and lawn east of the forecourt fall on the mapped road and outside the parcel, so they are not drawn. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 3.11 m, 12.77 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

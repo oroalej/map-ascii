@@ -1,0 +1,285 @@
+{
+  "id": "detail/ateneo-pacol",
+  "osm_id": "osm:way/871497903",
+  "title": "Ateneo de Naga University Junior High School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "unmapped-roof-1",
+      "ring": [
+        [123.23535997726, 13.6455871189],
+        [123.23534203728, 13.64559717566],
+        [123.23530325752, 13.64571956677],
+        [123.23534768515, 13.64578715323],
+        [123.23537556112, 13.64578889465],
+        [123.23544402505, 13.64576114923],
+        [123.23545487584, 13.64571335256],
+        [123.23535997726, 13.6455871189]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "covered-walk-1",
+      "ring": [
+        [123.23503387031, 13.64631081341],
+        [123.23508560205, 13.64637207343],
+        [123.23517211474, 13.64639699247],
+        [123.23540206956, 13.64639818717],
+        [123.23543145022, 13.64636424926],
+        [123.23518484528, 13.64635706254],
+        [123.23510916331, 13.64632798243],
+        [123.23505782195, 13.64626078476],
+        [123.23503387031, 13.64631081341]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "covered-walk-2",
+      "ring": [
+        [123.23401803842, 13.6460905546],
+        [123.23413135608, 13.64609114333],
+        [123.23413296707, 13.64605730503],
+        [123.23407816114, 13.64605684802],
+        [123.23408375983, 13.64593693138],
+        [123.23406425099, 13.64593611652],
+        [123.23406346686, 13.64591796398],
+        [123.23402626437, 13.6459177707],
+        [123.23401803842, 13.6460905546]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "covered-walk-3",
+      "ring": [
+        [123.23387811282, 13.64607552087],
+        [123.23390794533, 13.64607567587],
+        [123.23391704505, 13.6458845387],
+        [123.23391331014, 13.64559017216],
+        [123.23390122244, 13.64559010936],
+        [123.23387811282, 13.64607552087]
+      ],
+      "height_m": 3,
+      "material": "roof",
+      "overhead": true
+    },
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23508536145, 13.64637242575],
+        [123.2351720533, 13.64639739639],
+        [123.23540226235, 13.64639859242],
+        [123.23543213136, 13.6463640904],
+        [123.23542930559, 13.64636292842],
+        [123.23518496377, 13.64635667504],
+        [123.2351094165, 13.64632766169],
+        [123.23505773955, 13.64625999856],
+        [123.23503338281, 13.64631087335],
+        [123.23508536145, 13.64637242575]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.23404862834, 13.64622396628],
+        [123.23446504276, 13.64622612971],
+        [123.23446505394, 13.64620427767],
+        [123.23446573161, 13.64620288183],
+        [123.23446694236, 13.64620225294],
+        [123.2345921, 13.64620220931],
+        [123.23459376518, 13.64620287871],
+        [123.23459444606, 13.64620427767],
+        [123.23459445724, 13.64622680207],
+        [123.23500422102, 13.64622893094],
+        [123.23500732353, 13.6461637636],
+        [123.23496797203, 13.64615934246],
+        [123.23405193155, 13.64615458329],
+        [123.23404862834, 13.64622396628]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-3",
+      "ring": [
+        [123.23454970699, 13.64599153195],
+        [123.23454478765, 13.64609558213],
+        [123.23468533507, 13.64609561103],
+        [123.23469025463, 13.64599229469],
+        [123.23472980103, 13.64599246557],
+        [123.23473258344, 13.64593402161],
+        [123.23471576673, 13.6459339794],
+        [123.23471468864, 13.64593360344],
+        [123.23471392018, 13.64593277805],
+        [123.23471370021, 13.64590049971],
+        [123.23450358418, 13.64589940808],
+        [123.23449921091, 13.64599126757],
+        [123.23454970699, 13.64599153195]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-4",
+      "ring": [
+        [123.23401760286, 13.64609095659],
+        [123.23413175317, 13.64609154964],
+        [123.23413340263, 13.64605690305],
+        [123.23407849005, 13.64605660053],
+        [123.23408419546, 13.64593652804],
+        [123.2340661927, 13.64593649063],
+        [123.23406453104, 13.64593581761],
+        [123.23406384282, 13.64593419671],
+        [123.23406388383, 13.6459175619],
+        [123.23402586729, 13.64591736439],
+        [123.23401760286, 13.64609095659]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-5",
+      "ring": [
+        [123.23311569116, 13.64620276873],
+        [123.23403832917, 13.64620756218],
+        [123.23404085415, 13.64615452573],
+        [123.23394419548, 13.64615402356],
+        [123.2332160918, 13.64616323755],
+        [123.23311759987, 13.64616267675],
+        [123.23311569116, 13.64620276873]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-6",
+      "ring": [
+        [123.23390834242, 13.64607608217],
+        [123.23391746115, 13.64588454555],
+        [123.23391372105, 13.64558977005],
+        [123.23390082535, 13.64558970305],
+        [123.23387767725, 13.64607592286],
+        [123.23390834242, 13.64607608217]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-7",
+      "ring": [
+        [123.23339267206, 13.64601617602],
+        [123.23354636797, 13.64601697453],
+        [123.23355978818, 13.6457350865],
+        [123.23340609228, 13.64573428799],
+        [123.23339267206, 13.64601617602]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true,
+      "holes": [
+        [
+          [123.23353638683, 13.64595157971],
+          [123.23343523888, 13.64595105566],
+          [123.23344204803, 13.64580799305],
+          [123.23354316667, 13.64580848998],
+          [123.23353638683, 13.64595157971]
+        ]
+      ]
+    },
+    {
+      "id": "approach-8",
+      "ring": [
+        [123.23323273867, 13.64605213393],
+        [123.23338643457, 13.64605293243],
+        [123.23340277315, 13.64570974487],
+        [123.23324907725, 13.64570894636],
+        [123.23323273867, 13.64605213393]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "court-1",
+      "ring": [
+        [123.23343533058, 13.64595099531],
+        [123.23353629903, 13.64595151988],
+        [123.23354310428, 13.64580857745],
+        [123.23344213583, 13.64580805288],
+        [123.23343533058, 13.64595099531]
+      ],
+      "height_m": 0.1,
+      "material": "pitch",
+      "overhead": false
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.2334690046, 13.64616587651],
+        [123.23346743921, 13.64619875709]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.23459336435, 13.6460897531],
+        [123.23460143126, 13.64592030975]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-3-1",
+      "line": [
+        [123.23404459914, 13.646076835],
+        [123.23405190684, 13.64592333878]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.23496760984, 13.64616517968],
+        [123.23405491985, 13.64621815986]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/871497903",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6461969,123.2337541,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied ateneo-pacol.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The west field is uniformly mottled dry turf with faint pitch markings (grass); the reddish soil in its north-west corner, the soil track on its west edge and the reddish band south of the field stay bare; a pale dry-turf strip lies below the field's south tree row. Forest canopy fills the strip between the campus's north edge and the field, gym and main building; a second forest block fills the south-west and a canopy belt follows Cassablanca Road. Tree rows line the field's south edge and the internal road, with crown columns beside the court and along both sides of the parking lot. A green lawn lies south of the road rows; the court with its painted apron, the old concrete slab beside it and the gravel parking lot are traced as seen. The main building's courtyard is a planted garden with two small lawns and scattered crowns; the grade school's front has two dry lawns either side of the central walk and the semicircular stage, with a row of small palms. Covered walks run along the parking lot, to the grade school and east from the main building; the east lawn slopes toward the highway, and the grandstand roof east of the road loop is unmapped and drawn as a roof. Owner follow-up (2026-10-08): the parcel's north tip, which runs beyond the image's top edge, is forest continuing from the visible canopy north of the main building, and the wedge between the road loop and Pacol Road east of the octagonal roof is tree-covered; both are packed with crowns. Registration: global affine; independent check errors 4.12 m, 3.75 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}
