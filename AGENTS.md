@@ -40,6 +40,7 @@ Read these before doing substantial work:
 - `pnpm worktree:stop <branch> [--dry-run]` — end processes started from a task's worktree (a leftover `serve`/`dev` server, a watcher) so `worktree:remove` can rename it. Run it from the main checkout; it never stops its own caller or Claude/Codex sessions. `$merge-pr` runs it before `worktree:remove`.
 - `pnpm --silent cli:latest <codex|claude>` — print the path of the newest installed `codex`/`claude` executable (several copies can be installed, and PATH may pick an old one). Agent skills that start a separate Codex or Claude run that path. From Windows PowerShell, call `pnpm.cmd`, because the execution policy blocks `pnpm.ps1`.
 - `pnpm check:budgets` — after `pnpm build`, check initial JS, `<city>.pmtiles`, the 60 KiB gzip cap for `<city>.processions.json` and the 32 KiB gzip cap for `<city>.emergency.json` against the budgets in `docs/ARCHITECTURE.md` §8
+- `pnpm demo:video [-- --city <slug>] [--output <path.avif>] [--mp4 <path.mp4>]`: re-render the README promo clip (`docs/media/demo.avif`). It drives the static export one video frame at a time with Playwright's fake clock, under one heavy slot, and encodes with ffmpeg (`PATH` or `FFMPEG`). Run it only when the clip should change. It is not a test.
 - `pnpm lint` / `pnpm typecheck` / `pnpm format` (Prettier skips `*.md`)
 - `pnpm --filter @atlas/content validate` — validate every city pack against the zod schemas
 
