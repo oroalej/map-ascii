@@ -1,4 +1,6 @@
 import { labelCandidate } from './label-candidates';
+import { gridContains, shiftGrid, windowCells, windowMargin } from './grid';
+import { project, unproject } from './camera';
 import { expect, it, vi } from 'vitest';
 import { buntingWindResponse } from './life/bunting-motion';
 import {
@@ -432,6 +434,9 @@ it('allows paving edge sampling only where the cell pass can rasterize paving', 
     useProgram: vi.fn(),
     bindVertexArray: vi.fn(),
     drawArrays: vi.fn(),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    scissor: vi.fn(),
   } as unknown as GL;
   const targets = { cols: 83, rows: 37, base: {}, sub: {} } as CellTargets;
   const programs = { select: { program: {} } } as unknown as Programs;
@@ -459,6 +464,96 @@ it('allows paving edge sampling only where the cell pass can rasterize paving', 
   } finally {
     uniforms.mockRestore();
   }
+});
+
+it('selects only the cells on screen and one more around them in a margin window', () => {
+  vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = {
+    bindFramebuffer: vi.fn(),
+    drawBuffers: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    scissor: vi.fn<(x: number, y: number, width: number, height: number) => void>(),
+    SCISSOR_TEST: 7,
+  };
+  const size = windowCells(view, view.cellDev);
+  const grid = placeGrid(
+    view,
+    view.cellDev,
+    size.cols,
+    size.rows,
+    windowMargin(view, view.cellDev),
+  ).grid;
+  const targets = { cols: size.cols, rows: size.rows, base: {}, sub: {} } as CellTargets;
+  const programs = { select: { program: {} } } as unknown as Programs;
+  const resources = { map: { tables: {} } } as unknown as ThemeResources;
+  const highlights = { hover: 0, selected: 0, highlight: new Uint32Array(0), highlightCount: 0 };
+  selectPass(gl as unknown as GL, programs, targets, resources, view, grid, 0, highlights, {
+    strength: 0,
+    dir: [1, 0],
+    from: 90,
+  });
+  const area = grid.shiftX / view.cellDev.w;
+  const [x, y, width, height] = gl.scissor.mock.calls[0]!;
+  // From the partly visible cell left of the screen, less one, to one past the right edge.
+  expect(x).toBe(Math.ceil(area) - 2);
+  expect(y).toBe(Math.ceil(grid.shiftY / view.cellDev.h) - 2);
+  expect(x + width).toBe(Math.floor((grid.shiftX + view.width) / view.cellDev.w) + 2);
+  expect(y + height).toBe(Math.floor((grid.shiftY + view.height) / view.cellDev.h) + 2);
+  expect(width).toBeLessThan(size.cols - 10);
+  expect(gl.enable).toHaveBeenCalledWith(7);
+  expect(gl.disable).toHaveBeenCalledWith(7);
+  vi.restoreAllMocks();
+});
+
+it('freezes a margin window and shifts only its offset within it', () => {
+  const margin = windowMargin(view, view.cellDev);
+  // 1/8 of 800 × 600 px in 10 × 18 px cells.
+  expect(margin).toEqual({ cols: 10, rows: 5 });
+  const size = windowCells(view, view.cellDev);
+  expect(size).toEqual({ cols: 80 + 3 + 20, rows: 34 + 3 + 10 });
+  const placement = placeGrid(view, view.cellDev, size.cols, size.rows, margin);
+  const plain = placeGrid(view, view.cellDev, 83, 37);
+  // The same world, `margin` more cells to the top left.
+  expect(placement.grid.originCol).toBe(plain.grid.originCol - 10);
+  expect(placement.grid.originRow).toBe(plain.grid.originRow - 5);
+  expect(placement.grid.shiftX).toBe(plain.grid.shiftX + 100);
+  expect(placement.toCell(123.001, 13.001)[0]).toBeCloseTo(plain.toCell(123.001, 13.001)[0] + 10);
+  expect(gridContains(placement.grid, view.cellDev, view, size.cols, size.rows)).toBe(true);
+  // Re-placing the same camera into the frozen window reproduces its offset exactly.
+  expect(shiftGrid(view, view.cellDev, placement.grid)).toEqual(placement.grid);
+  const move = (cells: number) => {
+    const [x, y] = project(view.camera.lng, view.camera.lat, view.camera.zoom);
+    const [lng, lat] = unproject(x + (cells * view.cellDev.w) / view.dpr, y, view.camera.zoom);
+    return { ...view, camera: { ...view.camera, lng, lat } };
+  };
+  for (const cells of [-9, 9]) {
+    const moved = shiftGrid(move(cells), view.cellDev, placement.grid);
+    expect(moved.originCol).toBe(placement.grid.originCol);
+    expect(
+      Math.abs(moved.shiftX - placement.grid.shiftX - cells * view.cellDev.w),
+    ).toBeLessThanOrEqual(1);
+    expect(gridContains(moved, view.cellDev, view, size.cols, size.rows)).toBe(true);
+  }
+  for (const cells of [-12, 12])
+    expect(
+      gridContains(
+        shiftGrid(move(cells), view.cellDev, placement.grid),
+        view.cellDev,
+        view,
+        size.cols,
+        size.rows,
+      ),
+    ).toBe(false);
+  // Without a margin, the window is the original one-cell neighborhood.
+  expect(gridContains(plain.grid, view.cellDev, view, 83, 37)).toBe(true);
+  expect(
+    gridContains(shiftGrid(move(2), view.cellDev, plain.grid), view.cellDev, view, 83, 37),
+  ).toBe(false);
 });
 
 it('reuses crown matrices through sub-cell shifts and invalidates every matrix input', () => {
@@ -627,6 +722,9 @@ it('draws the glyphs and the cell light together, resetting the sun each pass', 
     useProgram: vi.fn(),
     bindVertexArray: vi.fn(),
     drawArrays: vi.fn(),
+    enable: vi.fn(),
+    disable: vi.fn(),
+    scissor: vi.fn(),
   };
   const targets = { cols: 80, rows: 34, base: {}, sub: {}, glyphFbo: {} } as CellTargets;
   const programs = { select: { program: {} } } as unknown as Programs;
@@ -754,6 +852,9 @@ it('lights grass with the frame lighting the glyph pass gets, and a clear noon w
       'useProgram',
       'bindVertexArray',
       'drawArrays',
+      'enable',
+      'disable',
+      'scissor',
     ].map((k) => [k, vi.fn()]),
   ) as unknown as GL;
   const lightTex = {} as WebGLTexture;

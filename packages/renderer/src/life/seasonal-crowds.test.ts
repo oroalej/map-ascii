@@ -19,6 +19,7 @@ import { worldTiles } from './testing/scenarios';
 import { complete } from './cooperate';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
 import { tileToLngLat } from '../raster/geometry';
+import { deliver } from './testing/worker-reply';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const calendar: RuntimeSeasonConfig = {
@@ -484,7 +485,9 @@ describe('seasonal crowds', () => {
           { rain: 0, sunAltitude: 45 },
         ],
       };
-      expect(api.frame(structuredClone(input)).agents).toEqual(runLifeFrame(world, input).agents);
+      expect(deliver(api.frame(structuredClone(input))).agents).toEqual(
+        runLifeFrame(world, input).agents,
+      );
     }
     api.clearTiles();
   });

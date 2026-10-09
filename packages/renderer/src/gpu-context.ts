@@ -64,9 +64,13 @@ export type Programs = {
     fireworks: boolean;
     folklore: boolean;
     pending?: { key: number; program: PendingProgram };
+    /** The rendered frame whose turn started the last parallel link. */
+    started?: number;
     cancel(): void;
   };
   glyphWarmupFailed?: boolean;
+  /** Main-thread ms spent compiling or finishing a glyph variant on first demand, until read. */
+  demandWaitMs?: number;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
 };
@@ -156,6 +160,8 @@ export function glyphProgram(
   focus: boolean,
   effectClocks: boolean,
   seasonal = false,
+  /** False for warmup's own synchronous compile, which no frame is waiting on. */
+  demand = true,
 ) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
@@ -164,6 +170,7 @@ export function glyphProgram(
   if (key === 0) return programs.glyph;
   let program = variants.get(key);
   if (!program) {
+    const start = performance.now();
     const pending = programs.glyphWarmup?.pending;
     if (pending?.key === key) {
       program = pending.program.finish();
@@ -175,19 +182,27 @@ export function glyphProgram(
         glyphFragmentFor({ focus, effectClocks, seasonal }),
       );
     variants.set(key, program);
+    if (demand) programs.demandWaitMs = (programs.demandWaitMs ?? 0) + performance.now() - start;
   }
   return program;
 }
 
-/** One owned idle task and at most one pending link; startup retains the minimal shader. */
+/**
+ * One owned idle task and at most one pending link; startup retains the minimal shader.
+ * `canWarm(parallel)` gates each turn: with `KHR_parallel_shader_compile` the caller may allow
+ * warming during interaction, since links compile off the main thread and finish only once
+ * ready; without it, a turn compiles synchronously. With `frame` (the rendered frame count),
+ * at most one parallel link starts per rendered frame.
+ */
 export function prewarmGlyphPrograms(
   gl: GL,
   programs: Programs,
-  canWarm: () => boolean,
+  canWarm: (parallel: boolean) => boolean,
   effectClocks = true,
   seasonal = false,
   fireworks = false,
   folklore = false,
+  frame?: () => number,
 ) {
   const variants = programs.glyphVariants;
   if (!variants || programs.glyphWarmupFailed) return;
@@ -251,7 +266,8 @@ export function prewarmGlyphPrograms(
       warmup.cancel();
       return;
     }
-    if (!canWarm()) {
+    const parallel = !!gl.getExtension('KHR_parallel_shader_compile');
+    if (!canWarm(parallel)) {
       queue();
       return;
     }
@@ -273,10 +289,16 @@ export function prewarmGlyphPrograms(
           programs.glyphWarmup = undefined;
           return;
         }
+        const rendered = frame?.();
+        if (parallel && rendered !== undefined && rendered === warmup.started) {
+          queue();
+          return;
+        }
         const focus = (key & 1) !== 0,
           effectClocks = (key & 2) !== 0;
         const seasonal = (key & 4) !== 0;
-        if (gl.getExtension('KHR_parallel_shader_compile'))
+        if (parallel) {
+          warmup.started = rendered;
           warmup.pending = {
             key,
             program: prepareProgram(
@@ -289,11 +311,11 @@ export function prewarmGlyphPrograms(
                   : glyphFragmentFor({ focus, effectClocks, seasonal }),
             ),
           };
-        else if (key === 16)
+        } else if (key === 16)
           programs.folkloreProgram = createProgram(gl, folkloreVertex, folkloreFragment);
         else if (key === 8)
           programs.fireworksProgram = createProgram(gl, fireworksVertex, fireworksFragment);
-        else glyphProgram(gl, programs, focus, effectClocks, seasonal);
+        else glyphProgram(gl, programs, focus, effectClocks, seasonal, false);
       }
       queue();
     } catch {

@@ -18,6 +18,9 @@ it('sets crop uniforms every pass and clears stale state when the calendar is ab
       'useProgram',
       'bindVertexArray',
       'drawArrays',
+      'enable',
+      'disable',
+      'scissor',
     ].map((name) => [name, vi.fn()]),
   ) as unknown as GL;
   const programs = {

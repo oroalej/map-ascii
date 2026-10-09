@@ -19,6 +19,9 @@ function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
 import { LifeWorld } from './life/simulate';
 import * as TapCapture from './life/tap-capture';
 import type { ProcessionRun, VisibleAgent } from './life/simulate';
+import * as LabelCandidates from './label-candidates';
+import { LifePreparation } from './life/preparation';
+
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
 import { CROP_STAGE } from './glyphs/select';
 import { activityLevels } from './life/config';
@@ -50,7 +53,7 @@ import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 import type * as PickingModule from './picking';
-import type { PickResult } from './picking';
+import { Picker, type PickResult } from './picking';
 import type * as GpuModule from './gpu';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
@@ -1166,6 +1169,7 @@ describe('live motion preference', () => {
       false,
       true,
       false,
+      expect.any(Function),
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -1279,6 +1283,7 @@ describe('live motion preference', () => {
       false,
       false,
       false,
+      expect.any(Function),
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
@@ -2141,6 +2146,19 @@ describe('live motion preference', () => {
     draw(20);
     expect(atlas.getProfile()!.samples).toHaveLength(1);
     expect(atlas.getProfile()!.stages.callback.count).toBe(1);
+    // The first drawn frame places the windows: every per-pass stage is recorded once.
+    const stages = atlas.getProfile()!.stages;
+    for (const stage of [
+      'cellPass',
+      'labels',
+      'sideWork',
+      'select',
+      'lifePass',
+      'lights',
+      'fixtures',
+      'glyph',
+    ] as const)
+      expect(stages[stage].count, stage).toBe(1);
     atlas.resetProfile();
     expect(atlas.getProfile()!.samples).toHaveLength(0);
     draw(50);
@@ -2172,6 +2190,53 @@ describe('live motion preference', () => {
     expect(step.mock.calls.at(-1)![6]).toBe(minimum);
   });
 
+  it.each([
+    [60, 60],
+    [90, 60],
+    [100, 67],
+    [120, 60],
+    [144, 72],
+  ])('caps a continuous camera stream on a %d Hz display at %d draws a second', (hz, drawn) => {
+    draw(1000);
+    const before = vi.mocked(glyphPass).mock.calls.length;
+    for (let tick = 1; tick <= hz; tick++) {
+      input.intents!.pan(2, 0);
+      draw(1000 + (tick * 1000) / hz);
+    }
+    expect(Math.abs(vi.mocked(glyphPass).mock.calls.length - before - drawn)).toBeLessThanOrEqual(
+      1,
+    );
+  });
+
+  it('keeps a skipped camera move pending, then draws the latest one', () => {
+    draw(1000);
+    const drawn = vi.mocked(glyphPass).mock.calls.length;
+    input.intents!.pan(4, 0);
+    input.intents!.pan(4, 0);
+    draw(1008);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn);
+    input.intents!.pan(4, 0);
+    draw(1017);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn + 1);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![5].camera).toEqual(atlas.getCamera());
+    // Nothing else is dirty: the next skipped tick draws nothing.
+    draw(1025);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn + 1);
+  });
+
+  it('picks against the drawn camera while a newer one waits to draw', () => {
+    const issue = vi.spyOn(Picker.prototype, 'issue');
+    draw(1000);
+    const shown = atlas.getCamera();
+    expect(issue.mock.lastCall![0].camera).toEqual(shown);
+    input.intents!.pan(40, 0);
+    draw(1008);
+    expect(atlas.getCamera()).not.toEqual(shown);
+    expect(issue.mock.lastCall![0].camera).toEqual(shown);
+    draw(1017);
+    expect(issue.mock.lastCall![0].camera).toEqual(atlas.getCamera());
+  });
+
   it('recovers Auto with skipped idle callbacks and keeps the idle draw cadence', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     for (let at = 50; at <= 4500; at += 50) draw(at);
@@ -2180,7 +2245,8 @@ describe('live motion preference', () => {
     step.mockClear();
     for (let at = 19_500; at < 24_500; at += 16) draw(at);
     expect(atlas.getStats().quality.tier).toBe(0);
-    expect(step.mock.calls.length).toBeLessThanOrEqual(151);
+    // Every second 16 ms tick: 30 fps idle within the pacing slack, never every tick.
+    expect(step.mock.calls.length).toBeLessThanOrEqual(157);
   });
 
   it('defers manual quality while a camera flight is active', () => {
@@ -2836,7 +2902,8 @@ describe('label focus in the renderer frame', () => {
     draw(1000);
     vi.mocked(selectPass).mockClear();
     vi.mocked(crownPass).mockClear();
-    for (let i = 1; i <= 30; i++) {
+    // Hover is not camera input: the idle cadence (30 fps, within its slack) still applies.
+    for (let i = 1; i <= 25; i++) {
       input.intents!.hover([100 + i * 3, 100]);
       draw(1000 + i);
     }
@@ -2864,6 +2931,144 @@ describe('label focus in the renderer frame', () => {
     draw(1100);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
   });
+  it('pans inside the margin without the cell pass, and places the window again past it', () => {
+    const classes = vi.fn();
+    atlas.on('classeschange', classes);
+    draw(10);
+    const passes = vi.mocked(cellPass).mock.calls.length;
+    const overlays = vi.mocked(overlayPass).mock.calls.length;
+    const before = vi.mocked(glyphPass).mock.calls.at(-1)![6];
+    // Two map cells: inside the 5-cell margin of a 400 px view.
+    input.intents!.pan(-20, 0);
+    draw(100);
+    expect(cellPass).toHaveBeenCalledTimes(passes);
+    const after = vi.mocked(glyphPass).mock.calls.at(-1)![6];
+    expect(after.originCol).toBe(before.originCol);
+    expect(Math.abs(after.shiftX - before.shiftX)).toBe(20);
+    // Whole cells moved on screen: labels are admitted again from the cached geometry.
+    expect(vi.mocked(overlayPass).mock.calls.length).toBeGreaterThan(overlays);
+    // Past the margin, the window is placed and drawn again.
+    input.intents!.pan(-80, 0);
+    draw(200);
+    expect(cellPass).toHaveBeenCalledTimes(passes + 1);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![6].originCol).not.toBe(before.originCol);
+  });
+
+  it('guards an in-margin pan: no cell pass, label projection, Life sync or static repack', async () => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    await vi.dynamicImportSettled();
+    draw(1000);
+    const project = vi.spyOn(LabelCandidates, 'labelCandidate');
+    const sync = vi.spyOn(LifePreparation.prototype, 'sync');
+    vi.mocked(cellPass).mockClear();
+    vi.mocked(fixturePass).mockClear();
+    vi.mocked(overlayPass).mockClear();
+    const classReads = () =>
+      labelFixture.requests.mock.calls.filter(([, , rect]) => (rect as { width: number }).width > 1)
+        .length;
+    const reads = classReads();
+    // Three map cells within 100 ms of the last sync: inside the margin, same Life tiles.
+    let shift = vi.mocked(glyphPass).mock.calls.at(-1)![6].shiftX;
+    for (const at of [1020, 1040, 1060]) {
+      input.intents!.pan(-10, 0);
+      draw(at);
+      const next = vi.mocked(glyphPass).mock.calls.at(-1)![6].shiftX;
+      expect(next).toBe(shift + 10);
+      shift = next;
+    }
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(project).not.toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
+    expect(vi.mocked(fixturePass).mock.calls.every((call) => call[7] === false)).toBe(true);
+    // What the screen shows is still reported: labels re-admitted, classes read again.
+    expect(overlayPass).toHaveBeenCalled();
+    draw(1400);
+    expect(classReads()).toBeGreaterThan(reads);
+    // Once the pan settles, Life's preparation focus catches up, by identity only.
+    expect(sync).toHaveBeenCalledOnce();
+    // The view's Life tiles change: Life hears of it on the next in-margin pan.
+    labelFixture.loaded = undefined;
+    input.intents!.pan(-10, 0);
+    draw(1420);
+    expect(cellPass).not.toHaveBeenCalled();
+    expect(sync).toHaveBeenCalledTimes(2);
+    expect(sync.mock.lastCall![0]).toEqual([]);
+  });
+
+  it.each([
+    ['whole-cell', 10],
+    ['sub-cell', 3],
+  ])('settles Life focus once after a short %s pan', async (_kind, dx) => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    await vi.dynamicImportSettled();
+    draw(1000);
+    const sync = vi.spyOn(LifePreparation.prototype, 'sync');
+    input.intents!.pan(-dx, 0);
+    draw(1030);
+    expect(sync).not.toHaveBeenCalled();
+    draw(1120);
+    expect(sync).not.toHaveBeenCalled();
+    draw(1190);
+    expect(sync).toHaveBeenCalledOnce();
+    const { lng, lat } = atlas.getCamera();
+    expect(sync.mock.lastCall![1]).toEqual([lng, lat]);
+    draw(1400);
+    draw(1800);
+    expect(sync).toHaveBeenCalledOnce();
+  });
+
+  it('asks for tiles over the whole drawn window', () => {
+    const tiles = vi.spyOn(TileCache.prototype, 'tilesToDraw');
+    draw(10);
+    const asked = tiles.mock.calls.filter((call) => call[2] !== false);
+    expect(asked.length).toBeGreaterThan(0);
+    const [, size] = asked.at(-1)! as unknown as [unknown, { width: number; height: number }];
+    expect(size.width).toBeGreaterThanOrEqual(400 * 1.25);
+    expect(size.height).toBeGreaterThanOrEqual(300 * 1.25);
+    // Life follows the view's own tiles, without changing what the window wants.
+    expect(tiles.mock.calls.some((call) => call[2] === false)).toBe(true);
+  });
+
+  it('rasterizes every drawn fractional zoom but throttles side work, then settles once', () => {
+    draw(10);
+    vi.mocked(cellPass).mockClear();
+    labelFixture.residentialRequests.mockClear();
+    let at = 100;
+    for (let frame = 0; frame < 30; frame++) {
+      input.intents!.zoom(0.01, [0, 0]);
+      draw((at += 1000 / 60));
+    }
+    expect(cellPass).toHaveBeenCalledTimes(30);
+    // About 10 Hz over half a second, instead of every frame.
+    const zooming = labelFixture.residentialRequests.mock.calls.length;
+    expect(zooming).toBeGreaterThanOrEqual(4);
+    expect(zooming).toBeLessThanOrEqual(6);
+    draw((at += 100));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming);
+    draw((at += 60));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming + 1);
+    draw((at += 200));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming + 1);
+  });
+
+  it('runs throttled zoom side work at once for an urgent invalidation', () => {
+    draw(10);
+    let at = 100;
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    labelFixture.residentialRequests.mockClear();
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    expect(labelFixture.residentialRequests).not.toHaveBeenCalled();
+    // A settings change invalidates the cells: their side work cannot wait for the throttle.
+    atlas.setLife({ time: 600 });
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledOnce();
+  });
+
   it('shifts subcell pans without placement and restores selection after context recreation', () => {
     const reports = vi.fn<(labels: LabelInView[]) => void>();
     atlas.on('labelschange', reports);

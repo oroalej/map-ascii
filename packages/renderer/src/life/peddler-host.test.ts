@@ -5,6 +5,7 @@ import { configureLifeWorld, createLifeWorkerApi } from './worker-api';
 import { createConfiguredInlineHost } from './inline-host';
 import { peddlerGeometry, peddlerTile, peddlerCenter, peddlerConfig } from './testing/peddlers';
 import type { FrameInput } from './worker-api';
+import { deliver } from './testing/worker-reply';
 
 afterEach(() => vi.restoreAllMocks());
 const peddlers: PeddlerConfig[] = [
@@ -59,7 +60,7 @@ it('configured worker and inline frames produce identical active peddlers', () =
     visible: [19, 0, peddlerCenter, { rain: 0, sunAltitude: 20 }],
   };
   for (let i = 0; i < 3; i++) {
-    const result = api.frame(input);
+    const result = deliver(api.frame(input));
     host.request(input);
     expect(result.agents).toEqual(host.latest()!.agents);
     expect(result.agents.some((a) => a.peddler)).toBe(true);

@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { gridArraysBuilt } from './testing/allocations';
+import { placeGrid } from '../grid';
 import { unpackGlyph } from '../glyphs/select';
 import { tileToLngLat } from '../raster/geometry';
 import { mapGlyphs, themes } from '../theme';
@@ -6,6 +8,8 @@ import { LifeBuilder } from './geometry';
 import { lightByte, LampState } from './lights';
 import {
   FixturePart,
+  createFixturePackingScratch,
+  cullFixtures,
   packFixtures,
   tileFixtures,
   updateFixtureSignals,
@@ -57,6 +61,76 @@ const cells = (out: Uint8Array) => {
   }
   return result;
 };
+
+describe('packFixtures allocations', () => {
+  it('constructs no grid-sized typed array on a repeat call with its scratch', () => {
+    const scratch = createFixturePackingScratch();
+    const out = new Uint8Array(grid.cols * grid.rows * 4);
+    const repack = () =>
+      packFixtures(out, grid, [lamp, signal], 19, glyph, 0, undefined, undefined, scratch);
+    // A fresh scratch sizes its owner buffer once.
+    expect(gridArraysBuilt(grid.cols * grid.rows, repack)).toBeGreaterThan(0);
+    expect(gridArraysBuilt(grid.cols * grid.rows, repack)).toBe(0);
+  });
+});
+
+describe('cullFixtures', () => {
+  it('drops only fixtures that cannot reach the window and packs identical texels', () => {
+    const camera = { lng: 123.185, lat: 13.624, zoom: 18.5 };
+    const view = { camera, dpr: 1, width: 400, height: 300 };
+    const placed = placeGrid(view, { w: 5, h: 9 }, 83, 37);
+    const g: FixtureGrid = {
+      cols: 83,
+      rows: 37,
+      cellWidth: 5,
+      cellHeight: 9,
+      toCell: placed.toCell,
+    };
+    const at = (east: number, north: number): [number, number] => [
+      camera.lng + east / (111_320 * Math.cos((camera.lat * Math.PI) / 180)),
+      camera.lat + north / 111_320,
+    ];
+    const light = (east: number): StreetFixture => ({
+      ...lamp,
+      base: at(east, 0),
+      tip: at(east + 3, 0),
+      forward: at(east + 4, 0),
+      right: at(east, -1),
+      roadCenter: at(east + 6, 0),
+    });
+    const pole = (id: string, east: number) => ({
+      id,
+      road: 'r',
+      component: 'r/0',
+      at: at(east, 5),
+      heading: [1, 0] as [number, number],
+      normal: [0, 1] as [number, number],
+      transformer: false,
+    });
+    const crossing: StreetFixture = {
+      kind: 'utility-span',
+      span: { id: 's', kind: 'corridor', from: pole('a', -900), to: pole('b', 900), seed: 1 },
+    };
+    const near = light(5),
+      far = light(2000),
+      farPole: StreetFixture = { kind: 'utility-pole', pole: pole('c', -3000) };
+    const fixtures = [near, far, farPole, crossing, signal];
+    const [west, south] = placed.fromCell!(0, 0),
+      [east, north] = placed.fromCell!(83, 37);
+    const culled = cullFixtures(fixtures, [
+      west,
+      Math.min(south, north),
+      east,
+      Math.max(south, north),
+    ]);
+    expect(culled).toEqual([near, crossing, signal]);
+    const packAll = packFixtures(new Uint8Array(83 * 37 * 4), g, fixtures, 18.5, glyph, 0);
+    const packCulled = packFixtures(new Uint8Array(83 * 37 * 4), g, culled, 18.5, glyph, 0);
+    expect(packCulled.texels).toEqual(packAll.texels);
+    expect(packCulled.visibility).toEqual(packAll.visibility);
+    expect(cells(packAll.texels).length).toBeGreaterThan(0);
+  });
+});
 
 describe('street fixtures', () => {
   it('packs and updates lamps from the same pressed offset snapshot', () => {

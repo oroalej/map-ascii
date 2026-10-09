@@ -7,6 +7,7 @@ import { makeScenario } from './testing/scenarios';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
 import {
   createLifeWorkerApi,
+  frameFromReply,
   runLifeFrame,
   type FrameInput,
   type LifeWorkerApi,
@@ -101,7 +102,11 @@ it.each([false, true])(
         }
         input.gust.time = frame / 30;
         const inline = runLifeFrame(direct, input);
-        const reply = await remote.frame(input);
+        // Delivered through a real port: the packed columns arrive transferred.
+        const wire = await remote.frame(input);
+        expect(wire.packed.numbers).toBeInstanceOf(Float64Array);
+        expect(wire.packed.count).toBe(inline.agents.length);
+        const reply = frameFromReply(wire);
         expect(reply.agents).toEqual(inline.agents);
         expect(structuredClone(reply.agents)).toEqual(reply.agents);
         if ([0, 1, 4, 5].includes(frame))

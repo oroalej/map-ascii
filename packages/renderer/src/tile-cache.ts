@@ -157,8 +157,11 @@ export class TileCache {
     this.suspended = false;
   }
 
-  /** Tiles to draw for the view: loaded ones, else a loaded ancestor or loaded children. */
-  tilesToDraw(camera: CameraState, size: Size): TileId[] {
+  /**
+   * Tiles to draw for the view: loaded ones, else a loaded ancestor or loaded children. With
+   * `request` false, only resolves what is loaded and leaves the wanted tiles as they are.
+   */
+  tilesToDraw(camera: CameraState, size: Size, request = true): TileId[] {
     const { header, meshes } = this;
     if (!header || this.suspended) return [];
     const minZoom = header.minZoom;
@@ -185,7 +188,7 @@ export class TileCache {
       }
     }
     // In the view's order (from its center out): those the view no longer needs are dropped.
-    this.source.want(missing, 'view');
+    if (request) this.source.want(missing, 'view');
     // Coarser tiles first, so finer ones overwrite them where both exist.
     return [...out.values()].sort((a, b) => a.z - b.z);
   }

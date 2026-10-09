@@ -28,7 +28,18 @@ export class AtlasLabels {
   private labelHeight = 0;
   private candidates = new Map<number, LabelCandidate>();
   private prepared: LabelCandidate[] = [];
+  /** Each label's projection into the current window (undefined: it cannot show there). */
   private copies = new Map<TileLabel, LabelCandidate | undefined>();
+  private window:
+    | {
+        toCell: GridPlacement['toCell'];
+        zoom: number;
+        dpr: number;
+        w: number;
+        h: number;
+      }
+    | undefined;
+  private windowArea = { left: 0, top: 0, right: 0, bottom: 0 };
   private sourceZooms = new Map<TileLabel, number>();
   private copyVisible = new Map<TileLabel, boolean>();
   private previous = new Map<number, TileLabel>();
@@ -63,6 +74,11 @@ export class AtlasLabels {
       }
     | undefined;
 
+  /**
+   * Prepare the labels of `sources` for `placement`'s window and admit those that fit on screen.
+   * Each label's projected geometry is kept while the window stays frozen (same projection,
+   * targets and label cells), so `readmit` after an in-margin pan never projects again.
+   */
   collect(
     targets: CellTargets,
     view: View,
@@ -80,25 +96,69 @@ export class AtlasLabels {
         transferLabelPlacement(this.targets, targets);
       else this.clear();
     }
+    if (!this.sameWindow(targets, view, placement)) {
+      this.copies.clear();
+      this.window = {
+        toCell: placement.toCell,
+        zoom: view.camera.zoom,
+        dpr: view.dpr,
+        w: view.labelDev.w,
+        h: view.labelDev.h,
+      };
+    }
     this.targets = targets;
     this.labelWidth = view.labelDev.w;
     this.labelHeight = view.labelDev.h;
+    this.sourceZooms.clear();
+    // Projected against the whole window: admission below decides what the screen shows.
+    const area = this.windowArea;
+    area.right = targets.labelCols;
+    area.bottom = targets.labelRows;
+    for (const { labels, zoom } of sources) {
+      for (const label of labels) {
+        if (!this.copies.has(label))
+          this.copies.set(label, labelCandidate(label, view, placement, area));
+        this.sourceZooms.set(label, Math.max(this.sourceZooms.get(label) ?? -Infinity, zoom));
+      }
+    }
+    this.admit(targets, view, placement);
+  }
+
+  /**
+   * Admit the collected labels again for an in-margin pan of the same window: screen admission,
+   * copy choice, retained slots and reporting follow the new offset, from cached geometry.
+   * False when the window changed, so the labels have to be collected again.
+   */
+  readmit(targets: CellTargets, view: View, placement: GridPlacement): boolean {
+    if (this.targets !== targets || !this.sameWindow(targets, view, placement)) return false;
+    this.admit(targets, view, placement);
+    return true;
+  }
+
+  private sameWindow(targets: CellTargets, view: View, placement: GridPlacement): boolean {
+    const window = this.window;
+    return (
+      this.targets === targets &&
+      window?.toCell === placement.toCell &&
+      window.zoom === view.camera.zoom &&
+      window.dpr === view.dpr &&
+      window.w === view.labelDev.w &&
+      window.h === view.labelDev.h
+    );
+  }
+
+  private admit(targets: CellTargets, view: View, placement: GridPlacement): void {
     this.placement = placement;
     this.observed = false;
-    this.clearCopies();
+    this.copyVisible.clear();
+    this.previous.clear();
     const memory = labelMemory(targets);
     for (const [id, label] of this.labels) if (memory?.has(id)) this.previous.set(id, label);
     this.prepareAdmission(view, placement.grid);
     this.screen = labelScreenArea(view, placement.grid);
-    for (const { labels, zoom } of sources) {
-      for (const label of labels) {
-        if (!this.copies.has(label))
-          this.copies.set(label, labelCandidate(label, view, placement, this.admission.area));
-        this.sourceZooms.set(label, Math.max(this.sourceZooms.get(label) ?? -Infinity, zoom));
-      }
-    }
     this.labels.clear();
-    for (const [label, candidate] of this.copies) {
+    for (const label of this.sourceZooms.keys()) {
+      const candidate = this.copies.get(label);
       if (this.fits(candidate, memory?.has(label.id) ?? false))
         collectLabel(
           this.labels,
@@ -119,14 +179,17 @@ export class AtlasLabels {
     }
     // Layout applies its own priorities. Reporting keeps the ordinary rank/id order.
     this.prepared.sort((a, b) => a.rank - b.rank || a.id - b.id);
-    this.clearCopies();
+    this.copyVisible.clear();
+    this.previous.clear();
   }
 
+  /** Forget the window's projected geometry and this pass's scratch. */
   private clearCopies(): void {
     this.copies.clear();
     this.sourceZooms.clear();
     this.copyVisible.clear();
     this.previous.clear();
+    this.window = undefined;
   }
 
   private prepareAdmission(view: View, grid: Grid): void {

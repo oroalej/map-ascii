@@ -79,13 +79,19 @@ describe('cached atlas labels', () => {
       expect(prepare).toHaveBeenCalledTimes(3);
       expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(shared);
       prepare.mockClear();
+      // The same window keeps each label's projection; only admission runs again.
       names.collect(targets, view, at, [{ labels: [detail], zoom: 16 }]);
-      expect(prepare).toHaveBeenCalledOnce();
+      expect(prepare).not.toHaveBeenCalled();
       expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)[0]).toBe(detail);
+      // A new window (a new projection) prepares again.
+      const moved = placement();
+      names.collect(targets, view, moved, [{ labels: [detail], zoom: 16 }]);
+      expect(prepare).toHaveBeenCalledOnce();
+      expect(names.draw(gl, targets, theme, view, moved, programs, 0, 0)[0]).toBe(detail);
       prepare.mockRestore();
     }
   });
-  it('reuses collection maps and releases all copy scratch after each pass and clearing', () => {
+  it('reuses collection maps, keeps window geometry and releases all scratch on clearing', () => {
     const { names, targets, draw } = fixture();
     draw([street(3, 6)]);
     const clear = vi.spyOn(Map.prototype, 'clear');
@@ -111,14 +117,35 @@ describe('cached atlas labels', () => {
       clear.mockRestore();
     }
     expect(created).toBe(0);
-    const counts = new Map<unknown, number>();
-    for (const map of cleared) counts.set(map, (counts.get(map) ?? 0) + 1);
-    const scratch = [...counts].filter(([, times]) => times === 4).map(([map]) => map);
-    expect(scratch).toHaveLength(4);
-    expect(scratch.every((map) => map instanceof Map && map.size === 0)).toBe(true);
+    const maps = new Set(cleared.filter((map): map is Map<unknown, unknown> => map instanceof Map));
+    // Visibility and previous-acceptance scratch is empty after each pass. The window's
+    // projected copies and source depths stay until the window changes or the labels clear,
+    // beside the accepted labels and their candidates.
+    expect([...maps].filter((map) => map.size === 0)).toHaveLength(2);
+    expect([...maps].filter((map) => map.size > 0)).toHaveLength(4);
     names.clear();
-    expect(scratch.every((map) => map instanceof Map && map.size === 0)).toBe(true);
+    expect([...maps].every((map) => map.size === 0)).toBe(true);
     expect(labelMemory(targets)).toBeUndefined();
+  });
+  it('readmits an in-margin pan from cached geometry and refuses a changed window', () => {
+    const { names, targets, gl, theme, programs } = fixture();
+    const at = placement();
+    const project = vi.spyOn(at, 'toCell');
+    const near = street(3, 6),
+      later = { ...street(14, 4), id: 2, text: 'Oak' };
+    names.collect(targets, view, at, [{ labels: [near, later], zoom: 16 }]);
+    expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)).toEqual([near]);
+    const calls = project.mock.calls.length;
+    // Ten label cells to the right: the second street comes on screen, the first leaves.
+    const panned = { ...at, grid: { ...at.grid, shiftX: 100 } };
+    expect(names.readmit(targets, view, panned)).toBe(true);
+    expect(project.mock.calls.length).toBe(calls);
+    expect(names.draw(gl, targets, theme, view, panned, programs, 0, 0)).toEqual([later]);
+    // Panning back restores the first.
+    expect(names.readmit(targets, view, at)).toBe(true);
+    expect(names.draw(gl, targets, theme, view, at, programs, 0, 0)).toEqual([near]);
+    expect(names.readmit(targets, view, placement())).toBe(false);
+    expect(names.readmit(targets, { ...view, dpr: 2 }, at)).toBe(false);
   });
   it.each(['selected', 'hovered'])(
     'skips %s eligibility through fractional shifts inside the same admission bounds',

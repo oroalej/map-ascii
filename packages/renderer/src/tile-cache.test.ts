@@ -49,6 +49,18 @@ function setup() {
 }
 
 describe('TileCache', () => {
+  it('resolves view membership without changing what the view wants', () => {
+    const { cache, source } = setup();
+    expect(cache.tilesToDraw(camera, size, false)).toEqual([]);
+    expect(source.request).not.toHaveBeenCalled();
+    cache.tilesToDraw(camera, size);
+    expect(source.request).toHaveBeenCalled();
+    const fine = source.request.mock.calls[0]![0];
+    source.handlers.tile(tileKey(fine), geometry);
+    source.request.mockClear();
+    expect(cache.tilesToDraw(camera, size, false)).toContainEqual(fine);
+    expect(source.request).not.toHaveBeenCalled();
+  });
   it('requests coarse coverage before fine tiles and draws it while they load', () => {
     const { cache, source } = setup();
     expect(cache.regionTilesForView(camera, size)).toEqual([]);

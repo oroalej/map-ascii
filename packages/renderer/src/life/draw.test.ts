@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gridArraysBuilt } from './testing/allocations';
 import { classId } from '../classes';
 import { unpackGlyph } from '../glyphs/select';
 import { drawProcedural } from '../glyphs/atlas';
@@ -59,6 +60,23 @@ const grid: LifeGrid = {
 };
 const cell = (out: Uint8Array, col: number, row: number) =>
   Array.from(out.subarray((row * grid.cols + col) * 4, (row * grid.cols + col) * 4 + 4));
+
+describe('packLife allocations', () => {
+  it('constructs no grid-sized typed array on a repeat call', () => {
+    const big: LifeGrid = { ...grid, cols: 40, rows: 30 };
+    const out = new Uint8Array(big.cols * big.rows * 4);
+    const owners = new Uint32Array(big.cols * big.rows);
+    const agents: VisibleAgent[] = [
+      { kind: 'vehicle', vehicle: 'car', lng: 5.5, lat: 5.5, ahead: [6.5, 5.5], flap: 0 },
+      { kind: 'person', lng: 10.5, lat: 7.5, flap: 0 },
+      { kind: 'person', lng: 10.5, lat: 7.5, flap: 1 },
+    ];
+    const pack = () =>
+      packLife(out, big, agents, themes.dark, glyphIndex, null, undefined, { owners });
+    pack();
+    expect(gridArraysBuilt(big.cols * big.rows, pack)).toBe(0);
+  });
+});
 
 describe('packLife', () => {
   it('gives miniature cars the detailed road/open-ground mask while preserving surface occlusion', () => {

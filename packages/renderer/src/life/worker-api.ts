@@ -18,6 +18,8 @@ import { LifeWorld, type LifeTile, type VisibleAgent, type ProcessionRun } from 
 import type { LifeGeometry } from './geometry';
 import type { WindNow } from './wind';
 import { snapshotOf, type TerrainSnapshot } from './terrain-snapshot';
+import { packAgents, packedTransferables, unpackAgents, type PackedAgents } from './agent-frame';
+import { RecentKeys } from './recent-keys';
 import { spawnMargin, type LifeViewContext } from './births';
 import { LifePreparation } from './preparation';
 import type { InspectionCommand } from './inspection';
@@ -67,6 +69,16 @@ export type FrameResult = {
   terrain?: TerrainSnapshot | null;
   profile?: ProfileSample;
 };
+/**
+ * A worker reply on the wire: the frame with its agents packed into transferred columns
+ * (agent-frame.ts); `frameFromReply` restores the object frame.
+ */
+export type FrameReply = Omit<FrameResult, 'agents'> & { packed: PackedAgents };
+
+/** The object frame of a delivered reply, with fresh agents. */
+export function frameFromReply({ packed, ...rest }: FrameReply): FrameResult {
+  return { ...rest, agents: unpackAgents(packed) };
+}
 export type LifeInit = {
   peddlers?: readonly PeddlerConfig[];
   folklore?: RuntimeFolklore;
@@ -183,6 +195,8 @@ export function createLifeWorkerApi(
   let lastTerrain: object | undefined;
   let terrainSent = false;
   const geometries = new Map<string, LifeGeometry>();
+  /** Mirrors the host's record of which geometry is held here (recent-keys.ts). */
+  const held = new RecentKeys();
   return {
     init(options: LifeInit) {
       preparation?.clear();
@@ -192,18 +206,18 @@ export function createLifeWorkerApi(
       preparation = new LifePreparation(world, profiler, preparationClock);
       configureLifeWorld(world, options);
       geometries.clear();
+      held.clear();
       lastTerrain = undefined;
       terrainSent = false;
     },
     sync(tiles: readonly SyncTile[], focus?: readonly [number, number], view?: LifeViewContext) {
-      const keep = new Set(tiles.map((t) => t.key));
       const resolved = tiles.map(({ key, tile, life }) => {
         const geometry = life ?? geometries.get(key);
         if (!geometry) throw new Error(`Missing Life geometry for ${key}`);
         geometries.set(key, geometry);
         return { key, tile, life: geometry };
       });
-      for (const key of geometries.keys()) if (!keep.has(key)) geometries.delete(key);
+      for (const key of held.touch(tiles.map((t) => t.key))) geometries.delete(key);
       // Sync happens between frame requests. Carry its timing into the next frame result.
       profiler?.begin(0);
       preparation.sync(resolved, focus, view);
@@ -215,22 +229,23 @@ export function createLifeWorkerApi(
       world.clearTiles();
       preparation.clear();
       geometries.clear();
+      held.clear();
       lastTerrain = undefined;
       terrainSent = false;
     },
-    frame(input: FrameInput): FrameResult {
+    frame(input: FrameInput): FrameReply {
       profiler?.begin(input.gust.time * 1000);
       preparation.camera(
         input.step.bounds,
         spawnMargin(input.step.cellMeters ?? 0, input.gust.cssCell.h / input.gust.cssCell.w),
       );
       preparation.commit();
-      const result: FrameResult = runLifeFrame(world, input, profiler);
-      for (const agent of result.agents) delete agent.consist;
+      const { agents, ...frame } = runLifeFrame(world, input, profiler);
+      for (const agent of agents) delete agent.consist;
+      const result: FrameReply = { ...frame, packed: packAgents(agents) };
+      const buffers: ArrayBuffer[] = packedTransferables(result.packed);
+      if (result.puffs.length) buffers.push(result.puffs.buffer as ArrayBuffer);
       const terrain = world.cellTerrain();
-      const buffers: ArrayBuffer[] = result.puffs.length
-        ? [result.puffs.buffer as ArrayBuffer]
-        : [];
       if (!terrainSent || terrain?.version !== lastTerrain) {
         terrainSent = true;
         lastTerrain = terrain?.version;
@@ -243,9 +258,17 @@ export function createLifeWorkerApi(
         } else result.terrain = null;
       }
       if (profiler) {
-        // Profiling only: serialization plus deserialization bounds the reply's clone cost.
+        // Profiling overhead, not transport latency: cloning what the reply copies rather than
+        // transfers (its string table and sidecars) bounds its serialization cost.
         const start = profiler.time();
-        structuredClone({ agents: result.agents, procession: result.procession });
+        structuredClone({
+          table: result.packed.table,
+          extras: result.packed.extras,
+          procession: result.procession,
+          folklore: result.folklore,
+          tapReceipts: result.tapReceipts,
+          signalOffsets: result.signalOffsets,
+        });
         profiler.add('replyClone', profiler.time() - start);
       }
       preparation.schedule();

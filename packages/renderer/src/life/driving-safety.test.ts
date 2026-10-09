@@ -20,6 +20,7 @@ import { completeScenarioState } from './testing/scenarios';
 import { continuityMover, continuityTile, left } from './testing/continuity';
 import { worldTiles } from './testing/scenarios';
 import type { JunctionTable } from './junctions';
+import { deliver } from './testing/worker-reply';
 
 type ExistingRandomStreams = Record<'rng' | 'routeRng' | 'walkerRng' | 'runRng', () => number>;
 const existingRandomStreams = (life: TileLife) => life as unknown as ExistingRandomStreams;
@@ -230,7 +231,7 @@ it('keeps forced bursts and rain transitions identical through worker and inline
       },
       visible: [18, activityLevels(1), center],
     };
-    expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+    expect(deliver(api.frame(input)).agents).toEqual(runLifeFrame(direct, input).agents);
   }
   expect(completeScenarioState(remote)).toEqual(completeScenarioState(direct));
 });
