@@ -169,7 +169,7 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
-import { animationDue, cameraDue, watchVisibility } from './pacing';
+import { animationDue, cameraDue, frameInterval, nextAnchor, watchVisibility } from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -623,6 +623,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
+  /** The ideal time of the last drawn frame, which pacing keeps to (pacing.ts `nextAnchor`). */
+  let frameAnchor = -Infinity;
   /** Frames drawn since the map was created (shader warmup starts one link per frame). */
   let drawnFrames = 0;
   /**
@@ -864,14 +866,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       .map(tileKey)
       .join(',');
   /**
-   * Side work that follows the view's tiles (Life membership and focus, firework sites). While
-   * the camera keeps moving it runs at most every `SIDE_MS` for the same tiles, and once more
-   * `SETTLE_MS` after a zoom stops; changed tiles, settings or tile arrivals run it at once.
+   * Side work that follows the view's tiles (Life membership and preparation focus, firework
+   * sites). While the camera keeps moving it runs at most every `SIDE_MS` for the same tiles,
+   * and once more `SETTLE_MS` after the camera stops; changed tiles, settings or tile arrivals
+   * run it at once. Life's bounds travel with every frame request regardless.
    */
   let sideAt = -Infinity;
   let sideTiles = '';
   let sideSettle = false;
-  let zoomedAt = -Infinity;
+  /** The last camera move that left side work pending (a zoom or an in-margin pan). */
+  let movedAt = -Infinity;
   let drawnZoom: number | undefined;
   const syncView = (tiles: readonly TileId[], at: number) => {
     syncLife(tiles);
@@ -911,6 +915,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // for the window's tiles (one that arrives draws the cells again).
     tileCache.regionTilesForView(windowTiles.camera, windowTiles.size);
     tileCache.tilesToDraw(windowTiles.camera, windowTiles.size);
+    movedAt = now;
     if (moved) {
       // Whole cells came onto or left the screen: what it shows and names is worked out again.
       classesStale = true;
@@ -930,7 +935,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const tiles = viewTiles();
       if (lifeMembershipOf(tiles) !== lifeMembership || now - sideAt >= SIDE_MS)
         syncView(tiles, now);
-    }
+      else sideSettle = true;
+    } else sideSettle = true;
     return true;
   };
 
@@ -965,7 +971,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const inView = viewTiles();
     const zooming = drawnZoom !== undefined && drawnZoom !== camera.zoom;
     drawnZoom = camera.zoom;
-    if (zooming) zoomedAt = now;
+    if (zooming) movedAt = now;
     const membership = `${tiles.map(tileKey).join(',')}|${lifeMembershipOf(inView)}`;
     if (invalidated || !zooming || membership !== sideTiles || now - sideAt >= SIDE_MS) {
       sideTiles = membership;
@@ -2063,12 +2069,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     updateSun(now);
-    if (sideSettle && now - zoomedAt >= SETTLE_MS && !cellDirty) syncView(viewTiles(), now);
+    if (sideSettle && now - movedAt >= SETTLE_MS && !cellDirty) syncView(viewTiles(), now);
     if (!targets || !programs || !themeRes) {
       profiler?.end();
       return;
     }
-    const animating = animationDue(now, lastDraw, lastInput, {
+    const animating = animationDue(now, frameAnchor, lastInput, {
       reducedMotion,
       watched: watch.watched(),
     });
@@ -2092,7 +2098,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const paced =
       cameraPending &&
       !drawNow &&
-      !cameraDue(now, lastDraw, { reducedMotion, watched: watch.watched() });
+      !cameraDue(now, frameAnchor, { reducedMotion, watched: watch.watched() });
     if (drawNow || drawDirty || (!paced && (cellDirty || animating || cursorCrownDirty))) {
       drawNow = false;
       cameraPending = false;
@@ -2260,6 +2266,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         programs.demandWaitMs = 0;
       }
       lastDraw = now;
+      frameAnchor = nextAnchor(now, frameAnchor, frameInterval(now, lastInput));
       drawnFrames++;
       drawnCamera = camera;
       drawnSize = cssSize();

@@ -25,30 +25,49 @@ export type Pacing = {
   watched: boolean;
 };
 
-/** Whether a frame at `now` keeps to `interval` after the last one drawn. */
-const due = (now: number, lastDraw: number, interval: number) =>
-  now - lastDraw >= interval - PACING_SLACK_MS;
+/** The interval animation keeps at `now`: interactive just after input, else idle. */
+export const frameInterval = (now: number, lastInput: number) =>
+  now - lastInput < ACTIVE_MS ? ACTIVE_FRAME_MS : IDLE_FRAME_MS;
 
 /**
- * Whether the animation is due a frame at `now` (ms, like `lastDraw` and `lastInput`): 60 fps
- * just after input (every frame at 60 Hz, every second one at 120 or 144 Hz), else 30 fps.
+ * Whether a frame at `now` keeps to `interval` after `anchor`, the ideal time of the last
+ * drawn frame (`nextAnchor`), not its actual time.
+ */
+const due = (now: number, anchor: number, interval: number) =>
+  now - anchor >= interval - PACING_SLACK_MS;
+
+/**
+ * The anchor after drawing at `now`. A frame drawn late keeps the ideal phase, so the next one
+ * isn't pushed back: a 90 or 100 Hz display alternates one and two ticks and averages the cap,
+ * instead of every second tick (45 or 50 fps). A frame drawn early, within the slack or for a
+ * discrete change, restarts the phase at `now`, so 120 and 144 Hz draw every second tick. A
+ * frame more than an interval late (after a pause) restarts it too.
+ */
+export function nextAnchor(now: number, anchor: number, interval: number): number {
+  const ideal = anchor + interval;
+  return now < ideal || now - ideal > interval ? now : ideal;
+}
+
+/**
+ * Whether the animation is due a frame at `now` (ms, like `anchor` and `lastInput`): 60 fps
+ * just after input, else 30 fps.
  */
 export function animationDue(
   now: number,
-  lastDraw: number,
+  anchor: number,
   lastInput: number,
   { reducedMotion, watched }: Pacing,
 ): boolean {
   if (reducedMotion || !watched) return false;
-  return due(now, lastDraw, now - lastInput < ACTIVE_MS ? ACTIVE_FRAME_MS : IDLE_FRAME_MS);
+  return due(now, anchor, frameInterval(now, lastInput));
 }
 
 /**
  * Whether a moved camera may draw at `now`. It keeps to the interactive rate, so a fast display
  * doesn't redraw every tick; with reduced motion, or while no one watches, it draws at once.
  */
-export function cameraDue(now: number, lastDraw: number, { reducedMotion, watched }: Pacing) {
-  return reducedMotion || !watched || due(now, lastDraw, ACTIVE_FRAME_MS);
+export function cameraDue(now: number, anchor: number, { reducedMotion, watched }: Pacing) {
+  return reducedMotion || !watched || due(now, anchor, ACTIVE_FRAME_MS);
 }
 
 /**

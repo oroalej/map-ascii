@@ -160,6 +160,8 @@ export function glyphProgram(
   focus: boolean,
   effectClocks: boolean,
   seasonal = false,
+  /** False for warmup's own synchronous compile, which no frame is waiting on. */
+  demand = true,
 ) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
@@ -180,7 +182,7 @@ export function glyphProgram(
         glyphFragmentFor({ focus, effectClocks, seasonal }),
       );
     variants.set(key, program);
-    programs.demandWaitMs = (programs.demandWaitMs ?? 0) + performance.now() - start;
+    if (demand) programs.demandWaitMs = (programs.demandWaitMs ?? 0) + performance.now() - start;
   }
   return program;
 }
@@ -313,7 +315,7 @@ export function prewarmGlyphPrograms(
           programs.folkloreProgram = createProgram(gl, folkloreVertex, folkloreFragment);
         else if (key === 8)
           programs.fireworksProgram = createProgram(gl, fireworksVertex, fireworksFragment);
-        else glyphProgram(gl, programs, focus, effectClocks, seasonal);
+        else glyphProgram(gl, programs, focus, effectClocks, seasonal, false);
       }
       queue();
     } catch {

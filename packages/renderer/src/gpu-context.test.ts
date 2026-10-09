@@ -292,6 +292,15 @@ describe('glyph program variants', () => {
     glyphProgram(context, programs, true, false);
     expect(programs.demandWaitMs).toBe(7);
     deletePrograms(context, programs);
+    // Quiet synchronous warmup compiles leave demand timing alone; a later demand still counts.
+    const warmed = createPrograms(context);
+    prewarmGlyphPrograms(context, warmed, () => true, false);
+    vi.advanceTimersByTime(100);
+    expect(warmed.glyphVariants?.size).toBe(2);
+    expect(warmed.demandWaitMs ?? 0).toBe(0);
+    glyphProgram(context, warmed, false, true);
+    expect(warmed.demandWaitMs).toBe(7);
+    deletePrograms(context, warmed);
     now.mockRestore();
   });
 

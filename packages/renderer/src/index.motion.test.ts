@@ -2178,6 +2178,8 @@ describe('live motion preference', () => {
 
   it.each([
     [60, 60],
+    [90, 60],
+    [100, 67],
     [120, 60],
     [144, 72],
   ])('caps a continuous camera stream on a %d Hz display at %d draws a second', (hz, drawn) => {
@@ -2187,7 +2189,9 @@ describe('live motion preference', () => {
       input.intents!.pan(2, 0);
       draw(1000 + (tick * 1000) / hz);
     }
-    expect(vi.mocked(glyphPass).mock.calls.length - before).toBe(drawn);
+    expect(Math.abs(vi.mocked(glyphPass).mock.calls.length - before - drawn)).toBeLessThanOrEqual(
+      1,
+    );
   });
 
   it('keeps a skipped camera move pending, then draws the latest one', () => {
@@ -2894,13 +2898,38 @@ describe('label focus in the renderer frame', () => {
     expect(overlayPass).toHaveBeenCalled();
     draw(1400);
     expect(classReads()).toBeGreaterThan(reads);
+    // Once the pan settles, Life's preparation focus catches up, by identity only.
+    expect(sync).toHaveBeenCalledOnce();
     // The view's Life tiles change: Life hears of it on the next in-margin pan.
     labelFixture.loaded = undefined;
     input.intents!.pan(-10, 0);
     draw(1420);
     expect(cellPass).not.toHaveBeenCalled();
-    expect(sync).toHaveBeenCalledOnce();
+    expect(sync).toHaveBeenCalledTimes(2);
     expect(sync.mock.lastCall![0]).toEqual([]);
+  });
+
+  it.each([
+    ['whole-cell', 10],
+    ['sub-cell', 3],
+  ])('settles Life focus once after a short %s pan', async (_kind, dx) => {
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: true });
+    await vi.dynamicImportSettled();
+    draw(1000);
+    const sync = vi.spyOn(LifePreparation.prototype, 'sync');
+    input.intents!.pan(-dx, 0);
+    draw(1030);
+    expect(sync).not.toHaveBeenCalled();
+    draw(1120);
+    expect(sync).not.toHaveBeenCalled();
+    draw(1190);
+    expect(sync).toHaveBeenCalledOnce();
+    const { lng, lat } = atlas.getCamera();
+    expect(sync.mock.lastCall![1]).toEqual([lng, lat]);
+    draw(1400);
+    draw(1800);
+    expect(sync).toHaveBeenCalledOnce();
   });
 
   it('asks for tiles over the whole drawn window', () => {

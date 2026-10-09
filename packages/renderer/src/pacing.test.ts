@@ -5,7 +5,9 @@ import {
   ACTIVE_MS,
   animationDue,
   cameraDue,
+  frameInterval,
   IDLE_FRAME_MS,
+  nextAnchor,
   PACING_SLACK_MS,
   watchVisibility,
 } from './pacing';
@@ -25,28 +27,51 @@ describe('animationDue', () => {
     expect(animationDue(1000, -Infinity, -Infinity, watching)).toBe(true);
   });
 
-  /** Drawn frames in one second of rAF ticks at `hz`, with ±0.8 ms of timestamp jitter. */
-  const drawnPerSecond = (hz: number, due: (now: number, lastDraw: number) => boolean) => {
-    let lastDraw = -Infinity;
+  /**
+   * Drawn frames per second over two seconds of rAF ticks at `hz`, with ±0.8 ms of timestamp
+   * jitter, and the longest gap between draws in ticks.
+   */
+  const pace = (hz: number, input: boolean, due: (now: number, anchor: number) => boolean) => {
+    let anchor = -Infinity;
     let drawn = 0;
+    let last = -1;
+    let gap = 0;
     for (let tick = 0; tick < hz * 3; tick++) {
       const now = 10_000 + (tick * 1000) / hz + (tick % 3 === 0 ? 0.8 : tick % 3 === 1 ? -0.8 : 0);
-      if (!due(now, lastDraw)) continue;
-      lastDraw = now;
-      if (tick >= hz) drawn++;
+      if (!due(now, anchor)) continue;
+      anchor = nextAnchor(now, anchor, frameInterval(now, input ? now : -Infinity));
+      if (tick >= hz) {
+        drawn++;
+        if (last >= hz) gap = Math.max(gap, tick - last);
+      }
+      last = tick;
     }
-    return drawn / 2;
+    return { fps: drawn / 2, gap };
   };
 
   it.each([
-    [60, 30, 60],
-    [120, 30, 60],
-    [144, 28.8, 72],
-  ])('paces a %d Hz display to %d fps idle and %d fps under input', (hz, idle, active) => {
-    const idleFps = drawnPerSecond(hz, (now, last) => animationDue(now, last, -Infinity, watching));
-    expect(Math.abs(idleFps - idle)).toBeLessThanOrEqual(0.5);
-    expect(drawnPerSecond(hz, (now, last) => animationDue(now, last, now, watching))).toBe(active);
-    expect(drawnPerSecond(hz, (now, last) => cameraDue(now, last, watching))).toBe(active);
+    [60, 30, 60, 1],
+    [90, 30, 60, 2],
+    [100, 33.3, 66.7, 2],
+    [120, 30, 60, 2],
+    [144, 31, 72, 2],
+    [165, 33, 68.5, 3],
+  ])('paces a %d Hz display to %d fps idle and %d fps under input', (hz, idle, active, maxGap) => {
+    const quiet = pace(hz, false, (now, anchor) => animationDue(now, anchor, -Infinity, watching));
+    expect(Math.abs(quiet.fps - idle)).toBeLessThanOrEqual(1);
+    const busy = pace(hz, true, (now, anchor) => animationDue(now, anchor, now, watching));
+    expect(Math.abs(busy.fps - active)).toBeLessThanOrEqual(1);
+    // Never every tick above 60 Hz, and never more than the cap's own spacing apart.
+    expect(busy.gap).toBeLessThanOrEqual(maxGap);
+    const camera = pace(hz, true, (now, anchor) => cameraDue(now, anchor, watching));
+    expect(camera.fps).toBe(busy.fps);
+  });
+
+  it('keeps the phase after a late frame and restarts it after an early or very late one', () => {
+    expect(nextAnchor(1022, 1000, ACTIVE_FRAME_MS)).toBe(1000 + ACTIVE_FRAME_MS);
+    expect(nextAnchor(1014, 1000, ACTIVE_FRAME_MS)).toBe(1014);
+    expect(nextAnchor(1100, 1000, ACTIVE_FRAME_MS)).toBe(1100);
+    expect(nextAnchor(500, -Infinity, IDLE_FRAME_MS)).toBe(500);
   });
 
   it('keeps camera redraws immediate with reduced motion or while unwatched', () => {
