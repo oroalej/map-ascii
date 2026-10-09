@@ -336,6 +336,16 @@ describe('Landmark', () => {
     expect(Landmark.safeParse({ ...landmark, geometry }).success).toBe(false);
   });
 
+  it('lets a standalone curated outline stand alone only with its height', () => {
+    const { osm_id: _unused, ...rest } = landmark;
+    const geometry = { type: 'Polygon', coordinates: [] };
+    expect(Landmark.safeParse({ ...rest, geometry, height_m: 3 }).success).toBe(true);
+    expect(Landmark.safeParse({ ...rest, geometry }).success).toBe(false);
+    const replaces = 'osm:way/1';
+    expect(Landmark.safeParse({ ...rest, geometry, replaces, height_m: 3 }).success).toBe(false);
+    expect(Landmark.safeParse({ ...landmark, height_m: 3 }).success).toBe(false);
+  });
+
   it('requires at least one source', () => {
     expect(Landmark.safeParse({ ...landmark, sources: [] }).success).toBe(false);
   });

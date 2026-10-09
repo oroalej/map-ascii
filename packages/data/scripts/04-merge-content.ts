@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { ContentBundle } from '@atlas/content';
 import { Landmark, SubdivisionAreas } from '@atlas/shared/schemas';
 import type { SubdivisionArea } from '@atlas/shared';
+import type { Polygon } from 'geojson';
 import booleanPointInPolygon from '@turf/boolean-point-in-polygon';
 import turfCentroid from '@turf/centroid';
 import type { Geography } from './02-convert';
@@ -61,15 +62,57 @@ function replaceWithCuratedOutlines(
   }
 }
 
+type Placement = { territory: Territory; subdivisions: readonly SubdivisionArea[] };
+
+/** The subdivision containing a point, for features the pipeline places itself. */
+function subdivisionAt(lng: number, lat: number, subdivisions: readonly SubdivisionArea[]) {
+  const area = subdivisions.find(
+    (a) =>
+      (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
+      booleanPointInPolygon([lng, lat], a.geometry as Parameters<typeof booleanPointInPolygon>[1]),
+  );
+  return area && { subdivision: area.name, subdivision_approx: area.approximate };
+}
+
 /**
- * Join curated landmarks onto features: by `osm_id`, or as curated outlines replacing an OSM
- * building. Curated names and dates win over OSM's. Present-day food tenants can have independent
- * Point identities; other standalone geometry remains outside this merge.
+ * A curated outline that stands alone (an arch, a gate) rather than replacing an OSM building:
+ * a small building of its curated height, whose feature id is the landmark id.
+ */
+function curatedStructure(
+  landmark: ContentBundle['landmarks'][number],
+  placement: Placement | undefined,
+): AtlasFeature {
+  if (!placement) throw new Error(`Curated outline ${landmark.id} requires territory admission`);
+  const ring = (landmark.geometry as Polygon).coordinates[0]!;
+  if (ring.some(([lng, lat]) => !inTerritory(lng!, lat!, placement.territory)))
+    throw new Error(`Curated outline ${landmark.id} is outside the territory`);
+  const [lng, lat] = turfCentroid(landmark.geometry as Polygon).geometry.coordinates as [
+    number,
+    number,
+  ];
+  return {
+    type: 'Feature',
+    geometry: landmark.geometry as Polygon,
+    properties: {
+      id: landmark.id,
+      class: 'building',
+      height: landmark.height_m!,
+      ...subdivisionAt(lng, lat, placement.subdivisions),
+    },
+    tippecanoe: { layer: 'buildings', minzoom: 12, maxzoom: 16 },
+  };
+}
+
+/**
+ * Join curated landmarks onto features: by `osm_id`, as curated outlines replacing an OSM
+ * building, or as standalone curated outlines. Curated names and dates win over OSM's.
+ * Present-day food tenants can have independent Point identities; other standalone geometry
+ * remains outside this merge.
  */
 export function mergeContent(
   features: AtlasFeature[],
   content: ContentBundle,
-  placement?: { territory: Territory; subdivisions: readonly SubdivisionArea[] },
+  placement?: Placement,
 ): AtlasFeature[] {
   replaceWithCuratedOutlines(features, content.landmarks);
   const byOsmId = new Map<string, ContentBundle['landmarks'][number]>();
@@ -86,6 +129,13 @@ export function mergeContent(
       byOsmId.set(landmark.osm_id, landmark);
       continue;
     }
+    if (landmark.height_m !== undefined) {
+      if (features.some((f) => f.properties.id === landmark.id))
+        throw new Error(`Duplicate feature identity: ${landmark.id}`);
+      features.push(curatedStructure(landmark, placement));
+      byOsmId.set(landmark.id, landmark);
+      continue;
+    }
     if (landmark.type !== 'food' || landmark.geometry?.type !== 'Point')
       throw new Error(`Standalone landmark geometry is not supported yet: ${landmark.id}`);
     if (!placement) throw new Error(`Point landmark ${landmark.id} requires territory admission`);
@@ -94,14 +144,6 @@ export function mergeContent(
       throw new Error(`Point landmark ${landmark.id} is outside the territory`);
     if (features.some((f) => f.properties.id === landmark.id))
       throw new Error(`Duplicate feature identity: ${landmark.id}`);
-    const area = placement.subdivisions.find(
-      (a) =>
-        (a.geometry.type === 'Polygon' || a.geometry.type === 'MultiPolygon') &&
-        booleanPointInPolygon(
-          [lng, lat],
-          a.geometry as Parameters<typeof booleanPointInPolygon>[1],
-        ),
-    );
     const feature: AtlasFeature = {
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [lng, lat] },
@@ -112,7 +154,7 @@ export function mergeContent(
         name: landmark.name.en,
         landmark: true,
         landmark_id: landmark.id,
-        ...(area && { subdivision: area.name, subdivision_approx: area.approximate }),
+        ...subdivisionAt(lng, lat, placement.subdivisions),
       },
       tippecanoe: { layer: 'poi', minzoom: 16, maxzoom: 16 },
     };
