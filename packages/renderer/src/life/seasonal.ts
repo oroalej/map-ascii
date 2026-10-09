@@ -27,6 +27,7 @@ import {
 } from './geometry';
 import type { FixtureGrid, LegacyStreetFixture, StreetFixture } from './fixtures';
 import { lightByte, LampState, placeSeed } from './lights';
+import { FixtureSight } from './fixture-sight';
 import { clipUtilityLine } from './utilities';
 import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { isCarnivalMotionPart } from './carnival-motion';
@@ -492,8 +493,10 @@ export function packSeasonalFixtures(
     out[at + 3] = alpha;
     owners[cell] = -3;
     written?.();
-    return !grid.visible || grid.visible(c, r);
+    return !grid.visible || grid.visible(c, r, sight);
   };
+  /** What the fixture being written reports when visible (`FixtureSight`). */
+  let sight: number = FixtureSight.installations;
   // Lay paving below decorations, independently of buffered tile/record ordering.
   let ordered = surfaceOrderCache.get(fixtures);
   if (!ordered) {
@@ -518,6 +521,7 @@ export function packSeasonalFixtures(
           : installationAlpha;
     if (!alpha) continue;
     if (fixture.kind === 'season-installation') {
+      sight = FixtureSight.installations;
       visibility.installations =
         packInstallation(fixture.record, grid, (x, y, glyph, part, info, replace) => {
           const c = Math.floor(x),
@@ -532,6 +536,7 @@ export function packSeasonalFixtures(
       continue;
     }
     if (fixture.kind === 'season-candle') {
+      sight = FixtureSight.candles;
       const [x, y] = grid.toCell(...fixture.at);
       visibility.candles =
         write(
@@ -545,6 +550,7 @@ export function packSeasonalFixtures(
       continue;
     }
     if (fixture.kind === 'season-lantern') {
+      sight = FixtureSight.lanterns;
       const { lamp } = fixture;
       const at = grid.toCell(...lamp.tip),
         base = grid.toCell(...lamp.base),
@@ -576,6 +582,7 @@ export function packSeasonalFixtures(
         break;
       }
     } else {
+      sight = FixtureSight.bunting;
       const row = rows?.get(fixture);
       if (!row) continue;
       const clipped = clipUtilityLine(row.from, row.to, grid.cols, grid.rows);

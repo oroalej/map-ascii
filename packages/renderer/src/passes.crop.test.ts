@@ -11,10 +11,16 @@ import type { Programs, ThemeResources } from './gpu-context';
 it('sets crop uniforms every pass and clears stale state when the calendar is absent', () => {
   const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
   const gl = Object.fromEntries(
-    ['bindFramebuffer', 'viewport', 'useProgram', 'bindVertexArray', 'drawArrays'].map((name) => [
-      name,
-      vi.fn(),
-    ]),
+    [
+      'bindFramebuffer',
+      'viewport',
+      'useProgram',
+      'bindVertexArray',
+      'drawArrays',
+      'enable',
+      'disable',
+      'scissor',
+    ].map((name) => [name, vi.fn()]),
   ) as unknown as GL;
   const programs = {
     select: { program: {} },

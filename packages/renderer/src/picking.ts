@@ -6,6 +6,7 @@ import type { CameraState } from '@atlas/shared';
 import type { Size } from './camera';
 import type { Readback } from './readback';
 import { unpackId } from './raster/geometry';
+import { cellAt } from './grid';
 
 /** The grid placement the glyph pass uses: device pixels from the screen to the grid. */
 export type GridPlacement = {
@@ -26,10 +27,8 @@ export function pointerCell(
   dpr: number,
   grid: GridPlacement,
 ): [number, number] {
-  return [
-    Math.floor((x * dpr + grid.shiftX) / grid.cellWidth),
-    Math.floor((y * dpr + grid.shiftY) / grid.cellHeight),
-  ];
+  const [col, row] = cellAt([x, y], dpr, grid);
+  return [Math.floor(col), Math.floor(row)];
 }
 
 /** Most features `setHighlighted` can light up at once (e.g. the ways of one street). */

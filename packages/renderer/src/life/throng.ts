@@ -68,6 +68,11 @@ export type ThrongPayload = {
   /** Field ground and terrain permission of one view cell for a detailed figure's texel. */
   allows?: (agent: VisibleAgent, col: number, row: number) => boolean;
   version?: number;
+  /**
+   * Cells (relative to the grid) a figure must stay inside, when the grid has a pan margin:
+   * admission and the cap see only the cells the screen draws from.
+   */
+  clip?: { left: number; top: number; right: number; bottom: number };
 };
 type Point = [number, number];
 type Guard = ((agent: VisibleAgent, col: number, row: number) => boolean) & {
@@ -1016,6 +1021,8 @@ export function throng(
   guardFor?: ThrongGuardFactory,
   budgetMs = THRONG_FIELD_BUDGET_MS,
   pool?: ThrongFieldPool,
+  /** Absolute cells to admit (`grid.ts` `coreCells`); default the whole grid. */
+  bounds?: { left: number; top: number; right: number; bottom: number },
 ): ThrongPayload {
   const result: ThrongPayload = { cells: [], cap: Math.floor(MAX_THRONG_CELLS * quality) };
   if (zoom < 15 || progress < 0 || progress >= 1 || quality <= 0) return result;
@@ -1032,13 +1039,13 @@ export function throng(
   if (!(Math.abs(det) > 0)) return result;
   const toI = (col: number, row: number) => (d * (col - e) - b * (row - f)) / det,
     toJ = (col: number, row: number) => (-c * (col - e) + a * (row - f)) / det;
-  const left = originCol,
-    top = originRow,
-    right = originCol + cols,
-    bottom = originRow + rows;
+  const left = bounds?.left ?? originCol,
+    top = bounds?.top ?? originRow,
+    right = bounds?.right ?? originCol + cols,
+    bottom = bounds?.bottom ?? originRow + rows;
   // The view and its pan margin, for preparation priority.
-  const mc = Math.ceil(cols * WINDOW_MARGIN),
-    mr = Math.ceil(rows * WINDOW_MARGIN);
+  const mc = Math.ceil((right - left) * WINDOW_MARGIN),
+    mr = Math.ceil((bottom - top) * WINDOW_MARGIN);
   const is = [
       toI(left - mc, top - mr),
       toI(right + mc, top - mr),
@@ -1091,7 +1098,7 @@ export function throng(
     event.kind === 'mass' ? Math.min(1, (1 - progress) / (1 - PROCESSION.mass.disperseStart)) : 1;
   const head = layout?.head(progress) ?? 0;
   const progressKey = event.kind === 'mass' ? massRamp : event.kind === 'fluvial' ? 0 : head;
-  const at = [originCol, originRow, cols, rows];
+  const at = [originCol, originRow, left, top, right, bottom];
   const held = view.dynamic;
   if (
     held &&
@@ -1105,6 +1112,13 @@ export function throng(
   result.ink = view.ink;
   result.version = field.version;
   result.pending = preparing || view.pending;
+  if (bounds)
+    result.clip = {
+      left: left - originCol,
+      top: top - originRow,
+      right: right - originCol,
+      bottom: bottom - originRow,
+    };
   result.allows = fine
     ? (agent, col, row) => {
         const kind = sample(

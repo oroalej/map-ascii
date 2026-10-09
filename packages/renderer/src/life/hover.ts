@@ -1,5 +1,6 @@
 import { SUB, unpackGlyph } from '../glyphs/select';
 import { pointerCell } from '../picking';
+import { cellAt } from '../grid';
 import type { Readback } from '../readback';
 import { agentAt, describeAgent, describeFolklore } from './describe';
 import { folkloreHit, type FolkloreQuad } from '../folklore-pass';
@@ -106,14 +107,9 @@ export class LifeHoverController {
     const agent = agentAt(f.owners, f.targets.cols, f.targets.rows, f.agents, [col, row]);
     const label = agent && describeAgent(agent);
     if (!label) return null;
-    const sx = Math.min(
-      SUB.cols - 1,
-      Math.floor(((p[0] * f.dpr + f.grid.shiftX) / f.grid.cellWidth - col) * SUB.cols),
-    );
-    const sy = Math.min(
-      SUB.rows - 1,
-      Math.floor(((p[1] * f.dpr + f.grid.shiftY) / f.grid.cellHeight - row) * SUB.rows),
-    );
+    const [x, y] = cellAt(p, f.dpr, f.grid);
+    const sx = Math.min(SUB.cols - 1, Math.floor((x - col) * SUB.cols));
+    const sy = Math.min(SUB.rows - 1, Math.floor((y - row) * SUB.rows));
     const offset = (row * f.targets.cols + col) * 4;
     const lifeClass = unpackGlyph(f.life[offset]!, f.life[offset + 1]!).cls;
     const lifeFlags = f.life[offset + 2]! & LIFE_AGENT_MASK;

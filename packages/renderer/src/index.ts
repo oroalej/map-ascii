@@ -92,7 +92,15 @@ import {
   type View,
 } from './passes';
 import { LabelRank } from './labels';
-import { screenArea } from './grid';
+import {
+  cellAt,
+  coreCells,
+  gridContains,
+  screenArea,
+  shiftGrid,
+  windowCells,
+  windowMargin,
+} from './grid';
 import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
@@ -471,6 +479,10 @@ const sameCamera = (a: CameraState, b: CameraState) =>
 const CLASS_READ_MS = 250;
 /** How often the sun's position is worked out again. */
 const SUN_MS = 1000;
+/** While the camera keeps moving, side work for unchanged tiles runs at most this often. */
+const SIDE_MS = 100;
+/** After a zoom stops this long, its throttled side work runs once more. */
+const SETTLE_MS = 150;
 /** Smoothing for the timing stats: each new sample's weight. */
 const STATS_WEIGHT = 0.1;
 const smooth = (average: number, sample: number) =>
@@ -777,11 +789,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       canvas.width = width;
       canvas.height = height;
     }
-    const cols = Math.ceil(width / cellDev().w) + 3;
-    const rows = Math.ceil(height / cellDev().h) + 3;
-    const labelDev = view().labelDev;
-    const labelCols = Math.ceil(width / labelDev.w) + 3;
-    const labelRows = Math.ceil(height / labelDev.h) + 3;
+    // The view, its one-cell neighborhood and the pan margin (grid.ts `windowCells`).
+    const { cols, rows } = windowCells({ width, height }, cellDev());
+    const { cols: labelCols, rows: labelRows } = windowCells({ width, height }, view().labelDev);
     if (
       !targets ||
       targets.cols !== cols ||
@@ -832,59 +842,137 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let labelsForReport: TileLabel[] | undefined;
   let labelVisibilityDirty = false;
 
-  const cellsKey = (v: View, map: GridPlacement, labels: GridPlacement) => {
-    const a = screenArea(v, map.grid);
-    const b = screenArea(v, labels.grid, v.labelDev);
-    return [
-      v.camera.zoom,
-      map.grid.originCol,
-      map.grid.originRow,
-      labels.grid.originCol,
-      labels.grid.originRow,
-      a.left,
-      a.top,
-      a.right,
-      a.bottom,
-      b.left,
-      b.top,
-      b.right,
-      b.bottom,
-    ].join(' ');
+  /**
+   * The frozen window the cells were drawn for (grid.ts `PAN_MARGIN`): its zoom, pixel ratio and
+   * cell sizes, with the label window placed beside it. A pan that stays inside both windows
+   * only moves their offsets (`shiftCells`); anything else places and draws them again.
+   */
+  const windowKey = (v: View) =>
+    `${v.camera.zoom} ${v.dpr} ${v.cellDev.w} ${v.cellDev.h} ${v.labelDev.w} ${v.labelDev.h}`;
+  let labelWindow: GridPlacement | undefined;
+  /** The camera and CSS size the window's tiles were asked for, kept while it stays frozen. */
+  let windowTiles = { camera, size: { width: 1, height: 1 } };
+  const sameArea = (a: ReturnType<typeof screenArea>, b: ReturnType<typeof screenArea>) =>
+    a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom;
+  /** The view's own tiles, for Life (never the window's margin), without asking for any. */
+  const viewTiles = () => tileCache.tilesToDraw(camera, cssSize(), false);
+  /** The Life tiles the view held when Life was last synchronized. */
+  let lifeMembership = '';
+  const lifeMembershipOf = (tiles: readonly TileId[]) =>
+    tiles
+      .filter((tile) => tile.z >= LIFE_TILE_MIN_ZOOM && tileCache.get(tile))
+      .map(tileKey)
+      .join(',');
+  /**
+   * Side work that follows the view's tiles (Life membership and focus, firework sites). While
+   * the camera keeps moving it runs at most every `SIDE_MS` for the same tiles, and once more
+   * `SETTLE_MS` after a zoom stops; changed tiles, settings or tile arrivals run it at once.
+   */
+  let sideAt = -Infinity;
+  let sideTiles = '';
+  let sideSettle = false;
+  let zoomedAt = -Infinity;
+  let drawnZoom: number | undefined;
+  const syncView = (tiles: readonly TileId[], at: number) => {
+    syncLife(tiles);
+    syncResidentialSites(tiles);
+    lifeMembership = lifeMembershipOf(tiles);
+    sideAt = at;
+    sideSettle = false;
   };
-  /** Shift the cells for a pan within a cell, if that is all it takes; whether it was. */
-  const shiftCells = (): boolean => {
-    if (!targets || cellsFor === null || cellsTargets !== targets) return false;
+
+  /**
+   * Move the cells for a pan inside the frozen window, if that is all it takes; whether it was.
+   * Labels, visible classes and fixture visibility follow the new offset from what is already
+   * drawn; Life hears of the view's tiles when they change.
+   */
+  const shiftCells = (now: number): boolean => {
+    if (!targets || !placement || !labelWindow || cellsFor === null || cellsTargets !== targets)
+      return false;
     const v = view();
-    const next = placeGrid(v, v.cellDev, targets.cols, targets.rows);
-    const nextLabels = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
-    if (cellsKey(v, next, nextLabels) !== cellsFor) return false;
-    placement = next;
-    grid = next.grid;
-    labelGrid = nextLabels.grid;
+    if (windowKey(v) !== cellsFor) return false;
+    const next = shiftGrid(v, v.cellDev, placement.grid);
+    const nextLabels = shiftGrid(v, v.labelDev, labelWindow.grid);
+    if (
+      !gridContains(next, v.cellDev, v, targets.cols, targets.rows) ||
+      !gridContains(nextLabels, v.labelDev, v, targets.labelCols, targets.labelRows)
+    )
+      return false;
+    const moved =
+      !sameArea(screenArea(v, next), screenArea(v, grid)) ||
+      !sameArea(screenArea(v, nextLabels, v.labelDev), screenArea(v, labelGrid, v.labelDev));
+    // The window's projection (toCell, tile matrices) stays; only the offset in it changes.
+    placement = { ...placement, grid: next };
+    labelWindow = { ...labelWindow, grid: nextLabels };
+    grid = next;
+    labelGrid = nextLabels;
     labelVisibilityDirty = true;
-    // Coarse coverage can arrive and draw while the detailed view still loads.
-    tileCache.regionTilesForView(camera, cssSize());
-    // Keep asking for the view's tiles (one that arrives draws the cells again).
-    tileCache.tilesToDraw(camera, cssSize());
+    // Coarse coverage can arrive and draw while the detailed window still loads; keep asking
+    // for the window's tiles (one that arrives draws the cells again).
+    tileCache.regionTilesForView(windowTiles.camera, windowTiles.size);
+    tileCache.tilesToDraw(windowTiles.camera, windowTiles.size);
+    if (moved) {
+      // Whole cells came onto or left the screen: what it shows and names is worked out again.
+      classesStale = true;
+      if (themeRes && programs && names.readmit(targets, v, labelWindow)) {
+        labelsForReport = names.draw(
+          gl,
+          targets,
+          themeRes,
+          v,
+          labelWindow,
+          programs,
+          selectedIndex(),
+          hoverIndex,
+        );
+        speechGeometry++;
+      }
+      const tiles = viewTiles();
+      if (lifeMembershipOf(tiles) !== lifeMembership || now - sideAt >= SIDE_MS)
+        syncView(tiles, now);
+    }
     return true;
   };
 
-  const drawCells = () => {
+  /** Place the windows at the camera and draw them: the cell pass, labels, and their inputs. */
+  const drawCells = (now: number) => {
     if (!targets || !programs || !themeRes) return;
     const v = view();
-    placement = placeGrid(v, v.cellDev, targets.cols, targets.rows);
+    const invalidated = cellsFor === null;
+    placement = placeGrid(v, v.cellDev, targets.cols, targets.rows, windowMargin(v, v.cellDev));
     grid = placement.grid;
-    const labelPlacement = placeGrid(v, v.labelDev, targets.labelCols, targets.labelRows);
-    labelGrid = labelPlacement.grid;
-    cellsFor = cellsKey(v, placement, labelPlacement);
+    labelWindow = placeGrid(
+      v,
+      v.labelDev,
+      targets.labelCols,
+      targets.labelRows,
+      windowMargin(v, v.labelDev),
+    );
+    labelGrid = labelWindow.grid;
+    cellsFor = windowKey(v);
     cellsTargets = targets;
+    // The window's tiles: as many CSS pixels as either target spans, around the camera.
+    windowTiles = {
+      camera,
+      size: {
+        width: Math.max(targets.cols * v.cellDev.w, targets.labelCols * v.labelDev.w) / dpr,
+        height: Math.max(targets.rows * v.cellDev.h, targets.labelRows * v.labelDev.h) / dpr,
+      },
+    };
     source.setFireworksActive(!!season?.fireworks && camera.zoom < FIREWORKS.hideZoom);
-    const regionTiles = tileCache.regionTilesForView(camera, cssSize());
-    const tiles = tileCache.tilesToDraw(camera, cssSize());
-    syncLife(tiles);
+    const regionTiles = tileCache.regionTilesForView(windowTiles.camera, windowTiles.size);
+    const tiles = tileCache.tilesToDraw(windowTiles.camera, windowTiles.size);
+    const inView = viewTiles();
+    const zooming = drawnZoom !== undefined && drawnZoom !== camera.zoom;
+    drawnZoom = camera.zoom;
+    if (zooming) zoomedAt = now;
+    const membership = `${tiles.map(tileKey).join(',')}|${lifeMembershipOf(inView)}`;
+    if (invalidated || !zooming || membership !== sideTiles || now - sideAt >= SIDE_MS) {
+      sideTiles = membership;
+      syncView(inView, now);
+    } else sideSettle = true;
     syncLamps(tiles);
     syncFixtures(tiles);
-    syncResidentialSites(tiles);
     const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -901,13 +989,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     crownTiles = layer(tiles);
     drawableBuffers = region.length > 0 || crownTiles.length > 0;
     cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    names.collect(targets, v, labelPlacement, labels);
+    names.collect(targets, v, labelWindow, labels);
     labelsForReport = names.draw(
       gl,
       targets,
       themeRes,
       v,
-      labelPlacement,
+      labelWindow,
       programs,
       selectedIndex(),
       hoverIndex,
@@ -1311,6 +1399,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             clock: drawnLife?.signalClock,
             guardFor: guardLife && ((toCell) => guardLife.cellGuard(toCell, true)),
             pool: crowdPool,
+            bounds: coreCells(grid, cellDev(), view()),
           }
         : undefined,
     );
@@ -1351,11 +1440,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
         toCell: placement.toCell,
         size: cssSize(),
-        labelsCover: ([x, y]) =>
+        labelsCover: (point) =>
           labelCovers(
             targets!,
-            (x * dpr + labelGrid.shiftX) / label.w,
-            (y * dpr + labelGrid.shiftY) / label.h,
+            ...cellAt(point, dpr, {
+              shiftX: labelGrid.shiftX,
+              shiftY: labelGrid.shiftY,
+              cellWidth: label.w,
+              cellHeight: label.h,
+            }),
           ),
       },
       now,
@@ -1473,11 +1566,23 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     tileLights.set(life, placed);
     return placed;
   };
+  /** The tiles' lamp inputs as last gathered, so an unchanged set keeps its arrays. */
+  let lampInputs: readonly LoadedTile['life'][] | undefined;
   const syncLamps = (tiles: readonly TileId[]) => {
+    const shown = lampShow() > 0;
+    const inputs: LoadedTile['life'][] = [];
+    if (shown)
+      for (const tile of tiles) {
+        if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
+        const loaded = tileCache.get(tile);
+        if (loaded) inputs.push(loaded.life);
+      }
+    if (lampInputs && sameReferenceMembers(inputs, lampInputs)) return;
+    lampInputs = inputs;
     lamps = [];
     shops = [];
     shopsKey = '';
-    if (lampShow() <= 0) return;
+    if (!shown) return;
     for (const tile of tiles) {
       if (tile.z < LIFE_TILE_MIN_ZOOM) continue;
       const loaded = tileCache.get(tile);
@@ -1958,6 +2063,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       emit('camerachange', { ...camera });
     }
     updateSun(now);
+    if (sideSettle && now - zoomedAt >= SETTLE_MS && !cellDirty) syncView(viewTiles(), now);
     if (!targets || !programs || !themeRes) {
       profiler?.end();
       return;
@@ -1996,8 +2102,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       let cellsDrawn = false;
       if (cellDirty) {
         cellDirty = false;
-        if (!shiftCells()) {
-          drawCells();
+        if (!shiftCells(now)) {
+          drawCells(now);
           cellsDrawn = true;
           cellPassMs = smooth(cellPassMs, performance.now() - frameStart);
         }

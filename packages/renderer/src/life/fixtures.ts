@@ -1,4 +1,5 @@
 import { PED_STOP, PED_WALK, PedestrianPart } from './pedestrian-glyphs';
+import { FixtureSight } from './fixture-sight';
 import { RoadAccess, carriageways } from './terrain';
 import type { BuntingProjection } from './bunting-junctions';
 /** Static street hardware, independent of the life population and lighting texture. */
@@ -71,17 +72,22 @@ export type FixtureVisibility = {
   utilities: boolean;
   seasonal?: SeasonalVisibility;
 };
-export type FixturePackingScratch = { seasonalAdmission: Int32Array };
+export type FixturePackingScratch = { seasonalAdmission: Int32Array; owners: Int32Array };
 export const createFixturePackingScratch = (): FixturePackingScratch => ({
   seasonalAdmission: new Int32Array(0),
+  owners: new Int32Array(0),
 });
+export { FixtureSight } from './fixture-sight';
 
 export type FixtureGrid = LightGrid & {
   buntingProjection?: BuntingProjection;
   cellWidth: number;
   cellHeight: number;
-  /** Only the viewport, excluding the render grid's offscreen margin. */
-  visible?: (col: number, row: number) => boolean;
+  /**
+   * Only the viewport, excluding the render grid's offscreen margin. `sight` says what a cell
+   * written there would report (`FixtureSight`).
+   */
+  visible?: (col: number, row: number, sight?: number) => boolean;
 };
 
 /** Low six bits of G; the high two bits retain the glyph's ten-bit index. */
@@ -478,7 +484,9 @@ export function packFixtures(
   offsets?: SignalOffsets,
 ): PackedFixtures {
   out.fill(0);
-  const owners = new Int32Array(grid.cols * grid.rows).fill(-1);
+  const size = grid.cols * grid.rows;
+  if (scratch && scratch.owners.length !== size) scratch.owners = new Int32Array(size);
+  const owners = (scratch?.owners ?? new Int32Array(size)).fill(-1);
   const packed: PackedFixtures = {
     seasonalCells: 0,
     texels: out,
@@ -576,7 +584,15 @@ export function packFixtures(
       out[at + 2] = tone;
       out[at + 3] = Math.round(opacity * 255);
       if (signal) signal.cells.push(at);
-      if (fixture.kind !== 'flagpole' && (!grid.visible || grid.visible(c, r)))
+      if (
+        fixture.kind !== 'flagpole' &&
+        (!grid.visible ||
+          grid.visible(
+            c,
+            r,
+            fixture.kind === 'signal' ? FixtureSight.trafficSignals : FixtureSight.streetlights,
+          ))
+      )
         packed.visibility[fixture.kind === 'signal' ? 'trafficSignals' : 'streetlights'] = true;
     };
     // Avoid expensive offscreen loops, including malformed geometry.

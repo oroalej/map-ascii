@@ -2838,6 +2838,79 @@ describe('label focus in the renderer frame', () => {
     draw(1100);
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples).toEqual([]);
   });
+  it('pans inside the margin without the cell pass, and places the window again past it', () => {
+    const classes = vi.fn();
+    atlas.on('classeschange', classes);
+    draw(10);
+    const passes = vi.mocked(cellPass).mock.calls.length;
+    const overlays = vi.mocked(overlayPass).mock.calls.length;
+    const before = vi.mocked(glyphPass).mock.calls.at(-1)![6];
+    // Two map cells: inside the 5-cell margin of a 400 px view.
+    input.intents!.pan(-20, 0);
+    draw(100);
+    expect(cellPass).toHaveBeenCalledTimes(passes);
+    const after = vi.mocked(glyphPass).mock.calls.at(-1)![6];
+    expect(after.originCol).toBe(before.originCol);
+    expect(Math.abs(after.shiftX - before.shiftX)).toBe(20);
+    // Whole cells moved on screen: labels are admitted again from the cached geometry.
+    expect(vi.mocked(overlayPass).mock.calls.length).toBeGreaterThan(overlays);
+    // Past the margin, the window is placed and drawn again.
+    input.intents!.pan(-80, 0);
+    draw(200);
+    expect(cellPass).toHaveBeenCalledTimes(passes + 1);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![6].originCol).not.toBe(before.originCol);
+  });
+
+  it('asks for tiles over the whole drawn window', () => {
+    const tiles = vi.spyOn(TileCache.prototype, 'tilesToDraw');
+    draw(10);
+    const asked = tiles.mock.calls.filter((call) => call[2] !== false);
+    expect(asked.length).toBeGreaterThan(0);
+    const [, size] = asked.at(-1)! as unknown as [unknown, { width: number; height: number }];
+    expect(size.width).toBeGreaterThanOrEqual(400 * 1.25);
+    expect(size.height).toBeGreaterThanOrEqual(300 * 1.25);
+    // Life follows the view's own tiles, without changing what the window wants.
+    expect(tiles.mock.calls.some((call) => call[2] === false)).toBe(true);
+  });
+
+  it('rasterizes every drawn fractional zoom but throttles side work, then settles once', () => {
+    draw(10);
+    vi.mocked(cellPass).mockClear();
+    labelFixture.residentialRequests.mockClear();
+    let at = 100;
+    for (let frame = 0; frame < 30; frame++) {
+      input.intents!.zoom(0.01, [0, 0]);
+      draw((at += 1000 / 60));
+    }
+    expect(cellPass).toHaveBeenCalledTimes(30);
+    // About 10 Hz over half a second, instead of every frame.
+    const zooming = labelFixture.residentialRequests.mock.calls.length;
+    expect(zooming).toBeGreaterThanOrEqual(4);
+    expect(zooming).toBeLessThanOrEqual(6);
+    draw((at += 100));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming);
+    draw((at += 60));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming + 1);
+    draw((at += 200));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledTimes(zooming + 1);
+  });
+
+  it('runs throttled zoom side work at once for an urgent invalidation', () => {
+    draw(10);
+    let at = 100;
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    labelFixture.residentialRequests.mockClear();
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    expect(labelFixture.residentialRequests).not.toHaveBeenCalled();
+    // A settings change invalidates the cells: their side work cannot wait for the throttle.
+    atlas.setLife({ time: 600 });
+    input.intents!.zoom(0.01, [0, 0]);
+    draw((at += 17));
+    expect(labelFixture.residentialRequests).toHaveBeenCalledOnce();
+  });
+
   it('shifts subcell pans without placement and restores selection after context recreation', () => {
     const reports = vi.fn<(labels: LabelInView[]) => void>();
     atlas.on('labelschange', reports);

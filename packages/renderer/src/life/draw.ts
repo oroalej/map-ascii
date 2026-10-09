@@ -777,6 +777,11 @@ function packThrong(
   drawingClockCells = undefined;
   const reusable = crowdJournal;
   let prepared = 0;
+  // A grid with a pan margin admits figures only where the screen draws from.
+  const minCol = Math.max(0, payload.clip?.left ?? 0),
+    minRow = Math.max(0, payload.clip?.top ?? 0),
+    maxCol = Math.min(grid.cols, payload.clip?.right ?? grid.cols),
+    maxRow = Math.min(grid.rows, payload.clip?.bottom ?? grid.rows);
   payload.stampPending = false;
   const table = payload.ink && inkTable(theme, glyphs, payload.ink, grid);
   for (const cell of payload.cells) {
@@ -821,10 +826,10 @@ function packThrong(
         const col = cell.col + dc,
           row = cell.row + dr;
         if (
-          col < 0 ||
-          row < 0 ||
-          col >= grid.cols ||
-          row >= grid.rows ||
+          col < minCol ||
+          row < minRow ||
+          col >= maxCol ||
+          row >= maxRow ||
           groundCells[row * grid.cols + col]
         )
           continue;
@@ -846,10 +851,10 @@ function packThrong(
         const col = cell.col + cells[i]!,
           row = cell.row + cells[i + 1]!;
         if (
-          col < 0 ||
-          row < 0 ||
-          col >= grid.cols ||
-          row >= grid.rows ||
+          col < minCol ||
+          row < minRow ||
+          col >= maxCol ||
+          row >= maxRow ||
           groundCells[row * grid.cols + col]
         ) {
           denied = true;
@@ -880,6 +885,18 @@ function packThrong(
       crowdRollbackSize = 0;
       journal = reusable;
       n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
+      // Without a margin these cells were off the grid: unwritten, unchecked and uncounted.
+      if (payload.clip)
+        for (let slot = 0; slot < crowdRollbackSize; slot++) {
+          const at = crowdRollbackCells[slot]!,
+            col = (at / 4) % grid.cols,
+            row = Math.floor(at / 4 / grid.cols);
+          if (col >= minCol && col < maxCol && row >= minRow && row < maxRow) continue;
+          for (let b = 0; b < 4; b++) out[at + b] = crowdRollbackBytes[slot * 4 + b]!;
+          if (drawingOwners) drawingOwners[at / 4] = crowdRollbackOwners[slot]!;
+          reusable.before.delete(at);
+        }
+      if (payload.clip && !reusable.before.size) n = 0;
     }
     const attempt = journal;
     if (!cell.mask && grid.allowsGroundCell)

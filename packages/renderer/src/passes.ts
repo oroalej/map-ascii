@@ -108,6 +108,7 @@ import {
   type StreetFixture,
   updatePedestrianVisibility,
   type FixtureVisibility,
+  FixtureSight,
 } from './life/fixtures';
 import type { TileId } from './tiles';
 
@@ -541,8 +542,21 @@ export function selectPass(
     u_area: areas,
     ...sunUniforms(view, sun),
   });
+  // Only cells on screen, partly or whole, and one more each side: the margin a pan
+  // window keeps beyond them is selected once it comes into view.
+  const area = screenArea(view, grid);
+  const left = Math.max(0, area.left - 2),
+    top = Math.max(0, area.top - 2);
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(
+    left,
+    top,
+    Math.max(0, Math.min(targets.cols, area.right + 2) - left),
+    Math.max(0, Math.min(targets.rows, area.bottom + 2) - top),
+  );
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.disable(gl.SCISSOR_TEST);
 }
 
 /**
@@ -661,18 +675,24 @@ export function lifePass(
     clock?: number;
     guardFor?: ThrongGuardFactory;
     pool?: ThrongFieldPool;
+    /** Absolute cells crowds may use (`grid.ts` `coreCells`), when the grid has a pan margin. */
+    bounds?: { left: number; top: number; right: number; bottom: number };
   },
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
-  // Target identity owns this cache. Placement and the paired frame own the ground
-  // guard, whose wrapper may be newly allocated even when its terrain is unchanged.
+  // Target identity owns this cache. The frozen window (its projection; never the pan offset
+  // inside it) and the paired frame own the ground guard, whose wrapper may be newly allocated
+  // even when its terrain is unchanged. Crowd admission follows the screen's cells.
+  const bounds = crowd?.bounds;
   const inputs = heldFrame
     ? [
         themeRes,
         theme,
-        placement,
-        view.camera,
+        placement.toCell,
+        placement.grid.originCol,
+        placement.grid.originRow,
+        view.camera.zoom,
         view.dpr,
         view.cellDev.w,
         view.cellDev.h,
@@ -683,6 +703,10 @@ export function lifePass(
         crowd?.event,
         crowd?.progress,
         crowd?.quality,
+        bounds?.left,
+        bounds?.top,
+        bounds?.right,
+        bounds?.bottom,
       ]
     : undefined;
   if (
@@ -706,6 +730,7 @@ export function lifePass(
         crowd.guardFor,
         undefined,
         crowd.pool,
+        crowd.bounds,
       )
     : undefined;
   buffers.crowdPending = crowdPayload?.pending;
@@ -882,8 +907,30 @@ const fixturesOf = new WeakMap<
     fixtureScratch: FixturePackingScratch;
     seasonal: boolean;
     viewport: ReturnType<typeof screenArea>;
+    /** Per cell, what a fixture written there reports when visible (`FixtureSight` bits). */
+    sight: Uint8Array;
   }
 >();
+
+/** Fixture visibility for `viewport`, from the sight bits recorded while packing. */
+function updateFixtureSight(
+  visibility: FixtureVisibility,
+  sight: Uint8Array,
+  cols: number,
+  rows: number,
+  viewport: ReturnType<typeof screenArea>,
+) {
+  let bits = 0;
+  for (let r = Math.max(0, viewport.top); r <= Math.min(rows - 1, viewport.bottom); r++)
+    for (let c = Math.max(0, viewport.left); c <= Math.min(cols - 1, viewport.right); c++)
+      bits |= sight[r * cols + c]!;
+  visibility.streetlights = (bits & FixtureSight.streetlights) !== 0;
+  visibility.trafficSignals = (bits & FixtureSight.trafficSignals) !== 0;
+  const seasonal = visibility.seasonal;
+  if (seasonal)
+    for (const key of ['lanterns', 'bunting', 'installations', 'candles'] as const)
+      if (key in seasonal) seasonal[key] = (bits & FixtureSight[key]) !== 0;
+}
 
 /** Reproject hardware only when geometry/grid changes; upload phase changes independently. */
 export function fixturePass(
@@ -917,6 +964,9 @@ export function fixturePass(
     const area = viewport;
     const utilityScratch = cache?.utilityScratch ?? createUtilityPackingScratch();
     const fixtureScratch = cache?.fixtureScratch ?? createFixturePackingScratch();
+    const cells = targets.cols * targets.rows;
+    const sight = cache?.sight.length === cells ? cache.sight.fill(0) : new Uint8Array(cells);
+    const cols = targets.cols;
     const packed = packFixtures(
       cache?.packed.texels.length === targets.cols * targets.rows * 4
         ? cache.packed.texels
@@ -942,7 +992,10 @@ export function fixturePass(
             return [(x * view.dpr) / view.cellDev.w, (y * view.dpr) / view.cellDev.h];
           },
         },
-        visible: (c, r) => c >= area.left && c <= area.right && r >= area.top && r <= area.bottom,
+        visible: (c, r, seen) => {
+          if (seen) sight[r * cols + c]! |= seen;
+          return c >= area.left && c <= area.right && r >= area.top && r <= area.bottom;
+        },
       },
       fixtures,
       view.camera.zoom,
@@ -973,6 +1026,7 @@ export function fixturePass(
       fixtureScratch,
       seasonal: (packed.seasonalCells ?? 0) > 0,
       viewport,
+      sight,
     };
     fixturesOf.set(targets, cache);
     changed = true;
@@ -1019,6 +1073,8 @@ export function fixturePass(
       (c, r) =>
         c >= viewport.left && c <= viewport.right && r >= viewport.top && r <= viewport.bottom,
     );
+    // An in-margin pan moves the viewport over the packed window without packing it again.
+    updateFixtureSight(cache.packed.visibility, cache.sight, targets.cols, targets.rows, viewport);
     cache.viewport = viewport;
   }
   return cache.packed.visibility;

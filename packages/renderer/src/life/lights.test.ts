@@ -9,6 +9,7 @@ import {
   packBeams,
   packCandles,
   packLights,
+  createConePackingScratch,
   placeTileLamps,
   SIDE_CELLS,
   type LightGrid,
@@ -426,6 +427,32 @@ describe('packBeams', () => {
     expect(packBeams(out, big, [car(2, true)])).toBe(0);
     expect(packBeams(out, big, [car(0.1)])).toBe(0);
     expect(out.every((v) => v === 0)).toBe(true);
+  });
+
+  it('reuses cached cones across an in-margin pan of the same frozen window', () => {
+    const world = [1, 1, 0, 0] as const;
+    const frozen: LightGrid = { ...big, world, toCell: (lng, lat) => [lng, lat] };
+    const scratch = createConePackingScratch();
+    // Two rendered frames of the same moving-free car: the second records the cone.
+    packBeams(new Uint8Array(big.cols * big.rows * 4), frozen, [car(2)], scratch);
+    packBeams(new Uint8Array(big.cols * big.rows * 4), frozen, [car(2)], scratch);
+    const entry = scratch.entries[0]!;
+    expect(entry.ready).toBe(true);
+    const revision = scratch.revision;
+    // A pan only replaces the placement wrapper: the window's origin and scale stay.
+    const panned: LightGrid = { ...frozen, toCell: (lng, lat) => [lng, lat] };
+    const reused = new Uint8Array(big.cols * big.rows * 4);
+    const fresh = new Uint8Array(big.cols * big.rows * 4);
+    packBeams(reused, panned, [car(2)], scratch);
+    packBeams(fresh, panned, [car(2)]);
+    expect(scratch.revision).toBe(revision);
+    expect(scratch.entries[0]).toBe(entry);
+    expect(reused).toEqual(fresh);
+    // A rebased window (new origin) or a new scale invalidates the cones.
+    packBeams(reused.fill(0), { ...panned, world: [1, 1, 3, 0] }, [car(2)], scratch);
+    expect(scratch.revision).toBe(revision + 1);
+    packBeams(reused.fill(0), { ...panned, world: [2, 1, 3, 0] }, [car(2)], scratch);
+    expect(scratch.revision).toBe(revision + 2);
   });
 
   it('keeps lamp heads and brighter pools', () => {
