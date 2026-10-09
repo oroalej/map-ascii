@@ -693,6 +693,39 @@ describe('pipelined Life host', () => {
       inline.mockRestore();
     }
   });
+  it('replays peddler configuration into the lazy fallback', async () => {
+    const peddlers = [
+      {
+        id: 'unrelated-goods',
+        label: 'Local seller',
+        prop: 'basket' as const,
+        hours: { from: 5, to: 11 },
+        lines: ['path' as const],
+        perTile: 1 as const,
+        source: [{ title: 'Test' }],
+      },
+    ];
+    const setter = vi.spyOn(LifeWorld.prototype, 'setPeddlers');
+    const s = fixture();
+    vi.stubGlobal(
+      'Worker',
+      class extends EventTarget {
+        constructor() {
+          super();
+          throw new Error('unavailable');
+        }
+      },
+    );
+    const host = createWorkerHost({ cityLife: { source: 'Test', peddlers } }, [], undefined, () =>
+      Promise.resolve(Inline),
+    );
+    host.sync(s.tiles);
+    await flush();
+    expect(setter).toHaveBeenCalledWith(peddlers);
+    expect(host.request(s.input)).toBe(true);
+    host.dispose();
+    setter.mockRestore();
+  });
 
   it('buffers current geometry and commands after an asynchronous worker error', async () => {
     const workers: EventTarget[] = [];

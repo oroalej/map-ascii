@@ -56,6 +56,8 @@ import {
   STAMP_MIN_CELLS,
   VehiclePart,
   VEHICLES,
+  isPeddlerCart,
+  peddlerCartOffset,
   type VehicleSpec,
 } from './vehicles';
 
@@ -441,6 +443,7 @@ export function packLife(
             agent.vehicle !== 'cart' &&
             !agent.prop &&
             !agent.line &&
+            !agent.peddler &&
             !agent.people?.some((look) => look.figure === 'seated') &&
             ((agent.kind === 'vehicle' && drawingMini) ||
               (agent.kind === 'person' && !agent.vehicle) ||
@@ -588,7 +591,12 @@ export function packLife(
         } else {
           drawn += n;
           if (!agent.eventScenery) for (const at of journal.before.keys()) groundCells[at / 4] = 1;
-          if (n && detailedStamp && agent.kind === 'vehicle') stampedVehicles[index] = 1;
+          if (
+            n &&
+            detailedStamp &&
+            (agent.kind === 'vehicle' || agent.peddler?.prop === 'fry-cart')
+          )
+            stampedVehicles[index] = 1;
         }
       }
     }
@@ -948,6 +956,72 @@ function drawAgent(
   const { cols, rows, toCell } = grid;
   if (agent.line) return drawLine(out, grid, agent.line, glyphIndex) ? 1 : 0;
   const [col, row] = toCell(agent.lng, agent.lat);
+  if (agent.peddler && isPeddlerCart(agent.peddler.prop) && agent.ahead && agent.side) {
+    const spec = VEHICLES[agent.peddler.prop],
+      offset = peddlerCartOffset(agent.peddler.prop),
+      [ax, ay] = toCell(...agent.ahead),
+      [sx, sy] = toCell(...agent.side),
+      along: [number, number] = [ax - col, ay - row],
+      across: [number, number] = [sx - col, sy - row],
+      cart: [number, number] = [col + along[0] * offset, row + along[1] * offset];
+    drawingMember = 0;
+    let drawn = false;
+    if (Math.hypot(...along) * spec.length >= STAMP_MIN_CELLS) {
+      drawn = stamp(out, grid, cart, along, across, spec, (part) => [
+        parts[part]!,
+        classId('life_vehicle'),
+        CellBit.person,
+        vehicleByte(agent.paint ?? 0, part),
+      ]);
+      detailedStamp = drawn;
+    } else {
+      const c = Math.floor(cart[0]),
+        r = Math.floor(cart[1]),
+        glyph = glyphIndex(spec.mini[0]);
+      if (c >= 0 && r >= 0 && c < cols && r < rows && glyph > 0) {
+        const at = (r * cols + c) * 4;
+        rememberGroundCell(out, at);
+        writeCell(
+          out,
+          at,
+          glyph,
+          classId('life_vehicle'),
+          CellBit.person,
+          vehicleByte(agent.paint ?? 0, VehiclePart.mini),
+        );
+        drawn = true;
+      }
+    }
+    if (!drawn && journal) journal.denied = journal.incomplete = true;
+    if (detailedStamp && agent.peddler.parasol > 0) {
+      stampFigure(
+        out,
+        grid,
+        cart,
+        along,
+        across,
+        {
+          figure: 'umbrella',
+          paint: agent.paint ?? 0,
+          lateral: 0,
+          back: 0,
+          flap: 0,
+        },
+        0,
+        glyphIndex,
+        (tone) => [
+          classId('life_person'),
+          CellBit.person,
+          personByte(agent.paint ?? 0, tone ? PersonPart.rib : PersonPart.canopy),
+        ],
+        { size: 0.4 + 0.6 * agent.peddler.parasol },
+      );
+    }
+    const pusher = drawPeople(out, grid, agent, [col, row], glyphIndex);
+    if (!pusher && journal) journal.denied = journal.incomplete = true;
+    drawingMember = 0;
+    return drawn && pusher ? 1 : 0;
+  }
   if (agent.prop === 'ball' || agent.prop === 'event') {
     const c = Math.floor(col),
       r = Math.floor(row),
@@ -1332,6 +1406,7 @@ function drawPeople(
   if (
     journal &&
     !agent.vehicle &&
+    !agent.peddler &&
     looks.length <= 4 &&
     c0 >= 0 &&
     r0 >= 0 &&

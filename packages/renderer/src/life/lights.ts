@@ -612,7 +612,8 @@ export function packCandles(
   const bulb = Math.max(1, BULB.radius * cellsPerMeter);
   agents.forEach((agent, i) => {
     const cart = agent.kind === 'person' && agent.vehicle === 'cart';
-    if (!agent.candle && !cart) return;
+    const peddler = agent.kind === 'person' ? (agent.peddler?.lamp ?? 0) : 0;
+    if (!agent.candle && !cart && !peddler) return;
     const r = agent.candle ? radius : bulb;
     const [cx, cy] = grid.toCell(agent.lng, agent.lat);
     if (cx < -r || cy < -r || cx > grid.cols + r || cy > grid.rows + r) return;
@@ -630,7 +631,17 @@ export function packCandles(
         agent.effectClock ?? ORDINARY_CLOCK,
       );
     } else {
-      pool(out, grid, cx, cy, r, r, BULB.strength, lightByte(LampState.bulb, i), clocks);
+      pool(
+        out,
+        grid,
+        cx,
+        cy,
+        r,
+        r,
+        BULB.strength * (peddler || 1),
+        lightByte(LampState.bulb, i),
+        clocks,
+      );
     }
     lit++;
   });

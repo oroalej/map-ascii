@@ -64,3 +64,31 @@ Four weather IDs bring the current inventory to 104 scenes (42 utterances and 62
 - `weather-clearing-linger` combines DIGDI/PA/AKO (here, still, I) as an independent observation.
 
 Every word was checked against Mintz's 1971 dictionary, downloaded from its University of Hawaii Press Manifold page. Stress marks are omitted following the existing catalog convention; no new spellings are inferred. These are original fictional compositions, with English and Tagalog meanings rather than literal quotations. Native-speaker review remains pending. The proposed fierce-sun and renewed-rain warnings were omitted in favor of these short supported compositions. Heat is the shared dry/high-sun midday rule, not measured temperature; clearing lines belong only to current post-rain shelter countdowns.
+
+## Street peddler calls (2026-10-08)
+
+The 104 legacy scenes remain intact. Added 21 original one-speaker peddler utterances: two plain calls per seven goods, four weather calls, two hover calls and one departure line. Main's six event cheers are also retained. Total 131 of 140; 9 slots remain. All include Bikol, English and Tagalog. Sources explain trades and language forms; native-speaker review has not occurred. Takatak sells candy only as a conservative simulation choice under Ordinance 2021-004, without claiming a blanket ambulant ban.
+
+| ID | Bikol | Context |
+| --- | --- | --- |
+| peddler-taho-1 | Tahoo!! Tahoo!! | taho |
+| peddler-taho-2 | Taho kamo diyan! | taho |
+| peddler-balut-1 | Baluuut! Penoy! | balut |
+| peddler-balut-2 | Balut! Mainit pa! | balut |
+| peddler-sorbetes-1 | Sorbetes! Sorbetes! | sorbetes |
+| peddler-sorbetes-2 | Sorbetes, suki! | sorbetes |
+| peddler-bote-dyaryo-1 | Bote, dyaryo, bakal, plastik! | bote-dyaryo |
+| peddler-bote-dyaryo-2 | Bote! Dyaryo! Bakal! | bote-dyaryo |
+| peddler-fishball-1 | Fishball! Kikiam! Kwek-kwek! | fishball |
+| peddler-fishball-2 | Tusok na, suki! | fishball |
+| peddler-kakanin-1 | Suman! Puto! Biko! | kakanin |
+| peddler-kakanin-2 | Suman! Ibos! Puto digdi! | kakanin |
+| peddler-takatak-1 | Takatak-takatak! | takatak |
+| peddler-takatak-2 | Kendi, suki! Kendi! | takatak |
+| peddler-heat-sorbetes | Sorbetes! Malipot! | sorbetes |
+| peddler-rain-balut | Balut, mainit pa sa uran! | balut |
+| peddler-clearing | Tapos na an uran. Bili na! | selling trades only |
+| peddler-heat-tired | Hay, kainit! Bili na, suki! | selling trades only |
+| peddler-hover-1 | Bili na, suki! | selling trades only |
+| peddler-hover-2 | Madya digdi, suki! | all goods |
+| peddler-leaving | Puli na ako. | all goods |

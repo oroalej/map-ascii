@@ -293,6 +293,27 @@ describe('packLights shops', () => {
 });
 
 describe('packCandles', () => {
+  it('packs explicit peddler bulbs without borrowing candle or parked-cart flags', () => {
+    const grid: LightGrid = { cols: 20, rows: 20, toCell: (lng, lat) => [lng, lat] };
+    const agent: VisibleAgent = {
+      kind: 'person',
+      lng: 5.5,
+      lat: 5.5,
+      flap: 0,
+      peddler: { id: 'local', label: 'Local vendor', prop: 'basket', parasol: 0, lamp: 0.5 },
+    };
+    const out = new Uint8Array(20 * 20 * 4);
+    expect(packCandles(out, grid, [agent], 1)).toBe(1);
+    expect(out[(5 * 20 + 5) * 4 + 1]).toBe(lightByte(LampState.bulb, 0));
+    expect(
+      packCandles(
+        new Uint8Array(out.length),
+        grid,
+        [{ ...agent, peddler: { ...agent.peddler!, lamp: 0 } }],
+        1,
+      ),
+    ).toBe(0);
+  });
   it('hangs a bulb on a vendor’s cart, but not on a plain passer-by', () => {
     const out = new Uint8Array(grid.cols * grid.rows * 4);
     const people: VisibleAgent[] = [

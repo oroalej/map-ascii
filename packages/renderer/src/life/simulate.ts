@@ -14,6 +14,8 @@ import {
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
 import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
+import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
+import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -36,6 +38,7 @@ import {
 import { DEFAULT_CELLS } from '../density';
 import { MOMENTS } from './moments';
 import {
+  EMOJI,
   EmojiObserver,
   EmojiMemory,
   type EmojiCue,
@@ -240,7 +243,7 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
-import { PuffStore, PuffSelector, EMPTY_PUFFS } from './exhaust';
+import { PuffStore, PuffSelector, EMPTY_PUFFS, PUFF, PUFF_STRIDE } from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
 import {
   collectSeasonAnchors,
@@ -1044,6 +1047,7 @@ export class TileLife {
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
   private readonly commerceStallsRng: () => number;
+  private readonly vendorRestrictedLineIds: ReadonlySet<number>;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
   junctionIndex!: JunctionIndex;
@@ -1246,7 +1250,8 @@ export class TileLife {
           shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
           rank: rng(),
         };
-        if (inTile(stall)) result.push(stall);
+        if (inTile(stall) && !this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1))
+          result.push(stall);
       }
     }
     return result;
@@ -1599,6 +1604,7 @@ export class TileLife {
     this.runRng = random(seed ^ 0xcc9e2d51);
     this.rushRng = random(seed ^ 0x5a17d3e9);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
+    this.vendorRestrictedLineIds = new Set(geo.vendorRestrictedLineIds);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
@@ -3321,7 +3327,7 @@ export class TileLife {
               side,
               rank: rng(),
             };
-            if (guard(stall)) {
+            if (!this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1) && guard(stall)) {
               this.stalls.push(stall);
               this.scenes.addStall(stall);
             }
@@ -3489,6 +3495,12 @@ export class TileLife {
    */
   private *spawnStalls(): Generator<void, void, void> {
     const { geo, looks, perMeter } = this;
+    const grounds = new PolygonIndex();
+    for (const area of geo.areas ?? [])
+      if (area.kind === 'peddler-exclusion')
+        grounds.add(
+          area.rings.map((ring) => ring.map((p) => ({ x: p.x / perMeter, y: p.y / perMeter }))),
+        );
     const reach = VENDORS.marketReach * perMeter;
     const nearMarket = (x: number, y: number) => {
       for (let i = 0; i < geo.markets.length; i += 2) {
@@ -3527,9 +3539,12 @@ export class TileLife {
           side,
           rank: looks(),
         };
+        const bodies = this.groundBodies(stall);
         if (
           kind !== LifeLine.roadMinor &&
-          this.roadTerrain.access.allows(this.groundBodies(stall), false)
+          !this.vendorRestrictedLineIds.has(geo.lineIds?.[line] ?? -1) &&
+          this.roadTerrain.access.allows(bodies, false) &&
+          !grounds.hits(bodies)
         )
           this.stalls.push(stall);
       }
@@ -6062,6 +6077,7 @@ export class TileLife {
   }
 
   private clearEmojiInput(input: Partial<EmojiObservation>) {
+    input.peddler = undefined;
     input.owner = undefined;
     input.mover = undefined;
     input.gatherer = undefined;
@@ -8719,6 +8735,7 @@ export function trainCars(life: TileLife, m: Mover): VisibleAgent[] {
 
 /** An agent to draw. */
 export type VisibleAgent = {
+  peddler?: { id: string; label: string; prop: PeddlerProp; parasol: number; lamp: number };
   beacon?: Beacon;
   /** Source provenance, stable through holds; only ordinary mapped person movers set this. */
   mappedPersonMover?: boolean;
@@ -8817,6 +8834,166 @@ type GroundTerrain = {
   ref?: TileLife;
 };
 export class LifeWorld {
+  private peddlerConfig: readonly PeddlerConfig[] = [];
+  private readonly peddlers = new Map<TileLife, PeddlerPopulation>();
+  private peddlerWeather?: Omit<PeddlerSignals, 'wet'>;
+  private peddlerGeneration = 0;
+  private readonly vendorGrounds = new WeakMap<GroundTerrain, PolygonIndex>();
+  private vendorGroundIndex(terrain: GroundTerrain) {
+    const saved = this.vendorGrounds.get(terrain);
+    if (saved) return saved;
+    const index = new PolygonIndex();
+    for (const [life, frame] of terrain.origins)
+      for (const area of life.geo.areas ?? [])
+        if (area.kind === 'peddler-exclusion')
+          index.add(
+            area.rings.map((ring) =>
+              ring.map((p) => ({
+                x: frame.x + (p.x / life.perMeter) * frame.scale,
+                y: frame.y + (p.y / life.perMeter) * frame.scale,
+              })),
+            ),
+          );
+    this.vendorGrounds.set(terrain, index);
+    return index;
+  }
+  private peddlerOrdinarySnapshot?: {
+    ref: TileLife;
+    sources: { life: TileLife; bodies: Body[] }[];
+  };
+  private ordinaryPeddlerBodies(life: TileLife): Body[] {
+    let snapshot = this.peddlerOrdinarySnapshot;
+    if (!snapshot) {
+      const ref = this.groundTerrain?.ref ?? life;
+      snapshot = { ref, sources: [] };
+      for (const other of this.tiles.values()) {
+        const frame = metricFrame(other, ref),
+          bodies: Body[] = [];
+        for (const actors of [other.movers, other.gatherers, other.stalls])
+          for (const actor of actors) {
+            if (!this.owns(other, actor)) continue;
+            for (const body of other.groundBodies(actor))
+              bodies.push({
+                ...body,
+                x: frame.x + body.x * frame.scale,
+                y: frame.y + body.y * frame.scale,
+                length: body.length * frame.scale,
+                width: body.width * frame.scale,
+              });
+          }
+        for (const parked of other.parked) {
+          const spec = VEHICLES[parked.vehicle];
+          bodies.push({
+            x: frame.x + (parked.x / other.perMeter) * frame.scale,
+            y: frame.y + (parked.y / other.perMeter) * frame.scale,
+            hx: parked.hx,
+            hy: parked.hy,
+            length: spec.length * frame.scale,
+            width: spec.width * frame.scale,
+          });
+        }
+        snapshot.sources.push({ life: other, bodies });
+      }
+      this.peddlerOrdinarySnapshot = snapshot;
+    }
+    const frame = metricFrame(snapshot.ref, life),
+      bodies: Body[] = [];
+    for (const source of snapshot.sources) {
+      const neighbor = metricFrame(source.life, life);
+      if (
+        Math.abs(neighbor.x) > EXTENT / life.perMeter + 20 ||
+        Math.abs(neighbor.y) > EXTENT / life.perMeter + 20
+      )
+        continue;
+      for (const body of source.bodies)
+        bodies.push({
+          ...body,
+          x: frame.x + body.x * frame.scale,
+          y: frame.y + body.y * frame.scale,
+          length: body.length * frame.scale,
+          width: body.width * frame.scale,
+        });
+    }
+    return bodies;
+  }
+  setPeddlers(config: readonly PeddlerConfig[] | undefined) {
+    this.peddlerOrdinarySnapshot = undefined;
+    this.peddlerGeneration++;
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
+    this.peddlerConfig = config ?? [];
+  }
+  private stepPeddlers(dt: number, zoom: number | undefined, env: LifeEnv) {
+    this.peddlerOrdinarySnapshot = undefined;
+    if (!this.peddlerConfig.length) return;
+    const retained = new Set([
+      ...this.tiles.values(),
+      ...[...this.retired.values()].map((r) => r.life),
+    ]);
+    for (const [life, population] of this.peddlers)
+      if (!retained.has(life)) {
+        population.clear();
+        this.peddlers.delete(life);
+      }
+    this.peddlerWeather = env;
+    if (zoom !== undefined && zoom < LIFE_ZOOM.person.min) {
+      for (const population of this.peddlers.values()) population.hide();
+      return;
+    }
+    const active = new Set(this.tiles.values());
+    for (const [life, population] of this.peddlers) if (!active.has(life)) population.hide();
+    for (const [key, life] of this.tiles) {
+      let population = this.peddlers.get(life);
+      if (!population) {
+        population = new PeddlerPopulation(
+          {
+            tile: life.tile,
+            geo: life.geo,
+            perMeter: life.perMeter,
+            seed: hashString(key),
+            generation: this.peddlerGeneration,
+            held: (owner) => this.inspection?.held(owner) ?? false,
+            forget: (owner) => this.inspection?.forgetOwner(owner, this.clock),
+            safe: (from, to) => {
+              const terrain = this.groundTerrain;
+              if (!terrain?.ref) return false;
+              const indexes = [
+                terrain.blocked,
+                terrain.water,
+                terrain.seasonal,
+                terrain.roadAccess.roads,
+                this.vendorGroundIndex(terrain),
+              ].filter((index) => index.polygons.length);
+              if (!indexes.length) return true;
+              const frame = metricFrame(life, terrain.ref),
+                project = (body: Body): Body => ({
+                  ...body,
+                  x: frame.x + body.x * frame.scale,
+                  y: frame.y + body.y * frame.scale,
+                  length: body.length * frame.scale,
+                  width: body.width * frame.scale,
+                });
+              const start = from.map(project),
+                end = to.map(project);
+              return !start.some((body, i) =>
+                indexes.some((index) => index.sweptHits(body, end[i]!)),
+              );
+            },
+            ordinary: () => this.ordinaryPeddlerBodies(life),
+          },
+          this.peddlerConfig,
+          {
+            dialogue: this.momentOptions?.dialogue,
+            periods: this.momentOptions?.periods,
+            emoji: this.emojiObserver,
+          },
+        );
+        this.peddlers.set(life, population);
+      }
+      population.step(dt, { ...env, zoom, wet: life.scenes.raining }, life.population);
+    }
+    this.peddlerOrdinarySnapshot = undefined;
+  }
   private readonly folklore: FolkloreObserver;
   setFolklore(config: RuntimeFolklore | undefined) {
     this.folklore.setConfig(config);
@@ -9510,6 +9687,10 @@ export class LifeWorld {
 
   /** Explicit reset; an empty view sync instead retains frozen agents briefly. */
   clearTiles() {
+    this.peddlerGeneration++;
+    for (const population of this.peddlers.values()) population.clear();
+    this.peddlers.clear();
+    this.peddlerWeather = undefined;
     this.folklore.clear();
     this.emergencyDispatch?.clear();
     this.emergencyRegions = undefined;
@@ -10193,7 +10374,8 @@ export class LifeWorld {
         for (const body of sample) toRef(o, body);
         if (
           !this.groundTerrain!.roadAccess.allows(sample, false) ||
-          this.groundTerrain!.seasonal.hits(sample)
+          this.groundTerrain!.seasonal.hits(sample) ||
+          this.vendorGroundIndex(this.groundTerrain!).hits(sample)
         ) {
           life.scenes.removeStall(stall);
           life.stalls.splice(i, 1);
@@ -10267,6 +10449,16 @@ export class LifeWorld {
       },
       terrain.seasonal.polygons.length > 0 || !!closure,
     );
+    // Also check later admissions and carts restored when seasonal closures end.
+    for (let i = life.stalls.length - 1; i >= 0; i--) {
+      const stall = life.stalls[i]!;
+      const bodies = life.groundBodies(stall, 0, this.groundSample);
+      for (const body of bodies) transform(body);
+      if (this.vendorGroundIndex(terrain).hits(bodies)) {
+        life.scenes.removeStall(stall);
+        life.stalls.splice(i, 1);
+      }
+    }
     this.reconciledActors.set(life, {
       terrain,
       closure,
@@ -10861,6 +11053,13 @@ export class LifeWorld {
       const onFoot = !('kind' in owner) || isWalker(owner.kind);
       const pair = buffer(owner);
       const next = bodies(life, owner, pair.trial);
+      // All cart admission paths, including shopfront commerce, share campus exclusion.
+      if (
+        !('kind' in owner) &&
+        !('walker' in owner) &&
+        this.vendorGroundIndex(this.groundTerrain!).hits(next)
+      )
+        return false;
       const previous = before ? bodies(previousLife, before, this.groundPrevious, identity) : next;
       let physical: Body[] | undefined;
       const endScore = occupied.conflicts(identity, next, ignore);
@@ -12004,6 +12203,7 @@ export class LifeWorld {
     this.retainCrossingClaims();
     this.crossingReservations.resolve();
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
+    this.stepPeddlers(clamped, zoom, env);
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
@@ -13144,8 +13344,62 @@ export class LifeWorld {
       return admitted;
     };
     const eventCount = scene instanceof GroundProcessionScene ? staged.length : 0;
+    const withPeddlers = (admitted: VisibleAgent[]) => {
+      if (!shows('person') || !this.peddlerWeather) return admitted;
+      let speeches = admitted.filter((a) => a.speech).length,
+        emojis = admitted.filter((a) => a.emoji).length;
+      const extraPuffs: number[] = [];
+      for (const life of this.tiles.values()) {
+        const population = this.peddlers.get(life);
+        if (!population) continue;
+        for (const owner of population.owners) {
+          if (
+            admitted.length >= maxAgents ||
+            !this.owns(life, { x: owner.x * life.perMeter, y: owner.y * life.perMeter })
+          ) {
+            population.hide(owner);
+            continue;
+          }
+          const agent = population.visible(owner, {
+            ...this.peddlerWeather,
+            zoom,
+            wet: life.scenes.raining,
+          });
+          if (
+            bounds &&
+            (agent.lng < bounds[0] ||
+              agent.lng > bounds[2] ||
+              agent.lat < bounds[1] ||
+              agent.lat > bounds[3])
+          ) {
+            population.hide(owner);
+            continue;
+          }
+          if (this.puffPacket.length + extraPuffs.length < PUFF.visible * PUFF_STRIDE)
+            extraPuffs.push(...population.visiblePuff(owner, admitted.length));
+          if (agent.speech) {
+            if (speeches >= MOMENTS.scene.capacity) agent.speech = undefined;
+            else speeches++;
+          }
+          if (agent.emoji) {
+            if (emojis >= EMOJI.capacity) agent.emoji = undefined;
+            else emojis++;
+          }
+          admitted.push(inspection ? inspection.present(owner, agent) : agent);
+        }
+      }
+      if (extraPuffs.length) {
+        const packet = new Float64Array(this.puffPacket.length + extraPuffs.length);
+        packet.set(this.puffPacket);
+        packet.set(extraPuffs, this.puffPacket.length);
+        this.puffPacket = packet;
+      }
+      return admitted;
+    };
     if (out.length + eventCount <= maxAgents) {
-      const result = this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds);
+      const result = withPeddlers(
+        this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+      );
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       return admitted;
@@ -13177,7 +13431,7 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = this.withPuffs(withBirdCues(withBalls(kept)), center, bounds);
+    const result = withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds));
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     return admitted;

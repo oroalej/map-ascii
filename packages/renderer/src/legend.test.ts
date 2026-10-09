@@ -412,8 +412,10 @@ describe('legendEntries life', () => {
     const vendors = entries[people + 1]!;
     expect(vendors.label).toBe('Street vendors (simulated)');
     expect(vendors.classes).toEqual([]);
-    expect(vendors.icons).toHaveLength(2);
+    expect(vendors.icons).toHaveLength(3);
     expect(vendors.icons![1]!.pixels).toBe(FIGURE_MASTERS.adult[10]);
+    expect(vendors.icons![2]!.pixels).toBe(FIGURE_MASTERS['pole-buckets'][10]);
+    expect(entries.filter((entry) => entry.id === 'life:vendors')).toHaveLength(1);
     for (const icon of vendors.icons!) {
       expect(new Set(icon.pixels.map((row) => row.length)).size).toBe(1);
       expect(icon.pixels.join('')).toMatch(/^[#o.]+$/);

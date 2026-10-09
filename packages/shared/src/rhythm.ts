@@ -1,4 +1,5 @@
 import type { LifeSiteConfig } from './life-sites';
+import type { PeddlerConfig } from './peddlers';
 import {
   expandSeasons,
   runtimeSeason,
@@ -93,6 +94,7 @@ export type EmergencyConfig = {
 };
 
 export type CityLifeConfig = {
+  peddlers?: PeddlerConfig[];
   folklore?: FolkloreConfig;
   emergency?: EmergencyConfig;
   /** Sourced annual calendars and their illustrative map decorations. */

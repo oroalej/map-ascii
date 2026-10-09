@@ -60,6 +60,57 @@ const square = (x: number, y: number, s: number): [number, number][] => [
 ];
 const reversed = (ring: [number, number][]) => [...ring].reverse();
 
+it('excludes campus and establishment grounds from peddlers without blocking ordinary walkers', () => {
+  const classes = ['building_school', 'building_hospital', 'building_market', 'building', 'paving'];
+  const geo = buildTileGeometry(
+    {
+      map: layer(
+        classes.map((className, i) =>
+          feature(3, { id: `grounds/${i}`, class: className, height: 0 }, [
+            square(200 + i * 200, 200, 100),
+          ]),
+        ),
+      ),
+    },
+    createIdRegistry(),
+    { z: 16, x: 55192, y: 30266 },
+    16,
+  ).life;
+  expect(geo.areas?.filter((a) => a.kind === 'peddler-exclusion')).toHaveLength(classes.length);
+  expect(geo.areas?.filter((a) => a.kind === 'blocked')).toHaveLength(0);
+  const copy = structuredClone(geo, { transfer: lifeTransferables(geo) });
+  expect(copy.areas).toEqual(geo.areas);
+});
+
+it('admits public streets but rejects service roads and restricted compound drives for peddlers', () => {
+  const input: TileFeatureLike['properties'][] = [
+    { id: 'public', kind: 'highway=residential' },
+    { id: 'service', kind: 'highway=service' },
+    { id: 'campus', kind: 'highway=residential', access: 'private' },
+    { id: 'customers', kind: 'highway=residential', access: 'customers' },
+    { id: 'motorway', kind: 'highway=motorway' },
+  ];
+  const geo = buildTileGeometry(
+    {
+      map: layer(
+        input.map((properties, i) =>
+          feature(2, { class: 'road_minor', width: 6, ...properties }, [
+            [
+              [200, 200 + i * 200],
+              [1200, 200 + i * 200],
+            ],
+          ]),
+        ),
+      ),
+    },
+    createIdRegistry(),
+    { z: 16, x: 55192, y: 30266 },
+    16,
+  ).life;
+  expect(geo.peddlerStreetIds).toEqual([hashString('public') >>> 0]);
+  expect(geo.kinds).toHaveLength(input.length);
+});
+
 it('extracts mapped hospital identities, field holes and solid roof anchors as sidecars', () => {
   const roof = [square(300, 300, 200), reversed(square(350, 350, 100))];
   const input = [

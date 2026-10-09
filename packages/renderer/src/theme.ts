@@ -7,7 +7,7 @@ import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
 import { figureOf, personGlyphs } from './life/people';
 import { PUFF_GLYPHS } from './life/puff-style';
-import { PAINT_COUNT, vehicleGlyphs } from './life/vehicles';
+import { PAINT_COUNT, PEDDLER_GLYPHS, vehicleGlyphs } from './life/vehicles';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
@@ -571,7 +571,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...singleWall,
     ...doubleWall,
     ...sextantGlyphs,
-    ...vehicleGlyphs(),
+    ...vehicleGlyphs().filter((glyph) => !(PEDDLER_GLYPHS as readonly string[]).includes(glyph)),
     ...personGlyphs().filter((glyph) => {
       const figure = figureOf(glyph)!;
       return !figure.pose && figure.stage === undefined;
@@ -597,6 +597,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...PROCESSION_GLYPHS.slice(0, 4),
     ...FOLKLORE_GLYPHS,
     ...PROCESSION_GLYPHS.slice(4),
+    ...PEDDLER_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];

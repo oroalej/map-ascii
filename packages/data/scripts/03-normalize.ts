@@ -4,6 +4,7 @@ import {
   type ShopAnchor,
   featureZoomBand,
   REGION_TILE_MAX_ZOOM,
+  vendorAccessRestricted,
   tileZoomRange,
   type AtlasClass,
   type BBox,
@@ -51,7 +52,7 @@ import { files, type Step } from './step';
 
 /** The zoom range of the tiles (DATA.md §2 step 05). */
 export const TILE_ZOOMS = { min: 6, max: 16 } as const;
-/** Full-source event routing tags, excluded from display tiles after route baking. */
+/** Full-source event routing tags; display tiles retain only the baked vendor restriction. */
 export const EVENT_ACCESS_TAGS = [
   'highway',
   'foot',
@@ -72,6 +73,8 @@ export type AtlasProperties = Partial<ShopAnchor> & {
   highway?: string;
   foot?: string;
   access?: string;
+  /** Baked before raw access tags are dropped from display tiles. */
+  vendor_restricted?: boolean;
   vehicle?: string;
   motor_vehicle?: string;
   motorcar?: string;
@@ -311,6 +314,7 @@ export function normalize(
   for (const item of [...detail, ...regional]) {
     const { feature, kind, cls, tags } = item;
     const properties: AtlasProperties = { id: `osm:${String(feature.id)}`, class: cls };
+    if (vendorAccessRestricted(tags)) properties.vendor_restricted = true;
     if (cls.startsWith('road_') || cls === 'path' || cls === 'barrier') {
       for (const tag of EVENT_ACCESS_TAGS) if (tags[tag]) properties[tag] = tags[tag];
     }

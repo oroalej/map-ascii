@@ -5,6 +5,7 @@ import { Heading } from './masters';
 import {
   CANDLE_BIT,
   FIGURE_MASTERS,
+  isCarrier,
   figureGlyph,
   figureOf,
   figurePixels,
@@ -17,6 +18,24 @@ import {
 import { PAINT_COUNT, Paint, STALL_GLYPH } from './vehicles';
 
 describe('people', () => {
+  it('stamps distinct carriers while retaining every adult coarse glyph', () => {
+    const carriers = ['pole-buckets', 'basket', 'head-tray', 'chest-tray'] as const;
+    const masters = carriers.map((figure) => FIGURE_MASTERS[figure][10]!.join(''));
+    expect(new Set(masters).size).toBe(4);
+    for (const figure of carriers) {
+      expect(isCarrier(figure)).toBe(true);
+      expect(figureGlyph(figure, false, 0)).toBe(figureGlyph('adult', false, 0));
+      expect(figureGlyph(figure, true, 1, { slice: 2 })).toBe(
+        figureGlyph('adult', true, 1, { slice: 2 }),
+      );
+      expect(
+        Array.from({ length: 100 }, (_, i) =>
+          figureInk(figure, 0, (i % 10) / 10, Math.floor(i / 10) / 10, 10),
+        ).some((ink) => ink !== '.'),
+      ).toBe(true);
+    }
+    expect(personGlyphs()).toHaveLength(201);
+  });
   it('packs paint, part, and candle into one byte', () => {
     expect(personByte(Paint.red, PersonPart.figure)).toBe(Paint.red);
     expect(personByte(Paint.red, PersonPart.canopy, true)).toBe(Paint.red | 16 | CANDLE_BIT);
@@ -46,8 +65,8 @@ describe('people', () => {
       for (const [size, rows] of Object.entries(masters)) {
         expect(rows, `${figure} ${size}`).toHaveLength(Number(size));
         for (const row of rows) expect(row).toMatch(new RegExp(`^[#o.]{${size}}$`));
-        // A paddler turned round is the other side's paddler at the other end of the stroke.
-        if (figure === 'rower' || figure === 'seated') continue;
+        // Carried goods, paddlers and seated figures have directional masters.
+        if (!['adult', 'child', 'umbrella'].includes(figure)) continue;
         const turned = [...rows].reverse().map((row) => [...row].reverse().join(''));
         expect(turned, `${figure} ${size}`).toEqual(rows);
       }

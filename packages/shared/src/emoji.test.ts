@@ -7,6 +7,8 @@ it('resolves every mood to an allowed single-code-point system emoji', () => {
       ' ',
     ),
   );
+  allowed.add('😩');
+  allowed.add('🔔');
   for (const subject of EMOJI_SUBJECTS)
     for (const mood of EMOJI_MOODS) {
       const glyph = emojiGlyph(subject, mood);
@@ -19,7 +21,8 @@ it('resolves every mood to an allowed single-code-point system emoji', () => {
   expect(emojiGlyph('dog', 'scared')).toBe('❗');
   expect(EMOJI_MOODS.filter((mood) => mood === 'crying')).toHaveLength(1);
   expect(new Set(EMOJI_MOODS).size).toBe(EMOJI_MOODS.length);
-  expect(EMOJI_MOODS).toHaveLength(57);
+  expect(EMOJI_MOODS).toHaveLength(59);
+  expect(EMOJI_MOODS.slice(-2)).toEqual(['tired', 'bell']);
   expect(emojiGlyph('person', 'candle')).toBe('🕯️');
   expect(emojiGlyph('person', 'melting')).toBe('😵');
   expect(emojiGlyph('person', 'moved')).toBe('😢');
