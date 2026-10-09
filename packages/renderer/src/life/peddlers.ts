@@ -211,6 +211,7 @@ export class PeddlerPopulation {
   private ordinaryBodies: readonly Body[] = [];
   private readonly obstacles = new PolygonIndex();
   private readonly streetIds?: Set<number>;
+  private readonly restrictedLineIds: ReadonlySet<number>;
   readonly caller: PeddlerCaller;
   readonly emoji = new PeddlerEmojiObserver();
   constructor(
@@ -225,6 +226,7 @@ export class PeddlerPopulation {
     this.caller = new PeddlerCaller(presentation.dialogue, presentation.periods);
     const { geo, perMeter } = context;
     this.streetIds = geo.peddlerStreetIds && new Set(geo.peddlerStreetIds);
+    this.restrictedLineIds = new Set(geo.vendorRestrictedLineIds);
     for (const area of geo.areas ?? [])
       if (area.kind === 'peddler-exclusion')
         this.obstacles.add(
@@ -333,6 +335,7 @@ export class PeddlerPopulation {
     };
     const candidates: { points: Point[]; line: number; width: number }[] = [];
     for (let line = 0; line < geo.kinds.length; line++) {
+      if (this.restrictedLineIds.has(geo.lineIds?.[line] ?? -1)) continue;
       const points = Array.from({ length: geo.starts[line + 1]! - geo.starts[line]! }, (_, i) => {
         const v = geo.starts[line]! + i;
         return { x: geo.coords[v * 2]!, y: geo.coords[v * 2 + 1]! };

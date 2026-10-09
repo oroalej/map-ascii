@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CityLife, Peddler } from './schemas';
-import { PEDDLER_PROPS } from './peddlers';
+import { PEDDLER_PROPS, vendorAccessRestricted } from './peddlers';
+
+it('keeps private ownership and access restrictions even when pedestrian entry is allowed', () => {
+  for (const access of ['private', 'no', 'customers', 'permit', 'destination', 'residents'])
+    expect(vendorAccessRestricted({ access, foot: 'yes' })).toBe(true);
+  expect(vendorAccessRestricted({ ownership: 'private', access: 'yes' })).toBe(true);
+  expect(vendorAccessRestricted({ access: 'public', foot: 'private' })).toBe(true);
+  for (const access of [undefined, '', 'yes', 'public', 'permissive', 'designated'])
+    expect(vendorAccessRestricted({ access })).toBe(false);
+  expect(vendorAccessRestricted({ foot: 'use_sidepath' })).toBe(false);
+});
 
 const example = {
   id: 'sample-goods',

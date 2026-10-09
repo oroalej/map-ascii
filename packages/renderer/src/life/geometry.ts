@@ -264,6 +264,8 @@ export type LifeGeometry = {
   lineIds?: Uint32Array;
   /** Public street feature ids; service/compound roads are deliberately absent. */
   peddlerStreetIds?: number[];
+  /** Restricted walking/street identities, also inherited by derived sidewalks. */
+  vendorRestrictedLineIds?: number[];
   /** Original population line per routing piece; splitting must not reshuffle spawn streams. */
   spawnGroups?: Uint32Array;
   /** Routing-only joins never contribute residents or consume population random streams. */
@@ -509,6 +511,10 @@ export class LifeBuilder {
   peddlerStreet(id?: number) {
     this.peddlerStreetIds ??= new Set();
     if (id !== undefined) this.peddlerStreetIds.add(id >>> 0);
+  }
+  private vendorRestrictedLineIds?: Set<number>;
+  restrictVendors(id: number) {
+    (this.vendorRestrictedLineIds ??= new Set()).add(id >>> 0);
   }
   private areas: LifeArea[] = [];
   private sites: number[] = [];
@@ -927,6 +933,7 @@ export class LifeBuilder {
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
       peddlerStreetIds: this.peddlerStreetIds && [...this.peddlerStreetIds],
+      vendorRestrictedLineIds: this.vendorRestrictedLineIds && [...this.vendorRestrictedLineIds],
       spawnGroups: this.spawnGroups && Uint32Array.from(this.spawnGroups),
       navigationOnly: Uint8Array.from(this.navigationOnly),
       areas: this.areas,

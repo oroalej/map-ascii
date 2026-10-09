@@ -1028,6 +1028,7 @@ export class TileLife {
   private adoptionGrid?: SegmentGrid;
   private ownership?: (p: { x: number; y: number }) => boolean;
   private readonly commerceStallsRng: () => number;
+  private readonly vendorRestrictedLineIds: ReadonlySet<number>;
   private readonly commercePeopleRng: () => number;
   private commerceAdmitted = false;
   junctionIndex!: JunctionIndex;
@@ -1230,7 +1231,8 @@ export class TileLife {
           shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
           rank: rng(),
         };
-        if (inTile(stall)) result.push(stall);
+        if (inTile(stall) && !this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1))
+          result.push(stall);
       }
     }
     return result;
@@ -1582,6 +1584,7 @@ export class TileLife {
     this.runRng = random(seed ^ 0xcc9e2d51);
     this.rushRng = random(seed ^ 0x5a17d3e9);
     this.commerceStallsRng = random(seed ^ 0xa24baed5);
+    this.vendorRestrictedLineIds = new Set(geo.vendorRestrictedLineIds);
     this.commercePeopleRng = random(seed ^ 0x9fb21c65);
     const lines = geo.kinds.length;
     this.along = new Float64Array(geo.coords.length / 2);
@@ -3301,7 +3304,7 @@ export class TileLife {
               side,
               rank: rng(),
             };
-            if (guard(stall)) {
+            if (!this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1) && guard(stall)) {
               this.stalls.push(stall);
               this.scenes.addStall(stall);
             }
@@ -3516,6 +3519,7 @@ export class TileLife {
         const bodies = this.groundBodies(stall);
         if (
           kind !== LifeLine.roadMinor &&
+          !this.vendorRestrictedLineIds.has(geo.lineIds?.[line] ?? -1) &&
           this.roadTerrain.access.allows(bodies, false) &&
           !grounds.hits(bodies)
         )

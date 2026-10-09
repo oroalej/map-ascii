@@ -1,5 +1,17 @@
 import type { Source } from './schemas';
 
+const PUBLIC_ACCESS = new Set(['yes', 'public', 'permissive', 'designated']);
+/** Permission to walk through a property does not permit generated street vendors there. */
+export function vendorAccessRestricted(tags: Readonly<Record<string, unknown>>): boolean {
+  const restricted = (value: unknown) =>
+    value !== undefined && value !== '' && (typeof value !== 'string' || !PUBLIC_ACCESS.has(value));
+  return (
+    tags.ownership === 'private' ||
+    restricted(tags.access) ||
+    (tags.foot !== 'use_sidepath' && restricted(tags.foot))
+  );
+}
+
 /** Generic carried shapes; goods, labels and illustrative hours belong to city packs. */
 export const PEDDLER_PROPS = [
   'pole-buckets',

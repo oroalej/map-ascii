@@ -329,4 +329,8 @@ Trade sources:
 
 Stationary generated cart vendors use the same compound exclusions, including later shopfront additions and carts restored after seasonal closures. Ateneo's complete mapped campus boundary excludes both stationary vendors and walking peddlers.
 
+Both vendor populations also avoid mapped private or restricted grounds, private walking routes and their derived sidewalks, and interiors enclosed by closed fences, walls or hedges. Public pedestrian access does not override private ownership or general access restrictions. The pipeline retains these restrictions in the published tiles; ordinary pedestrians keep their existing routes.
+
 For owner review in `pnpm dev`: `/naga?lat=13.618246&lng=123.191733&z=19` at 09:00 has a decoded street-side taho vendor; `/naga?lat=13.618320&lng=123.191145&z=19` has a terminal-constrained street-side takatak candidate. Check the Ateneo campus at `/naga?lat=13.631430&lng=123.184370&z=19`. These coordinates were checked through the simulation, without screenshots or visual claims.
+
+Review private-route exclusions at `/naga?lat=13.6222927&lng=123.196672&z=19`.
