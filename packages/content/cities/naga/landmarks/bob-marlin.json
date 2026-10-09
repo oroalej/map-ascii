@@ -1,0 +1,50 @@
+{
+  "id": "landmark/bob-marlin",
+  "name": {
+    "en": "Bob Marlin"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Magsaysay grill uses a reggae theme."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Signed plates from visiting celebrities decorate its walls."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Langyaw highlights crispy pata and the Rasta Paling cocktail."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Langyaw: Bob Marlin (2014)",
+      "url": "https://langyaw.com/2014/09/02/bob-marlin-popular-reggae-inspired-naga-city-resto/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/5332949931",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/5332949931",
+  "signatures": [
+    {
+      "name": "Crispy pata",
+      "source": 0
+    },
+    {
+      "name": "Rasta Paling cocktail",
+      "source": 0
+    }
+  ]
+}

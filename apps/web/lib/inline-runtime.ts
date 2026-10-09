@@ -1,8 +1,9 @@
-import type { RuntimeCityLife, RuntimeDialogueCatalog } from '@atlas/shared';
+import type { Dish, RuntimeCityLife, RuntimeDialogueCatalog } from '@atlas/shared';
 import { gunzipSync, strFromU8 } from 'fflate';
 
 /** Validated pack data transported inline, with the same values consumed by the renderer/HUD. */
 export type InlineRuntime = {
+  dishes?: readonly Dish[] | undefined;
   cityLife?: RuntimeCityLife | undefined;
   dialogue?: RuntimeDialogueCatalog | undefined;
 };

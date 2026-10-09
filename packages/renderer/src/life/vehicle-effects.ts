@@ -19,6 +19,7 @@ import { kinematicsOf } from './config';
 import { frameBetween } from './frames';
 import { hashString } from './random';
 import type { Mover, TileLife } from './simulate';
+import { metricGust, type CursorGust } from './pointer';
 
 export type VehicleEffects = {
   brake: number;
@@ -97,7 +98,14 @@ export class VehicleEffectTracker {
     private readonly seed: () => number,
   ) {}
 
-  begin(clock: number, dt: number, cellMeters: number, wind: Wind, nextSourceId?: () => number) {
+  begin(
+    clock: number,
+    dt: number,
+    cellMeters: number,
+    wind: Wind,
+    nextSourceId?: () => number,
+    gust?: CursorGust,
+  ) {
     this.count = 0;
     this.clock = clock;
     this.dt = dt;
@@ -115,7 +123,13 @@ export class VehicleEffectTracker {
         if (c.state.exhaust) shiftEmitter(c.state.exhaust, gap);
         c.wake += gap;
       }
-    this.tile.puffs.advance(clock, dt, wind, this.tile.perMeter);
+    this.tile.puffs.advance(
+      clock,
+      dt,
+      wind,
+      this.tile.perMeter,
+      gust ? metricGust(gust, this.tile.tile, this.tile.perMeter) : undefined,
+    );
     if (this.minimum > MAX_MOTOR_LENGTH) {
       if (this.enabled) this.pause(clock - dt);
       this.enabled = false;
@@ -263,7 +277,13 @@ export class VehicleEffectTracker {
     r.hy = pose.hy;
   }
 
-  finish(clock: number, dt: number, wind: Wind, owners?: ReadonlyMap<Mover, TileLife>) {
+  finish(
+    clock: number,
+    dt: number,
+    wind: Wind,
+    owners?: ReadonlyMap<Mover, TileLife>,
+    gust?: CursorGust,
+  ) {
     for (let i = 0; i < this.count; i++) {
       const r = this.captured[i]!,
         m = r.mover!,
@@ -323,6 +343,7 @@ export class VehicleEffectTracker {
                     dt,
                     owner.perMeter,
                     wind,
+                    gust ? metricGust(gust, owner.tile, owner.perMeter) : undefined,
                   ),
                 );
               }

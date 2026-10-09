@@ -35,6 +35,9 @@ describe('serializeViewParams', () => {
 });
 
 describe('parseViewParams', () => {
+  it.each(['landmark/cafe', 'dish/soup'])('restores the canonical food selection %s', (sel) => {
+    expect(parseViewParams(`?${serializeViewParams({ ...view, sel })}`).sel).toBe(sel);
+  });
   it('round-trips a serialized view', () => {
     const full: SerializableView = {
       ...view,

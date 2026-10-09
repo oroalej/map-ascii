@@ -1,0 +1,46 @@
+{
+  "id": "dish/toasted-siopao",
+  "name": {
+    "en": "Toasted siopao"
+  },
+  "origin": "contested",
+  "description": {
+    "en": "Baked filled buns associated with Naga and Libmanan."
+  },
+  "facts": [
+    {
+      "text": {
+        "en": "The buns are baked, rather than steamed."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "GMC traces early Naga versions to Naga Garden and Romero’s Bakery in the 1970s."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The Sta. Maria family expanded production through 3N Bakery in the 1990s."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A Naga food guide records 3N’s Libmanan origin claim, alongside the early Naga accounts."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "GMC: Toasted siopao (2022)",
+      "url": "https://genmil.com.ph/toasted-siopao/"
+    },
+    {
+      "title": "Langyaw: Where to eat in Naga (2016)",
+      "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+    }
+  ]
+}

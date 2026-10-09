@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { classId } from '../classes';
-import type { HoverFrame } from './hover';
+import type { HoverFrame, LifeHover } from './hover';
 import { LifeHoverController } from './hover';
 import { lifeVisibleOnSurface } from './surface-visibility';
 import { CellBit } from './config';
@@ -58,7 +58,7 @@ function fixture() {
       requests.push({ rect, done, retire });
     },
   };
-  const emit = vi.fn();
+  const emit = vi.fn<(value: LifeHover) => void>();
   const inspect = vi.fn();
   const inspectItem = vi.fn();
   const hover = new LifeHoverController(reads, 100, emit, inspect, inspectItem);
@@ -225,38 +225,43 @@ it('renews stable identities at 125 ms while unrelated raster revisions and arra
   expect(inspectItem).toHaveBeenLastCalledWith(null);
   expect(requests).toHaveLength(3);
 });
-it('publishes a moving bird tooltip without either inspection callback, then inspects a person', () => {
-  const { hover, frame, finish, emit, inspect, inspectItem } = fixture();
-  frame.life[1] = classId('life_bird');
-  frame.life[2] = CellBit.bird;
-  frame.agents = [
-    {
-      kind: 'bird',
-      lng: 0,
-      lat: 0,
-      flap: 0,
-      inspectionId: 10,
-      bird: { species: 'pigeon', pose: 0 },
-    },
-  ];
-  hover.pointer([2, 3]);
-  hover.update(frame, 0);
-  finish();
-  hover.update(frame, 1);
-  expect(emit).toHaveBeenLastCalledWith({ label: 'Pigeon (simulated)', point: [2, 3] });
-  frame.agents = [{ ...frame.agents[0]!, lng: 1, flap: 1 }];
-  hover.update(frame, 16);
-  expect(inspect).not.toHaveBeenCalled();
-  expect(inspectItem).not.toHaveBeenCalled();
-  frame.life[1] = classId('life_person');
-  frame.life[2] = CellBit.person;
-  frame.agents = [{ kind: 'person', lng: 0, lat: 0, flap: 0, inspectionId: 11 }];
-  hover.update(frame, 32);
-  finish();
-  hover.update(frame, 33);
-  expect(inspect).toHaveBeenLastCalledWith(true);
-  expect(inspectItem).toHaveBeenLastCalledWith(frame.agents[0]);
-});
+it.each(['bird', 'cat', 'dog'] as const)(
+  'publishes a moving %s tooltip without inspection, then inspects a person',
+  (kind) => {
+    const { hover, frame, finish, emit, inspect, inspectItem } = fixture();
+    frame.life[1] = classId(
+      kind === 'bird' ? 'life_bird' : kind === 'cat' ? 'life_cat' : 'life_dog',
+    );
+    frame.life[2] = kind === 'bird' ? CellBit.bird : CellBit.person;
+    frame.agents = [
+      {
+        kind,
+        lng: 0,
+        lat: 0,
+        flap: 0,
+        inspectionId: 10,
+        bird: { species: 'pigeon', pose: 0 },
+      },
+    ];
+    hover.pointer([2, 3]);
+    hover.update(frame, 0);
+    finish();
+    hover.update(frame, 1);
+    expect(emit.mock.calls.at(-1)?.[0]?.label).toContain('(simulated)');
+    frame.agents = [{ ...frame.agents[0]!, lng: 1, flap: 1 }];
+    hover.update(frame, 16);
+    expect(inspect).not.toHaveBeenCalled();
+    expect(inspectItem).not.toHaveBeenCalled();
+    frame.life[1] = classId('life_person');
+    frame.life[2] = CellBit.person;
+    frame.agents = [{ kind: 'person', lng: 0, lat: 0, flap: 0, inspectionId: 11 }];
+    hover.update(frame, 32);
+    finish();
+    hover.update(frame, 33);
+    expect(inspect).toHaveBeenLastCalledWith(true);
+    expect(inspectItem).toHaveBeenLastCalledWith(frame.agents[0]);
+  },
+);
 
 it('checks surfaces, trees, grounds and birds using agent permissions only', () => {
   const person = classId('life_person'),

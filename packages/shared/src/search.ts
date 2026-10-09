@@ -3,6 +3,8 @@ import { BBox, GeoJsonGeometry } from './schemas';
 
 /** What a search result is; results are grouped by it (SPEC.md §5). */
 export const SearchType = z.enum([
+  'food',
+  'dish',
   'landmark',
   'subdivision',
   'street',
@@ -16,12 +18,12 @@ export const SearchType = z.enum([
 export type SearchType = z.infer<typeof SearchType>;
 
 /** One searchable feature in `<city>.search-index.json` (ARCHITECTURE.md §7). */
-export const SearchEntry = z.object({
+export const GeographicSearchEntry = z.object({
   /** Feature id (`osm:way/123`), or a synthetic `street/<slug>` for a street's ways. */
   id: z.string().min(1),
   name: z.string().min(1),
   altNames: z.array(z.string().min(1)),
-  type: SearchType,
+  type: SearchType.exclude(['dish']),
   subdivision: z.string().min(1).optional(),
   /** The subdivision comes from an approximate area, not a mapped boundary. */
   approximate: z.boolean().optional(),
@@ -33,6 +35,14 @@ export const SearchEntry = z.object({
   /** Every feature the entry stands for (e.g. a street's ways), to highlight together. */
   featureIds: z.array(z.string().min(1)).optional(),
 });
+export type GeographicSearchEntry = z.infer<typeof GeographicSearchEntry>;
+export const DishSearchEntry = z.strictObject({
+  id: z.string().regex(/^dish\/[a-z0-9-]+$/),
+  name: z.string().min(1),
+  altNames: z.array(z.string().min(1)),
+  type: z.literal('dish'),
+});
+export const SearchEntry = z.discriminatedUnion('type', [GeographicSearchEntry, DishSearchEntry]);
 export type SearchEntry = z.infer<typeof SearchEntry>;
 
 export const SearchIndexFile = z.object({

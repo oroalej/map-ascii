@@ -1,6 +1,69 @@
 import { describe, expect, it } from 'vitest';
 import { classId, MAX_CLASSES } from '../classes';
 import { grassGlyphs, themes } from '../theme';
+import { combineWind, cursorStrength, type CursorWind } from '../life/cursor-wind';
+import { variantFor, CROP_STAGE } from './select';
+import { cellVertex, CROWN_WIND_MAX } from '../shaders/cell';
+import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
+
+it('keeps storm-plus-cursor crown sway inside the reserved sweep and preserves zero-cursor strength', () => {
+  const limit = Math.max(...Object.values(WIND_PRESETS)) * (1 + WIND_VARIATION.breathe),
+    radius = 4,
+    envelope = radius * limit * Math.hypot(SWAY.bend, SWAY.flutter * 0.8);
+  expect(CROWN_WIND_MAX).toBe(limit);
+  expect(cellVertex).toContain(`min(combineWind(front.x, u_windDir, cell, dir), ${limit})`);
+  const cursor: CursorWind = { at: [0, 0], dir: [1, 0], strength: 1, radius: 8, aspect: 1.8 };
+  for (let i = 0; i < 100; i++) {
+    const legacy = (limit * i) / 99;
+    expect(Math.min(combineWind(legacy, [1, 0], 0, 0).strength, limit)).toBe(legacy);
+    const combined = combineWind(legacy, [1, 0], 0, 0, cursor);
+    const sway = swayOffset(
+      radius,
+      Math.min(combined.strength, limit),
+      0,
+      i * 0.37,
+      i,
+      combined.dir,
+    );
+    expect(Math.hypot(...sway)).toBeLessThanOrEqual(envelope + 1e-9);
+  }
+});
+
+it('combines independent local wind in calm and opposing winds, with precise large-origin crops', () => {
+  const cursor: CursorWind = { at: [2, 3], dir: [-1, 0], strength: 0.6, radius: 8, aspect: 1.8 };
+  expect(combineWind(0, [1, 0], 2, 3, cursor)).toEqual({ strength: 0.6, dir: [-1, 0] });
+  expect(combineWind(0.2, [1, 0], 2, 3, cursor).dir).toEqual([-1, 0]);
+  expect(cursorStrength(2, 8, cursor)).toBe(0);
+  const ctx = {
+    x: 20_000_002,
+    y: 10_000_003,
+    origin: [20_000_000, 10_000_000] as const,
+    time: 1,
+    wind: 0,
+    windDir: [1, 0] as const,
+    height: 0,
+    neighbor: () => null,
+    crop: { stage: CROP_STAGE.growing, progress: 0.5 },
+  };
+  for (const kind of ['grass', 'planting', 'crop', 'canopy', 'foliage'] as const) {
+    const cls =
+      kind === 'crop'
+        ? 'farmland'
+        : kind === 'foliage'
+          ? 'tree'
+          : kind === 'planting'
+            ? 'grass'
+            : kind === 'canopy'
+              ? 'trees'
+              : 'grass';
+    expect(variantFor(kind, cls, 16, { ...ctx, cursorWind: { ...cursor, strength: 0 } })).toBe(
+      variantFor(kind, cls, 16, ctx),
+    );
+  }
+  expect(variantFor('crop', 'farmland', 16, { ...ctx, cursorWind: cursor })).toBe(
+    CropGlyph.leanLeft,
+  );
+});
 import {
   buildGlyphTables,
   CANOPY,

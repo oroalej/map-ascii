@@ -2,8 +2,13 @@ import { searchOptions, type SearchEntry } from '@atlas/shared';
 import MiniSearch from 'minisearch';
 import { describe, expect, it } from 'vitest';
 import { groupResults, search, TYPE_ORDER } from './search';
+import { isSearchIndexFile } from './guards';
 
-const entry = (id: string, name: string, type: SearchEntry['type']): SearchEntry => ({
+const entry = (
+  id: string,
+  name: string,
+  type: Exclude<SearchEntry['type'], 'dish'>,
+): SearchEntry => ({
   id,
   name,
   altNames: [],
@@ -39,6 +44,37 @@ describe('groupResults', () => {
 });
 
 describe('search', () => {
+  it('loads serialized geographic food and non-geographic dishes with the browser options and guards', () => {
+    const foodEntries: SearchEntry[] = [
+      { ...entry('landmark/cafe', 'Cafe', 'food'), altNames: ['Noodle soup'] },
+      { id: 'dish/soup', name: 'Noodle soup', type: 'dish', altNames: [] },
+    ];
+    const built = new MiniSearch<SearchEntry>(searchOptions);
+    built.addAll(foodEntries);
+    const file = JSON.parse(
+      JSON.stringify({ version: 1, entries: foodEntries, index: built.toJSON() }),
+    ) as { entries: SearchEntry[]; index: ReturnType<MiniSearch['toJSON']> };
+    expect(isSearchIndexFile({ ...file, version: 1 })).toBe(true);
+    const loaded = {
+      entries: new Map(file.entries.map((entry) => [entry.id, entry])),
+      index: MiniSearch.loadJS<SearchEntry>(file.index, searchOptions),
+    };
+    expect(search(loaded, 'Noodle soup').map((group) => group.type)).toEqual(['food', 'dish']);
+    expect(
+      isSearchIndexFile({
+        version: 1,
+        index: file.index,
+        entries: [{ ...foodEntries[1], lat: 0, lng: 0 }],
+      }),
+    ).toBe(false);
+    expect(
+      isSearchIndexFile({
+        version: 1,
+        index: file.index,
+        entries: [{ id: 'dish/soup', name: 'Soup', type: 'food', altNames: [] }],
+      }),
+    ).toBe(false);
+  });
   const index = new MiniSearch<SearchEntry>(searchOptions);
   index.addAll(entries);
   const city = { entries: byId, index };

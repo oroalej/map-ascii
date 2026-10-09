@@ -171,6 +171,7 @@ const endAfterStart = (v: { start_year?: number | undefined; end_year?: number |
   v.start_year === undefined || v.end_year === undefined || v.end_year > v.start_year;
 
 export const LandmarkType = z.enum([
+  'food',
   'church',
   'school',
   'plaza',
@@ -182,6 +183,11 @@ export const LandmarkType = z.enum([
   'other',
 ]);
 export type LandmarkType = z.infer<typeof LandmarkType>;
+
+export const LandmarkId = z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>');
+/** OSM features and independently placed, present-day landmarks share selection behavior. */
+export const SelectableFeatureId = z.union([OsmId, LandmarkId]);
+export const DishId = z.string().regex(/^dish\/[a-z0-9-]+$/, 'expected dish/<slug>');
 
 export const NameHistoryEntry = z
   .object({
@@ -756,9 +762,34 @@ export function contentSchemas(languages?: readonly string[]) {
       path: ['certainty'],
     });
 
+  const Dish = z
+    .object({
+      id: DishId,
+      name: text,
+      origin: z.enum(['local', 'regional', 'contested', 'elsewhere', 'unknown']),
+      description: text,
+      facts: z.array(LandmarkFact).min(3).max(5),
+      sources: Sources,
+    })
+    .superRefine((dish, ctx) => {
+      dish.facts.forEach((fact, index) => {
+        if (fact.source >= dish.sources.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['facts', index, 'source'],
+            message: 'fact source must reference a dish source',
+          });
+      });
+    });
+  const MenuItem = z.strictObject({
+    name: z.string().trim().min(1),
+    note: z.string().trim().min(1).optional(),
+    source: z.int().nonnegative(),
+  });
+
   const Landmark = z
     .object({
-      id: z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>'),
+      id: LandmarkId,
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
       name: text,
@@ -769,6 +800,9 @@ export function contentSchemas(languages?: readonly string[]) {
       story: text.optional(),
       photos: z.array(Photo).optional(),
       facts: z.array(LandmarkFact).min(3).max(5).optional(),
+      known_for: z.array(DishId).min(1).optional(),
+      signatures: z.array(MenuItem).optional(),
+      pasalubong: z.array(MenuItem).optional(),
       sources: Sources,
     })
     .refine(endAfterStart, {
@@ -780,6 +814,33 @@ export function contentSchemas(languages?: readonly string[]) {
       path: ['osm_id'],
     })
     .superRefine((landmark, ctx) => {
+      for (const field of ['signatures', 'pasalubong'] as const)
+        landmark[field]?.forEach((item, index) => {
+          if (item.source >= landmark.sources.length)
+            ctx.addIssue({
+              code: 'custom',
+              path: [field, index, 'source'],
+              message: `${field} source must reference a landmark source`,
+            });
+        });
+      if (landmark.type === 'food' && !landmark.osm_id) {
+        if (
+          landmark.geometry?.type !== 'Point' ||
+          !MercatorPosition.safeParse(landmark.geometry.coordinates).success
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['geometry'],
+            message: 'standalone food landmarks require a valid Point',
+          });
+        if (landmark.start_year !== undefined || landmark.end_year !== undefined)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['start_year'],
+            message:
+              'standalone food landmarks represent present-day locations; dates belong in facts',
+          });
+      }
       landmark.facts?.forEach((fact, index) => {
         if (fact.source >= landmark.sources.length) {
           ctx.addIssue({
@@ -816,8 +877,8 @@ export function contentSchemas(languages?: readonly string[]) {
     fly_ms: z.int().positive().max(MAX_TOUR_FLY_MS).optional(),
     narration: text,
     year: Year.optional(),
-    select: OsmId.optional(),
-    highlight: z.array(OsmId).max(64).optional(),
+    select: SelectableFeatureId.optional(),
+    highlight: z.array(SelectableFeatureId).max(64).optional(),
     audio: z.string().min(1).optional(),
     /** Where the narration's claims come from; required once the tour is verified. */
     sources: Sources.optional(),
@@ -1075,6 +1136,7 @@ export function contentSchemas(languages?: readonly string[]) {
     });
 
   return {
+    Dish,
     LandmarkFact,
     Landmark,
     NameHistory,
@@ -1091,6 +1153,7 @@ export function contentSchemas(languages?: readonly string[]) {
 }
 
 export const {
+  Dish,
   LandmarkFact,
   Landmark,
   NameHistory,
@@ -1102,6 +1165,7 @@ export const {
   Landcover,
   Procession,
 } = contentSchemas();
+export type Dish = z.infer<typeof Dish>;
 export type Procession = z.infer<typeof Procession>;
 export type Landcover = z.infer<typeof Landcover>;
 export type LandmarkPlan = z.infer<typeof LandmarkPlan>;

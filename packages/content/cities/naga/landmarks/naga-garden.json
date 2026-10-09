@@ -1,0 +1,64 @@
+{
+  "id": "landmark/naga-garden",
+  "name": {
+    "en": "Naga Garden"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "A Cantonese founder opened the restaurant near Plaza Rizal around 1969."
+      },
+      "source": 0,
+      "year": 1969,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "Its mami menu offers chicken, pork, beef and wonton combinations."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "GMC credits Naga Garden with an early-1970s version of toasted siopao."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Langyaw: Naga Garden mami (2015)",
+      "url": "https://langyaw.com/2015/06/03/mami-mami-mami-at-naga-garden-restaurant/"
+    },
+    {
+      "title": "GMC: Toasted siopao (2022)",
+      "url": "https://genmil.com.ph/toasted-siopao/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/642882303",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1853901, 13.623112]
+  },
+  "known_for": ["dish/toasted-siopao", "dish/kinunot"],
+  "signatures": [
+    {
+      "name": "Mami",
+      "source": 0
+    },
+    {
+      "name": "Pancit guisado",
+      "source": 0
+    },
+    {
+      "name": "Kinunot",
+      "source": 0
+    }
+  ]
+}

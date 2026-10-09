@@ -1,0 +1,61 @@
+{
+  "id": "landmark/aling-celys",
+  "name": {
+    "en": "Aling Cely’s Kinalasan"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "A 2015 profile names Aling Cely as the owner and main cook."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The same profile says it had served kinalas for more than three decades; it gives no exact opening year."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The eatery appeared on ABS-CBN’s Rated K in 2015."
+      },
+      "source": 0,
+      "year": 2015
+    },
+    {
+      "text": {
+        "en": "FEATR’s 2023 account locates it on Dimasalang Street."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Trip or Treat: Aling Cely’s (2015)",
+      "url": "https://triportreatph.wordpress.com/2015/11/03/the-hunt-for-bicols-best-kinalas-1-aling-celys-kinalasan-naga-city/"
+    },
+    {
+      "title": "FEATR: The best kinalas in Bicol (2023)",
+      "url": "https://featrmedia.com/the-best-kinalas-in-bicol-is-this-filipino-ramen/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/11152417378",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1859006, 13.6266719]
+  },
+  "known_for": ["dish/kinalas"],
+  "signatures": [
+    {
+      "name": "Kinalas",
+      "source": 0
+    }
+  ]
+}

@@ -68,6 +68,7 @@ export type EmojiCue = {
   pair?: string;
   order?: 0 | 1;
 };
+export type PointerEvent = { owner: object; mood: 'scared' | 'happy' | 'relaxed' | 'mosquito' };
 export type Temperament = 'neutral' | 'cheerful' | 'grumpy' | 'sleepy';
 export const TEMPERAMENT: Record<
   Temperament,
@@ -125,6 +126,7 @@ export type EmojiObservation = {
   arrival?: boolean;
   still?: boolean;
   vendor?: boolean;
+  cursorShaded?: boolean;
   peddler?: PeddlerObservation;
 };
 export type PeddlerObservation = {
@@ -217,7 +219,7 @@ export function ambientPool(
   const open = m?.vehicle && ['motorcycle', 'bicycle', 'tricycle', 'jeepney'].includes(m.vehicle);
   if (
     hotAt(env.minutes, env.rain, env.sunAltitude) &&
-    ((subject === 'person' && o.visit?.state !== 'shade') ||
+    ((subject === 'person' && !o.cursorShaded && o.visit?.state !== 'shade') ||
       (subject === 'driver' && open) ||
       ((subject === 'dog' || subject === 'cat') && o.still))
   ) {
@@ -319,6 +321,7 @@ type Track = {
   paused: boolean;
   triggers: number;
   edges: Set<EmojiMood>;
+  pointerEdges?: Set<PointerEvent['mood']>;
   replies: Map<EmojiMood, object>;
   seen: WeakSet<object>;
   followups: object[];
@@ -504,6 +507,7 @@ export class EmojiObserver {
   private season?: string | null;
   private entries: readonly SeasonEmojiEntry[] = [];
   private graveVisitors = false;
+  private pointerMosquito = new WeakMap<object, number>();
   constructor(
     seed: number,
     readonly perMeter: number,
@@ -526,6 +530,7 @@ export class EmojiObserver {
   dispose() {
     for (const g of this.groups) this.memory.retire(g);
     this.epoch++;
+    this.pointerMosquito = new WeakMap();
   }
   freeze() {
     this.frozenAt ??= this.clock;
@@ -631,6 +636,7 @@ export class EmojiObserver {
     purchases: readonly { mover: Mover; stall: Stall; key: object }[] = [],
     completions: readonly { token: object; owners: readonly object[] }[] = [],
     startled: readonly object[] = [],
+    pointerEvents: readonly PointerEvent[] = [],
   ) {
     dt = env.emojiTime?.dt ?? dt;
     this.clock = env.emojiTime?.clock ?? env.clock ?? this.clock + dt;
@@ -667,6 +673,7 @@ export class EmojiObserver {
         t.clock = undefined;
         t.epoch = -1;
         t.edges.clear();
+        t.pointerEdges?.clear();
         t.groomingHappy = false;
         t.replies.clear();
         t.followups.length = 0;
@@ -686,6 +693,7 @@ export class EmojiObserver {
       if (gap) {
         t.rest = t.stop = t.cruise = t.wait = 0;
         t.edges.clear();
+        t.pointerEdges?.clear();
         t.groomingHappy = false;
         t.replies.clear();
         t.followups.length = 0;
@@ -696,6 +704,18 @@ export class EmojiObserver {
       }
       t.epoch = this.epoch;
       t.clock = this.clock;
+      for (const event of pointerEvents)
+        if (event.owner === o.owner) (t.pointerEdges ??= new Set()).add(event.mood);
+      const mosquito =
+        o.subject === 'person' &&
+        (env.pointerRest ?? 0) >= 1 &&
+        !!env.pointerPeople?.has(o.owner) &&
+        inHours(env.minutes, EMOJI.hours.mosquito);
+      if (!mosquito) t.pointerEdges?.delete('mosquito');
+      else if (this.clock >= (this.pointerMosquito.get(o.owner) ?? -Infinity)) {
+        (t.pointerEdges ??= new Set()).add('mosquito');
+        this.pointerMosquito.set(o.owner, this.clock + 10);
+      }
       if (t.attemptAt === undefined) {
         // Bias the one initial opportunity toward the early part of its 2–12 s window.
         // Slow rendering must not require most owners to wait near the upper bound.
@@ -908,6 +928,10 @@ export class EmojiObserver {
     for (const o of evaluation) {
       const t = this.memory.get(o.owner);
       if (!t) continue;
+      if (t.pointerEdges?.size) {
+        for (const mood of t.pointerEdges) this.admit(o, mood, observations);
+        t.pointerEdges.clear();
+      }
       if (o.subject === 'bird') {
         // Chance 1; admission retains the shared eligibility, cooldown and capacity gates.
         if (t.edges.has('scared')) this.admit(o, 'scared', observations);

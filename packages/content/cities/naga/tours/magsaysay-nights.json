@@ -1,0 +1,209 @@
+{
+  "id": "tour/magsaysay-nights",
+  "title": {
+    "en": "Magsaysay nights"
+  },
+  "description": {
+    "en": "Restaurant stories, cakes and Bicolano fusion along the dining strip."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": {
+        "lng": 123.19725,
+        "lat": 13.63126,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Red Platter moved here in 2008. Its fusion menu features steaks, ribs and specialty coffee."
+      },
+      "select": "osm:way/23674975",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Graceland at 50 (2026)",
+          "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/way/23674975",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.2004267,
+        "lat": 13.6270567,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Bob Marlin brings reggae décor, crispy pata and the Rasta Paling cocktail to Magsaysay. Signed plates recall visiting celebrities."
+      },
+      "select": "osm:node/5332949931",
+      "sources": [
+        {
+          "title": "Langyaw: Bob Marlin (2014)",
+          "url": "https://langyaw.com/2014/09/02/bob-marlin-popular-reggae-inspired-naga-city-resto/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/5332949931",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.19667,
+        "lat": 13.63091,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Bigg’s grew from a Naga take-out counter in 1983 into a regional diner brand. Langyaw highlights its Tower Burger and arroz caldo."
+      },
+      "select": "osm:way/1534490769",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Biggs at 40 (2023)",
+          "url": "https://dateline-ibalon.com/2023/03/biggs-diner-bigg-at-40/"
+        },
+        {
+          "title": "Langyaw: Where to eat in Naga (2016)",
+          "url": "https://langyaw.com/2016/06/08/foodie-where-to-eat-in-naga-city/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/way/1534490769",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.199201,
+        "lat": 13.628583,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Molino Grill was a Magsaysay pioneer by 2012. That visit recorded chicken tinola and rice in calderos, and pinangat with crablets and young coconut. Its present operation is unconfirmed."
+      },
+      "sources": [
+        {
+          "title": "Stay, Stray, Play and Feast: Molino Grill (2012)",
+          "url": "https://camsurstaystray.blogspot.com/2012/09/molino-grill-magsaysay-avenue.html",
+          "note": "Documents the former dining experience; current operation is unconfirmed."
+        },
+        {
+          "title": "Restaurant Guru: location",
+          "url": "https://restaurantguru.com/Molino-Grill-Philippines",
+          "note": "Approximate business coordinate from listing metadata, checked against the published street/subdivision address; no entrance or footprint precision implied."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1992891,
+        "lat": 13.6282935,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "At Villa Caceres, Rafabel’s is associated with Oreo cheesecake, ube cake and chocolate mousse. Its earlier story began on Panganiban Drive."
+      },
+      "select": "landmark/rafabels",
+      "sources": [
+        {
+          "title": "Naga City Deck: Rafabel’s cakes and patisserie",
+          "url": "https://www.nagacitydeck.com/2012/02/cafes-in-naga-rafabels-cakes-and.html"
+        },
+        {
+          "title": "Food and Adventure with Jam: Rafabel’s (2016)",
+          "url": "https://foodandadventurewithjam.wordpress.com/2016/09/02/rafabels-cakes-and-patisserie/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/6178638785",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.19757,
+        "lat": 13.63133,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Chef Doy’s puts Bicolano dishes into new forms: Laing Embutido and Cheesy Bicol Express. The chef opened his own restaurant in 2008 after working at Avenue Plaza Hotel."
+      },
+      "select": "osm:way/267198240",
+      "sources": [
+        {
+          "title": "Department of Tourism: Chef Doy’s profile",
+          "url": "https://7641islands.ph/explore/this-chef-is-shining-the-spotlight-on-bicolano-cuisine/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/way/267198240",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1973936,
+        "lat": 13.6310266,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "DCA Signature offers coffee and cakes in Cereza. Its brand traces its Daet beginnings to June 2017; the Naga branch’s opening date is unconfirmed."
+      },
+      "select": "landmark/dca-signature",
+      "sources": [
+        {
+          "title": "DCA Daet: business self-description on Tripadvisor",
+          "url": "https://www.tripadvisor.in/Restaurant_Review-g1207744-d13139613-Reviews-DCA_Signature_Daet-Daet_Camarines_Norte_Province_Bicol_Region_Luzon.html",
+          "note": "Brand history in Daet; this does not date the Naga branch."
+        },
+        {
+          "title": "Restaurant Guru: DCA Signature Naga",
+          "url": "https://restaurantguru.com/DCA-Signature-Naga-Naga"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/13986130048",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.2173578,
+        "lat": 13.621988,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "A ride east reaches Casa Soriano in Concepcion Grande, serving family recipes across Filipino, Bicolano and Spanish cooking. The city dates its opening to March 2015."
+      },
+      "select": "osm:node/4948310625",
+      "sources": [
+        {
+          "title": "Naga City Tourism: Casa Soriano",
+          "url": "https://tourism.naga.gov.ph/tr-establishments/casa-soriano/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/4948310625",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    }
+  ]
+}

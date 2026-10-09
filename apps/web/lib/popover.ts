@@ -2,7 +2,7 @@ import { TOOLTIP_INSET, type TooltipViewport } from './tooltip';
 
 export type Side = 'right' | 'left' | 'bottom' | 'top';
 export const POPOVER_GAP = 18;
-export const POPOVER_WIDTH = 320;
+export const POPOVER_WIDTH = 480;
 export const POPOVER_MAX_HEIGHT_RATIO = 0.6;
 export const POPOVER_PADDING = 14;
 export const POPOVER_PADDING_RATIO = 1 / 8;

@@ -11,6 +11,59 @@
       "title": "OpenStreetMap",
       "url": "https://www.openstreetmap.org/way/23674855",
       "note": "Location and name only; no construction date inferred."
+    },
+    {
+      "title": "City of Naga: Public market history (2021)",
+      "url": "https://www2.naga.gov.ph/naga-lgu-to-explore-plan-to-build-new-public-market/"
+    },
+    {
+      "title": "City of Naga: The Siopao Center (2022)",
+      "url": "https://www2.naga.gov.ph/a-classic-nagueno-delicacy-is-just-around-the-corner-the-siopao-center/"
+    },
+    {
+      "title": "Naga City Guide: Pasalubong (2025)",
+      "url": "https://www.nagacityguide.com/the-ultimate-naga-city-pasalubong-guidewhat-to-buy-where-to-go/"
+    }
+  ],
+  "facts": [
+    {
+      "text": {
+        "en": "The city dates the start of market construction to 1964."
+      },
+      "source": 1,
+      "year": 1964
+    },
+    {
+      "text": {
+        "en": "The market became operational in 1969."
+      },
+      "source": 1,
+      "year": 1969
+    },
+    {
+      "text": {
+        "en": "The Siopao Center is inside the market."
+      },
+      "source": 2
+    },
+    {
+      "text": {
+        "en": "A local pasalubong guide highlights dried anchovies and dried squid here."
+      },
+      "source": 3
+    }
+  ],
+  "known_for": ["dish/toasted-siopao", "dish/pili-tart-mazapan"],
+  "signatures": [
+    {
+      "name": "Toasted siopao",
+      "source": 2
+    }
+  ],
+  "pasalubong": [
+    {
+      "name": "Dried anchovies and dried squid",
+      "source": 3
     }
   ]
 }
