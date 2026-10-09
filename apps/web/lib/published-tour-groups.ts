@@ -9,9 +9,16 @@ export async function assertPublishedTourGroups(
   read: (path: string, encoding: 'utf8') => Promise<string> = readFile,
 ): Promise<void> {
   const repair = `Regenerate and publish ${city.slug}'s tour sidecar with pnpm data:build -- --city ${city.slug} and pnpm data:publish -- --city ${city.slug}.`;
-  const payload: unknown = JSON.parse(
-    await read(join(process.cwd(), 'public', 'tiles', `${city.slug}.tours.json`), 'utf8'),
-  );
+  let source: string;
+  try {
+    source = await read(join(process.cwd(), 'public', 'tiles', `${city.slug}.tours.json`), 'utf8');
+  } catch (error) {
+    // Missing generated data already has a normal notice in CityAtlas.
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT')
+      return;
+    throw new Error(`Cannot read published tours for ${city.slug}. ${repair}`, { cause: error });
+  }
+  const payload: unknown = JSON.parse(source);
   if (!isCityTours(payload)) throw new Error(`Invalid published tours for ${city.slug}. ${repair}`);
   const groups = city.tour_groups && new Set(city.tour_groups.map((group) => group.id));
   for (const tour of payload) {

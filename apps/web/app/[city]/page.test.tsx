@@ -22,6 +22,7 @@ vi.mock('@/lib/published-tour-groups', () => ({
 type PageElement = ReactElement<{
   children: ReactElement<{
     runtimeGzip: string;
+    metaState: { status: string };
     tilesVersion?: string;
     tourGroups?: { id: string; label: string }[];
   }>;
@@ -38,6 +39,7 @@ describe('city page client boundary', () => {
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
       expect(page.props.children.props.tilesVersion).toBe('1234abcd');
+      expect(page.props.children.props.metaState).toEqual({ status: 'missing' });
       expect(assertPublishedTourGroups).toHaveBeenCalledWith(pack.city);
       expect(page.props.children.props.tourGroups).toEqual(
         pack.city.tour_groups?.map((group) => ({ id: group.id, label: group.label.en })),

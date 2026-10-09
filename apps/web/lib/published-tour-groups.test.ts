@@ -10,7 +10,9 @@ const city = {
   tour_groups: [{ id: 'heritage', label: { en: 'Heritage' } }],
 };
 const first = { ...payloads.tours[0]!, id: 'tour/first', group: 'heritage' };
-beforeEach(() => read.mockReset());
+beforeEach(() => {
+  read.mockReset();
+});
 
 it('accepts matching published assignments and reads the served sidecar', async () => {
   read.mockResolvedValue(JSON.stringify([first]));
@@ -49,4 +51,18 @@ it('rejects a malformed tour sidecar', async () => {
   await expect(assertPublishedTourGroups(city, read)).rejects.toThrow(
     'Invalid published tours for fixture',
   );
+});
+
+it('preserves the existing missing-data state when the sidecar is absent', async () => {
+  read.mockRejectedValue({ code: 'ENOENT' });
+  await expect(assertPublishedTourGroups(city, read)).resolves.toBeUndefined();
+});
+
+it('keeps other read failures actionable without treating them as missing data', async () => {
+  const error = Object.assign(new Error('permission denied'), { code: 'EACCES' });
+  read.mockRejectedValue(error);
+  await expect(assertPublishedTourGroups(city, read)).rejects.toThrow(
+    'Cannot read published tours for fixture. Regenerate and publish',
+  );
+  await expect(assertPublishedTourGroups(city, read)).rejects.toMatchObject({ cause: error });
 });
