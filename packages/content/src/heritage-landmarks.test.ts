@@ -24,6 +24,7 @@ const sites = [
   'barlin-dimasalang-corner-house',
   'abella-paz-stone-structure',
   'usi-main-building',
+  'holy-rosary-minor-seminary-building',
   'elias-angeles-dimasalang-corner-house',
   'abella-business-buildings',
   'de-la-rosa-buildings',
@@ -140,16 +141,17 @@ describe('Naga heritage scope', () => {
     expect(row.sources[0]!.note).toContain('representative');
   });
 
-  it('lists registered churches as heritage while keeping their type', () => {
+  it('lists registered churches and the martyrs monument as heritage while keeping their type', () => {
     const listed = landmarks.filter((landmark) => landmark.heritage);
     expect(listed.map((landmark) => landmark.id.replace('landmark/', '')).sort()).toEqual([
       'naga-metropolitan-cathedral',
       'penafrancia-basilica',
       'penafrancia-shrine',
+      'quince-martires-monument',
       'san-francisco-parish',
     ]);
     for (const landmark of listed) {
-      expect(landmark.type).toBe('church');
+      expect(landmark.type).toBe(landmark.id.endsWith('-monument') ? 'monument' : 'church');
       expect(
         landmark.sources.some((source) => source.url?.includes('talapamana.ncca.gov.ph')),
       ).toBe(true);
