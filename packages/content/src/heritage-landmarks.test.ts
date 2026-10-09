@@ -29,6 +29,7 @@ const sites = [
   'csnhs-gabaldon-building',
   'san-francisco-old-belfry',
   'socorro-abella-building',
+  'asilo',
   'elias-angeles-dimasalang-corner-house',
   'abella-business-buildings',
   'de-la-rosa-buildings',

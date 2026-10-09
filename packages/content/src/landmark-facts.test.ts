@@ -6,7 +6,7 @@ const landmarks = import.meta.glob('../cities/naga/landmarks/*.json', {
   import: 'default',
 }) as Record<string, Landmark>;
 
-it('curates facts for thirty-one Naga landmarks besides food places, including heritage sites and the museum statue', () => {
+it('curates facts for thirty-two Naga landmarks besides food places, including heritage sites and the museum statue', () => {
   // Food places carry their own sourced facts (food-content.test.ts).
   const clickable = Object.values(landmarks).filter(
     (landmark) => landmark.facts && landmark.type !== 'food',
@@ -16,6 +16,7 @@ it('curates facts for thirty-one Naga landmarks besides food places, including h
       'abella-business-buildings',
       'administracion-de-correo',
       'almeda-ancestral-house',
+      'asilo',
       'ateneo-de-naga-main-building',
       'ateneo-de-naga-university',
       'badiola-house',
