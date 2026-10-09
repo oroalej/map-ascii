@@ -1,8 +1,17 @@
 # Roadmap — ASCII Atlas
 
-ASCII Atlas is a generic engine for ASCII city maps. **Naga City is the first city.** Phases 1–5 build the engine using Naga as the working example, and Phase 6 proves the engine is generic by onboarding a second city. Naga-specific tasks and acceptance criteria are marked **(Naga)**. Details are in [`docs/cities/naga.md`](cities/naga.md).
+ASCII Atlas is a generic engine for ASCII city maps. **This roadmap focuses on Naga City.** Phases 1–5 build the map, tours, timeline and historical depth against Naga. Naga-specific tasks and acceptance criteria are marked **(Naga)**. Details are in [`docs/cities/naga.md`](cities/naga.md).
 
 Work phase by phase. Each phase ends with its acceptance criteria met, tests green, and a short note appended to the "Log" at the bottom of this file.
+
+**Status reviewed 2026-10-09.** Phases 0–2 are implemented, Phase 3 has seven verified tours and one draft, and Phases 4–5 remain open. Living city extensions have shipped alongside the core phases.
+
+## Next steps
+
+1. Close out Phase 3: verify the Heritage Centro walk and add the sourced Campus belt, Monuments and martyrs, and Heritage houses tours. Heritage-house content and tour groups are merged, so their implementation dependencies are satisfied.
+2. Prepare Phase 4: audit the dates in the published tiles. Historical facts and institutional founding dates do not automatically date the current mapped footprint.
+3. Finish Phase 4 with the legend note about undated features before starting Phase 5.
+4. Keep additional Life features queued while completing the tours and timeline.
 
 ## Phase 0 — Scaffold
 
@@ -57,6 +66,9 @@ Work phase by phase. Each phase ends with its acceptance criteria met, tests gre
 - [x] Top-right corner: a legend of what each glyph means, listing the classes visible at the current zoom (derived from the theme, never hardcoded).
 - [x] Top-right corner: the current zoom value and its level name (e.g. `z 15.3 · District`).
 - [x] **(Naga)** Seed content: 10 landmarks with sources (see `docs/cities/naga.md` §4).
+- [x] **(Naga)** Boundary-inclusive city coverage: all 27 subdivisions and their search entries, published as pinned static assets.
+- [x] **(Naga)** Landmark facts dialogs, expanded grounds/cemetery/hospital content, neighborhood identity, and 28 heritage sites with documented omissions. The current pack has 117 curated landmarks; estimated outdoor geometry remains draft where indicated by its sources.
+- [x] Stable labels, accessible Places in view, and zoom-floor/legend updates.
 
 **Accept when**
 - Zooming from the Region level to a single building is smooth.
@@ -76,10 +88,13 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 - [x] Tours live in the city pack (`cities/<slug>/tours/`).
 - [x] **(Naga)** Tours: "From Isarog to the river" and "Heritage Centro walk" (narration marked `TODO(verify)` until sourced). "From Isarog to the river" was removed when the map was limited to downtown and remains historical. A replacement tour needs a separate task; the boundary-inclusive Naga extension does not restore it.
 - [x] Landmark appearance pass, done together with the skyline check: review the draft `plans/` and `art/`, and tune how plan-view parts read when tilted. Checked tilted at z17.5–19: the parts sit and rise where their plans put them, so no numbers changed. Plans and art stay `draft` until someone who knows the places reviews them.
+- [ ] **(Naga)** Verify the existing Heritage Centro walk: replace its `TODO(verify)` narration with sourced claims.
+- [ ] **(Naga)** Add verified present-day Campus belt, Monuments and martyrs, and Heritage houses tours. Cut unsupported stops; keep historical year-setting for Phase 5.
 
 **Accept when**
 - ~~**(Naga)** Tilting to 60° shows the Centro skyline in ASCII.~~ Removed 2026-09-30 with orbit mode.
-- Both tours play end to end on desktop and mobile.
+- Every shipped tour plays end to end on desktop and mobile, including the food and route extensions below.
+- **(Naga)** The Centro walk and three additional heritage tours are verified, with a non-OSM source for every step. The removed Isarog tour is not an acceptance requirement.
 
 **Completed food-tour and content extension (2026-10-08)**
 
@@ -92,27 +107,25 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 ## Phase 4 — Timeline v1
 
 **Tasks**
-- [ ] Timeline slider UI with data-driven ticks (range from the city's meta `yearRange`), play/pause, and a large year indicator; year in the URL.
-- [ ] Renderer time filtering (`u_year`), type-in/dissolve transition masks, and dithering for `circa` dates.
-- [ ] `name_history` resolution in labels.
-- [ ] Imagery underlay: the pipeline bakes grayscale tiles per city (`imagery/<city>/`) for selected years (Sentinel-2 or Esri Wayback, whichever the licensing allows), and the renderer samples the underlay luminance.
-- [ ] Events layer and pins.
+- [x] Shared date schemas, OSM date parsing, curated start/end-year merging, and generated meta `yearRange`.
+- [x] Year state in the store and share URLs, URL restoration, and tour-step year state. Renderer `setYear()` remains a stub, so these do not yet change the map.
 - [ ] Legend note about undated features.
 
+The current published metadata spans 1901–2026, but the curated landmark pack has only two feature start dates, no end dates and no name histories. Audit tile-level dates separately; neither the meta range nor dated facts proves that a historical city view is complete.
+
 **Accept when**
-- **(Naga)** Scrubbing from 2015 to the current year visibly changes the underlay.
-- Dated landmarks appear and disappear at the right years.
-- Unit tests cover the visibility logic.
+- The legend explains how undated features are represented.
 
 ## Phase 5 — Historical depth
 
 **Tasks**
 - [ ] Georeferenced historic map underlays (`cities/<slug>/historic-maps`) with year ranges.
+- [x] Standalone curated landmark geometry supported by the pipeline and used for surviving heritage structures that lack an OSM identity. This supplies groundwork for historical geometry.
 - [ ] Standalone geometry for demolished landmarks.
 - [ ] "Then/now" photo pairs in the facts dialog.
 - [ ] UI string translations keyed by language code, loaded per city's declared languages.
 - [ ] **(Naga)** Street renaming data for the Centro.
-- [ ] **(Naga)** Historical/year-setting "Traslación route" work and the "Campus belt" tour. The verified present-day Traslación route is a completed Phase 3 content extension; year-setting remains open.
+- [ ] **(Naga)** Historical/year-setting tours, including the Traslación route. The verified present-day route is a completed Phase 3 extension; the present-day Campus belt tour is tracked in Phase 3 above.
 - [ ] **(Naga)** `fil` and `bcl` translations for UI strings and the main landmarks.
 
 **Accept when**
@@ -136,7 +149,7 @@ Built alongside Phase 3 to make the map feel inhabited (SPEC.md §4 "Life layer"
 **Accept when**
 - **(Naga)** At z17+ over the Centro, cars follow the streets through junctions, people stroll the plazas, boats drift on the Naga River, and birds circle the parks.
 - Turning Life off removes every agent, and reduced motion never shows any.
-- 60 fps pan with Life on, on desktop hardware. *(Still to check by hand; headless runs use software WebGL.)*
+- 60 fps pan with Life on, on desktop hardware. Recent hardware measurements record 59.9 fps pan and 59.8 fps zoom; these establish the tested desktop scenes, not physical Android acceptance (ARCHITECTURE.md §8).
 
 ## Side quest — Living city II
 
@@ -146,42 +159,45 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - [x] M1 — Daily rhythm clock: the city's clock (`timezone`), fixed times as clock hours, per-kind activity curves (`life.rhythm`, `DEFAULT_RHYTHM`).
 - [x] M2 — Places come alive: churchgoers, students, players, people on benches and at monuments, farm workers and carabao, boats on canals; peaks at the pack's Mass and school times.
 - [x] Small human moments — greetings, conversations, ball passing and monument viewing, with guarded stationary poses, independent decisions and spare-capacity props.
-- [ ] M3 — Polish: trains on the same track queue; rain splashes on water.
-- [ ] M4 — Transit stops: bus and jeepney stops and terminals from OSM; jeepneys dwell to board and drop people; tricycles queue at terminals.
-- [x] M5a — Festive decorations: sourced illustrative pack calendars, preview chip, star lanterns, bunting, temporary stalls, residential fireworks, Christmas installations and seasonal carnivals (`life.seasons`); automatic real city date and reduced-motion behavior. Generated dense corridors, installations and carnivals are implemented with local tiles; archive publication remains pending.
-- [ ] M5b — Fiesta crowds in September, separately from decorative fixtures and vendor carts.
+- [x] M3 — Rain splashes on water.
+- [ ] M3 — Trains on the same track queue.
+- [x] M4 — Mapped transit stops/terminals and city-pack service sites, vehicle dwell and passenger boarding interactions. Existing boarding hides a passenger briefly and returns them to their origin; it is not a ride to another stop.
+- [ ] M4 — Curated jeepney/tricycle routes and waiting lines, passengers riding to later stops and walking away after alighting, and route-bound terminal queues (`jeepney-routes` handoff).
+- [x] M5a — Festive decorations: sourced illustrative pack calendars, preview chip, star lanterns, bunting, temporary stalls, residential fireworks, Christmas installations and seasonal carnivals (`life.seasons`); automatic real city date and reduced-motion behavior. Generated dense corridors, installations and carnivals are included in published pinned tiles; placements and recurring-calendar verification remain draft where noted.
+- [x] M5b — September fiesta crowd implementation merged with PR #46: static crowd fields, crowd workers and bounded raster drawing, separately from decorative fixtures and vendor carts.
 
 - [x] M6 — Street events: `procession` and `parade` kinds routed over eligible ways, plus connected outdoor `mass` gatherings. Naga's draft Traslación, military parade and Cathedral/Basilica arrival Masses share the fiesta menu with the fluvial; playback drives event time and bounded physical crowd/traffic reservations.
 - [ ] M7 — Penitensya: Holy Week penitents as a pack-gated `procession`-kind record (hooded walkers and cross-bearers, nothing graphic); Naga's only once a source confirms the practice there.
+
+**Other merged Life extensions**
+- [x] Original dialogue, emoji, human moments, Life hover/focus, pointer interactions and Life taps. Native-speaker review of the dialogue remains pending.
+- [x] Vehicle brake/hazard lamps, exhaust, night brake-light glow, intersection turns/priority, pedestrian signals, rain driving, umbrella transitions and heat shelter.
+- [x] Undas candles/visitors, pack-gated folklore, emergency vehicles and street peddlers. These remain illustrative where stated.
 
 **Accept when**
 - **(Naga)** At 08:00 the Centro is visibly busier than at 14:00, and dusk falls at Naga's dusk from any visitor time zone.
 - Each milestone's agents fit inside the existing draw caps (1,200 drawn, 600 per tile), at 60 fps with Life on.
 
-## Phase 6 — Second city
+## Completed performance work
 
-**Tasks**
-- [ ] Choose the second city (see Open decisions), and write its brief at `docs/cities/<slug>.md`.
-- [ ] Onboard it with a city pack only, following `DATA.md` §8 "Adding a city": `city.json`, the smoke landmark, and one establishing tour.
-- [ ] Make `/` a city picker in the same ASCII style, and add a way to switch cities from inside the atlas.
-- [ ] Fix any city-specific assumptions the second city exposes in the engine, e.g. admin levels, languages, scripts in the glyph atlas, or southern-hemisphere or antimeridian bounds.
+- [x] Zod-free browser/tile decoding, startup critical-path reductions, inline metadata and deferred runtime dependencies (PRs #59 and #61).
+- [x] Versioned static tile delivery, owned range caching and renderer readiness instrumentation (PR #60).
+- [x] Frame pacing, retained Life tile geometry, fixture culling and per-pass profiling (PR #68). Tested desktop idle/night draw at 30 fps, with improved pan/zoom callback times.
+- [x] Current-frame lighting composition (PR #67).
 
-**Accept when**
-- The second city builds, validates, and passes the e2e smoke test.
-- Adding it needed no changes in `packages/renderer` or `apps/web` except the generic fixes listed above.
-- Both cities share one static deploy, and share URLs for either city round-trip.
+Performance budgets and hardware measurements are documented in `ARCHITECTURE.md` §8; task-specific review and measurement history stays in the task plans.
 
 ## Open decisions
 
 - Pure ASCII vs hybrid. Default: hybrid (photos and panels render normally). **Settled for the map (2026-09-29):** the map stays ASCII, and its legibility limits are fixed inside the engine (two colors per cell, sub-cell edges; SPEC.md §4) rather than by moving to a 3D library such as Three.js, which would replace none of the ASCII pipeline.
 - ~~Which other views to offer (orbit, street walk).~~ **Settled (2026-09-30):** the map is strictly top-down and north-up. Tilt, rotation, 3D buildings, street walk, and 3D landmark models are out of scope.
-- Which imagery source is allowed for the timeline underlay. This must be settled before Phase 4.
-- Hosting for large tile and imagery files: Vercel or R2. **Settled for tiles for now:** each city's generated files are GitHub release assets pinned by its `tiles.lock.json`, fetched before every build and served by Vercel as static files (`DATA.md` §9). Revisit (R2) when imagery underlays arrive in Phase 4.
+- Hosting for large tile and imagery files: Vercel or R2. **Settled for tiles for now:** each city's generated files are GitHub release assets pinned by its `tiles.lock.json`, fetched before every build and served by Vercel as static files (`DATA.md` §9). Revisit (R2) when historical map underlays arrive in Phase 5.
 - Final product name ("ASCII Atlas" is the working name) and domain name.
 - ~~How to assign subdivisions when a city's subdivision boundaries are incomplete in OSM.~~ **Settled in Phase 2:** mapped boundaries win; elsewhere, features get the nearest subdivision `place` node inside the city (Voronoi areas clipped to the city boundary), flagged `approximate`. The UI marks these with "≈", and approximate borders are never drawn. Mapping the real boundaries in OSM remains the long-term fix.
-- Which city comes second. It should differ from Naga in at least one of country, admin levels, or languages, to stress the generic model.
 
 ## Log
+
+- **2026-10-09 — Roadmap reconciliation.** Updated against main through PR #68 and #67: checked implemented year plumbing, standalone landmark geometry, rain splashes, transit interactions and fiesta crowds; recorded merged content, Life and performance extensions with their remaining acceptance gaps. Prioritized sourced heritage tours followed by three Timeline v1 milestones. Removed the city-onboarding phase and its open decision at the owner's request. Earlier log entries describe their historical revisions; their old pending/publication notes do not override current task status above.
 
 - **2026-10-05 — Street events and arrival Masses (M6).** Generic street processions and parades use connected eligible OSM routes and shared formation dimensions; outdoor Mass gatherings reuse nearby predecessor attendees. Naga adds draft Traslación, military parade and Cathedral/Basilica arrival records to the fiesta menu. Playback advances event time and lighting, and Stop restores the viewer's time. Clipped, compact event geography loads after map startup; bounded reservations preserve ordinary commerce and tile/visible quotas. Paths, formation details, crowd density, annual schedules and Mass durations remain illustrative drafts pending verification; M5b fiesta crowds and M7 penitents remain separate work.
 
@@ -254,7 +270,7 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
   - Seated people are drawn as standing figures (a seated figure waits on the people-sprite work in progress).
   - Place radii are circles, so people around an L-shaped building can stand beyond its short wing.
 - **2026-09-30 — Smaller e2e suite.** Playwright is now a smoke suite for what unit tests can't see: one spec (`smoke.spec.ts`) with 7 desktop tests (the `/` redirect, the map loading and drawing with attribution, search to the panel, a click on a place opening the panel, the share-URL round trip, recovery from a lost WebGL context, and the first tour played end to end). Only the 2 tests tagged `@mobile` (drawing, and tap to open the bottom sheet) also run on the Pixel 7. That is 9 runs instead of about 44. Dropped: the HUD, URL-mirroring, 60° tilt, tour-control, "Places in view", `?debug=1`, and life-layer e2e tests. Tour controls and URL state were already unit-tested (`state/tour.test.ts`, `state/url.test.ts`), and the life preferences, including the `day` → 12:00 migration, now are too (`state/life.test.ts`).
-- **2026-09-30 — Flat map only (decision).** The map is strictly top-down and north-up from now on. Orbit mode (tilt to 60°, rotation, the compass, extruded buildings, standing tree crowns and trunks, tilted roof rims, and label thinning when tilted) is removed. So are the planned street walk mode (the old Phase 6), map mode's 0–15° pitch, and the idea of a 3D landmark model in the info panel. The second city is now Phase 6. Building and tree heights stay, since the flat map uses them for the shade ramp, walls, ridges, and shadows. Removed in code: `CameraState` is now `{ lat, lng, zoom }` (a strict object, so a stray `pitch` fails validation); the URL drops `pitch`, `bearing`, and `mode`, and old links with them still load, flat; the compass is gone; right-drag, Ctrl+drag, and a two-finger twist no longer orbit (right-click gets the browser's menu again); the renderer loses its perspective grid, tilted tile selection, 3D building and standing-crown geometry (smaller tiles on the GPU), tilted label thinning, roof rims, and the wall window key. The heritage tour's last step, the only tilted one, is now a flat overview of the Centro (draft, `TODO(verify)`). Tests: 629 unit.
+- **2026-09-30 — Flat map only (decision).** The map is strictly top-down and north-up from now on. Orbit mode (tilt to 60°, rotation, the compass, extruded buildings, standing tree crowns and trunks, tilted roof rims, and label thinning when tilted) is removed. So are the planned street walk mode, map mode's 0–15° pitch, and the idea of a 3D landmark model in the info panel. Building and tree heights stay, since the flat map uses them for the shade ramp, walls, ridges, and shadows. Removed in code: `CameraState` is now `{ lat, lng, zoom }` (a strict object, so a stray `pitch` fails validation); the URL drops `pitch`, `bearing`, and `mode`, and old links with them still load, flat; the compass is gone; right-drag, Ctrl+drag, and a two-finger twist no longer orbit (right-click gets the browser's menu again); the renderer loses its perspective grid, tilted tile selection, 3D building and standing-crown geometry (smaller tiles on the GPU), tilted label thinning, roof rims, and the wall window key. The heritage tour's last step, the only tilted one, is now a flat overview of the Centro (draft, `TODO(verify)`). Tests: 629 unit.
 - **2026-09-30 — Local scenes and nature.** The data pipeline fetches mapped transit sites and shelters separately and accepts sourced `life.sites` overrides; Naga's pack identifies four mapped jeepney terminals. A bounded walking graph rejects building, water, and barrier crossings. Existing groups queue for vendors and transit, finish purchases, board one group at a time, shelter in rain, and retrace their approach. Stops hold six people, vendors four, and terminals three vehicles. Vendor hours and rain covers reuse the city's clock and weather. Sparse cats walk, rest, and groom on their own seed; dogs can settle near carts or shelters. Water gains rain rings and occasional simulated fish from z18 in the existing glyph pass. Life and reduced motion retain their existing controls. Tests cover ownership, blocked routing, queue capacity and cleanup, boarding, hours, rain hysteresis, animal rendering and caps, and motion preferences. Known: tricycle stands and covered Centro entrances need sourced surveys; tiles rebuilt locally, not published; real-device frame rates remain to be checked.
 - **2026-09-30 — Street and life polish.** Ground agents use swept footprint clearance across loaded tile seams: cars yield and walkers steer or wait, with whole-agent cell reservation when zoomed out. Parking validates full lot boundaries and holes, curb alignment, strip width, and junction setbacks. Individual tree crowns carry local surface coordinates for rounded interior lighting. Streets rotate as whole glyph words along their longest straight runs, sharing label collisions and horizontal fallback. Boat legend icons use their hull plans. Eligible landmark hovers show a pointer cursor and clear it on exit, drag, context loss and teardown. Connected running rail routes receive occasional complete train arrivals after an activity-adjusted 60–120 simulated seconds; sidings remain standby tracks. Verification: affected unit tests, renderer/web type checks, lint, production export, three related desktop smoke checks (drawing, pointer/picking, context recovery), screenshot inspection and size budgets pass. Full and mobile e2e remain with CI.
 - **2026-09-30 — Crossings and signals.** Add traffic enrichment, mapped/derived crosswalk geometry, deterministic simulated signal phases, vehicle and pedestrian waiting (including local scene routes), and bounded yielding at unsignalized shared-vertex junctions. Naga rebuilt locally: 6 mapped and 30 derived signals, 88 mapped crossing anchors and 93 derived crossings; 23 KB tile growth, all signals retained at z15. Affected tests, type checks, content validation, production build and desktop drawing/context smoke checks pass. Publication remains separate.
