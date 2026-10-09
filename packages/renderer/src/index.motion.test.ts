@@ -50,7 +50,7 @@ import type { FrameInput } from './life/worker-api';
 import type * as PassesModule from './passes';
 import type * as PacingModule from './pacing';
 import type * as PickingModule from './picking';
-import type { PickResult } from './picking';
+import { Picker, type PickResult } from './picking';
 import type * as GpuModule from './gpu';
 import type { TileLabel } from './raster/geometry';
 import { LabelRank } from './labels';
@@ -1166,6 +1166,7 @@ describe('live motion preference', () => {
       false,
       true,
       false,
+      expect.any(Function),
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -1279,6 +1280,7 @@ describe('live motion preference', () => {
       false,
       false,
       false,
+      expect.any(Function),
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
@@ -2172,6 +2174,49 @@ describe('live motion preference', () => {
     expect(step.mock.calls.at(-1)![6]).toBe(minimum);
   });
 
+  it.each([
+    [60, 60],
+    [120, 60],
+    [144, 72],
+  ])('caps a continuous camera stream on a %d Hz display at %d draws a second', (hz, drawn) => {
+    draw(1000);
+    const before = vi.mocked(glyphPass).mock.calls.length;
+    for (let tick = 1; tick <= hz; tick++) {
+      input.intents!.pan(2, 0);
+      draw(1000 + (tick * 1000) / hz);
+    }
+    expect(vi.mocked(glyphPass).mock.calls.length - before).toBe(drawn);
+  });
+
+  it('keeps a skipped camera move pending, then draws the latest one', () => {
+    draw(1000);
+    const drawn = vi.mocked(glyphPass).mock.calls.length;
+    input.intents!.pan(4, 0);
+    input.intents!.pan(4, 0);
+    draw(1008);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn);
+    input.intents!.pan(4, 0);
+    draw(1017);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn + 1);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![5].camera).toEqual(atlas.getCamera());
+    // Nothing else is dirty: the next skipped tick draws nothing.
+    draw(1025);
+    expect(vi.mocked(glyphPass).mock.calls.length).toBe(drawn + 1);
+  });
+
+  it('picks against the drawn camera while a newer one waits to draw', () => {
+    const issue = vi.spyOn(Picker.prototype, 'issue');
+    draw(1000);
+    const shown = atlas.getCamera();
+    expect(issue.mock.lastCall![0].camera).toEqual(shown);
+    input.intents!.pan(40, 0);
+    draw(1008);
+    expect(atlas.getCamera()).not.toEqual(shown);
+    expect(issue.mock.lastCall![0].camera).toEqual(shown);
+    draw(1017);
+    expect(issue.mock.lastCall![0].camera).toEqual(atlas.getCamera());
+  });
+
   it('recovers Auto with skipped idle callbacks and keeps the idle draw cadence', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     for (let at = 50; at <= 4500; at += 50) draw(at);
@@ -2180,7 +2225,8 @@ describe('live motion preference', () => {
     step.mockClear();
     for (let at = 19_500; at < 24_500; at += 16) draw(at);
     expect(atlas.getStats().quality.tier).toBe(0);
-    expect(step.mock.calls.length).toBeLessThanOrEqual(151);
+    // Every second 16 ms tick: 30 fps idle within the pacing slack, never every tick.
+    expect(step.mock.calls.length).toBeLessThanOrEqual(157);
   });
 
   it('defers manual quality while a camera flight is active', () => {
@@ -2763,7 +2809,8 @@ describe('label focus in the renderer frame', () => {
     draw(1000);
     vi.mocked(selectPass).mockClear();
     vi.mocked(crownPass).mockClear();
-    for (let i = 1; i <= 30; i++) {
+    // Hover is not camera input: the idle cadence (30 fps, within its slack) still applies.
+    for (let i = 1; i <= 25; i++) {
       input.intents!.hover([100 + i * 3, 100]);
       draw(1000 + i);
     }

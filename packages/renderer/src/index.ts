@@ -161,7 +161,7 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
-import { animationDue, watchVisibility } from './pacing';
+import { animationDue, cameraDue, watchVisibility } from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -611,6 +611,18 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let crowdPool: ReturnType<typeof createThrongPool> | undefined;
   let focus = normalizeFocus(null);
   let lastDraw = -Infinity;
+  /** Frames drawn since the map was created (shader warmup starts one link per frame). */
+  let drawnFrames = 0;
+  /**
+   * The camera moved since the last draw. It draws at the interactive rate (pacing.ts
+   * `cameraDue`); input arriving in between only updates it, so the next draw takes the latest.
+   */
+  let cameraPending = false;
+  /** Draw on the next frame whatever the pacing: a resize or a restored context. */
+  let drawNow = true;
+  /** The camera and CSS size of the last completed draw: picks and surface reads use them. */
+  let drawnCamera: CameraState | undefined;
+  let drawnSize = { width: 1, height: 1 };
   let lastInput = -Infinity;
   const start = performance.now();
   let lastPointerInput = start;
@@ -793,6 +805,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     cellDirty = true;
     cellsFor = null;
+    drawNow = true;
   };
 
   // Tiles
@@ -1324,6 +1337,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     const cell = cellDev(),
       label = themeRes!.label.cellDev;
+    // The raster belongs to the last drawn camera, even while a newer one waits to draw.
+    const shown = drawnCamera ?? camera;
     controller.update(
       {
         targets,
@@ -1332,7 +1347,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         owners: raster.owners,
         speakers: speechSpeakers,
         life: raster.life,
-        geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}`,
+        geometry: `${targetsGeneration}/${speechGeometry}/${shown.lng}/${shown.lat}/${shown.zoom}`,
         grid: { shiftX: grid.shiftX, shiftY: grid.shiftY, cellWidth: cell.w, cellHeight: cell.h },
         toCell: placement.toCell,
         size: cssSize(),
@@ -1833,6 +1848,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const step = stepFlight(flight, now, limits, cssSize());
     camera = step.camera;
     cellDirty = true;
+    cameraPending = true;
     lastInput = now;
     emit('camerachange', { ...camera });
     if (step.done) {
@@ -1867,12 +1883,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
 
   let raf = 0;
-  const canWarmGlyphs = () =>
+  /**
+   * Parallel links compile off the main thread, so they warm from the first drawn frame on,
+   * input or not; a synchronous compile waits for a second without input.
+   */
+  const canWarmGlyphs = (parallel: boolean) =>
     !destroyed &&
     !lost &&
     watch.watched() &&
-    !flight &&
-    performance.now() - Math.max(lastInput, lastPointerInput) >= 1000;
+    (parallel
+      ? lastDraw !== -Infinity
+      : !flight && performance.now() - Math.max(lastInput, lastPointerInput) >= 1000);
   const warmSeasonalPrograms = (clocks = false) => {
     if (!programs || lost || destroyed) return;
     const seasonal =
@@ -1890,6 +1911,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       seasonal,
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
       !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
+      () => drawnFrames,
     );
   };
   const frame = (now: number) => {
@@ -1914,10 +1936,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       resize();
     }
     advanceFlight(now);
-    const nextTier = quality.decide(now, !flight && now - lastInput >= 1000);
+    const deviceDpr = window.devicePixelRatio || 1;
+    const nextTier = quality.decide(now, !flight && now - lastInput >= 1000, (tier) =>
+      Math.min(deviceDpr, TIERS[tier]!.knobs.maxDpr),
+    );
     if (nextTier !== undefined) {
       const nextKnobs = TIERS[nextTier]!.knobs;
-      if (nextKnobs.maxDpr !== knobs.maxDpr) sizeDirty = true;
+      // Only a change in the pixel ratio actually drawn resizes the targets.
+      if (Math.min(deviceDpr, nextKnobs.maxDpr) !== dpr) sizeDirty = true;
       knobs = nextKnobs;
       drawDirty = true;
       resetQualitySamples();
@@ -1956,7 +1982,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         ? cursorEffects.wind(placement, now, cellDev().h / cellDev().w)
         : undefined;
     cursorCrownDirty ||= cursorCrownActive && !cursor;
-    if (cellDirty || drawDirty || animating || cursorCrownDirty) {
+    // A moved camera waits for its interactive slot; discrete changes draw at once.
+    const paced =
+      cameraPending &&
+      !drawNow &&
+      !cameraDue(now, lastDraw, { reducedMotion, watched: watch.watched() });
+    if (drawNow || drawDirty || (!paced && (cellDirty || animating || cursorCrownDirty))) {
+      drawNow = false;
+      cameraPending = false;
       const time = (now - start) / 1000;
       const frameStart = performance.now();
       gpuTimer.begin(now);
@@ -2116,7 +2149,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         emit('ready', { firstTileFrame: readyMs });
       }
       gpuTimer.end();
+      if (programs.demandWaitMs) {
+        profiler?.add('shaderWait', programs.demandWaitMs);
+        programs.demandWaitMs = 0;
+      }
       lastDraw = now;
+      drawnFrames++;
+      drawnCamera = camera;
+      drawnSize = cssSize();
       frameMs = smooth(frameMs, performance.now() - frameStart);
       if (!qualityWarmupDraw) previousDraw = { at: now, cpuMs: performance.now() - frameStart };
       qualityWarmupDraw = false;
@@ -2137,8 +2177,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         cellWidth: cellDev().w,
         cellHeight: cellDev().h,
       },
-      camera: { ...camera },
-      size: cssSize(),
+      camera: { ...(drawnCamera ?? camera) },
+      size: drawnCamera ? drawnSize : cssSize(),
       generation: targetsGeneration,
     });
     readClasses(now);
@@ -2163,7 +2203,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               cellHeight: cellDev().h,
             },
             dpr,
-            geometry: `${targetsGeneration}/${speechGeometry}/${camera.lng}/${camera.lat}/${camera.zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
+            geometry: `${targetsGeneration}/${speechGeometry}/${(drawnCamera ?? camera).lng}/${(drawnCamera ?? camera).lat}/${(drawnCamera ?? camera).zoom}/${grid.originCol}/${grid.originRow}/${grid.shiftX}/${grid.shiftY}/${dpr}/${cellDev().w}/${cellDev().h}`,
             revision: raster?.revision ?? 0,
             owners: raster?.owners ?? EMPTY_OWNERS,
             life: raster?.life ?? EMPTY_LIFE_CELLS,
@@ -2271,6 +2311,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     emoji.clear();
     camera = clampCamera(next, limits, dpr > 0 ? cssSize() : undefined);
     cellDirty = true;
+    cameraPending = true;
     lastInput = performance.now();
     if (batched) cameraMoved = true;
     else emit('camerachange', { ...camera });
@@ -2332,7 +2373,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         drawnLife.tapFrame !== undefined;
       const target = targets;
       const source = drawnLife;
-      const at = viewportFor(camera, cssSize()).unproject([...point]);
+      // Where the tap lands on the map as drawn, even while a newer camera waits to draw.
+      const at = viewportFor(drawnCamera ?? camera, drawnCamera ? drawnSize : cssSize()).unproject([
+        ...point,
+      ]);
       const epoch = tapEpoch;
       const geometry = speechGeometry;
       const capturedCamera = camera;

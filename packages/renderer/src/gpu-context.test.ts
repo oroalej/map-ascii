@@ -198,6 +198,103 @@ describe('glyph program variants', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('starts at most one parallel link per rendered frame and finishes only ready links', () => {
+    let ready = false;
+    const links: { ready: () => boolean; finish: () => unknown; cancel: () => void }[] = [];
+    vi.mocked(prepareProgram).mockImplementation(() => {
+      const link = {
+        ready: vi.fn(() => ready),
+        finish: vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>),
+        cancel: vi.fn(),
+      };
+      links.push(link);
+      return link;
+    });
+    const programs = createPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    let frame = 0;
+    const gates: boolean[] = [];
+    // Input is continuous: only the parallel path may run.
+    prewarmGlyphPrograms(
+      context,
+      programs,
+      (parallel) => {
+        gates.push(parallel);
+        return parallel;
+      },
+      true,
+      false,
+      false,
+      false,
+      () => frame,
+    );
+    vi.advanceTimersByTime(100);
+    expect(gates).toEqual([true]);
+    expect(links).toHaveLength(1);
+    vi.advanceTimersByTime(500);
+    expect(links).toHaveLength(1);
+    expect(links[0]!.finish).not.toHaveBeenCalled();
+    ready = true;
+    vi.advanceTimersByTime(100);
+    expect(links[0]!.finish).toHaveBeenCalledOnce();
+    expect(programs.glyphVariants?.size).toBe(2);
+    // The finished link does not let another start until a new frame is drawn.
+    vi.advanceTimersByTime(300);
+    expect(links).toHaveLength(1);
+    ready = false;
+    frame = 1;
+    vi.advanceTimersByTime(200);
+    expect(links).toHaveLength(2);
+    expect(programs.glyphWarmup?.pending).toBeDefined();
+    deletePrograms(context, programs);
+    expect(links[1]!.cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('keeps quiet-only synchronous warmup without the extension', () => {
+    const programs = createPrograms(context);
+    let quiet = false;
+    const gates: boolean[] = [];
+    prewarmGlyphPrograms(
+      context,
+      programs,
+      (parallel) => {
+        gates.push(parallel);
+        return quiet;
+      },
+      true,
+      false,
+      false,
+      false,
+      () => 0,
+    );
+    vi.advanceTimersByTime(300);
+    expect(createProgram).toHaveBeenCalledTimes(4);
+    expect(gates.every((parallel) => !parallel)).toBe(true);
+    quiet = true;
+    vi.advanceTimersByTime(100);
+    expect(createProgram).toHaveBeenCalledTimes(5);
+    deletePrograms(context, programs);
+  });
+
+  it('reports a demand compile or an unfinished link as a separate wait', () => {
+    const now = vi.spyOn(performance, 'now');
+    let clock = 0;
+    now.mockImplementation(() => clock);
+    vi.mocked(createProgram).mockImplementation(() => {
+      clock += 7;
+      return { program: {} } as ReturnType<typeof createProgram>;
+    });
+    const programs = createPrograms(context);
+    expect(programs.demandWaitMs ?? 0).toBe(0);
+    glyphProgram(context, programs, true, false);
+    expect(programs.demandWaitMs).toBe(7);
+    glyphProgram(context, programs, true, false);
+    expect(programs.demandWaitMs).toBe(7);
+    deletePrograms(context, programs);
+    now.mockRestore();
+  });
+
   it('cancels an owned idle callback on context loss and warms the restored context independently', () => {
     const idle = new Map<number, () => void>();
     let next = 0;

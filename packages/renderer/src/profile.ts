@@ -30,6 +30,8 @@ export const PROFILE_STAGES = [
   'acceptedFrameAge',
   'prepareSlice',
   'activation',
+  'shaderWait',
+  'agentDecode',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {

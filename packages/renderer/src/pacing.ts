@@ -6,9 +6,16 @@
  * decides whether the map moves on its own.
  */
 
-/** While idle, animation redraws at most this often. */
+/** While idle, animation redraws at most this often (30 fps). */
 export const IDLE_FRAME_MS = 1000 / 30;
-/** How long after input the loop keeps drawing every frame. */
+/** Interaction (input, camera moves, the animation just after them) draws at most this often. */
+export const ACTIVE_FRAME_MS = 1000 / 60;
+/**
+ * How early a frame may come and still count as due: rAF timestamps jitter around the display's
+ * period, so an exact interval would skip every other 60 Hz tick (33 ms, then 50 ms).
+ */
+export const PACING_SLACK_MS = 4;
+/** How long after input the loop keeps drawing at the interactive rate. */
 export const ACTIVE_MS = 500;
 
 export type Pacing = {
@@ -18,7 +25,14 @@ export type Pacing = {
   watched: boolean;
 };
 
-/** Whether the animation is due a frame at `now` (ms, like `lastDraw` and `lastInput`). */
+/** Whether a frame at `now` keeps to `interval` after the last one drawn. */
+const due = (now: number, lastDraw: number, interval: number) =>
+  now - lastDraw >= interval - PACING_SLACK_MS;
+
+/**
+ * Whether the animation is due a frame at `now` (ms, like `lastDraw` and `lastInput`): 60 fps
+ * just after input (every frame at 60 Hz, every second one at 120 or 144 Hz), else 30 fps.
+ */
 export function animationDue(
   now: number,
   lastDraw: number,
@@ -26,8 +40,15 @@ export function animationDue(
   { reducedMotion, watched }: Pacing,
 ): boolean {
   if (reducedMotion || !watched) return false;
-  const interval = now - lastInput < ACTIVE_MS ? 0 : IDLE_FRAME_MS;
-  return now - lastDraw >= interval;
+  return due(now, lastDraw, now - lastInput < ACTIVE_MS ? ACTIVE_FRAME_MS : IDLE_FRAME_MS);
+}
+
+/**
+ * Whether a moved camera may draw at `now`. It keeps to the interactive rate, so a fast display
+ * doesn't redraw every tick; with reduced motion, or while no one watches, it draws at once.
+ */
+export function cameraDue(now: number, lastDraw: number, { reducedMotion, watched }: Pacing) {
+  return reducedMotion || !watched || due(now, lastDraw, ACTIVE_FRAME_MS);
 }
 
 /**

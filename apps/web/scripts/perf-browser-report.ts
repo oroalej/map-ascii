@@ -68,6 +68,8 @@ export const SUMMARY_STAGES = [
   'upload',
   'step',
   'visible',
+  'shaderWait',
+  'agentDecode',
 ] as const;
 export type StageSummary =
   { missing: true; count: 0; p95Ms: null } | { missing: false; count: number; p95Ms: number };

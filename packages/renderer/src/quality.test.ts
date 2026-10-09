@@ -8,11 +8,12 @@ const drive = (
   interval = 16,
   cpu = 3,
   quiet = true,
+  dprOf?: (tier: number) => number,
 ) => {
   const changes: number[] = [];
   for (let at = start; at <= end; at += 16) {
     q.sample({ at, intervalMs: interval, cpuMs: cpu, gpuMs: null });
-    const tier = q.decide(at, quiet);
+    const tier = q.decide(at, quiet, dprOf);
     if (tier !== undefined) changes.push(tier);
   }
   return changes;
@@ -61,6 +62,26 @@ describe('adaptive quality', () => {
     expect(q.decide(90_001, true)).toBe(0);
     expect(q.state).toEqual({ choice: 'auto', tier: 0, name: 'high' });
     expect(q.decide(100_000, true)).toBeUndefined();
+  });
+  it('caps the pixel ratio by tier and never raises it on the way down', () => {
+    expect(TIERS.map((tier) => tier.knobs.maxDpr)).toEqual([2, 1.5, 1.5, 1.25]);
+  });
+  it('steps down under severe load mid-gesture only where the pixel ratio stays', () => {
+    // A 2× display: every step changes the drawing pixel ratio, so input defers it.
+    const hiDpi = new QualityController('auto');
+    const capped = (tier: number) => Math.min(2, TIERS[tier]!.knobs.maxDpr);
+    expect(drive(hiDpi, 0, 6000, 50, 30, false, capped)).toEqual([]);
+    expect(drive(hiDpi, 6016, 6400, 50, 30, true, capped)).toEqual([1]);
+    // A 1× display: no tier resizes, so a severe hold steps down while input continues.
+    const flat = new QualityController('auto');
+    const one = () => 1;
+    expect(drive(flat, 0, 1400, 50, 30, false, one)).toEqual([]);
+    expect(drive(flat, 1416, 2400, 50, 30, false, one)).toEqual([1]);
+    // Slow but not severe load still waits for quiet, and so does every recovery.
+    const slow = new QualityController('auto');
+    expect(drive(slow, 0, 6000, 30, 15, false, one)).toEqual([]);
+    expect(drive(flat, 2416, 40_000, 16, 3, false, one)).toEqual([]);
+    expect(drive(flat, 40_016, 41_000, 16, 3, true, one)).toEqual([0]);
   });
   it('reset discards an old overload window', () => {
     const q = new QualityController('auto');
