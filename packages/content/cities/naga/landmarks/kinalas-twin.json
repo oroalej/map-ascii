@@ -1,0 +1,53 @@
+{
+  "id": "landmark/kinalas-twin",
+  "name": {
+    "en": "Kinalas Twin"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "Edwin Rey began experimenting with his kinalas recipe."
+      },
+      "source": 0,
+      "year": 1990
+    },
+    {
+      "text": {
+        "en": "The premises were rebuilt after Typhoon Unding."
+      },
+      "source": 0,
+      "year": 2004
+    },
+    {
+      "text": {
+        "en": "Brain slices, egg and crushed chicharon are optional additions to its kinalas."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Langyaw: Kinalas Twin (2010)",
+      "url": "https://langyaw.com/2010/10/29/kinalas-is-comfort-food-brain-slices-optional/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/node/4921456921",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:node/4921456921",
+  "known_for": ["dish/kinalas"],
+  "signatures": [
+    {
+      "name": "Kinalas with optional brain, egg or chicharon",
+      "source": 0
+    },
+    {
+      "name": "Puto cheese",
+      "source": 0
+    }
+  ]
+}

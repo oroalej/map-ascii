@@ -261,7 +261,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
       PROCESSION_GLYPHS.length +
-      FOLKLORE_GLYPHS.length,
+      FOLKLORE_GLYPHS.length +
+      3,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
     385 +
@@ -271,7 +272,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       CANDLE_GLYPHS.length +
       PEDESTRIAN_GLYPHS.length +
       PROCESSION_GLYPHS.length +
-      FOLKLORE_GLYPHS.length,
+      FOLKLORE_GLYPHS.length +
+      3,
   );
   for (const theme of Object.values(themes)) {
     const glyphs = mapGlyphs(theme);

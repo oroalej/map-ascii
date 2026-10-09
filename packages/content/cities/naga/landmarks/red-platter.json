@@ -1,0 +1,48 @@
+{
+  "id": "landmark/red-platter",
+  "name": {
+    "en": "Red Platter"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The Graceland group opened Red Platter."
+      },
+      "source": 0,
+      "year": 2004
+    },
+    {
+      "text": {
+        "en": "It moved to Magsaysay Avenue."
+      },
+      "source": 0,
+      "year": 2008
+    },
+    {
+      "text": {
+        "en": "Its fusion menu includes steaks, ribs and specialty coffee."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: Graceland at 50 (2026)",
+      "url": "https://dateline-ibalon.com/2026/09/graceland-at-50-a-journey-of-gratitude/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/way/23674975",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:way/23674975",
+  "signatures": [
+    {
+      "name": "Steaks, ribs and specialty coffee",
+      "source": 0
+    }
+  ]
+}

@@ -46,7 +46,11 @@ export const source = [
       .map((feature) => [feature.properties.id, feature]),
   ).values(),
 ];
-mergeContent(source, { landmarks } as ContentBundle);
+// These geometry fixtures cover curated grounds, not the whole city's POIs.
+const sourceIds = new Set(source.map((feature) => feature.properties.id));
+mergeContent(source, {
+  landmarks: landmarks.filter((landmark) => landmark.osm_id && sourceIds.has(landmark.osm_id)),
+} as ContentBundle);
 // Prepare immutable inputs and their bounds once, only when a geometry audit needs them.
 let auditInput: { feature: AtlasFeature; bounds: [number, number, number, number] }[] | undefined;
 export const nearby = (bounds: [number, number, number, number]) => {

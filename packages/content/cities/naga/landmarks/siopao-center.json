@@ -1,0 +1,54 @@
+{
+  "id": "landmark/siopao-center",
+  "name": {
+    "en": "3N Bakery — The Siopao Center"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The city’s 2022 profile places the Siopao Center inside the People’s Mall."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "That profile describes toasted siopao that sells out quickly."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "GMC credits the Sta. Maria family’s 3N Bakery with mass production from the 1990s."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "City of Naga: The Siopao Center (2022)",
+      "url": "https://www2.naga.gov.ph/a-classic-nagueno-delicacy-is-just-around-the-corner-the-siopao-center/"
+    },
+    {
+      "title": "GMC: Toasted siopao (2022)",
+      "url": "https://genmil.com.ph/toasted-siopao/"
+    },
+    {
+      "title": "OpenStreetMap: People’s Mall placement area",
+      "url": "https://www.openstreetmap.org/way/23674855",
+      "note": "Representative Point inside the mapped market, supported by the city’s inside-the-mall address. Exact stall/entrance position is unknown; the Point does not replace the market footprint."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.183758, 13.62108]
+  },
+  "known_for": ["dish/toasted-siopao"],
+  "signatures": [
+    {
+      "name": "Toasted siopao",
+      "source": 0
+    }
+  ]
+}

@@ -30,7 +30,9 @@ describe('city page client boundary', () => {
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
       expect(page.props.children.props.tilesVersion).toBe('1234abcd');
-      const life = decodeInlineRuntime(page.props.children.props.runtimeGzip).cityLife;
+      const runtime = decodeInlineRuntime(page.props.children.props.runtimeGzip);
+      expect(runtime.dishes).toEqual(pack.content.dishes);
+      const life = runtime.cityLife;
       expect(life).toEqual(pack.city.life ? runtimeCityLife(pack.city.life) : undefined);
       for (const season of life?.seasons ?? []) {
         expect(season).not.toHaveProperty('grounds');

@@ -1,5 +1,6 @@
 .popover,
-.sheet {
+.sheet,
+.dish {
   position: fixed;
   box-sizing: border-box;
   overflow-y: auto;
@@ -10,6 +11,16 @@
   line-height: 1.5;
   z-index: 14;
   overflow-wrap: anywhere;
+}
+.dish {
+  top: max(64px, calc(var(--focus-header-bottom, 0px) + 8px));
+  right: 16px;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(
+    100dvh - max(64px, calc(var(--focus-header-bottom, 0px) + 8px)) -
+      var(--attribution-height, 40px) - 16px
+  );
+  padding: 16px;
 }
 .popover {
   top: 0;

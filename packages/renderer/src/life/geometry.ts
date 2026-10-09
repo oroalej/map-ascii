@@ -262,6 +262,10 @@ export type LifeGeometry = {
   controlledCrossings?: ControlledCrossingAnchor[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
+  /** Public street feature ids; service/compound roads are deliberately absent. */
+  peddlerStreetIds?: number[];
+  /** Restricted walking/street identities, also inherited by derived sidewalks. */
+  vendorRestrictedLineIds?: number[];
   /** Original population line per routing piece; splitting must not reshuffle spawn streams. */
   spawnGroups?: Uint32Array;
   /** Routing-only joins never contribute residents or consume population random streams. */
@@ -334,7 +338,13 @@ export type LifeArea = {
   /** Mapped stripe boundary for crossing decisions; `rings` retains the wider walking cut. */
   crossingStripes?: TilePoint[][];
   kind:
-    'parking' | 'blocked' | 'vehicle-blocked' | 'carriageway' | 'crossing' | 'parking-exclusion';
+    | 'parking'
+    | 'blocked'
+    | 'vehicle-blocked'
+    | 'carriageway'
+    | 'crossing'
+    | 'parking-exclusion'
+    | 'peddler-exclusion';
   rings: TilePoint[][];
   water?: boolean;
   seating?: boolean;
@@ -497,6 +507,15 @@ export class LifeBuilder {
     return this.areas.filter((area) => area.kind === 'carriageway').map((area) => area.rings);
   }
   private lineIds: number[] = [];
+  private peddlerStreetIds?: Set<number>;
+  peddlerStreet(id?: number) {
+    this.peddlerStreetIds ??= new Set();
+    if (id !== undefined) this.peddlerStreetIds.add(id >>> 0);
+  }
+  private vendorRestrictedLineIds?: Set<number>;
+  restrictVendors(id: number) {
+    (this.vendorRestrictedLineIds ??= new Set()).add(id >>> 0);
+  }
   private areas: LifeArea[] = [];
   private sites: number[] = [];
   private obstacles: number[] = [];
@@ -913,6 +932,8 @@ export class LifeBuilder {
       controlledCrossings: this.controlledCrossings,
       commerce: shopValues(this.commerce),
       lineIds: Uint32Array.from(this.lineIds),
+      peddlerStreetIds: this.peddlerStreetIds && [...this.peddlerStreetIds],
+      vendorRestrictedLineIds: this.vendorRestrictedLineIds && [...this.vendorRestrictedLineIds],
       spawnGroups: this.spawnGroups && Uint32Array.from(this.spawnGroups),
       navigationOnly: Uint8Array.from(this.navigationOnly),
       areas: this.areas,

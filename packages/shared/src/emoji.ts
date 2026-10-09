@@ -63,6 +63,8 @@ export const EMOJI_MOODS = [
   'yawn',
   'candle',
   'beg',
+  'tired',
+  'bell',
   'bark',
 ] as const;
 export type EmojiMood = (typeof EMOJI_MOODS)[number];
@@ -134,6 +136,8 @@ export const MOOD_GLYPHS: Readonly<Record<EmojiMood, string>> = {
   yawn: '🥱',
   candle: '🕯️',
   beg: '🥺',
+  tired: '😩',
+  bell: '🔔',
   bark: '📢',
 };
 export const SUBJECT_GLYPHS: Readonly<Record<EmojiSubject, Partial<Record<EmojiMood, string>>>> = {

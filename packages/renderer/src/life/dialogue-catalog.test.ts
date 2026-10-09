@@ -4,11 +4,15 @@ import { dialogueChoices, SCENE_PROFILES } from '@atlas/shared';
 import { Moments, type MomentActor, type MomentContext } from './moments';
 import { SceneSpeech } from './scene-speech';
 import { dialogueEligible, type DialogueContext } from './dialogue';
+import { peddlerFixture, peddlerConfig, peddlerWeather, peddlerPM } from './testing/peddlers';
+import { LifeBuilder, LifeLine } from './geometry';
+import { PeddlerCaller } from './peddler-calls';
 import { assignEventCues, eventCheers } from './event-cues';
 import type { VisibleAgent } from './simulate';
 
 // loadCityPacks reads the packs from disk; this lets targeted runs select the test on dialogue edits.
 import.meta.glob('../../../content/cities/*/dialogue.json');
+import.meta.glob('../../../content/cities/*/city.json');
 const { packs, errors } = await loadCityPacks();
 if (errors.length) throw new Error(JSON.stringify(errors));
 const entries = packs.flatMap(({ city, dialogue }) =>
@@ -23,6 +27,57 @@ const entries = packs.flatMap(({ city, dialogue }) =>
 const choices = entries.map(({ entry }) => entry);
 // Event cheers are called out by running events (event-cues.ts), not by street moments.
 const cheers = entries.filter(({ entry }) => entry.kind === 'cheer');
+
+it.each(['heat', 'clearing', 'hover'] as const)(
+  'excludes sales-only dialogue for the actual buyer in %s',
+  (mode) => {
+    const street = new LifeBuilder();
+    street.line(
+      [
+        { x: 1000, y: 1500 },
+        { x: 1000 + 100 * peddlerPM, y: 1500 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
+    const pack = packs.find(({ city }) => city.slug === 'naga')!,
+      buyer = pack.city.life!.peddlers!.find(({ id }) => id === 'bote-dyaryo')!,
+      catalog = dialogueChoices(pack.dialogue!),
+      { population } = peddlerFixture([{ ...buyer, share: 1 }], street.finish());
+    population.step(0, { ...peddlerWeather, minutes: 540 }, 0);
+    const owner = population.owners[0]!,
+      caller = new PeddlerCaller(catalog, pack.dialogue!.periods),
+      env = { ...peddlerWeather, minutes: 780, sunAltitude: 60 };
+    expect(owner).toBeDefined();
+    const context: DialogueContext = {
+      minutes: 780,
+      rain: 0,
+      wind: 0,
+      sunAltitude: 60,
+      clearing: mode === 'clearing',
+      figures: ['adult'],
+      profiles: ['peddler-call'],
+      delivery: 'utterance',
+      peddler: { goods: buyer.id, event: mode === 'hover' ? 'hover' : undefined },
+    };
+    for (const id of ['peddler-heat-tired', 'peddler-clearing', 'peddler-hover-1'])
+      expect(
+        dialogueEligible(
+          catalog.find((entry) => entry.id === id)!,
+          context,
+          pack.dialogue!.periods,
+        ),
+      ).toBe(false);
+    for (let i = 0; i < 4; i++) {
+      owner.callToken++;
+      if (mode === 'clearing') owner.resumeToken++;
+      caller.step(owner, 10, env, true, mode === 'hover' && i === 0);
+      if (mode === 'hover' && i === 0)
+        expect(caller.cue(owner)?.exchangeId).toBe('peddler-hover-2');
+      else expect(caller.cue(owner)?.exchangeId).toMatch(/^peddler-bote-dyaryo-/);
+    }
+  },
+);
 
 it.each(cheers)('$city/$entry.id is called out by each of its events', ({ entry }) => {
   const byEvent = eventCheers(choices);
@@ -76,6 +131,12 @@ it.each(entries.filter(({ entry }) => entry.kind !== 'cheer'))(
       figures:
         entry.conditions?.audience === 'adult-child' ? ['adult', 'child'] : ['adult', 'adult'],
       ...(sceneOwned && { profiles: [entry.profile!] }),
+      ...(entry.profile === 'peddler-call' && {
+        peddler: {
+          goods: entry.conditions?.goods?.[0] ?? 'sample-goods',
+          event: entry.conditions?.event as 'hover' | 'leaving' | undefined,
+        },
+      }),
     };
     context.figures = Array.from({ length: slots }, (_, i) => context.figures[i] ?? 'adult');
     // Search the pack's legal clock window rather than assuming Naga's period boundaries.
@@ -86,7 +147,49 @@ it.each(entries.filter(({ entry }) => entry.kind !== 'cheer'))(
     context.minutes = minutes!;
     expect(dialogueEligible(entry, context, periods)).toBe(true);
     const seen = new Map<number, number>();
-    if (sceneOwned) {
+    if (entry.profile === 'peddler-call') {
+      const { population } = peddlerFixture([{ ...peddlerConfig, id: context.peddler!.goods }]);
+      population.step(0, peddlerWeather, 0);
+      const owner = population.owners[0]!;
+      const caller = new PeddlerCaller([entry], periods);
+      caller.step(
+        owner,
+        0,
+        { ...peddlerWeather, ...context, wind: { dir: [1, 0], strength: context.wind } },
+        true,
+        false,
+      );
+      owner.callToken++;
+      owner.resumeToken += Number(weather === 'clearing');
+      owner.leaving = context.peddler!.event === 'leaving';
+      caller.step(
+        owner,
+        0,
+        { ...peddlerWeather, ...context, wind: { dir: [1, 0], strength: context.wind } },
+        true,
+        context.peddler!.event === 'hover',
+      );
+      const cue = caller.cue(owner);
+      expect(cue?.exchangeId).toBe(entry.id);
+      seen.set(cue!.line, cue!.member!);
+      expect(dialogueEligible(entry, { ...context, peddler: undefined }, periods)).toBe(false);
+      if (entry.conditions?.goods)
+        expect(
+          dialogueEligible(
+            entry,
+            { ...context, peddler: { ...context.peddler!, goods: 'unrelated-goods' } },
+            periods,
+          ),
+        ).toBe(false);
+      if (entry.conditions?.event)
+        expect(
+          dialogueEligible(
+            entry,
+            { ...context, peddler: { ...context.peddler!, event: undefined } },
+            periods,
+          ),
+        ).toBe(false);
+    } else if (sceneOwned) {
       const host = new SceneSpeech(42, [entry], periods);
       const scene = {
         kind: entry.kind,

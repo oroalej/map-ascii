@@ -1,0 +1,55 @@
+{
+  "id": "landmark/new-china",
+  "name": { "en": "New China Restaurant" },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "Established in 1943, New China serves Chinese-Filipino dishes near Prieto and General Luna streets."
+      },
+      "source": 0,
+      "year": 1943
+    },
+    {
+      "text": {
+        "en": "Its upstairs dining room hosted wedding receptions, birthdays and other family celebrations."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "Coffee served with evaporated or condensed milk made it a gathering place for journalists, artists and writers."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2026 visit documents its pancit and signature siopao; the former Beehive Cake is no longer served."
+      },
+      "source": 1,
+      "year": 2026
+    }
+  ],
+  "sources": [
+    {
+      "title": "Dateline Ibalon: New China Restaurant (2025)",
+      "url": "https://dateline-ibalon.com/2025/02/naga-city-360-arts-culture-and-heritage-in-28-days-28-ways-part-2-dennis-b-gonzaga/"
+    },
+    {
+      "title": "The Archipelago Press: Downtown Naga stroll (2026)",
+      "url": "https://thearchipelagopress.com/a-nostalgic-stroll-through-downtown-naga-city-the-heart-of-bicol/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/642992021",
+      "note": "Point copied from the mapped New China business node near Prieto and General Luna. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": { "type": "Point", "coordinates": [123.1842225, 13.6222399] },
+  "signatures": [
+    { "name": "Pancit", "source": 1 },
+    { "name": "Siopao", "source": 1 },
+    { "name": "Coffee with evaporated or condensed milk", "source": 0 }
+  ]
+}

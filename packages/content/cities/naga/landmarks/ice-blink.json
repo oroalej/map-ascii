@@ -1,0 +1,54 @@
+{
+  "id": "landmark/ice-blink",
+  "name": {
+    "en": "Ice Blink — Elias Angeles"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "Uma’s guide identifies an Elias Angeles halo-halo shop."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The guide calls it Naga’s oldest halo-halo shop; an opening date is not established."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "A 2011 visitor also described Ice Blink’s mami and toasted siopao."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "Uma: Halo-halo in Naga (2024)",
+      "url": "https://umahotel.ph/fantastic-food-and-where-to-find-them-best-place-to-eat-halo-halo-near-uma/"
+    },
+    {
+      "title": "Marxtermind: Bicol food trip (2011)",
+      "url": "https://www.marxtermind.com/something-local-my-bicol-food-trip/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/11987328389",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1863005, 13.6253791]
+  },
+  "known_for": ["dish/halo-halo"],
+  "signatures": [
+    {
+      "name": "Halo-halo",
+      "source": 0
+    }
+  ]
+}

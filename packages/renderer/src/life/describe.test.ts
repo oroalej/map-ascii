@@ -5,6 +5,20 @@ import { VEHICLES } from './vehicles';
 import type { VisibleAgent } from './simulate';
 
 const person: VisibleAgent = { kind: 'person', lng: 0, lat: 0, flap: 0 };
+it('uses a generic pack label for an owned peddler', () => {
+  expect(
+    describeAgent({
+      ...person,
+      peddler: {
+        id: 'unrelated-goods',
+        label: 'Local seller',
+        prop: 'basket',
+        parasol: 0,
+        lamp: 0,
+      },
+    }),
+  ).toBe('Local seller (simulated)');
+});
 it('names every craft, species, pet and figure as simulated', () => {
   for (const [vehicle, name] of [
     ['ambulance', 'Ambulance'],

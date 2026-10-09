@@ -23,9 +23,9 @@ const catalog = {
 };
 describe('curated dialogue', () => {
   const schema = dialogueCatalog(['bcl', 'fil']);
-  it('accepts heat and clearing conditions and pins both catalog caps at 120', () => {
+  it('accepts heat and clearing conditions and pins both catalog caps at 140', () => {
     for (const weather of ['heat', 'clearing']) {
-      const exchanges = Array.from({ length: 120 }, (_, i) => ({
+      const exchanges = Array.from({ length: 140 }, (_, i) => ({
         ...catalog.exchanges[0]!,
         id: `weather-${i}`,
         conditions: { weather },

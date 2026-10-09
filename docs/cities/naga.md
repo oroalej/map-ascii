@@ -57,6 +57,8 @@ Tour 2 is in the city pack (`packages/content/cities/naga/tours/`) as a draft: i
 
 Tour narration must be fact-checked against sources before shipping. Draft text may use placeholders marked `TODO(verify)`.
 
+Five verified food tours extend the Centro walk: **Kinalas crawl** (Cathedral neighborhood, Dayangdang, Carolina), **Centro old-timers** (New China, Crown Park, Quality Bakery, mami, bakeries and halo-halo), **Market breakfast** (People's Mall, 3N, Face the Wall), **Magsaysay nights** (grills, cakes, coffee and family recipes), and **Pili and pasalubong** (Graceland, Casa Moderna, RPM Pili Nut Candies, People’s Mall dried goods, J. Emmanuel at SM and FSJ at the bus terminal). Each step cites its research. Twenty-three food landmarks and the People's Mall have clickable facts; nine dishes are searchable and appear under Known for. Sourced products appear under Pasalubong. Tenant Points and overview cameras state their placement limits; inaccessible sources or unestablished locations are omitted.
+
 ## 4. Research backlog (content team)
 
 Illustrative rice seasons (2026-10-08): `climate.crops.rice` uses illustrative six-stage timing from [DA Bicol's April 2026 report](https://bicol.da.gov.ph/da-bicol-tiniyak-na-sapat-ang-bigas-sa-rehiyon-at-patuloy-ang-mga-interbensyon-para-sa-mga-magsasaka-ngayong-wet-cropping-season/) (June planting and September harvest), its [September 2024-February 2025 climate outlook](https://bicol.da.gov.ph/wp-content/uploads/2024/09/v2RSCOA_Sept2024-to-feb2025.pdf) (December dry-season planting), and [PhilRice cropping-season context](https://www.philrice.gov.ph/competitiveness-philippine-rice-asia/). Exact land preparation, transplanting, ripening, harvesting and fallow dates need confirmation with local farmers; verify irrigation, varieties and crop types. All farmland is depicted as irrigated rice without verified crop tags, and the legend discloses this illustrative calendar.
@@ -298,3 +300,39 @@ Illustrative seasonal simulation. Candle placement, fallback memorial sites, fam
 Sources: [Naga’s October 17, 2022 preparation report](https://www2.naga.gov.ph/undas-sa-syudad-nin-naga-pig-aandaman-na/) supports November 1–2 cemetery visitation, especially at Naga City Public Cemetery. [Naga’s October 31, 2022 Pista nin mga Kalag post](https://www2.naga.gov.ph/pista-nin-mga-kalag-and-why-nov-2-is-a-working-holiday/) supports the local dates and cemetery observance; its holiday classification applies to 2022. [PNA’s 2020 Undas article](https://www.pna.gov.ph/articles/1117601) provides general Philippine context for pre-pandemic October 31 vigils, families, candles, flowers, vendors and hearing Mass; pandemic restrictions are historical context. None establishes Naga-specific hours, counts or church schedules.
 
 Verification backlog: verify actual Mass schedules and church selection, cemetery visiting hours, vendor locations and surveyed placements. Existing representative marker geometry is incomplete; retain the explicit markerless fallback caveat until a better inventory exists.
+
+## Street peddlers
+
+Seven illustrative walking trades use the city-local clock. Peddlers use street-edge corridors outside the carriageway. School, hospital, market and other establishment grounds, parks, plazas, parking areas and fields exclude their complete footprints; service roads and restricted-access drives are not eligible. These corridors are illustrative placement derived from street geometry, not mapped sidewalk claims. Exact hours and shares below are authored settings, not a Naga trade survey. Generic Philippine trade sources support recognizable goods, calls and broad morning/day/night patterns. [Naga livelihood research](https://philjournalsci.dost.gov.ph/publication/regular-issues/next-issue/116-vol-151-no-6a-december-2022-part-a/1733-street-vendors-livelihood-vulnerability-to-typhoons-in-naga-city-philippines) supports weather vulnerability, not the numeric shares.
+
+| Goods | Prop | Hours | Base / rain / heat / gust share |
+| --- | --- | --- | --- |
+| taho | `pole-buckets` | 05:00–11:00 | 1 / 0.5 / 0.6 / 0.5 |
+| balut | `basket` | 18:00–02:00 | 1 / 0.5 / 0.7 / 0.5 |
+| sorbetes | `box-cart` | 10:00–17:00 | 0.5 / 0 / 1 / 0.3 |
+| bote-dyaryo | `flatbed-cart` | 09:00–16:00 | 0.7 / 0 / 0.5 / 0.4 |
+| fishball | `fry-cart` | 14:00–22:00 | 0.7 / 0.3 / 1 / 0.5 |
+| kakanin | `head-tray` | 06:00–10:00, 14:00–17:00 | 0.7 / 0.3 / 0.5 / 0.4 |
+| takatak | `chest-tray` | 07:00–20:00 | 0.8 / 0.5 / 0.6 / 0.5 |
+
+Balut and fishball carry night lamps. Sorbetes rings a bell, carries a parasol and uses the pack’s cool mood override. Takatak stays within 160 m of decoded jeepney terminals and sells candy only as a conservative simulation choice: [Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/) regulates tobacco retail permits and locations; no blanket ban on all ambulant tobacco sale is claimed. Its mapped terminal walking coverage is available in the pinned archive.
+
+The [dialogue review](../../packages/content/cities/naga/dialogue-review.md) lists 21 new original utterances (14 plain, four weather, two hover, one leaving) with Bikol, English and Tagalog. The full catalog, including six event cheers, is 131/140, leaving 9 slots. Native-speaker review has not occurred.
+
+Trade sources:
+
+- taho: [How is taho made—and where?](https://lifestyle.inquirer.net/208164/how-is-taho-made-and-where/).
+- balut: [The authentic balut: history, culture, and economy of a Philippine food icon](https://doi.org/10.1186/s42779-019-0020-8).
+- sorbetes: [Dirty Ice Cream gets a Make Over](https://www.philstar.com/other-sections/starweek-magazine/2008/04/06/54243/dirty-ice-cream-gets-make-over/amp/).
+- bote-dyaryo: [Nestlé Philippines waste segregation guide](https://www.nestle.com.ph/sites/g/files/pydnoa366/files/2021-06/Solid%20Waste%20Management%20-%20Guide%20for%20Teens%202.5.pdf).
+- fishball: [Eating your way through Manila's mobile street food vendors](https://afn.netlify.app/en/articles/guide--eating-your-way-through-manila-s-mobile-street-food-vendo/).
+- kakanin: [Bicol DA assorted kakanin procurement](https://bicol.da.gov.ph/wp-content/uploads/2025/01/SVP-1-2025-PMED-405K.pdf).
+- takatak: [Takatak: Sa Kahon ng Paglimot, Sa Laylayan ng Pag-usad](https://newsroom-pacesetter.medium.com/takatak-sa-kahon-ng-paglimot-sa-laylayan-ng-pag-usad-b8207d62d1a8); [Naga Ordinance 2021-004](https://www2.naga.gov.ph/sp_ordinances/ordinance-no-2021-004/).
+
+Stationary generated cart vendors use the same compound exclusions, including later shopfront additions and carts restored after seasonal closures. Ateneo's complete mapped campus boundary excludes both stationary vendors and walking peddlers.
+
+Both vendor populations also avoid mapped private or restricted grounds, private walking routes and their derived sidewalks, and interiors enclosed by closed fences, walls or hedges. Public pedestrian access does not override private ownership or general access restrictions. The pipeline retains these restrictions in the published tiles; ordinary pedestrians keep their existing routes.
+
+For owner review in `pnpm dev`: `/naga?lat=13.618246&lng=123.191733&z=19` at 09:00 has a decoded street-side taho vendor; `/naga?lat=13.618320&lng=123.191145&z=19` has a terminal-constrained street-side takatak candidate. Check the Ateneo campus at `/naga?lat=13.631430&lng=123.184370&z=19`. These coordinates were checked through the simulation, without screenshots or visual claims.
+
+Review private-route exclusions at `/naga?lat=13.6222927&lng=123.196672&z=19`.

@@ -1,0 +1,55 @@
+{
+  "id": "landmark/dca-signature",
+  "name": {
+    "en": "DCA Signature — Naga"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The brand’s Daet listing dates its beginnings to 8 June 2017; this does not date the Naga branch."
+      },
+      "source": 0,
+      "year": 2017
+    },
+    {
+      "text": {
+        "en": "DCA expands to D’ Coffee Apartment in the brand’s own account."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The Naga listing places its coffee-and-cake shop in Cereza on Magsaysay Avenue."
+      },
+      "source": 1
+    }
+  ],
+  "sources": [
+    {
+      "title": "DCA Daet: business self-description on Tripadvisor",
+      "url": "https://www.tripadvisor.in/Restaurant_Review-g1207744-d13139613-Reviews-DCA_Signature_Daet-Daet_Camarines_Norte_Province_Bicol_Region_Luzon.html",
+      "note": "Brand history in Daet; this does not date the Naga branch."
+    },
+    {
+      "title": "Restaurant Guru: DCA Signature Naga",
+      "url": "https://restaurantguru.com/DCA-Signature-Naga-Naga"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/13986130048",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1973936, 13.6310266]
+  },
+  "signatures": [
+    {
+      "name": "Coffee and cakes",
+      "source": 1
+    }
+  ]
+}

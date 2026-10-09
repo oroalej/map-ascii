@@ -17,7 +17,6 @@ import styles from './AtlasCanvas.module.css';
 import { Attribution } from './Attribution';
 
 import { Hud } from './Hud';
-
 import { PlacesInView } from './PlacesInView';
 import { SearchBox } from './SearchBox';
 
@@ -38,6 +37,9 @@ const TourPlayer = dynamic(() => import('./InteractionDetails').then((m) => m.To
   ssr: false,
 });
 const LandmarkFacts = dynamic(() => import('./InteractionDetails').then((m) => m.LandmarkFacts), {
+  ssr: false,
+});
+const DishFacts = dynamic(() => import('./InteractionDetails').then((m) => m.DishFacts), {
   ssr: false,
 });
 const DebugStats = dynamic(() => import('./InteractionDetails').then((m) => m.DebugStats), {
@@ -87,7 +89,11 @@ export function CityAtlas({
   sidewalksDerived = true,
   utilitiesDerived = false,
 }: CityAtlasProps) {
-  const { cityLife, dialogue } = useMemo(() => decodeInlineRuntime(runtimeGzip), [runtimeGzip]);
+  const {
+    cityLife,
+    dialogue,
+    dishes = [],
+  } = useMemo(() => decodeInlineRuntime(runtimeGzip), [runtimeGzip]);
   const { landmarks, request, loaded } = useLandmarks(slug);
   const startup = useUiStore((s) => s.startup);
   const status =
@@ -177,9 +183,17 @@ export function CityAtlas({
       <TourMenu hasTours={hasTours} />
       {hover && <HoverTooltip />}
       {lifeShown && zoom >= Math.min(SPEECH_ZOOM, EMOJI_ZOOM) && <CueBubbles catalog={dialogue} />}
-      {selection && (
-        <LandmarkFacts city={slug} subdivisionLabel={subdivisionLabel} landmarks={landmarks} />
-      )}
+      {selection &&
+        (selection.id.startsWith('dish/') ? (
+          <DishFacts dishes={dishes} />
+        ) : (
+          <LandmarkFacts
+            city={slug}
+            subdivisionLabel={subdivisionLabel}
+            landmarks={landmarks}
+            dishes={dishes}
+          />
+        ))}
       {touring && <TourPlayer />}
       <Attribution />
       {debug && <DebugStats />}

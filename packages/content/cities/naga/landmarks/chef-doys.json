@@ -1,0 +1,62 @@
+{
+  "id": "landmark/chef-doys",
+  "name": {
+    "en": "Chef Doy’s Gourmet Restaurant"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "Chef Leandro “Doy” Sto. Domingo opened his restaurant."
+      },
+      "source": 0,
+      "year": 2008
+    },
+    {
+      "text": {
+        "en": "He trained at Pan Pacific Hotel Manila under Chef Sau del Rosario."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "He served as Avenue Plaza Hotel’s first executive chef before opening his own restaurant."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "His Bicolano fusion dishes include Laing Embutido and Cheesy Bicol Express."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Department of Tourism: Chef Doy’s profile",
+      "url": "https://7641islands.ph/explore/this-chef-is-shining-the-spotlight-on-bicolano-cuisine/"
+    },
+    {
+      "title": "OpenStreetMap: location",
+      "url": "https://www.openstreetmap.org/way/267198240",
+      "note": "Mapped business location only; no construction date inferred."
+    }
+  ],
+  "osm_id": "osm:way/267198240",
+  "known_for": ["dish/laing-pinangat", "dish/bicol-express"],
+  "signatures": [
+    {
+      "name": "Laing Embutido",
+      "source": 0
+    },
+    {
+      "name": "Cheesy Bicol Express",
+      "source": 0
+    },
+    {
+      "name": "Kare-Kareng Lechon Kawali",
+      "source": 0
+    }
+  ]
+}

@@ -1,0 +1,132 @@
+{
+  "id": "tour/kinalas-crawl",
+  "title": {
+    "en": "Kinalas crawl"
+  },
+  "description": {
+    "en": "From the Cathedral neighborhood through Dayangdang to upland Carolina."
+  },
+  "status": "verified",
+  "steps": [
+    {
+      "camera": {
+        "lng": 123.1859006,
+        "lat": 13.6266719,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Aling Cely’s serves kinalas on Dimasalang Street. A 2015 profile names its owner as the main cook and describes more than three decades of service."
+      },
+      "select": "landmark/aling-celys",
+      "sources": [
+        {
+          "title": "Trip or Treat: Aling Cely’s (2015)",
+          "url": "https://triportreatph.wordpress.com/2015/11/03/the-hunt-for-bicols-best-kinalas-1-aling-celys-kinalasan-naga-city/"
+        },
+        {
+          "title": "FEATR: The best kinalas in Bicol (2023)",
+          "url": "https://featrmedia.com/the-best-kinalas-in-bicol-is-this-filipino-ramen/"
+        },
+        {
+          "title": "OpenStreetMap: independent business POI",
+          "url": "https://www.openstreetmap.org/node/11152417378",
+          "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1946302,
+        "lat": 13.6296071,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "At Kinalas Twin, the noodle bowl can gain brain slices, egg or chicharon, with puto cheese alongside. Edwin Rey began developing his recipe in 1990."
+      },
+      "select": "osm:node/4921456921",
+      "sources": [
+        {
+          "title": "Langyaw: Kinalas Twin (2010)",
+          "url": "https://langyaw.com/2010/10/29/kinalas-is-comfort-food-brain-slices-optional/"
+        },
+        {
+          "title": "OpenStreetMap: location",
+          "url": "https://www.openstreetmap.org/node/4921456921",
+          "note": "Mapped business location only; no construction date inferred."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1905938,
+        "lat": 13.6270831,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Cha Kamot’s Corregidor Street kinalas helped popularize this Naga comfort food. Dateline Ibalon describes a following spanning roughly two generations."
+      },
+      "select": "landmark/cha-kamot",
+      "sources": [
+        {
+          "title": "Dateline Ibalon: Naga City 360, part 4 (2025)",
+          "url": "https://dateline-ibalon.com/2025/02/naga-city-360-arts-culture-and-heritage-in-28-days-28-ways-part-4-dennis-b-gonzaga/"
+        },
+        {
+          "title": "Restaurant Guru: location",
+          "url": "https://restaurantguru.com/Cordovas-Kinalas-Cha-Kamot-Naga",
+          "note": "Approximate business coordinate from listing metadata, checked against the published street/subdivision address; no entrance or footprint precision implied."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.1908121,
+        "lat": 13.6275653,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "Mang Kok’s began as a home-based kinalasan in 2015. Its Solid Street menu includes beef, special and lechon kinalas."
+      },
+      "select": "landmark/mang-koks",
+      "sources": [
+        {
+          "title": "Naga City Tourism: Mang Kok’s Kinalas",
+          "url": "https://tourism.naga.gov.ph/tr-establishments/mang-koks-kinalas/"
+        },
+        {
+          "title": "City tourism: linked map position",
+          "url": "https://maps.app.goo.gl/6zuReT8R9Y8vXMFU7",
+          "note": "Point from the map linked by the city tourism listing; approximate business location, not a surveyed entrance or footprint."
+        }
+      ]
+    },
+    {
+      "camera": {
+        "lng": 123.2616047,
+        "lat": 13.6630448,
+        "zoom": 17.5
+      },
+      "duration_ms": 12000,
+      "narration": {
+        "en": "The flight east ends at Didick’s in Carolina. Its special kinalas adds egg, chicharon and special meat; turones, paksiw and dinuguan round out the menu."
+      },
+      "select": "landmark/didicks-kina-log",
+      "sources": [
+        {
+          "title": "Naga City Tourism: Didick’s Kina-Log",
+          "url": "https://tourism.naga.gov.ph/tr-establishments/didicks-kina-log-kinalas-log-log/",
+          "note": "Undated anniversary text does not establish an opening year."
+        },
+        {
+          "title": "Restaurant Guru: location",
+          "url": "https://restaurantguru.com/Didicks-Kina-log-Naga",
+          "note": "Approximate business coordinate from listing metadata, checked against the published street/subdivision address; no entrance or footprint precision implied."
+        }
+      ]
+    }
+  ]
+}

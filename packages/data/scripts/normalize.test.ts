@@ -40,6 +40,31 @@ const collection = (...features: Feature[]): FeatureCollection => ({
   type: 'FeatureCollection',
   features,
 });
+it('bakes vendor restrictions for private lawns, owned grounds and paths before tile tag removal', () => {
+  const lawn: Feature = {
+    type: 'Feature',
+    id: 'way/lawn',
+    properties: { landuse: 'grass', access: 'private', foot: 'yes' },
+    geometry: square(0.002, 0.002, 0.004, 0.004),
+  };
+  const owned: Feature = {
+    ...lawn,
+    id: 'way/owned',
+    properties: { landuse: 'grass', ownership: 'private', access: 'yes' },
+  };
+  const path = road('way/path', 'footway', 0.003);
+  path.properties = { highway: 'footway', access: 'customers' };
+  const publicPath = road('way/public', 'footway', 0.005);
+  publicPath.properties = { highway: 'footway', access: 'permissive' };
+  const records = normalize(collection(lawn, owned, path, publicPath), boundary, 10).features;
+  for (const id of ['lawn', 'owned', 'path'])
+    expect(
+      records.find((f) => f.properties.id === `osm:way/${id}`)!.properties.vendor_restricted,
+    ).toBe(true);
+  expect(
+    records.find((f) => f.properties.id === 'osm:way/public')!.properties.vendor_restricted,
+  ).toBeUndefined();
+});
 it('keeps event access/bridge metadata and separates path clearance from ordinary widths', () => {
   const street = road('way/road', 'residential', 0.002),
     path = road('way/path', 'footway', 0.004);

@@ -39,6 +39,7 @@ export default async function CityPage({ params }: Props) {
         runtimeGzip={encodeInlineRuntime({
           cityLife: city.life ? runtimeCityLife(city.life) : undefined,
           dialogue: runtimeDialogueCatalog(pack.dialogue),
+          dishes: content.dishes,
         })}
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}

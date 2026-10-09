@@ -35,6 +35,7 @@ export function createConfiguredInlineHost(
     processions,
     seasons: simulationSeasons(options.cityLife?.seasons),
     shopSchedule: options.cityLife?.schedules?.shops,
+    peddlers: options.cityLife?.peddlers,
     folklore: runtimeFolklore(options.cityLife),
     emergencyConfig: options.cityLife?.emergency,
     emergency: options.emergency,

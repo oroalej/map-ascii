@@ -4,7 +4,7 @@ import {
   searchOptions,
   type BBox,
   type SearchEntry,
-  type SearchType,
+  type GeographicSearchEntry,
   type SubdivisionArea,
 } from '@atlas/shared';
 import { SearchIndexFile } from '@atlas/shared/schemas';
@@ -40,7 +40,7 @@ function searchPoint(
 export const zoomForSpan = (span: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, Math.round(Math.log2(562.5 / Math.max(span, 1e-6)) * 10) / 10));
 
-const typeOf = (p: AtlasProperties): SearchType | null => {
+const typeOf = (p: AtlasProperties): GeographicSearchEntry['type'] | null => {
   if (p.landmark) return 'landmark';
   switch (p.class) {
     case 'building_school':
@@ -65,7 +65,8 @@ const typeOf = (p: AtlasProperties): SearchType | null => {
   }
 };
 
-const zoomHints: Record<SearchType, number> = {
+const zoomHints: Record<GeographicSearchEntry['type'], number> = {
+  food: 17.5,
   landmark: 17.5,
   subdivision: 15,
   street: 16,
@@ -119,7 +120,7 @@ const join2 = (a: BBox, b: BBox): BBox => [
   Math.max(a[3], b[3]),
 ];
 
-type Candidate = { feature: AtlasFeature; bbox: BBox; type: SearchType };
+type Candidate = { feature: AtlasFeature; bbox: BBox; type: GeographicSearchEntry['type'] };
 
 /**
  * A search entry's bbox, rounded, or nothing when it has no area (a point, or a way running
@@ -159,6 +160,7 @@ export function searchEntries(
 ): SearchEntry[] {
   const entries = new Map<string, SearchEntry>();
   const landmarks = new Map(content.landmarks.map((l) => [l.id, l]));
+  const dishes = new Map(content.dishes.map((dish) => [dish.id, dish]));
   const byName = new Map<string, Candidate[]>();
   const placeNodes = new Map<string, AtlasFeature>();
 
@@ -166,7 +168,8 @@ export function searchEntries(
     const p = feature.properties;
     if (!p.name) continue;
     if (p.subdivision_label) placeNodes.set(p.name, feature);
-    const type = typeOf(p);
+    const type =
+      p.landmark_id && landmarks.get(p.landmark_id)?.type === 'food' ? 'food' : typeOf(p);
     if (!type || (type === 'place' && p.subdivision_label)) continue;
     const key = `${type}\u0000${p.name}`;
     const list = byName.get(key) ?? [];
@@ -205,7 +208,15 @@ export function searchEntries(
       entries.set(p.id, {
         id: p.id,
         name: p.name!,
-        altNames: [...new Set([...altNamesOf(p), ...localized])],
+        altNames: [
+          ...new Set([
+            ...altNamesOf(p),
+            ...localized,
+            ...(landmark?.known_for ?? []).flatMap((id) =>
+              Object.values(dishes.get(id)?.name ?? {}),
+            ),
+          ]),
+        ],
         type: main.type,
         ...(p.subdivision && { subdivision: p.subdivision }),
         ...(p.subdivision_approx && { approximate: true }),
@@ -253,6 +264,15 @@ export function searchEntries(
       ...entryBbox(turfBbox(feature) as BBox),
     });
   }
+  for (const dish of content.dishes)
+    entries.set(dish.id, {
+      id: dish.id,
+      name: dish.name.en,
+      type: 'dish',
+      altNames: Object.entries(dish.name)
+        .filter(([lang]) => lang !== 'en')
+        .map(([, name]) => name),
+    });
   return [...entries.values()];
 }
 
@@ -265,7 +285,7 @@ export function buildSearchIndex(entries: SearchEntry[]): SearchIndexFile {
 
 /** The entries whose point lies inside the region. */
 export const inRegion = (entries: SearchEntry[], region: BBox) =>
-  entries.filter((e) => inBbox(e.lng, e.lat, region));
+  entries.filter((e) => e.type === 'dish' || inBbox(e.lng, e.lat, region));
 
 // Build <city>.search-index.json
 export const step: Step = {

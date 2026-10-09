@@ -4,6 +4,7 @@ import type {
   UtilityRecord as UtilityRecordType,
 } from './utilities';
 import * as z from 'zod';
+import { PEDDLER_PROPS, peddlerHourParts } from './peddlers';
 import { isEmergencyData, type EmergencyData } from './emergency-network';
 import type { EmergencyConfig } from './rhythm';
 import { OsmId, OsmAreaId, OsmWayId, MercatorPosition } from './schema-primitives';
@@ -170,6 +171,7 @@ const endAfterStart = (v: { start_year?: number | undefined; end_year?: number |
   v.start_year === undefined || v.end_year === undefined || v.end_year > v.start_year;
 
 export const LandmarkType = z.enum([
+  'food',
   'church',
   'school',
   'plaza',
@@ -181,6 +183,11 @@ export const LandmarkType = z.enum([
   'other',
 ]);
 export type LandmarkType = z.infer<typeof LandmarkType>;
+
+export const LandmarkId = z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>');
+/** OSM features and independently placed, present-day landmarks share selection behavior. */
+export const SelectableFeatureId = z.union([OsmId, LandmarkId]);
+export const DishId = z.string().regex(/^dish\/[a-z0-9-]+$/, 'expected dish/<slug>');
 
 export const NameHistoryEntry = z
   .object({
@@ -755,9 +762,34 @@ export function contentSchemas(languages?: readonly string[]) {
       path: ['certainty'],
     });
 
+  const Dish = z
+    .object({
+      id: DishId,
+      name: text,
+      origin: z.enum(['local', 'regional', 'contested', 'elsewhere', 'unknown']),
+      description: text,
+      facts: z.array(LandmarkFact).min(3).max(5),
+      sources: Sources,
+    })
+    .superRefine((dish, ctx) => {
+      dish.facts.forEach((fact, index) => {
+        if (fact.source >= dish.sources.length)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['facts', index, 'source'],
+            message: 'fact source must reference a dish source',
+          });
+      });
+    });
+  const MenuItem = z.strictObject({
+    name: z.string().trim().min(1),
+    note: z.string().trim().min(1).optional(),
+    source: z.int().nonnegative(),
+  });
+
   const Landmark = z
     .object({
-      id: z.string().regex(/^landmark\/[a-z0-9-]+$/, 'expected landmark/<slug>'),
+      id: LandmarkId,
       osm_id: OsmId.optional(),
       geometry: GeoJsonGeometry.optional(),
       name: text,
@@ -768,6 +800,9 @@ export function contentSchemas(languages?: readonly string[]) {
       story: text.optional(),
       photos: z.array(Photo).optional(),
       facts: z.array(LandmarkFact).min(3).max(5).optional(),
+      known_for: z.array(DishId).min(1).optional(),
+      signatures: z.array(MenuItem).optional(),
+      pasalubong: z.array(MenuItem).optional(),
       sources: Sources,
     })
     .refine(endAfterStart, {
@@ -779,6 +814,33 @@ export function contentSchemas(languages?: readonly string[]) {
       path: ['osm_id'],
     })
     .superRefine((landmark, ctx) => {
+      for (const field of ['signatures', 'pasalubong'] as const)
+        landmark[field]?.forEach((item, index) => {
+          if (item.source >= landmark.sources.length)
+            ctx.addIssue({
+              code: 'custom',
+              path: [field, index, 'source'],
+              message: `${field} source must reference a landmark source`,
+            });
+        });
+      if (landmark.type === 'food' && !landmark.osm_id) {
+        if (
+          landmark.geometry?.type !== 'Point' ||
+          !MercatorPosition.safeParse(landmark.geometry.coordinates).success
+        )
+          ctx.addIssue({
+            code: 'custom',
+            path: ['geometry'],
+            message: 'standalone food landmarks require a valid Point',
+          });
+        if (landmark.start_year !== undefined || landmark.end_year !== undefined)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['start_year'],
+            message:
+              'standalone food landmarks represent present-day locations; dates belong in facts',
+          });
+      }
       landmark.facts?.forEach((fact, index) => {
         if (fact.source >= landmark.sources.length) {
           ctx.addIssue({
@@ -815,8 +877,8 @@ export function contentSchemas(languages?: readonly string[]) {
     fly_ms: z.int().positive().max(MAX_TOUR_FLY_MS).optional(),
     narration: text,
     year: Year.optional(),
-    select: OsmId.optional(),
-    highlight: z.array(OsmId).max(64).optional(),
+    select: SelectableFeatureId.optional(),
+    highlight: z.array(SelectableFeatureId).max(64).optional(),
     audio: z.string().min(1).optional(),
     /** Where the narration's claims come from; required once the tour is verified. */
     sources: Sources.optional(),
@@ -1074,6 +1136,7 @@ export function contentSchemas(languages?: readonly string[]) {
     });
 
   return {
+    Dish,
     LandmarkFact,
     Landmark,
     NameHistory,
@@ -1090,6 +1153,7 @@ export function contentSchemas(languages?: readonly string[]) {
 }
 
 export const {
+  Dish,
   LandmarkFact,
   Landmark,
   NameHistory,
@@ -1101,6 +1165,7 @@ export const {
   Landcover,
   Procession,
 } = contentSchemas();
+export type Dish = z.infer<typeof Dish>;
 export type Procession = z.infer<typeof Procession>;
 export type Landcover = z.infer<typeof Landcover>;
 export type LandmarkPlan = z.infer<typeof LandmarkPlan>;
@@ -1729,8 +1794,59 @@ export const EmergencyConfigSchema = z
 /** The runtime codec validates the bounded packed graph, including every cross-reference. */
 export const CityEmergency = z.custom<EmergencyData>(isEmergencyData, 'invalid emergency network');
 
+const PeddlerHours = z
+  .strictObject({
+    from: z.number().min(0).lt(24),
+    to: z.number().min(0).max(24),
+  })
+  .refine((h) => h.from !== h.to, 'empty hours');
+export const Peddler = z.strictObject({
+  id: z.string().regex(/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/),
+  label: z.string().trim().min(1),
+  prop: z.enum(PEDDLER_PROPS),
+  hours: z.union([
+    PeddlerHours,
+    z
+      .array(PeddlerHours)
+      .min(1)
+      .max(2)
+      .refine((windows) => {
+        const parts = windows
+          .flatMap(peddlerHourParts)
+          .filter(([a, b]) => a < b)
+          .sort((a, b) => a[0] - b[0]);
+        return parts.every((p, i) => i === 0 || p[0] >= parts[i - 1]![1]);
+      }, 'overlapping hours'),
+  ]),
+  lines: z
+    .array(z.enum(['street', 'path', 'plaza']))
+    .min(1)
+    .refine((v) => new Set(v).size === v.length, 'duplicate walking kind'),
+  perTile: z.union([z.literal(1), z.literal(2)]),
+  share: z.number().min(0).max(1).optional(),
+  call: z.enum(['voice', 'bell']).optional(),
+  weather: z
+    .strictObject({
+      rain: z.number().min(0).max(1).optional(),
+      heat: z.number().min(0).max(1).optional(),
+      wind: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+  near: z
+    .strictObject({ kind: z.enum(['stop', 'terminal']), reach: z.number().positive().max(200) })
+    .optional(),
+  lamp: z.boolean().optional(),
+  emoji: z.strictObject({ heat: z.literal('cool').optional() }).optional(),
+  source: Sources,
+});
+
 export const CityLife = z
   .strictObject({
+    peddlers: z
+      .array(Peddler)
+      .max(8)
+      .refine((v) => new Set(v.map((p) => p.id)).size === v.length, 'duplicate peddler id')
+      .optional(),
     folklore: Folklore.optional(),
     emergency: EmergencyConfigSchema.optional(),
     seasons: z

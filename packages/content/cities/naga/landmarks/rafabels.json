@@ -1,0 +1,61 @@
+{
+  "id": "landmark/rafabels",
+  "name": {
+    "en": "Rafabel’s Cakes and Patisserie"
+  },
+  "type": "food",
+  "certainty": "unknown",
+  "facts": [
+    {
+      "text": {
+        "en": "The business began on Panganiban Drive, across from St. John Hospital."
+      },
+      "source": 1
+    },
+    {
+      "text": {
+        "en": "A 2016 account dates its move to SM City Naga to around 2009."
+      },
+      "source": 1,
+      "year": 2009,
+      "certainty": "circa"
+    },
+    {
+      "text": {
+        "en": "Naga City Deck describes the Villa Caceres ground-floor branch in its Venetian-style wing."
+      },
+      "source": 0
+    },
+    {
+      "text": {
+        "en": "The reviewed cake range includes Oreo cheesecake, ube cake and chocolate mousse."
+      },
+      "source": 0
+    }
+  ],
+  "sources": [
+    {
+      "title": "Naga City Deck: Rafabel’s cakes and patisserie",
+      "url": "https://www.nagacitydeck.com/2012/02/cafes-in-naga-rafabels-cakes-and.html"
+    },
+    {
+      "title": "Food and Adventure with Jam: Rafabel’s (2016)",
+      "url": "https://foodandadventurewithjam.wordpress.com/2016/09/02/rafabels-cakes-and-patisserie/"
+    },
+    {
+      "title": "OpenStreetMap: independent business POI",
+      "url": "https://www.openstreetmap.org/node/6178638785",
+      "note": "Point copied from the mapped business node. It marks the business approximately within a shared footprint; it does not identify a building or entrance."
+    }
+  ],
+  "geometry": {
+    "type": "Point",
+    "coordinates": [123.1992891, 13.6282935]
+  },
+  "signatures": [
+    {
+      "name": "Oreo cheesecake, ube cake and chocolate mousse",
+      "source": 0
+    }
+  ]
+}
