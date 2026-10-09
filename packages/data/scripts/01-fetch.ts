@@ -122,6 +122,11 @@ export const poolsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox
 nwr["leisure"="swimming_pool"];
 out body; >; out skel qt;`;
 
+/** Waterfall anchors and their geometry, without invalidating older detail downloads. */
+export const waterfallsQuery = (bbox: string) => `[out:json][timeout:120][bbox:${bbox}];
+nwr["waterway"="waterfall"];
+out body; >; out skel qt;`;
+
 /** Region-wide railway track, per quarter; asked for after the other layers (`regionQueries`). */
 const regionRail = 'way["railway"~"^(rail|narrow_gauge)$"];';
 
@@ -332,6 +337,13 @@ export const step: Step = {
       cache,
     );
     console.log(`  swimming pools: ${pools.elements.length} elements`);
+
+    const waterfalls = await overpass(
+      waterfallsQuery(toOverpassBbox(detailBbox)),
+      join(rawDir, files.rawDetailWaterfalls),
+      cache,
+    );
+    console.log(`  waterfalls: ${waterfalls.elements.length} elements`);
 
     const parts: OverpassResponse[] = [];
     for (const [i, query] of regionQueries(city, regionBbox).entries()) {

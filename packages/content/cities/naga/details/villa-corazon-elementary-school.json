@@ -1,0 +1,55 @@
+{
+  "id": "detail/villa-corazon-elementary-school",
+  "osm_id": "osm:way/881094775",
+  "title": "Villa Corazon Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.23121837122, 13.62336274689],
+        [123.23124570969, 13.62315048875],
+        [123.23120179183, 13.62314627608],
+        [123.23117470071, 13.62335661386],
+        [123.23121669302, 13.62336172708],
+        [123.23121837122, 13.62336274689]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.23122300427, 13.6231541782],
+        [123.2311973339, 13.62335348513]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.2312070264, 13.62315264558],
+        [123.2312132594, 13.62335542431]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881094775",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6233634,123.2312041,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied villa-corazon-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Tightly packed roofs. The paved courtyard walk runs north from Aurora Street to the brown classroom roof, edged on the west by a planted strip with a line of small round crowns; a canopy belt of crowns runs along the east edge behind the classroom blocks. Registration: global affine; independent check errors 1.70 m, 3.97 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

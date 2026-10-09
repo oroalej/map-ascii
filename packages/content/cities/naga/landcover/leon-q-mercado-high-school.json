@@ -1,0 +1,261 @@
+{
+  "id": "landcover/leon-q-mercado-high-school",
+  "title": "Leon Q. Mercado High School grounds",
+  "trees": [
+    {
+      "at": [123.25000414563, 13.65294651385],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.25006604695, 13.65294025532],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.25013019246, 13.65292515752],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.25020854347, 13.65291112106],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.25027499294, 13.65290595292],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.2503487958, 13.65289082608],
+      "crown_m": 6.6,
+      "height_m": 7.6
+    },
+    {
+      "at": [123.25043509113, 13.65287400557],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.25052652555, 13.65286545009],
+      "crown_m": 6.6,
+      "height_m": 7.6
+    },
+    {
+      "at": [123.25062191719, 13.65285081035],
+      "crown_m": 5.1,
+      "height_m": 5.9
+    },
+    {
+      "at": [123.25069799412, 13.6528362287],
+      "crown_m": 4.6,
+      "height_m": 5.3
+    },
+    {
+      "at": [123.25078603237, 13.65283154766],
+      "crown_m": 6.6,
+      "height_m": 7.6
+    },
+    {
+      "at": [123.25012628134, 13.65258898137],
+      "crown_m": 4.1,
+      "height_m": 4.7
+    },
+    {
+      "at": [123.25024574505, 13.65264106519],
+      "crown_m": 10.1,
+      "height_m": 11.6
+    },
+    {
+      "at": [123.25032982608, 13.65264246841],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.25039350021, 13.65265773383],
+      "crown_m": 5.6,
+      "height_m": 6.4
+    },
+    {
+      "at": [123.25047817218, 13.6526663117],
+      "crown_m": 4.6,
+      "height_m": 5.3
+    },
+    {
+      "at": [123.25081677039, 13.6526724698],
+      "crown_m": 10.1,
+      "height_m": 11.6
+    },
+    {
+      "at": [123.24947186241, 13.65277201625],
+      "crown_m": 6.3,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24954864984, 13.65280214711],
+      "crown_m": 6.3,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24963849078, 13.65282837449],
+      "crown_m": 6.3,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.24971232353, 13.65282263211],
+      "crown_m": 5.1,
+      "height_m": 5.9
+    },
+    {
+      "at": [123.24946656704, 13.65253631421],
+      "crown_m": 12.2,
+      "height_m": 14.0
+    },
+    {
+      "at": [123.24976500215, 13.65259614027],
+      "crown_m": 4.6,
+      "height_m": 5.3
+    },
+    {
+      "at": [123.24956162989, 13.65241844535],
+      "crown_m": 6.3,
+      "height_m": 7.2
+    },
+    {
+      "at": [123.25081644309, 13.65299778366],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25088989574, 13.65301539341],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25086893632, 13.65294496186],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25094238898, 13.65296257161],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25101584163, 13.65298018136],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25084141157, 13.65284692953],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25092597061, 13.65291206084],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25099471091, 13.65290947432],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25106816356, 13.65292708407],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25112140707, 13.65291635443],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25090035494, 13.65282121205],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25097380759, 13.6528388218],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25104726025, 13.65285643154],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.2511207129, 13.65287404129],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25095262077, 13.65276833573],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25102607342, 13.65278594548],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25109952608, 13.65280355523],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25117297873, 13.65282116498],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25100517011, 13.65271529296],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25107862276, 13.65273290271],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25115207542, 13.65275051246],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25105749204, 13.65266219567],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25113094469, 13.65267980541],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    },
+    {
+      "at": [123.25120439735, 13.65269741516],
+      "crown_m": 9.6,
+      "height_m": 11.0
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/780476088",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6527594,123.2502190,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied leon-q-mercado-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit). The central yard is exposed orange soil and stays bare. A row of round crowns lines the front of the diagonal north classroom row; a second row of crowns runs along the south edge of the yard; canopy sits between the west classroom blocks, with single crowns at the west edge, and forest fills the east end. The pale dirt walk from the south-east gate (extended to the mapped road, which runs south of the image's road) curves up into the yard toward the north row. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.63 m, 5.17 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

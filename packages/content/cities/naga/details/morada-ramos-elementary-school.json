@@ -1,0 +1,120 @@
+{
+  "id": "detail/morada-ramos-elementary-school",
+  "osm_id": "osm:way/1395444066",
+  "title": "Morada-Ramos Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.27784530325, 13.65278243335],
+        [123.27789689629, 13.65278255971],
+        [123.27789699795, 13.65274362735],
+        [123.2778928364, 13.65274361709],
+        [123.27789192033, 13.6527447976],
+        [123.27789061044, 13.65274519067],
+        [123.27765831044, 13.65274619067],
+        [123.27765720018, 13.65274592603],
+        [123.2776563473, 13.65274518314],
+        [123.27765593851, 13.65274303295],
+        [123.27765041261, 13.65274301932],
+        [123.27765031108, 13.65276420268],
+        [123.27707668805, 13.65276278824],
+        [123.27707664426, 13.6527795569],
+        [123.27726605941, 13.6527762097],
+        [123.2772673757, 13.65277657379],
+        [123.27726834225, 13.65277779329],
+        [123.2772685462, 13.65278324017],
+        [123.2773141105, 13.65278335783],
+        [123.27731383153, 13.65289954677],
+        [123.27733898086, 13.6528994841],
+        [123.27733902051, 13.65288429868],
+        [123.27733824427, 13.65288268366],
+        [123.27733484424, 13.65279228146],
+        [123.27733519235, 13.65279099961],
+        [123.27733601571, 13.65279021944],
+        [123.27733926719, 13.65278983456],
+        [123.27733932115, 13.65278341555],
+        [123.2775087134, 13.65278383238],
+        [123.2775940164, 13.6527808108],
+        [123.27759600956, 13.65278175696],
+        [123.27759649456, 13.65278404883],
+        [123.27760684792, 13.65278407436],
+        [123.27760711862, 13.65278142471],
+        [123.27760808025, 13.6527804843],
+        [123.27760919264, 13.65278020932],
+        [123.27783989264, 13.65277950932],
+        [123.27784120152, 13.65277989017],
+        [123.27784207404, 13.65278091461],
+        [123.2778422668, 13.65278465485],
+        [123.27784526023, 13.65278466224],
+        [123.27784530325, 13.65278243335]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.27732642144, 13.65289367636],
+        [123.27732673553, 13.65277339423],
+        [123.27766002007, 13.65277421605]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-1-2",
+      "line": [
+        [123.27770284816, 13.6527740861],
+        [123.27775932, 13.65275996685]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.27731985441, 13.65289369272],
+        [123.27732884685, 13.65279192171],
+        [123.27732891202, 13.65279135217],
+        [123.27732904023, 13.65279063155],
+        [123.27732923774, 13.65278986186],
+        [123.27732966148, 13.65278871751],
+        [123.27732992102, 13.65278819687],
+        [123.27733404011, 13.65278063012],
+        [123.27733434531, 13.65278014223],
+        [123.27733469809, 13.65277968563],
+        [123.27733509508, 13.65277926471],
+        [123.27733553247, 13.65277888347],
+        [123.27733600608, 13.65277854556],
+        [123.2773365114, 13.65277825422],
+        [123.27733704358, 13.65277801223],
+        [123.27733759753, 13.65277782191],
+        [123.27733816797, 13.65277768507],
+        [123.27733874944, 13.65277760302],
+        [123.27733933637, 13.65277757655],
+        [123.27765029583, 13.65277004168],
+        [123.27765088408, 13.65277001509],
+        [123.27789096983, 13.65275101483]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped grounds and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1395444066",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6527325,123.2775267,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied morada-ramos-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. New owner image (2026-10-09), registered by hand to the mapped classroom roofs (checks 1.4/1.2 m). The central yard is bare reddish soil and stays bare. Large canopy fills the south-west of the campus and the strip south and east of the south-east classroom block; separate crowns and bushes stand along the apron in front of the north classroom row. The packed apron runs along the front of the north row and between it and the south-east block; the short link through the gap between the north roofs to the campus's north edge is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 1.36 m, 1.15 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

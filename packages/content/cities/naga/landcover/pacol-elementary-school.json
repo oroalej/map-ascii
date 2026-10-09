@@ -1,0 +1,322 @@
+{
+  "id": "landcover/pacol-elementary-school",
+  "title": "Pacol Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.23161694302, 13.6516111084],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23171034183, 13.6516258423],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23180566709, 13.65166279825],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23195438448, 13.65173119098],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23205351278, 13.6517588837],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23214503502, 13.65180510287],
+      "crown_m": 10.0,
+      "height_m": 11.5
+    },
+    {
+      "at": [123.23224416331, 13.65183279559],
+      "crown_m": 10.0,
+      "height_m": 11.5
+    },
+    {
+      "at": [123.23233568555, 13.65187901476],
+      "crown_m": 10.0,
+      "height_m": 11.5
+    },
+    {
+      "at": [123.23243481385, 13.65190670748],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23250727102, 13.65194553546],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23158824567, 13.651492607],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23160913742, 13.65141480562],
+      "crown_m": 6.7,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.23172733077, 13.65144988953],
+      "crown_m": 6.7,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.23163763523, 13.65131847779],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23180151487, 13.65129611033],
+      "crown_m": 6.7,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.23167186253, 13.65123510878],
+      "crown_m": 6.7,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.23212425919, 13.65159732921],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23180739402, 13.65147019106],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23185875991, 13.6513719912],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23233532638, 13.65149232215],
+      "crown_m": 3.3,
+      "height_m": 4
+    },
+    {
+      "at": [123.23237718968, 13.65142265108],
+      "crown_m": 3.3,
+      "height_m": 4
+    },
+    {
+      "at": [123.23241372874, 13.65136594852],
+      "crown_m": 4.0,
+      "height_m": 4.6
+    },
+    {
+      "at": [123.23256426665, 13.6517528798],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.23259469092, 13.65167877401],
+      "crown_m": 6.7,
+      "height_m": 7.7
+    },
+    {
+      "at": [123.23267267805, 13.65151573158],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.2326935698, 13.6514379302],
+      "crown_m": 7.8,
+      "height_m": 9.0
+    },
+    {
+      "at": [123.2317523128, 13.65103883746],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23182038039, 13.65108867229],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23190044363, 13.65110897382],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23197290081, 13.6511478018],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23205296406, 13.65116810333],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23212542124, 13.65120693131],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.2322817447, 13.6512567976],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23235420187, 13.65129562558],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23243426512, 13.65131592711],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.2325067223, 13.65135475509],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23258678555, 13.65137505662],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    },
+    {
+      "at": [123.23265924272, 13.6514138846],
+      "crown_m": 8.9,
+      "height_m": 10.2
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.23217334509, 13.65144020947],
+        [123.23228195575, 13.65147158329],
+        [123.2324039174, 13.65149739663],
+        [123.23247618257, 13.65137517433],
+        [123.23224176312, 13.65127356055],
+        [123.23217334509, 13.65144020947]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.23211249492, 13.65158842501],
+        [123.23215053917, 13.6516031741],
+        [123.23220374739, 13.65147357241],
+        [123.23216570314, 13.65145882332],
+        [123.23211249492, 13.65158842501]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.23164900462, 13.65118324843],
+        [123.23176331038, 13.65122756278],
+        [123.23181652593, 13.65110870153],
+        [123.23178134886, 13.65109506399],
+        [123.23174569919, 13.65118482478],
+        [123.2317442371, 13.65118617577],
+        [123.23174265163, 13.6511861372],
+        [123.23166395163, 13.6511566372],
+        [123.23166264564, 13.65115542968],
+        [123.23166260039, 13.65115367644],
+        [123.2316984098, 13.65106290997],
+        [123.23164900462, 13.65118324843]
+      ],
+      "cover": "grass"
+    },
+    {
+      "ring": [
+        [123.23171393947, 13.65142317441],
+        [123.23176334466, 13.65130283595],
+        [123.23175389799, 13.65129917364],
+        [123.23170449281, 13.65141951211],
+        [123.23171393947, 13.65142317441]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23169868743, 13.65141726146],
+        [123.23174809262, 13.65129692299],
+        [123.23173864595, 13.65129326069],
+        [123.23168924077, 13.65141359916],
+        [123.23169868743, 13.65141726146]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23168343539, 13.65141134851],
+        [123.23173284057, 13.65129101004],
+        [123.23172339391, 13.65128734774],
+        [123.23167398873, 13.65140768621],
+        [123.23168343539, 13.65141134851]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23166818335, 13.65140543556],
+        [123.23171758853, 13.65128509709],
+        [123.23170814187, 13.65128143479],
+        [123.23165873668, 13.65140177325],
+        [123.23166818335, 13.65140543556]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.2316529313, 13.65139952261],
+        [123.23170233649, 13.65127918414],
+        [123.23169288982, 13.65127552183],
+        [123.23164348464, 13.6513958603],
+        [123.2316529313, 13.65139952261]
+      ],
+      "cover": "planting"
+    },
+    {
+      "ring": [
+        [123.23212816219, 13.65163100675],
+        [123.232185386, 13.65165319143],
+        [123.23219123085, 13.65163980267],
+        [123.23219263111, 13.65163870352],
+        [123.23219421906, 13.65163879058],
+        [123.23238522538, 13.65171738727],
+        [123.23238618852, 13.65171833788],
+        [123.23238640785, 13.65171986641],
+        [123.23238225416, 13.65172951378],
+        [123.23239927852, 13.65173611383],
+        [123.23240373726, 13.65172573143],
+        [123.23240479801, 13.65172488369],
+        [123.23240638063, 13.65172480692],
+        [123.23252330885, 13.65177177816],
+        [123.23252876355, 13.65175849189],
+        [123.23213801582, 13.65160700581],
+        [123.23212816219, 13.65163100675]
+      ],
+      "cover": "shrubs"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/312531363",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6514709,123.2321180,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied pacol-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Re-registered by hand (similarity fit); the mapped Educare footprint sits about 9 m off its image roof and is kept as mapped. The central field's reddish worn soil stays bare; its olive south-west part and west edge are dry turf (grass). A clipped hedge row lines the field's north edge below the north classrooms; vegetable-garden beds sit west; a small lawn west of the south-west classrooms; tree belts run along the north edge, the Pacol Road frontage and the east edge, with a column of small trees on the field's east side and crowns among the west classroom blocks. The yard south of the main building is hardscape; its short gate walk to Pacol Road under the roadside canopy is inferred. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 4.67 m, 2.82 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

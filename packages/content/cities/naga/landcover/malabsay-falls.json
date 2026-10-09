@@ -1,0 +1,117 @@
+{
+  "id": "landcover/malabsay-falls",
+  "title": "Malabsay Falls: forested banks and mossy rocks",
+  "trees": [],
+  "areas": [
+    {
+      "cover": "shrubs",
+      "ring": [
+        [123.3356745, 13.6618461],
+        [123.3356929, 13.6618551],
+        [123.3357133, 13.6618757],
+        [123.3357484, 13.661873],
+        [123.3357484, 13.6618865],
+        [123.3357022, 13.661882],
+        [123.3356652, 13.6618551],
+        [123.3356745, 13.6618461]
+      ]
+    },
+    {
+      "cover": "shrubs",
+      "ring": [
+        [123.3358224, 13.661873],
+        [123.3358501, 13.6618461],
+        [123.3358501, 13.6618102],
+        [123.3358686, 13.6618012],
+        [123.3358778, 13.6618461],
+        [123.3358593, 13.661882],
+        [123.3358316, 13.661891],
+        [123.3358224, 13.661873]
+      ]
+    },
+    {
+      "cover": "shrubs",
+      "ring": [
+        [123.3358464, 13.661776],
+        [123.3358686, 13.6617653],
+        [123.3358593, 13.6617203],
+        [123.3358224, 13.6616934],
+        [123.3357761, 13.6616934],
+        [123.3357761, 13.661706],
+        [123.3358159, 13.6617167],
+        [123.3358436, 13.6617473],
+        [123.3358464, 13.661776]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.3355913, 13.6616485],
+        [123.3356467, 13.6616485],
+        [123.3356652, 13.6616709],
+        [123.3356467, 13.6616781],
+        [123.3356264, 13.6616575],
+        [123.3356033, 13.6616619],
+        [123.335594, 13.6616754],
+        [123.335582, 13.6616754],
+        [123.3355913, 13.6616485]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.3356541, 13.6617527],
+        [123.3356652, 13.6617563],
+        [123.3356745, 13.66175],
+        [123.3356726, 13.661741],
+        [123.3356569, 13.661741],
+        [123.3356541, 13.6617527]
+      ]
+    },
+    {
+      "cover": "planting",
+      "ring": [
+        [123.3356902, 13.6616826],
+        [123.335704, 13.6616889],
+        [123.335717, 13.6616835],
+        [123.3357179, 13.6616754],
+        [123.3357077, 13.6616709],
+        [123.3356929, 13.6616736],
+        [123.3356902, 13.6616826]
+      ]
+    }
+  ],
+  "status": "draft",
+  "credit": "Photo-informed draft plan estimates: Monette Nyem (CC BY 3.0), herbert joey (CC BY-SA 2.0), Naga City Tourism; overhead forest context: Esri World Imagery. Pool/rock/vegetation extent and bearing are unsurveyed; no reference bitmap ships. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: Malabsay Falls",
+      "url": "https://www.openstreetmap.org/node/358728247",
+      "note": "Real waterfall point at 123.3357669, 13.6618461; waterway=waterfall. Supplemental pipeline query inspected 2026-10-08. This point does not survey the pool perimeter or fall bearing."
+    },
+    {
+      "title": "Naga City Investment and Tourism Promotions Office: Malabsay Falls",
+      "url": "https://tourism.naga.gov.ph/attractions/malabsay-falls/",
+      "note": "Panicuason, Mt. Isarog Natural Park, approximately 40-foot drop and receiving pond. Access times, fees and hours are not asserted."
+    },
+    {
+      "title": "Monette Nyem: Malabsay Falls, 30 October 2011 (CC BY 3.0)",
+      "url": "https://commons.wikimedia.org/wiki/File:Malabsay_Falls,_Panicuason,_Naga_City_-_panoramio.jpg",
+      "note": "Original 1024×680 photograph inspected directly 2026-10-08. Narrow fall against dark rock, broad plunge pool, mossy outlet boulders and leafy/fern banks guide the plan-view impression. https://creativecommons.org/licenses/by/3.0/ . No bitmap ships. Its distant geotag is not used to place the falls."
+    },
+    {
+      "title": "herbert joey: Malabsayfalls, 31 October 2005 (CC BY-SA 2.0)",
+      "url": "https://commons.wikimedia.org/wiki/File:Malabsayfalls.jpg",
+      "note": "Original 600×800 photograph inspected directly 2026-10-08; confirms exposed rock beside the narrow drop, pool and vegetation. https://creativecommons.org/licenses/by-sa/2.0/ . Reference only; no raster or front-view drawing ships."
+    },
+    {
+      "title": "Esri World Imagery: overhead forest context",
+      "url": "https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9",
+      "note": "North-up z17/z18 source tiles inspected directly 2026-10-08 around the OSM point. Dense canopy and shadow obscure water edges; no surveyed pool outline, individual trunks or flow bearing can be derived. Capture date unknown."
+    },
+    {
+      "title": "Draft plan-view placement and limits",
+      "note": "Photo-informed natural forms, not surveyed geometry: about 15 m across and 13 m long for the pool; a narrow crest at the OSM point, asymmetric rock ledge and grouped outlet boulders. Pool/outlet are provisionally southwest of the anchor; bearing, scale and all vegetation boundaries are estimates. Ground photographs establish appearance, not north/south orientation. No added trail, stairway, furniture, concrete, species or historical dates. The complete mapped hiking path is untouched; no mapped stream connects to the point."
+    }
+  ]
+}

@@ -1,0 +1,323 @@
+{
+  "id": "landcover/cararayan-national-high-school",
+  "title": "Cararayan National High School grounds",
+  "trees": [
+    {
+      "at": [123.23776040671, 13.63001806045],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23783316675, 13.63001602715],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.2379112835, 13.6300070605],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23797833985, 13.63000217163],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23805668793, 13.62999973092],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23812362862, 13.62999157908],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23819068497, 13.62998669022],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23825747144, 13.62997418776],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23832452779, 13.62996929889],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23839158414, 13.62996441002],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23845864049, 13.62995952115],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23852569685, 13.62995463228],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.2377330425, 13.62987829477],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23773689558, 13.62982894284],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23781281234, 13.62959986224],
+      "kind": "palm",
+      "crown_m": 3.9,
+      "height_m": 6.2
+    },
+    {
+      "at": [123.23796195418, 13.62953991776],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23817237157, 13.62947005353],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.2382076723, 13.62945439426],
+      "crown_m": 2.7,
+      "height_m": 4
+    },
+    {
+      "at": [123.23841400386, 13.62933248551],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.23846294672, 13.62929075089],
+      "crown_m": 4.8,
+      "height_m": 5.5
+    },
+    {
+      "at": [123.23858676605, 13.62937018562],
+      "crown_m": 7.3,
+      "height_m": 8.4
+    },
+    {
+      "at": [123.2386183202, 13.62927281215],
+      "crown_m": 6.1,
+      "height_m": 7.0
+    },
+    {
+      "at": [123.23769575776, 13.62928439516],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.2377517067, 13.62927774004],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.23781876785, 13.62926976312],
+      "crown_m": 4.2,
+      "height_m": 4.8
+    },
+    {
+      "at": [123.237885829, 13.62926178621],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.2381193793, 13.62923400543],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23816402208, 13.62922869517],
+      "crown_m": 3.6,
+      "height_m": 4.1
+    },
+    {
+      "at": [123.23796710806, 13.62988445674],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23800890652, 13.62988140934],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23805070498, 13.62987836195],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23809250344, 13.62987531455],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2381343019, 13.62987226716],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23817610036, 13.62986921976],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23798675812, 13.62984769298],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23802855658, 13.62984464558],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23807035504, 13.62984159819],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2381121535, 13.6298385508],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23815395196, 13.6298355034],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23819575042, 13.62983245601],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23796460973, 13.62981397662],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23800640819, 13.62981092922],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23804820665, 13.62980788183],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.2380900051, 13.62980483443],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23813180356, 13.62980178704],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23817360202, 13.62979873964],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23798425979, 13.62977721286],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23802605825, 13.62977416546],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23806785671, 13.62977111807],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23810965517, 13.62976807068],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23815145363, 13.62976502328],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23819325209, 13.62976197589],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23861061819, 13.62986262118],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23865241665, 13.62985957378],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23869421511, 13.62985652639],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23863026825, 13.62982585742],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23867206671, 13.62982281003],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    },
+    {
+      "at": [123.23871386517, 13.62981976263],
+      "crown_m": 5.3,
+      "height_m": 6.1
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.23790199689, 13.6296805524],
+        [123.23792719105, 13.62967871557],
+        [123.23792009685, 13.62963025185],
+        [123.23790026512, 13.62963169772],
+        [123.23790199689, 13.6296805524]
+      ],
+      "cover": "planting"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881097068",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6296076,123.2381788,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied cararayan-national-high-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. The central quadrangle between the classroom blocks is packed earth and concrete used for assembly and parking, traced as hardscape; the dirt yard in the north-west corner stays bare. The link from the east road between the north and east blocks runs under canopy and is inferred. Canopy: the large crown cluster north of the centre, the belt along the north frontage, the cluster east of the north block, crowns west of the west blocks, the palm and crown beside the west corridor, crowns between the south blocks and the large south-east crowns, plus a crown row along the south frontage. A small green bed sits between the west classroom blocks. Registration: global affine; independent check errors 1.68 m, 3.31 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

@@ -122,6 +122,41 @@ afterAll(async () => {
 });
 
 describe('pipeline (02–04) on the fixture extract', () => {
+  it('merges an optional supplemental waterfall download through conversion and normalization', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'atlas-waterfalls-'));
+    const rawDir = join(root, 'raw');
+    await mkdir(rawDir);
+    try {
+      for (const file of [files.rawBoundary, files.rawDetail])
+        await copyFile(join(ctx.rawDir, file), join(rawDir, file));
+      const anchor = {
+        type: 'node',
+        id: 900,
+        lat: 0.006,
+        lon: 0.006,
+        tags: { name: 'Fixture Falls', waterway: 'waterfall' },
+      };
+      await writeJson(join(rawDir, files.rawDetailWaterfalls), { elements: [anchor] });
+      const local = { ...ctx, rawDir, buildDir: root };
+      await convert.run(local);
+      await normalize.run(local);
+      const normalized: AtlasFeature[] = [];
+      for await (const f of readFeatures(join(root, files.normalized)))
+        normalized.push(f as AtlasFeature);
+      const drop = normalized.find((f) => f.properties.id === 'osm:node/900')!;
+      expect(drop.geometry).toEqual({ type: 'Point', coordinates: [anchor.lon, anchor.lat] });
+      expect(drop.properties).toMatchObject({
+        class: 'water_stream',
+        kind: 'waterway=waterfall',
+        name: 'Fixture Falls',
+      });
+      expect(normalized.filter((f) => f.properties.id === drop.properties.id)).toHaveLength(1);
+      // A missing supplement was already exercised by the suite's ordinary beforeAll pipeline.
+      expect(features.some((f) => f.properties.id === 'osm:node/900')).toBe(false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
   it('writes normal-step metadata without touching an existing archive', async () => {
     await mkdir(ctx.outDir, { recursive: true });
     const archive = join(ctx.outDir, `${city.slug}.pmtiles`);

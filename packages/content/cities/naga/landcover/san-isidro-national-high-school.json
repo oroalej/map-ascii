@@ -1,0 +1,164 @@
+{
+  "id": "landcover/san-isidro-national-high-school",
+  "title": "San Isidro National High School grounds",
+  "trees": [
+    {
+      "at": [123.26852024838, 13.63257017757],
+      "crown_m": 6.4,
+      "height_m": 7.4
+    },
+    {
+      "at": [123.2685282712, 13.63248213224],
+      "crown_m": 5.9,
+      "height_m": 6.8
+    },
+    {
+      "at": [123.26821875021, 13.63241534296],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26827196991, 13.63245123177],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26833142901, 13.6324938174],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26839586004, 13.63254093246],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26828828304, 13.63238769582],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26833889056, 13.63242201619],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26839426108, 13.63246087714],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26845869211, 13.6325079922],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.2681580566, 13.63222688373],
+      "crown_m": 10.0,
+      "height_m": 11.5
+    },
+    {
+      "at": [123.26822454992, 13.6322719208],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26829124443, 13.63231590032],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26835599519, 13.63235871276],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26840595387, 13.63239264353],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26845719728, 13.63242774471],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26852162832, 13.63247485977],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26858605935, 13.63252197483],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26822786807, 13.63219777199],
+      "crown_m": 10.0,
+      "height_m": 11.5
+    },
+    {
+      "at": [123.26829408274, 13.63224427366],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26836077726, 13.63228825318],
+      "crown_m": 9.7,
+      "height_m": 11.2
+    },
+    {
+      "at": [123.26842291584, 13.63232949718],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26847287452, 13.63236342796],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26852283319, 13.63239735873],
+      "crown_m": 8.5,
+      "height_m": 9.8
+    },
+    {
+      "at": [123.26858446039, 13.6324419195],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    },
+    {
+      "at": [123.26864889142, 13.63248903456],
+      "crown_m": 9.9,
+      "height_m": 11.4
+    }
+  ],
+  "areas": [
+    {
+      "ring": [
+        [123.26838143543, 13.63266186196],
+        [123.26844999678, 13.63271294068],
+        [123.26854313378, 13.63260845446],
+        [123.26845299813, 13.63254788671],
+        [123.26839213955, 13.63264750141],
+        [123.26838709178, 13.63265491854],
+        [123.26838143543, 13.63266186196]
+      ],
+      "cover": "grass"
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/relation/14210960",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6324719,123.2682953,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied san-isidro-schools.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Shares one owner image with San Isidro Elementary. Dense canopy covers the campus south and west of the yard; the bare dirt yard north-east stays bare; patchy low green cover (grass) with small crowns lies along the north-east edge. The beige apron under the north roof is hardscape, and the link west to the white-roofed block crosses the open north strip (inferred where the frame structure hides it). Registration: continuous triangulated image registration; independent check errors 2.14 m, 1.17 m, 8.29 m, 8.23 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "id": "landcover/teodora-moscoso-elementary-school",
+  "title": "Teodora Moscoso Elementary School grounds",
+  "trees": [
+    {
+      "at": [123.26809864038, 13.66383938545],
+      "crown_m": 4.4,
+      "height_m": 5.1
+    },
+    {
+      "at": [123.26812091863, 13.66386348195],
+      "crown_m": 2.6,
+      "height_m": 4
+    }
+  ],
+  "areas": [],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/1395444073",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6637505,123.2682093,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied teodora-moscoso-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Tightly packed roofs. The open yard in front of the central classroom block, between the dark west roof and the east row, is bare paved ground reached from the road at the north; a crown clump stands at its north-west corner by the gate. The small courtyard between the central block and the south row is paved; the narrow pale strip along the west roof is hardscape. Registration: global affine; independent check errors 0.77 m, 1.52 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}

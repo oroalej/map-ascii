@@ -1,0 +1,145 @@
+{
+  "id": "detail/concepcion-grande-elementary-school",
+  "osm_id": "osm:way/881073797",
+  "title": "Concepcion Grande Elementary School",
+  "surface": "keep",
+  "structures": [
+    {
+      "id": "unmapped-roof-1",
+      "ring": [
+        [123.22032740295, 13.61987852649],
+        [123.22054338943, 13.6196900794],
+        [123.2204307824, 13.61956817278],
+        [123.22021479592, 13.61975661987],
+        [123.22032740295, 13.61987852649]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "unmapped-roof-2",
+      "ring": [
+        [123.22026930973, 13.6198901762],
+        [123.22030577891, 13.61985835703],
+        [123.2202131385, 13.61975806596],
+        [123.2201790507, 13.61978780739],
+        [123.22026930973, 13.6198901762]
+      ],
+      "height_m": 5,
+      "material": "roof",
+      "overhead": false
+    },
+    {
+      "id": "approach-1",
+      "ring": [
+        [123.22043291459, 13.61956631246],
+        [123.22054555249, 13.6196882525],
+        [123.22054619304, 13.61968943186],
+        [123.22054618544, 13.61969076327],
+        [123.22054533797, 13.61969212162],
+        [123.22032928271, 13.61988062872],
+        [123.22032807363, 13.61988125021],
+        [123.22032689709, 13.61988128328],
+        [123.22032329664, 13.61989893205],
+        [123.22033450201, 13.61991415723],
+        [123.22051999092, 13.61975231911],
+        [123.22061728292, 13.61965564697],
+        [123.22061854584, 13.61965512272],
+        [123.22062008684, 13.61965548091],
+        [123.22062533124, 13.61966041023],
+        [123.22063229951, 13.61965433045],
+        [123.22062675084, 13.61964824319],
+        [123.22070973312, 13.6197380244],
+        [123.22083407058, 13.61962432681],
+        [123.22081671089, 13.61960083874],
+        [123.22069510773, 13.61946298178],
+        [123.22066379555, 13.61945546834],
+        [123.22061106024, 13.61945270659],
+        [123.22055290758, 13.61950622596],
+        [123.22051817022, 13.61949192736],
+        [123.22043291459, 13.61956631246]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    },
+    {
+      "id": "approach-2",
+      "ring": [
+        [123.22042886825, 13.61956610055],
+        [123.22040482985, 13.61954007695],
+        [123.22037533295, 13.61956175222],
+        [123.22037354759, 13.61956202684],
+        [123.22037200295, 13.61956090307],
+        [123.22020388342, 13.61970758649],
+        [123.22019339132, 13.61973344759],
+        [123.22021288177, 13.61975454765],
+        [123.22042886825, 13.61956610055]
+      ],
+      "height_m": 0.1,
+      "material": "paving",
+      "overhead": false,
+      "ground_override": true
+    }
+  ],
+  "walks": [
+    {
+      "id": "link-1-1",
+      "line": [
+        [123.22071579416, 13.61972446474],
+        [123.22066550993, 13.61967002782],
+        [123.22065879665, 13.61967417691]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-2-1",
+      "line": [
+        [123.22033571287, 13.6198922488],
+        [123.22060181035, 13.61966008013],
+        [123.22064182393, 13.61957916139],
+        [123.22059353193, 13.61949582202]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "link-3-1",
+      "line": [
+        [123.22021000063, 13.61973286029],
+        [123.22041201895, 13.61955660035]
+      ],
+      "width_m": 1.2
+    },
+    {
+      "id": "frontage-to-classroom",
+      "line": [
+        [123.22082612071, 13.61962357912],
+        [123.22062590855, 13.61964246184],
+        [123.22062533079, 13.61964256961],
+        [123.22062476665, 13.61964273179],
+        [123.22062422154, 13.61964294682],
+        [123.22062370068, 13.61964321262],
+        [123.22062320907, 13.61964352667],
+        [123.22061342046, 13.61965117452],
+        [123.22033548344, 13.61990545415]
+      ],
+      "width_m": 1.2
+    }
+  ],
+  "status": "draft",
+  "credit": "Google Maps satellite reference, capture date unknown; draft geographic estimates. Geometry: © OpenStreetMap contributors (ODbL).",
+  "sources": [
+    {
+      "title": "OpenStreetMap: complete mapped campus and neighborhood",
+      "url": "https://www.openstreetmap.org/way/881073797",
+      "note": "Complete parent, roofs, full-width roads and paths, water and mapped pitches retain their source geometry (ODbL)."
+    },
+    {
+      "title": "Google Maps satellite: owner-supplied local reference",
+      "url": "https://www.google.com/maps/@13.6196605,123.2204586,80m/data=!3m1!1e3",
+      "note": "Inspected owner-supplied concepcion-grande-elementary-school.png on 2026-10-08; capture date unknown. URL locates the site. Hand re-traced on 2026-10-08 from the owner image at enlarged scale: every distinguishable crown, canopy belt, lawn, planted bed, garden plot, hedge, path, apron, court and parking area is traced where the image shows it, and bare ground stays bare. Image is rotated about 42 degrees from north; re-registered by hand. The large yellow/orange classroom roof and the small red roof beside it are visible but unmapped, so they are drawn as standing roofs. The east quadrangle, the corridor strips between the classroom rows and the strip along the dark roof's east end are hardscape. Crowns: the tree between the north rows, the west canopy beside the restaurant, the canopy belt between the west roofs and the south row, the large crowns south-east of the quadrangle, the big tree between the north-east roofs and the canopy east of them. Nothing in the image reads as lawn. Registration: hand similarity fit to hand-picked OSM roof corners and junctions; independent check errors 3.66 m, 2.12 m. Trunks sit inside their observed crowns; crowns may overhang roofs and roads. Complete mapped roofs, pitches, full-width paths/roads, water and farmland remain unchanged. Ground under opaque canopy is not invented. No surveyed boundary, species, construction date or exact inventory inferred; no bitmap ships."
+    }
+  ]
+}
