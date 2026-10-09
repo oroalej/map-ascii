@@ -11,6 +11,7 @@ import {
   placeGrid,
   prepareCrowns,
   selectPass,
+  sunUniforms,
   type TileDraw,
   type View,
   type Weather,
@@ -26,6 +27,7 @@ import { themes } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { LampState } from './life/lights';
 import { normalizeFocus } from './focus';
+import { kindCodes, SHADOW, standingClasses } from './glyphs/select';
 
 it('dims map cells for folklore-only focus and restores the ordinary glyph program on clear', () => {
   const setters = {
@@ -241,10 +243,12 @@ it('selects the seasonal shader from cached fixture inputs and returns to the or
     cols: 80,
     rows: 34,
     sub: {},
+    shadeTex: {},
     fixtureTex: {},
     signalLightTex: {},
   } as CellTargets;
   const placement = placeGrid(view, view.cellDev, 80, 34);
+  const uniforms = vi.spyOn(twgl, 'setUniforms');
   const draw = () =>
     glyphPass(
       gl,
@@ -275,11 +279,14 @@ it('selects the seasonal shader from cached fixture inputs and returns to the or
     );
     draw();
     expect(choose.mock.calls.at(-1)![4]).toBe(true);
+    // The seasonal variant reads the cell light like the ordinary one.
+    expect(uniforms.mock.calls.at(-1)![1]).toMatchObject({ u_shade: targets.shadeTex });
     fixturePass(gl, targets, resources, view, placement, [], 0, true);
     draw();
     expect(choose.mock.calls.at(-1)![4]).toBe(false);
   } finally {
     choose.mockRestore();
+    uniforms.mockRestore();
   }
 });
 it.each([
@@ -412,6 +419,7 @@ it('allows paving edge sampling only where the cell pass can rasterize paving', 
   const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
   const gl = {
     bindFramebuffer: vi.fn(),
+    drawBuffers: vi.fn(),
     viewport: vi.fn(),
     useProgram: vi.fn(),
     bindVertexArray: vi.fn(),
@@ -598,4 +606,136 @@ it('reuses a label upload per target, clearing old glyphs and collisions without
   const resized = { ...targets, labelCols: 10, labelRows: 10 };
   overlayPass(gl, resized, resources, view, placement, [], programs);
   expect(uploaded[6]).toHaveLength(400);
+});
+
+it('draws the glyphs and the cell light together, resetting the sun each pass', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const gl = {
+    COLOR_ATTACHMENT0: 0x8ce0,
+    COLOR_ATTACHMENT1: 0x8ce1,
+    bindFramebuffer: vi.fn(),
+    drawBuffers: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  };
+  const targets = { cols: 80, rows: 34, base: {}, sub: {}, glyphFbo: {} } as CellTargets;
+  const programs = { select: { program: {} } } as unknown as Programs;
+  const resources = { map: { tables: {} } } as unknown as ThemeResources;
+  const { grid } = placeGrid(view, view.cellDev, 80, 34);
+  const draw = (sun: { azimuth: number; altitude: number } | null, shadows?: boolean) =>
+    selectPass(
+      gl as unknown as GL,
+      programs,
+      targets,
+      resources,
+      view,
+      grid,
+      0,
+      { hover: 0, selected: 0, highlight: new Uint32Array(64), highlightCount: 0 },
+      { from: 0, strength: 0, dir: [1, 0] },
+      sun,
+      shadows,
+    );
+  try {
+    draw({ azimuth: 90, altitude: 45 }, false);
+    expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(undefined, targets.glyphFbo);
+    expect(gl.drawBuffers).toHaveBeenLastCalledWith([0x8ce0, 0x8ce1]);
+    const lit = uniforms.mock.calls.at(-1)![1] as Record<string, number[] | boolean>;
+    expect(lit.u_shadows).toBe(false);
+    expect(lit).toEqual(expect.objectContaining(sunUniforms(view, { azimuth: 90, altitude: 45 })));
+    draw(null);
+    const dark = uniforms.mock.calls.at(-1)![1] as Record<string, number[] | boolean>;
+    expect(dark.u_shadows).toBe(true);
+    expect((dark.u_sun as number[])[2]).toBe(0);
+  } finally {
+    uniforms.mockRestore();
+  }
+});
+
+it('steps toward the sun and across it in cells', () => {
+  // A 10 x 18 px cell at z18: cells are taller in meters than they are wide.
+  const [w, h] = sunUniforms(view, null).u_cellMeters;
+  expect(h! / w!).toBeCloseTo(1.8);
+  const east = sunUniforms(view, { azimuth: 90, altitude: 45 });
+  expect(east.u_sun[0]).toBeCloseTo(1);
+  expect(east.u_sun[2]).toBeCloseTo(1);
+  // A meter east is 1 / w cells east; a penumbra ray sits SHADOW.spread cell widths south.
+  expect(east.u_sunStep[0]).toBeCloseTo(1 / w!);
+  expect(east.u_sunStep[1]).toBeCloseTo(0);
+  expect(east.u_sunSide[0]).toBeCloseTo(0);
+  expect(east.u_sunSide[1]).toBeCloseTo((SHADOW.spread * w!) / h!);
+  const south = sunUniforms(view, { azimuth: 180, altitude: 30 });
+  expect(south.u_sunStep[1]).toBeCloseTo(1 / h!);
+  expect(south.u_sunSide[0]).toBeCloseTo(-SHADOW.spread);
+  // The altitude floor keeps the tangent positive while the sun is up.
+  expect(sunUniforms(view, { azimuth: 0, altitude: 0.2 }).u_sun[2]).toBeGreaterThan(0);
+});
+
+it('binds the cell light and the standing classes to every glyph program', () => {
+  const uniforms = vi.spyOn(twgl, 'setUniforms').mockImplementation(() => {});
+  const choose = vi.spyOn(gpuContext, 'glyphProgram');
+  const gl = Object.fromEntries(
+    ['bindFramebuffer', 'viewport', 'useProgram', 'bindVertexArray', 'drawArrays'].map((k) => [
+      k,
+      vi.fn(),
+    ]),
+  ) as unknown as GL;
+  const program = { program: {}, uniformSetters: {} };
+  const programs = {
+    glyph: program,
+    glyphVariants: new Map([0, 1, 2, 3, 4, 5, 6, 7].map((key) => [key, program])),
+    emptyVao: null,
+  } as unknown as Programs;
+  const kinds = new Int32Array(64);
+  kinds[classId('building')] = kindCodes.building;
+  kinds[classId('tree_crown')] = kindCodes.foliage;
+  kinds[classId('grass')] = kindCodes.grass;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: { kinds } },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const shadeTex = {} as WebGLTexture;
+  const plain = { sub: {}, shadeTex } as CellTargets;
+  const clocked = { sub: {}, shadeTex, effectClockTex: {} } as CellTargets;
+  const focused = normalizeFocus({ classes: ['grass'], life: [] });
+  try {
+    for (const [targets, focus] of [
+      [plain, normalizeFocus(null)],
+      [plain, focused],
+      [clocked, normalizeFocus(null)],
+      [clocked, focused],
+    ] as const) {
+      glyphPass(
+        gl,
+        programs,
+        targets,
+        resources,
+        themes.dark,
+        view,
+        grid,
+        grid,
+        0,
+        true,
+        1,
+        undefined,
+        0,
+        0,
+        null,
+        focus,
+      );
+      const fields = uniforms.mock.calls.at(-1)![1] as Record<string, unknown>;
+      expect(fields.u_shade).toBe(shadeTex);
+      expect(fields.u_standing).toEqual(standingClasses(kinds));
+    }
+    expect(new Set(choose.mock.calls.map((call) => `${call[2]}/${call[3]}`))).toEqual(
+      new Set(['false/false', 'true/false', 'false/true', 'true/true']),
+    );
+  } finally {
+    uniforms.mockRestore();
+    choose.mockRestore();
+  }
 });

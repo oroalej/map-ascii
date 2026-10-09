@@ -115,6 +115,11 @@ export type CellTargets = {
   attrTex: WebGLTexture;
   idTex: WebGLTexture;
   glyphTex: WebGLTexture;
+  /**
+   * R8 per-cell light from the select pass (glyphs/select.ts `cellLight`), `glyphFbo`'s second
+   * attachment; LINEAR, so the ground can read it filtered.
+   */
+  shadeTex: WebGLTexture;
   /** RGBA8 overlay on the label grid: 16-bit label glyph code, color index (labels.ts). */
   overlayTex: WebGLTexture;
   /** RGBA8 life layer (passes.ts `lifePass`): glyph index, life class id, agent kind bit. */
@@ -233,6 +238,9 @@ export function createCellTargets(
   const base = createRasterTargets(gl, cols, rows, 'cell base');
   const subBase = createRasterTargets(gl, cols * SUB.cols, rows * SUB.rows, 'sub-cell base');
   const glyphTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
+  const shadeTex = createTexture(gl, gl.R8, gl.RED, cols, rows);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   const overlayTex = createTexture(gl, gl.RGBA8, gl.RGBA, labelCols, labelRows);
   const lifeTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   const crowdMaskTex = createTexture(
@@ -255,6 +263,10 @@ export function createCellTargets(
   const glyphFbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, glyphFbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glyphTex, 0);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, shadeTex, 0);
+  // The select pass draws both; reads (readback.ts) name attachment 0 themselves.
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);
   checkComplete(gl, 'glyph');
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
@@ -267,6 +279,7 @@ export function createCellTargets(
     attrTex: cell.attrTex,
     idTex: cell.idTex,
     glyphTex,
+    shadeTex,
     overlayTex,
     lifeTex,
     crowdMaskTex,
@@ -293,6 +306,7 @@ export function deleteCellTargets(gl: GL, t: CellTargets) {
     t.attrTex,
     t.idTex,
     t.glyphTex,
+    t.shadeTex,
     t.overlayTex,
     t.lifeTex,
     t.lightTex,

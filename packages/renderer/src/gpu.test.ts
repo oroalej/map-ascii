@@ -1,5 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import {
+  createCellTargets,
+  deleteCellTargets,
   deleteTile,
   drawCrowns,
   drawGround,
@@ -246,3 +248,67 @@ it.each([false, true])(
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(6);
   },
 );
+
+it('creates the cell light as a filtered R8 second attachment of the glyph target, and deletes it', () => {
+  const constants = new Map<string, number>();
+  const calls: { name: string; args: unknown[] }[] = [];
+  let made = 0;
+  const constant = (key: string) => {
+    if (!constants.has(key)) constants.set(key, 0x1000 + constants.size);
+    return constants.get(key)!;
+  };
+  const gl = new Proxy({} as Record<string, unknown>, {
+    get(_, key: string) {
+      if (/^[A-Z0-9_]+$/.test(key)) return constant(key);
+      return (...args: unknown[]) => {
+        calls.push({ name: key, args });
+        if (key === 'checkFramebufferStatus') return constant('FRAMEBUFFER_COMPLETE');
+        if (key.startsWith('create')) return { handle: ++made, kind: key };
+        return undefined;
+      };
+    },
+  }) as unknown as GL;
+  const k = (name: string) => (gl as unknown as Record<string, number>)[name]!;
+  const targets = createCellTargets(gl, 12, 7, 4, 3);
+  // Its storage: one RED byte per cell.
+  const image = calls.find(
+    (c, i) => c.name === 'texImage2D' && calls[i - 2]?.args[1] === targets.shadeTex,
+  );
+  expect(image?.args.slice(2, 8)).toEqual([k('R8'), 12, 7, 0, k('RED'), k('UNSIGNED_BYTE')]);
+  // Linear, edge-clamped: the parameters set while it is bound, after its storage.
+  const bound = calls.findIndex((c) => c.name === 'bindTexture' && c.args[1] === targets.shadeTex);
+  const next = calls.findIndex((c, i) => i > bound && c.name === 'createTexture');
+  const params = calls
+    .slice(bound, next)
+    .filter((c) => c.name === 'texParameteri')
+    .map((c) => [c.args[1], c.args[2]]);
+  expect(params).toEqual(
+    expect.arrayContaining([
+      [k('TEXTURE_MIN_FILTER'), k('LINEAR')],
+      [k('TEXTURE_MAG_FILTER'), k('LINEAR')],
+      [k('TEXTURE_WRAP_S'), k('CLAMP_TO_EDGE')],
+      [k('TEXTURE_WRAP_T'), k('CLAMP_TO_EDGE')],
+    ]),
+  );
+  expect(new Map(params as [number, number][]).get(k('TEXTURE_MIN_FILTER'))).toBe(k('LINEAR'));
+  // Attachment 1 of the glyph framebuffer, drawn together with the glyphs, then checked.
+  const attach = calls.find(
+    (c) => c.name === 'framebufferTexture2D' && c.args[3] === targets.shadeTex,
+  );
+  expect(attach?.args[1]).toBe(k('COLOR_ATTACHMENT1'));
+  const glyphBind = calls.findIndex(
+    (c) => c.name === 'bindFramebuffer' && c.args[1] === targets.glyphFbo,
+  );
+  const after = calls.slice(glyphBind);
+  expect(after.find((c) => c.name === 'drawBuffers')?.args[0]).toEqual([
+    k('COLOR_ATTACHMENT0'),
+    k('COLOR_ATTACHMENT1'),
+  ]);
+  expect(after.find((c) => c.name === 'readBuffer')?.args[0]).toBe(k('COLOR_ATTACHMENT0'));
+  expect(after.some((c) => c.name === 'checkFramebufferStatus')).toBe(true);
+  calls.length = 0;
+  deleteCellTargets(gl, targets);
+  expect(
+    calls.filter((c) => c.name === 'deleteTexture' && c.args[0] === targets.shadeTex),
+  ).toHaveLength(1);
+});

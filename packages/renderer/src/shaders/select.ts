@@ -1,9 +1,10 @@
 /**
  * Select pass: per cell, pick the glyph from the class, its neighbors, and the world position.
- * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output (RGBA8): glyph atlas index,
- * class id, the cell's state (picking.ts `cellState`: hover, highlighted, selected; plus
- * `EDGE_STATE` for a sub-cell edge, `SHADOW_STATE`, and vegetation's wind level and tone; see
- * glyphs/select.ts), and the class whose fill is the cell's background.
+ * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output 0 (RGBA8): glyph atlas
+ * index, class id, the cell's state (picking.ts `cellState`: hover, highlighted, selected; plus
+ * `EDGE_STATE` for a sub-cell edge, and vegetation's wind level and tone; see glyphs/select.ts),
+ * and the class whose fill is the cell's background. Output 1 (R8, `shadeTex`): the cell's light
+ * from soft shadows and contact shade (glyphs/select.ts `cellLight`).
  *
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
@@ -22,7 +23,6 @@ import {
   Dir,
   EDGE_STATE,
   SHADOW,
-  SHADOW_STATE,
   DEFAULT_SUN,
   GUST_STEPS,
   Tone,
@@ -89,21 +89,22 @@ uniform sampler2D u_subId;
 uniform int u_area[${MAX_CLASSES}];
 uniform vec3 u_sun;               // toward the sun (x east, y south), tan(altitude); z <= 0: none
 uniform vec2 u_cellMeters;        // a cell's width and height in meters (flat views) // 1 for area classes, which draw sub-cell edges
+uniform vec2 u_sunStep;           // cells per meter toward the sun
+uniform vec2 u_sunSide;           // a penumbra ray's offset across the sun line, in cells
 
-out vec4 o_glyph;
+layout(location = 0) out vec4 o_glyph;
+layout(location = 1) out vec4 o_shade;
 
 // This cell's state (picking.ts cellState, plus EDGE_STATE) and the class whose fill is its
 // background, set in main before any emit.
 float g_state = 0.0;
 int g_bg = 0;
-// SHADOW_STATE if the cell is in a shadow (glyphs/select.ts inShadow), whatever it draws.
-float g_shadow = 0.0;
 // A vegetation cell's wind level (windLevel) and tone (Tone), which the glyph pass lights and tints.
 int g_wind = 0;
 int g_tone = 0;
 
 void emit(vec2 glyph, int cls) {
-  float state = g_state + g_shadow + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
+  float state = g_state + float((g_wind << ${WIND_SHIFT}) + (g_tone << ${TONE_SHIFT}));
   o_glyph = vec4(glyph.x, float(cls + (int(glyph.y * 255.0 + 0.5) << 6)) / 255.0, state / 255.0, float(g_bg) / 255.0);
 }
 
@@ -371,28 +372,66 @@ float castsAt(ivec2 q) {
   return standing ? texelFetch(u_attr, q, 0).r * 255.0 : 0.0;
 }
 
-// Whether the cell is in shadow (glyphs/select.ts inShadow): looking toward the sun a cell
-// width at a time, something stands taller than the sun rises over that distance.
-bool inShadow(ivec2 p) {
-  if (!u_shadows || u_sun.z <= 0.0) return false;
-  float self = castsAt(p);
-  vec2 perStep = u_sun.xy * u_cellMeters.x / u_cellMeters;
-  for (int k = 1; k <= ${SHADOW.steps}; k++) {
-    ivec2 q = p + ivec2(floor(perStep * float(k) + 0.5));
-    float h = castsAt(q);
-    if (h > 0.0 && h - self >= float(k) * u_cellMeters.x * u_sun.z) return true;
+// How much of the cell is in shadow, 0–1 (glyphs/select.ts shadowAmount): three rays toward the
+// sun, each taking its strongest blocker over the near cells and, at a low sun, a few far ones.
+float shadowAmount(ivec2 p, float self) {
+  if (u_sun.z <= 0.0) return 0.0;
+  float nearEnd = ${float(SHADOW.steps)} * u_cellMeters.x;
+  float farEnd = min(${float(SHADOW.reach)}, ${float(SHADOW.tall)} / u_sun.z);
+  float sum = 0.0;
+  for (int side = -1; side <= 1; side++) {
+    vec2 across = u_sunSide * float(side);
+    float ray = 0.0;
+    for (int i = 1; i <= ${SHADOW.steps + SHADOW.farSteps}; i++) {
+      float d = i <= ${SHADOW.steps} ? float(i) * u_cellMeters.x
+        : nearEnd + (farEnd - nearEnd) * float(i - ${SHADOW.steps}) / ${float(SHADOW.farSteps)};
+      if (i > ${SHADOW.steps} && farEnd <= nearEnd) break;
+      if (d > ${float(SHADOW.reach)}) {
+        if (i <= ${SHADOW.steps}) continue;
+        break;
+      }
+      float h = castsAt(p + ivec2(floor(u_sunStep * d + across + 0.5)));
+      // Only something taller casts on the cell: one roof's cells never shade each other.
+      if (h > self) ray = max(ray, smoothstep(${float(-SHADOW.soft)}, ${float(SHADOW.soft)}, h - self - d * u_sun.z));
+    }
+    sum += ray;
   }
-  return false;
+  return sum / 3.0;
+}
+
+// Ground at the foot of something tall, 0–1 (glyphs/select.ts contactShade).
+float contactShade(ivec2 p, float self) {
+  if (self > 0.0) return 0.0;
+  float near = 0.0;
+  float far = 0.0;
+  for (int dy = -1; dy <= 1; dy++) {
+    for (int dx = -1; dx <= 1; dx++) {
+      if (dx == 0 && dy == 0) continue;
+      ivec2 d = ivec2(dx, dy);
+      if (castsAt(p + d) - self >= ${float(SHADOW.aoRise)}) near += 1.0;
+      if (castsAt(p + 2 * d) - self >= ${float(SHADOW.aoRise)}) far += 1.0;
+    }
+  }
+  return (near + 0.5 * far) / 8.0 * ${float(SHADOW.ao)};
+}
+
+// The cell's light, 0–1 (glyphs/select.ts cellLight); 1 with shadows off.
+float cellLight(ivec2 p) {
+  if (!u_shadows) return 1.0;
+  float self = castsAt(p);
+  return (1.0 - ${float(SHADOW.dark)} * shadowAmount(p, self)) * (1.0 - contactShade(p, self));
 }
 
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   int cls = classAt(p);
   int kind = u_kind[cls];
-  g_shadow = inShadow(p) ? ${SHADOW_STATE}.0 : 0.0;
+  // Every path below writes the glyph; the light is written once, here.
+  float light = cellLight(p);
+  o_shade = vec4(light, 0.0, 0.0, 1.0);
   if (cls == 0 || kind == 0) {
-    // An empty cell may still hold part of an area's edge, or a shadow on the ground.
-    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0, 0.0, g_shadow / 255.0, 0.0);
+    // An empty cell may still hold part of an area's edge; its light is the ground's.
+    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0);
     return;
   }
   vec4 id = idAt(p);
