@@ -48,12 +48,14 @@ The pack has sourced facts for exactly twelve landmarks: Plaza Rizal, Plaza Quin
 
 ## 3. Tours (launch set)
 
-1. **Traslación route.** The procession path from the Old Shrine of Our Lady of Peñafrancia to the Naga Metropolitan Cathedral, then the fluvial procession along the Naga River.
+The Tours menu groups the pack in declared order: **Food (5)**, **Heritage (2)** and **Infrastructure (1)**.
+
+1. **Traslación route** (Heritage, verified). Nine stops cover the old Shrine, Covarrubias plaza, reported street route, Porta Mariae and Cathedral, then the later Danlugan-to-Dagsaan river return and Basilica. Documented endpoints and independently corroborated Colgante passage are distinguished from the OSM-based intervening bridge reconstruction. There are no year-setting steps or procession replay controls.
 2. **Heritage Centro walk.** Plaza Quince Martires, Plaza Rizal, the Cathedral, and the old commercial streets.
-3. **Campus belt.** Ateneo de Naga University, the University of Nueva Caceres, and the surrounding streets.
+3. **Bridges and terminals** (Infrastructure, verified). Seven stops: General Luna/Tabuco, Colgante, Panganiban, Magsaysay, Naga railway station, Bicol Central Station and Queborac. Sources establish bridge context, the 1972 tragedy, dated rail recovery, terminal operation and legal naming/location decisions without inventing opening dates.
 4. **From Isarog to the river.** Future city-spanning tour remains out of scope for this extension. A replacement must use cameras compatible with the expanded bounds and current viewport minimum; Region and City bands remain below the desktop limit.
 
-Tour 2 is in the city pack (`packages/content/cities/naga/tours/`) as a draft: its camera path comes from the OSM data, and all narration is marked `TODO(verify)`. Tours 1 and 3 are Phase 5.
+The Heritage Centro walk remains draft in `packages/content/cities/naga/tours/`, with sourced geography and `TODO(verify)` narration. The planned heritage-tours follow-up, after PR #56's heritage houses and tour groups land, promotes that walk and adds Campus belt, Monuments and martyrs, and Heritage houses. Historical/year-setting Traslación work remains in Phase 5; these present-day tours do not advance timeline or historical-depth acceptance.
 
 Tour narration must be fact-checked against sources before shipping. Draft text may use placeholders marked `TODO(verify)`.
 

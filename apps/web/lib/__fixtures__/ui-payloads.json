@@ -22,6 +22,7 @@
   "tours": [
     {
       "id": "tour/heritage-centro-walk",
+      "group": "heritage",
       "title": { "en": "Heritage Centro walk" },
       "description": {
         "en": "The plazas, the churches, and the old commercial streets of the Centro, ending with a view across its rooftops."

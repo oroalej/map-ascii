@@ -85,6 +85,10 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 
 - [x] **(Naga)** Five verified present-day food tours: Kinalas crawl, Centro old-timers, Market breakfast, Magsaysay nights, and Pili & pasalubong. Added 23 sourced food landmarks, including New China Restaurant, Crown Park Restaurant, Quality Bakery (Ruivivar's Quality Cafe) and RPM Pili Nut Candies, enriched the People's Mall, and published nine dish records with Known for, signature items, pasalubong and source citations. Independent food Points preserve shared-building identities; food search flies to places, while dish search opens facts without moving the map. Schema/content/pipeline/web checks and the related desktop food smoke passed; the remaining timeline and historical-depth phases stay separate.
 
+**Completed tour-group and route extension (2026-10-09)**
+
+- [x] City-pack menu groups and two verified present-day Naga tours: **Bridges and terminals** and **Traslación route**. Food, Heritage and Infrastructure sections preserve tour order and sourced narration. The existing Centro walk remains draft. The route tour distinguishes the September street departure from the later fluvial return and identifies reconstructed geography. This Phase 3 content extension adds no timeline behavior and does not advance Phase 4 or Phase 5 acceptance.
+
 ## Phase 4 — Timeline v1
 
 **Tasks**
@@ -108,7 +112,7 @@ Phase 3 also built orbit mode (tilt up to 60°, rotation, extruded 3D buildings)
 - [ ] "Then/now" photo pairs in the facts dialog.
 - [ ] UI string translations keyed by language code, loaded per city's declared languages.
 - [ ] **(Naga)** Street renaming data for the Centro.
-- [ ] **(Naga)** "Traslación route" and "Campus belt" tours, including year-setting steps.
+- [ ] **(Naga)** Historical/year-setting "Traslación route" work and the "Campus belt" tour. The verified present-day Traslación route is a completed Phase 3 content extension; year-setting remains open.
 - [ ] **(Naga)** `fil` and `bcl` translations for UI strings and the main landmarks.
 
 **Accept when**

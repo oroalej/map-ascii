@@ -37,11 +37,29 @@
 }
 
 .list {
+  max-height: min(560px, calc(100dvh - 100px));
+  overflow-y: auto;
   margin: 4px 0 0;
   padding: 0;
   list-style: none;
   background: rgb(4 5 10 / 96%);
   border: 1px solid #2a2c36;
+}
+
+.groupHeading {
+  margin: 0;
+  padding: 10px 10px 4px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groupList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .tour {

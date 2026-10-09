@@ -21,6 +21,11 @@
     }
   },
   "languages": ["fil", "bcl"],
+  "tour_groups": [
+    { "id": "food", "label": { "en": "Food" } },
+    { "id": "heritage", "label": { "en": "Heritage" } },
+    { "id": "infrastructure", "label": { "en": "Infrastructure" } }
+  ],
   "timezone": "Asia/Manila",
   "streets": {
     "exclusions": [

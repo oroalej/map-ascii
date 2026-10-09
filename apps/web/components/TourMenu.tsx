@@ -9,8 +9,16 @@ const TourList = dynamic(() => import('./InteractionDetails').then((m) => m.Tour
   ssr: false,
 });
 
+export type TourGroup = { id: string; label: string };
+
 /** The tours menu (SPEC.md §5, `T`): the city's tours, and a button to start each. */
-export function TourMenu({ hasTours }: { hasTours: boolean }) {
+export function TourMenu({
+  hasTours,
+  tourGroups,
+}: {
+  hasTours: boolean;
+  tourGroups?: readonly TourGroup[] | undefined;
+}) {
   const open = useTourStore((s) => s.menuOpen);
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -39,7 +47,7 @@ export function TourMenu({ hasTours }: { hasTours: boolean }) {
       >
         Tours <span className={styles.key}>T</span>
       </button>
-      {open && <TourList id={listId} />}
+      {open && <TourList id={listId} tourGroups={tourGroups} />}
     </div>
   );
 }

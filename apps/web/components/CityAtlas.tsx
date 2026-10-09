@@ -24,6 +24,7 @@ import { useTourStore } from '@/state/tour';
 import { isDebugRequested } from '@/lib/debug';
 import { useLifeShown } from './useProcessionPlayback';
 import { TourMenu } from './TourMenu';
+import type { TourGroup } from './TourMenu';
 
 // WebGL starts on the client; load its engine separately from the HUD and page content.
 const loadCanvas = () => import('./AtlasCanvas');
@@ -56,6 +57,7 @@ const subscribeNoop = () => () => {};
 export type CityAtlasProps = {
   metaState: MetaState;
   hasTours: boolean;
+  tourGroups?: readonly TourGroup[] | undefined;
   slug: string;
   tilesVersion?: string | undefined;
   name: string;
@@ -78,6 +80,7 @@ export type CityAtlasProps = {
 export function CityAtlas({
   metaState,
   hasTours,
+  tourGroups,
   slug,
   tilesVersion,
   name,
@@ -180,7 +183,7 @@ export function CityAtlas({
         seasons={cityLife?.seasons}
       />
       <SearchBox city={slug} subdivisionLabel={subdivisionLabel} />
-      <TourMenu hasTours={hasTours} />
+      <TourMenu hasTours={hasTours} tourGroups={tourGroups} />
       {hover && <HoverTooltip />}
       {lifeShown && zoom >= Math.min(SPEECH_ZOOM, EMOJI_ZOOM) && <CueBubbles catalog={dialogue} />}
       {selection &&
