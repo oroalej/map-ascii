@@ -16,7 +16,11 @@ vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
 
 type PageElement = ReactElement<{
-  children: ReactElement<{ runtimeGzip: string; tilesVersion?: string }>;
+  children: ReactElement<{
+    runtimeGzip: string;
+    tilesVersion?: string;
+    tourGroups?: { id: string; label: string }[];
+  }>;
 }>;
 
 const loadedPacks = await loadCityPacks();
@@ -30,6 +34,9 @@ describe('city page client boundary', () => {
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
       expect(page.props.children.props.tilesVersion).toBe('1234abcd');
+      expect(page.props.children.props.tourGroups).toEqual(
+        pack.city.tour_groups?.map((group) => ({ id: group.id, label: group.label.en })),
+      );
       const runtime = decodeInlineRuntime(page.props.children.props.runtimeGzip);
       expect(runtime.dishes).toEqual(pack.content.dishes);
       const life = runtime.cityLife;

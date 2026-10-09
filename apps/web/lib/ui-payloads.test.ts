@@ -16,6 +16,12 @@ it('accepts actual pipeline wire formats and their corresponding schemas', () =>
 it('rejects malformed facts, steps, art colors, palettes and row dimensions', () => {
   expect(isCityLandmarks([{ ...fixture.landmarks[0], sources: [] }])).toBe(false);
   expect(isCityTours([{ ...fixture.tours[0], steps: [{ camera: {} }] }])).toBe(false);
+  for (const group of ['', 'Food', 'food tours', 'food/tours', 1]) {
+    const tours = [{ ...fixture.tours[0], group }];
+    expect(Tour.array().safeParse(tours).success).toBe(false);
+    expect(isCityTours(tours)).toBe(false);
+  }
+  expect(isCityTours([{ ...fixture.tours[0], group: undefined }])).toBe(true);
   const piece = fixture.art.pieces[0]!;
   for (const bad of [
     { ...piece, palette: { a: 'unknown' } },

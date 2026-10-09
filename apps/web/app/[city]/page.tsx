@@ -44,6 +44,7 @@ export default async function CityPage({ params }: Props) {
         utilitiesDerived={city.streets?.utilities?.derive === true}
         sidewalksDerived={city.streets?.sidewalks?.derive !== false}
         hasTours={content.tours.length > 0}
+        tourGroups={city.tour_groups?.map((group) => ({ id: group.id, label: group.label.en }))}
       />
     </main>
   );
