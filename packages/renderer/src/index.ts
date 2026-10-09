@@ -180,7 +180,7 @@ import {
 } from './raster/geometry';
 import { Readback } from './readback';
 import { GpuTimer } from './gpu-timer';
-import { FrameProfiler, type AtlasProfile } from './profile';
+import { FrameProfiler, type AtlasProfile, type ProfileStage } from './profile';
 import { QualityController, TIERS, type QualityChoice, type QualityState } from './quality';
 import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
@@ -822,6 +822,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   // Tiles
   const profiler = options.profiling ? new FrameProfiler() : undefined;
+  /** Time `run` as `stage` when profiling (frame breakdown for `perf:browser`). */
+  const timed = <T>(stage: ProfileStage, run: () => T): T => {
+    if (!profiler) return run();
+    const start = profiler.time();
+    const result = run();
+    profiler.add(stage, profiler.time() - start);
+    return result;
+  };
   const archiveUrl = new URL(options.tilesUrl, canvas.ownerDocument.baseURI);
   if (options.tilesVersion) archiveUrl.searchParams.set('v', options.tilesVersion);
   const tileCache = new TileCache(
@@ -919,22 +927,24 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (moved) {
       // Whole cells came onto or left the screen: what it shows and names is worked out again.
       classesStale = true;
-      if (themeRes && programs && names.readmit(targets, v, labelWindow)) {
-        labelsForReport = names.draw(
-          gl,
-          targets,
-          themeRes,
-          v,
-          labelWindow,
-          programs,
-          selectedIndex(),
-          hoverIndex,
+      if (themeRes && programs && timed('labels', () => names.readmit(targets!, v, labelWindow!))) {
+        labelsForReport = timed('labels', () =>
+          names.draw(
+            gl,
+            targets!,
+            themeRes!,
+            v,
+            labelWindow!,
+            programs!,
+            selectedIndex(),
+            hoverIndex,
+          ),
         );
         speechGeometry++;
       }
-      const tiles = viewTiles();
+      const tiles = timed('sideWork', viewTiles);
       if (lifeMembershipOf(tiles) !== lifeMembership || now - sideAt >= SIDE_MS)
-        syncView(tiles, now);
+        timed('sideWork', () => syncView(tiles, now));
       else sideSettle = true;
     } else sideSettle = true;
     return true;
@@ -975,10 +985,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const membership = `${tiles.map(tileKey).join(',')}|${lifeMembershipOf(inView)}`;
     if (invalidated || !zooming || membership !== sideTiles || now - sideAt >= SIDE_MS) {
       sideTiles = membership;
-      syncView(inView, now);
+      timed('sideWork', () => syncView(inView, now));
     } else sideSettle = true;
-    syncLamps(tiles);
-    syncFixtures(tiles);
+    timed('sideWork', () => {
+      syncLamps(tiles);
+      syncFixtures(tiles);
+    });
     const labels: LabelSource[] = [];
     const layer = (ids: readonly TileId[]): TileDraw[] => {
       const out: TileDraw[] = [];
@@ -994,18 +1006,22 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const region = layer(regionTiles);
     crownTiles = layer(tiles);
     drawableBuffers = region.length > 0 || crownTiles.length > 0;
-    cellPass(gl, programs, targets, v, placement, { region, tiles: crownTiles });
-    names.collect(targets, v, labelWindow, labels);
-    labelsForReport = names.draw(
-      gl,
-      targets,
-      themeRes,
-      v,
-      labelWindow,
-      programs,
-      selectedIndex(),
-      hoverIndex,
+    timed('cellPass', () =>
+      cellPass(gl, programs!, targets!, v, placement!, { region, tiles: crownTiles }),
     );
+    timed('labels', () => {
+      names.collect(targets!, v, labelWindow!, labels);
+      labelsForReport = names.draw(
+        gl,
+        targets!,
+        themeRes!,
+        v,
+        labelWindow!,
+        programs!,
+        selectedIndex(),
+        hoverIndex,
+      );
+    });
     speechGeometry++;
     classesStale = true;
   };
@@ -2158,42 +2174,47 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         bandVisibility(CLASS_ZOOM.tree, camera.zoom) > 0;
       if (placement && (cellsDrawn || cursorCrownDirty || (swaying && animating))) {
         const crownStart = performance.now();
-        crownPass(
-          gl,
-          programs,
-          targets,
-          v,
-          placement,
-          crownTiles,
-          time,
-          wind,
-          knobs.crownSway ? cursor : undefined,
+        timed('crowns', () =>
+          crownPass(
+            gl,
+            programs!,
+            targets!,
+            v,
+            placement!,
+            crownTiles,
+            time,
+            wind,
+            knobs.crownSway ? cursor : undefined,
+          ),
         );
         crownPassMs = smooth(crownPassMs, performance.now() - crownStart);
       }
       cursorCrownActive = !!cursor && knobs.crownSway;
       cursorCrownDirty = false;
-      selectPass(
-        gl,
-        programs,
-        targets,
-        themeRes,
-        v,
-        grid,
-        reducedMotion ? 0 : time,
-        highlights(),
-        knobs.groundWind ? wind : { ...wind, strength: 0 },
-        sun,
-        knobs.shadows,
-        true,
-        cropPass,
-        knobs.groundWind ? cursor : undefined,
+      timed('select', () =>
+        selectPass(
+          gl,
+          programs!,
+          targets!,
+          themeRes!,
+          v,
+          grid,
+          reducedMotion ? 0 : time,
+          highlights(),
+          knobs.groundWind ? wind : { ...wind, strength: 0 },
+          sun,
+          knobs.shadows,
+          true,
+          cropPass,
+          knobs.groundWind ? cursor : undefined,
+        ),
       );
       const lifeStart = performance.now();
-      drawLife(now, wind);
+      timed('lifePass', () => drawLife(now, wind));
       lifeMs = smooth(lifeMs, performance.now() - lifeStart);
-      drawLights(cellsDrawn);
-      drawFixtures(cellsDrawn, time, wind);
+      timed('lights', () => drawLights(cellsDrawn));
+      timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));
+      const glyphStart = profiler?.time();
       glyphPass(
         gl,
         programs,
@@ -2231,6 +2252,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         placement && carnivalBoosts ? carnivalBoosts.uniforms(time, placement.toCell) : undefined,
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined,
       );
+      if (glyphStart !== undefined) profiler!.add('glyph', profiler!.time() - glyphStart);
       drawDirty = false;
       fireworksPass(
         gl,

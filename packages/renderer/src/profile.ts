@@ -32,6 +32,16 @@ export const PROFILE_STAGES = [
   'activation',
   'shaderWait',
   'agentDecode',
+  // Main-thread breakdown of a drawn frame.
+  'cellPass',
+  'labels',
+  'sideWork',
+  'crowns',
+  'select',
+  'lifePass',
+  'lights',
+  'fixtures',
+  'glyph',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {
