@@ -18,7 +18,7 @@ function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
 }
 import { LifeWorld } from './life/simulate';
 import * as TapCapture from './life/tap-capture';
-import type { ProcessionRun } from './life/simulate';
+import type { ProcessionRun, VisibleAgent } from './life/simulate';
 import type { FluvialRoute, ClimateConfig } from '@atlas/shared';
 import { CROP_STAGE } from './glyphs/select';
 import { activityLevels } from './life/config';
@@ -2360,8 +2360,14 @@ describe('live motion preference', () => {
       expect(lighting.u_cloudOffset).toEqual(glyphs[11]!.cloudOffset ?? [0, 0]);
       return lighting;
     };
-    const car = (lng: number) =>
-      ({ kind: 'vehicle', vehicle: 'car', lng, lat: 0, ahead: [lng + 0.01, 0], flap: 0 }) as const;
+    const car = (lng: number): VisibleAgent => ({
+      kind: 'vehicle',
+      vehicle: 'car',
+      lng,
+      lat: 0,
+      ahead: [lng + 0.01, 0],
+      flap: 0,
+    });
     visible.mockReturnValue([car(0)]);
     draw(100);
     inOrder();
