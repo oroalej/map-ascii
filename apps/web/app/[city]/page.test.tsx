@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CityAtlas } from '@/components/CityAtlas';
 import { loadCity } from '@/lib/cities';
 import { decodeInlineRuntime } from '@/lib/inline-runtime';
+import { assertPublishedTourGroups } from '@/lib/published-tour-groups';
 import CityPage from './page';
 
 vi.mock('@/lib/tiles-version', () => ({ tilesVersion: vi.fn(() => Promise.resolve('1234abcd')) }));
@@ -14,6 +15,9 @@ vi.mock('@/lib/city-meta', () => ({
 }));
 vi.mock('@/components/CityAtlas', () => ({ CityAtlas: () => null }));
 vi.mock('@/lib/cities', () => ({ loadCity: vi.fn(), loadRegistry: vi.fn() }));
+vi.mock('@/lib/published-tour-groups', () => ({
+  assertPublishedTourGroups: vi.fn().mockResolvedValue(undefined),
+}));
 
 type PageElement = ReactElement<{
   children: ReactElement<{
@@ -34,6 +38,7 @@ describe('city page client boundary', () => {
         params: Promise.resolve({ city: pack.city.slug }),
       })) as PageElement;
       expect(page.props.children.props.tilesVersion).toBe('1234abcd');
+      expect(assertPublishedTourGroups).toHaveBeenCalledWith(pack.city);
       expect(page.props.children.props.tourGroups).toEqual(
         pack.city.tour_groups?.map((group) => ({ id: group.id, label: group.label.en })),
       );
@@ -86,5 +91,20 @@ describe('city page client boundary', () => {
       params: Promise.resolve({ city: pack.city.slug }),
     })) as PageElement;
     expect(decodeInlineRuntime(page.props.children.props.runtimeGzip).dialogue).toBeUndefined();
+  });
+  it('rejects an export whose published tour groups do not match the city', async () => {
+    const pack = loadedPacks.packs[0]!;
+    vi.mocked(loadCity).mockResolvedValue(pack);
+    vi.mocked(assertPublishedTourGroups).mockRejectedValueOnce(new Error('stale published tours'));
+    await expect(CityPage({ params: Promise.resolve({ city: pack.city.slug }) })).rejects.toThrow(
+      'stale published tours',
+    );
+  });
+  it('does not require a tour sidecar for a city without tours', async () => {
+    const pack = loadedPacks.packs[0]!;
+    vi.mocked(loadCity).mockResolvedValue({ ...pack, content: { ...pack.content, tours: [] } });
+    vi.mocked(assertPublishedTourGroups).mockClear();
+    await CityPage({ params: Promise.resolve({ city: pack.city.slug }) });
+    expect(assertPublishedTourGroups).not.toHaveBeenCalled();
   });
 });
