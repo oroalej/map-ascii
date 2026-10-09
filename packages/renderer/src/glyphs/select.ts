@@ -832,20 +832,82 @@ export const GRASS = {
   uprightBelow: 0.4,
 } as const;
 
-/** Broad bare-earth patches between ground cover, stable in world cells. */
-export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
-export function plantingCell(x: number, y: number, gust: number, dir: WindDir = DEFAULT_WIND_DIR) {
-  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
-    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
-    : grassCell(x, y, gust, dir);
+/**
+ * Light thins and thickens grass and planting ink (SPEC.md §4): a cell's density light
+ * (`densityLight`, 0–1) shifts its tuft score by `gain` per unit away from `neutral`, the light of
+ * open ground at noon on a clear day, so sunny grass is as before. The shift moves the resting
+ * tuft at most one rank of `GRASS_RANKS` either way. A streetlight's pool counts `lampGain` times
+ * its strength.
+ */
+export const LIGHT_INK = { gain: 0.4, neutral: 1, lampGain: 2 } as const;
+
+/** Resting grass glyphs from dense to sparse. */
+export const GRASS_RANKS = [0, 1, 2, GrassGlyph.sparse] as const;
+
+/** A tuft score's rank in `GRASS_RANKS`: 0 dense … 3 sparse. */
+export const grassRank = (score: number): number =>
+  score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : 3;
+
+/**
+ * A resting tuft under `light` (`densityLight`): the score's own rank, moved by the light's bias
+ * but never more than one rank away from it.
+ */
+export function restingGrass(score: number, light: number = LIGHT_INK.neutral): number {
+  const rank = grassRank(score);
+  const lit = grassRank(score + LIGHT_INK.gain * (light - LIGHT_INK.neutral));
+  return GRASS_RANKS[Math.min(rank + 1, Math.max(rank - 1, lit))]!;
 }
 
-/** A grass cell's glyph and tone: the tufts at rest, leaning downwind in a gust, then flat. */
+/**
+ * A streetlight pool's share of a grass cell's density light, 0–1 (the select pass, at the cell
+ * centre): its strength `pool` times how far its lamp is lit (`lit`: on, switched on and faded in
+ * at this zoom, as the glyph pass lights it), times `LIGHT_INK.lampGain`. A cell no lamp claims,
+ * or one only brake glow reaches (that lights roads), gets none.
+ */
+export const lampInk = (pool: number, lit: number, claimed: boolean, brakeGlow = false): number =>
+  claimed && !brakeGlow ? Math.min(1, Math.max(0, pool * lit * LIGHT_INK.lampGain)) : 0;
+
+/**
+ * The light grass ink follows, 0–1: by day the cell's light (`cellLight`) under the cloud's shade
+ * (`cloud`), at night its lamp (`lampInk`), mixed by `daylight`. With shadows off it is neutral.
+ */
+export function densityLight(
+  daylight: number,
+  light: number,
+  cloud: number,
+  lamp: number,
+  shadows = true,
+): number {
+  if (!shadows) return LIGHT_INK.neutral;
+  const day = Math.min(1, Math.max(0, daylight));
+  return Math.min(1, Math.max(0, lamp + (light * cloud - lamp) * day));
+}
+
+/** Broad bare-earth patches between ground cover, stable in world cells. */
+export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
+/** A planting cell: bare earth in its patches, else grass (thinned or thickened by `light`). */
+export function plantingCell(
+  x: number,
+  y: number,
+  gust: number,
+  dir: WindDir = DEFAULT_WIND_DIR,
+  light: number = LIGHT_INK.neutral,
+) {
+  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
+    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
+    : grassCell(x, y, gust, dir, light);
+}
+
+/**
+ * A grass cell's glyph and tone: the tufts at rest (thinner in low `light`, `densityLight`),
+ * leaning downwind in a gust, then flat.
+ */
 export function grassCell(
   x: number,
   y: number,
   gust: number,
   dir: WindDir = DEFAULT_WIND_DIR,
+  light: number = LIGHT_INK.neutral,
 ): { variant: number; tone: number } {
   const lush = valueNoise(x, y, GRASS.lushScale, GRASS.lushSeed);
   const h = cellHash(x, y);
@@ -866,9 +928,7 @@ export function grassCell(
     return { variant: lean, tone };
   }
   const score = lush + (((h >>> 8) & 255) / 256 - 0.5) * GRASS.jitter;
-  const variant =
-    score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : GrassGlyph.sparse;
-  return { variant, tone };
+  return { variant: restingGrass(score, light), tone };
 }
 
 /**

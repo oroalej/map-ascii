@@ -106,7 +106,18 @@ import {
   windFront,
   windGust,
   windLevel,
+  cellHash,
+  densityLight,
+  GRASS_RANKS,
+  grassRank,
+  lampInk,
+  LIGHT_INK,
+  PLANTING,
+  plantingCell,
+  restingGrass,
 } from './select';
+import { selectFragment } from '../shaders/select';
+import { glyphFragment, lampGlsl, cloudGlsl } from '../shaders/glyph';
 
 /** Every cell of a `size × size` square from (x0, y0). */
 const cells = (x0: number, y0: number, size: number) =>
@@ -599,5 +610,116 @@ describe('fields and water in the wind', () => {
     const tables = buildGlyphTables(themes.dark, (g) => g.codePointAt(0)! % 256);
     expect(tables.kinds[classId('farmland')]).toBe(kindCodes.crop);
     expect(themes.dark.styles.farmland!.glyphs.slice(0, 5)).toEqual(['≡', "'", '/', '\\', '~']);
+  });
+});
+
+describe('grass ink in the light', () => {
+  const field = cells(-2_000, 7_000, 60);
+  const dir = DEFAULT_WIND_DIR;
+  /** Main's resting tuft, before light: the score's own threshold. */
+  const before = (x: number, y: number) => {
+    const lush = valueNoise(x, y, GRASS.lushScale, GRASS.lushSeed);
+    const score = lush + (((cellHash(x, y) >>> 8) & 255) / 256 - 0.5) * GRASS.jitter;
+    return score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : 7;
+  };
+  const rank = (variant: number) => GRASS_RANKS.indexOf(variant as (typeof GRASS_RANKS)[number]);
+
+  it('keeps open sunny grass as it was', () => {
+    for (const [x, y] of field) {
+      expect(grassCell(x, y, 0, dir).variant).toBe(before(x, y));
+      expect(grassCell(x, y, 0, dir, LIGHT_INK.neutral).variant).toBe(before(x, y));
+    }
+  });
+
+  it('thins in low light and fills in bright light, never the other way', () => {
+    let thinned = 0;
+    for (const [x, y] of field) {
+      const own = rank(before(x, y));
+      for (const light of [0, 0.25, 0.5, 0.75, 0.99]) {
+        const lit = rank(grassCell(x, y, 0, dir, light).variant);
+        expect(lit).toBeGreaterThanOrEqual(own);
+        if (light === 0.5 && lit > own) thinned++;
+      }
+      for (const light of [1.01, 1.5, 2])
+        expect(rank(grassCell(x, y, 0, dir, light).variant)).toBeLessThanOrEqual(own);
+    }
+    // Shade visibly thins a lawn.
+    expect(thinned).toBeGreaterThan(field.length / 4);
+  });
+
+  it('moves a tuft at most one rank, however far the light moves its score', () => {
+    const edges = [GRASS.dense, GRASS.medium, GRASS.thin];
+    const scores = [-0.5, 0, 0.1, 1, 1.5, ...edges.flatMap((e) => [e - 1e-6, e, e + 1e-6])];
+    for (const score of scores) {
+      for (const light of [-2, 0, 0.3, 0.55, 1, 1.4, 3]) {
+        const moved = rank(restingGrass(score, light)) - grassRank(score);
+        expect(Math.abs(moved)).toBeLessThanOrEqual(1);
+      }
+    }
+    // 0.425 is medium; light 0.55 lowers it 0.18, to 0.245, past both medium and thin: one rank.
+    expect(grassRank(0.425)).toBe(1);
+    expect(grassRank(0.425 + LIGHT_INK.gain * (0.55 - LIGHT_INK.neutral))).toBe(3);
+    expect(restingGrass(0.425, 0.55)).toBe(GRASS_RANKS[2]);
+  });
+
+  it('leaves bare earth, tones and gusts alone', () => {
+    for (const [x, y] of field) {
+      for (const light of [0, 0.5, 2]) {
+        const lit = grassCell(x, y, 0, dir, light);
+        expect(lit.tone).toBe(grassCell(x, y, 0, dir).tone);
+        const planted = plantingCell(x, y, 0, dir, light);
+        const bare = valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow;
+        if (bare) expect(planted).toEqual({ variant: PLANTING.bareGlyph, tone: Tone.none });
+        else expect(planted).toEqual(lit);
+        for (const gust of [GUST_STEPS[0], GUST_STEPS[1]])
+          expect(grassCell(x, y, gust, dir, light)).toEqual(grassCell(x, y, gust, dir));
+      }
+    }
+  });
+
+  it('follows the sun, shade and cloud by day, and the lamps by night', () => {
+    // Clear noon on open ground: neutral.
+    expect(densityLight(1, 1, 1, 0)).toBe(LIGHT_INK.neutral);
+    // Shade and cloud lower it; a lamp does nothing by day.
+    expect(densityLight(1, 0.5, 1, 1)).toBe(0.5);
+    expect(densityLight(1, 1, 0.78, 0)).toBeCloseTo(0.78);
+    // Night: unlit grass goes thin, a lit lamp's pool restores it.
+    expect(densityLight(0, 1, 1, 0)).toBe(0);
+    expect(densityLight(0, 1, 1, lampInk(0.6, 1, true))).toBe(1);
+    expect(densityLight(0.5, 1, 1, 0)).toBe(0.5);
+    // Shadows off: neutral, whatever the light.
+    expect(densityLight(0, 0.2, 0.5, 0, false)).toBe(LIGHT_INK.neutral);
+  });
+
+  it('takes light only from claimed, lit lamps that light the ground', () => {
+    expect(lampInk(0.3, 1, true)).toBeCloseTo(0.3 * LIGHT_INK.lampGain);
+    expect(lampInk(0.9, 1, true)).toBe(1);
+    // Filtered spill into a cell no lamp claims, a dead or not-yet-switched lamp, brake glow.
+    expect(lampInk(0.5, 1, false)).toBe(0);
+    expect(lampInk(0.5, 0, true)).toBe(0);
+    expect(lampInk(0.5, 1, true, true)).toBe(0);
+    // None of them restores grass the night has thinned.
+    for (const [x, y] of field.slice(0, 400)) {
+      const unlit = grassCell(x, y, 0, dir, densityLight(0, 1, 1, 0));
+      for (const lamp of [
+        lampInk(0.5, 1, false),
+        lampInk(0.5, 0, true),
+        lampInk(0.5, 1, true, true),
+      ])
+        expect(grassCell(x, y, 0, dir, densityLight(0, 1, 1, lamp))).toEqual(unlit);
+    }
+  });
+
+  it('lights grass with the same lamp gates and clouds as the glyph pass', () => {
+    // One lamp implementation: dusk switching per source, flicker, haunts, candle clocks held
+    // with reduced motion.
+    expect(selectFragment).toContain(lampGlsl);
+    expect(glyphFragment).toContain(lampGlsl);
+    expect(selectFragment).toContain(cloudGlsl);
+    expect(glyphFragment).toContain(cloudGlsl);
+    const ink = selectFragment.slice(selectFragment.indexOf('float lampInk('));
+    expect(ink).toContain('switchedOn(g)');
+    expect(ink).toContain('effectTime(p, 1)');
+    expect(ink).toContain('lampOn(g, clock');
   });
 });

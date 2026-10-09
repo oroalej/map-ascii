@@ -22,6 +22,7 @@ import {
   BUILDING_STEPS,
   Dir,
   EDGE_STATE,
+  LIGHT_INK,
   SHADOW,
   DEFAULT_SUN,
   GUST_STEPS,
@@ -48,6 +49,10 @@ import {
 } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
+import { cloudGlsl, cloudUniformsGlsl, lampGlsl } from './glyph';
+import { skyNoiseGlsl } from '../life/sky';
+import { LampState } from '../life/lights';
+import { BRAKE_GLOW } from '../life/lamps';
 import { partyWallsGlsl } from './party-walls';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -91,6 +96,19 @@ uniform vec3 u_sun;               // toward the sun (x east, y south), tan(altit
 uniform vec2 u_cellMeters;        // a cell's width and height in meters (flat views) // 1 for area classes, which draw sub-cell edges
 uniform vec2 u_sunStep;           // cells per meter toward the sun
 uniform vec2 u_sunSide;           // a penumbra ray's offset across the sun line, in cells
+// The frame's lighting, as the glyph pass gets it (passes.ts frameLighting): grass ink follows it.
+uniform float u_daylight;
+uniform sampler2D u_light;
+uniform float u_lampShow;
+uniform float u_lifeTime;
+uniform bool u_shimmer;
+uniform sampler2D u_effectClocks;
+uniform bool u_hasEffectClocks;
+uniform vec3 u_haunts[8];
+uniform int u_hauntCount;
+uniform vec2 u_hauntOrigin;
+uniform vec2 u_hauntCell;
+${cloudUniformsGlsl}
 
 layout(location = 0) out vec4 o_glyph;
 layout(location = 1) out vec4 o_shade;
@@ -115,6 +133,9 @@ int classAt(ivec2 p) {
 
 ${cellHashGlsl}
 ${vegetationGlsl}
+${skyNoiseGlsl}
+${cloudGlsl}
+${lampGlsl}
 
 vec4 idAt(ivec2 p) {
   p = clamp(p, ivec2(0), textureSize(u_id, 0) - 1);
@@ -415,6 +436,30 @@ float contactShade(ivec2 p, float self) {
   return (near + 0.5 * far) / 8.0 * ${float(SHADOW.ao)};
 }
 
+// A streetlight pool's share of grass ink at the cell's centre (glyphs/select.ts lampInk), lit by
+// the same gates as the glyph pass's pool. Brake glow lights roads only.
+float lampInk(ivec2 p) {
+  if (lamps() * u_lampShow <= 0.0) return 0.0;
+  vec4 t = texelFetch(u_light, p, 0);
+  int g = int(t.g * 255.0 + 0.5);
+  bool brakeGlow = (g & 7) == ${LampState.beam} && (g >> 3) == ${BRAKE_GLOW.seed};
+  if (t.a <= 0.5 || brakeGlow) return 0.0;
+  float clock = (g & 7) == ${LampState.candle} ? effectTime(p, 1) : u_lifeTime;
+  float lit = lampOn(g, clock, vec2(p) + 0.5) * switchedOn(g) * u_lampShow;
+  float pool = texture(u_light, (vec2(p) + 0.5) / vec2(textureSize(u_light, 0))).r;
+  return clamp(pool * lit * ${float(LIGHT_INK.lampGain)}, 0.0, 1.0);
+}
+
+// The light grass ink follows (glyphs/select.ts densityLight): sun, shade and cloud by day, the
+// streetlights by night; neutral with shadows off.
+float densityLight(ivec2 p, float light) {
+  if (!u_shadows) return ${float(LIGHT_INK.neutral)};
+  float day = clamp(u_daylight, 0.0, 1.0);
+  float sun = day > 0.0 ? light * cloudAt(vec2(p) + 0.5) : 0.0;
+  float lamp = day < 1.0 ? lampInk(p) : 0.0;
+  return clamp(mix(lamp, sun, day), 0.0, 1.0);
+}
+
 // The cell's light, 0–1 (glyphs/select.ts cellLight); 1 with shadows off.
 float cellLight(ivec2 p) {
   if (!u_shadows) return 1.0;
@@ -570,7 +615,8 @@ void main() {
     vec2 dir;
     front.x = combineWind(front.x, u_windDir, vec2(w - u_origin), dir);
     int tone;
-    v = min(kind == ${kindCodes.planting} ? plantingVariant(w, front.x, dir, tone) : grassVariant(w, front.x, dir, tone), u_count[cls] - 1);
+    float ink = densityLight(p, light);
+    v = min(kind == ${kindCodes.planting} ? plantingVariant(w, front.x, dir, ink, tone) : grassVariant(w, front.x, dir, ink, tone), u_count[cls] - 1);
     g_tone = tone;
     g_wind = windLevel(front.x, front.y);
   } else if (kind == ${kindCodes.crop}) {

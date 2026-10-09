@@ -73,6 +73,7 @@ import {
   cellPass,
   crownPass,
   effectClockPass,
+  frameLighting,
   glyphPass,
   fixturePass,
   hasCrowns,
@@ -90,6 +91,7 @@ import {
   type GridPlacement,
   type TileDraw,
   type View,
+  type Weather,
 } from './passes';
 import { LabelRank } from './labels';
 import { screenArea } from './grid';
@@ -2020,6 +2022,42 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       }
       cursorCrownActive = !!cursor && knobs.crownSway;
       cursorCrownDirty = false;
+      // Life, then its lights and candle clocks, before select: grass ink follows this frame's
+      // lamps (passes.ts frameLighting). Neither reads the select pass's output.
+      const lifeStart = performance.now();
+      drawLife(now, wind);
+      lifeMs = smooth(lifeMs, performance.now() - lifeStart);
+      drawLights(cellsDrawn);
+      const weather: Weather = {
+        rain: currentRain(),
+        wind,
+        ripples: lifeRunning() && placement ? cursorEffects.project(placement, now) : [],
+        cursorWind: cursor,
+        detail: cursorRipplesEnabled(),
+        fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
+        cloudCover: cover,
+        cloudSeed: sky.seed,
+        cloudDetail:
+          knobs.clouds &&
+          sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
+        cloudOffset,
+        ...(placement?.world ? skyGrid(sky, placement.world) : {}),
+      };
+      const flare =
+        placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;
+      const lighting = frameLighting(
+        programs,
+        targets,
+        v,
+        grid,
+        reducedMotion,
+        daylight,
+        weather,
+        lampShow(),
+        lifePause.time,
+        folklorePacket,
+        flare,
+      );
       selectPass(
         gl,
         programs,
@@ -2035,11 +2073,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         true,
         cropPass,
         knobs.groundWind ? cursor : undefined,
+        lighting,
       );
-      const lifeStart = performance.now();
-      drawLife(now, wind);
-      lifeMs = smooth(lifeMs, performance.now() - lifeStart);
-      drawLights(cellsDrawn);
       drawFixtures(cellsDrawn, time, wind);
       glyphPass(
         gl,
@@ -2053,21 +2088,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         time,
         reducedMotion,
         daylight,
-        {
-          rain: currentRain(),
-          wind,
-          ripples: lifeRunning() && placement ? cursorEffects.project(placement, now) : [],
-          cursorWind: cursor,
-          detail: cursorRipplesEnabled(),
-          fish: lifeActive() && camera.zoom >= 18 && knobs.fish,
-          cloudCover: cover,
-          cloudSeed: sky.seed,
-          cloudDetail:
-            knobs.clouds &&
-            sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
-          cloudOffset,
-          ...(placement?.world ? skyGrid(sky, placement.world) : {}),
-        },
+        weather,
         lampShow(),
         moon,
         sun,
@@ -2076,7 +2097,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         folklorePacket,
         cropPass,
         placement && carnivalBoosts ? carnivalBoosts.uniforms(time, placement.toCell) : undefined,
-        placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined,
+        flare,
+        lighting,
       );
       drawDirty = false;
       fireworksPass(

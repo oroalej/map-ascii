@@ -58,6 +58,98 @@ import { hauntLampGlsl } from '../life/folklore-lighting';
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 /**
+ * The cloud field's inputs (life/sky.ts), and its shade at a point `at` cells into the grid:
+ * ambient, 1 clear – 1 - SKY.shadow overcast, scaled by daylight. Shared by the select pass (grass
+ * ink, at cell centres) and the glyph pass (per pixel). Needs `skyNoiseGlsl` and `u_daylight`.
+ */
+export const cloudUniformsGlsl = /* glsl */ `
+uniform float u_cloudCover;
+uniform uint u_cloudSeed;
+uniform bool u_cloudDetail;
+uniform vec2 u_meterOrigin;
+uniform vec2 u_meterStep;
+uniform vec2 u_cloudOffset;
+`;
+export const cloudGlsl = /* glsl */ `
+float cloudAt(vec2 at) {
+  if (u_daylight <= 0.0) return 1.0;
+  if (u_cloudCover >= 1.0) return 1.0 - ${SKY.shadow} * u_daylight;
+  if (!u_cloudDetail) return 1.0 - 0.5 * ${SKY.shadow} * u_cloudCover * u_daylight;
+  if (u_cloudCover < ${SKY.detailMin}) return 1.0;
+  vec2 world_m = u_meterOrigin + at * u_meterStep - u_cloudOffset;
+  return 1.0 - ${SKY.shadow} * u_daylight * cloudShadow(world_m, u_cloudCover, u_cloudSeed);
+}
+`;
+
+/**
+ * Lamps over the grid (life/lights.ts), shared by the select pass (grass ink under a pool) and
+ * the glyph pass (colour): `lamps` fades streetlights in through dusk, `effectTime` reads a
+ * candle's own clock, `lampOn` is a lamp's flicker, haunting or candle flare, and `switchedOn`
+ * whether its kind is on yet. Needs `cellHashGlsl` and the uniforms they read (u_daylight,
+ * u_time, u_lifeTime, u_shimmer, u_effectClocks, u_hasEffectClocks and the haunts).
+ */
+export const lampGlsl = /* glsl */ `
+float lamps() {
+  return smoothstep(0.25, 0.8, 1.0 - u_daylight);
+}
+
+float effectTime(ivec2 cell, int channel) {
+  if (!u_hasEffectClocks) return u_lifeTime;
+  float token = texelFetch(u_effectClocks, cell, 0)[channel];
+  if (token == ${float(ORDINARY_CLOCK)}) return u_lifeTime;
+  return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
+}
+
+${hauntLampGlsl}
+${candleFlareGlsl}
+float lampOn(int g, float time, vec2 sampleCell) {
+  int state = g & 7;
+  if (state == ${LampState.dead}) return 0.0;
+  if(u_shimmer && u_hauntCount>0 && (state==${LampState.working} || state==${LampState.flicker} || state==${LampState.candle})) {
+    vec2 world=u_hauntOrigin+sampleCell*u_hauntCell;
+    for(int i=0;i<8;i++) {
+      if(i>=u_hauntCount)break;
+      if(distance(world,u_haunts[i].xy)<u_haunts[i].z) {
+        return hauntLamp(time, g);
+      }
+    }
+  }
+  if (state == ${LampState.candle}) {
+    float beat = 5.0 + float(g >> 3) * 0.23;
+    float flicker = u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
+    float flare = candleFlareAt(g,sampleCell);
+    return flare>0.0 ? flicker*(1.0+flare) : flicker;
+  }
+  if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
+  int seed = g >> 3;
+  float slow = u_time * 0.8 + float(seed) * 0.37;
+  uint spell = cellHash(ivec2(int(floor(slow)), seed + 101));
+  // Humming: a faint waver.
+  if ((spell & 3u) != 0u) return 0.9 + 0.1 * sin(u_time * 23.0 + float(seed));
+  // Stuttering: off and on in quick, uneven snaps.
+  uint tick = cellHash(ivec2(int(floor(u_time * 13.0)), seed + 202));
+  return (tick & 255u) < 120u ? 0.06 : 1.0;
+}
+
+float switchedOn(int g) {
+  int state = g & 7;
+  // Headlight beams and candles shine with the vehicles' own lamps; floodlights come on early.
+  // Shops and carts, open while their lights are needed, light up with the dusk.
+  if (
+    state == ${LampState.beam} ||
+    state == ${LampState.candle} ||
+    state == ${LampState.shop} ||
+    state == ${LampState.bulb}
+  ) {
+    return lamps();
+  }
+  if (state == ${LampState.flood}) return smoothstep(0.2, 0.3, 1.0 - u_daylight);
+  float at = 0.3 + 0.3 * float(g >> 3) / 31.0;
+  return smoothstep(at, at + 0.04, 1.0 - u_daylight);
+}
+`;
+
+/**
  * Lighting helpers: darkness starts after twilight, daylit warms dusk and cools moonlit nights,
  * toned brightens foliage only by day, and fillOf tints each class's background. Lamps fade in
  * through dusk; dead lamps stay off and each flickering lamp has a seeded stutter, while candle
@@ -150,12 +242,7 @@ uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
 uniform float u_moon;
-uniform float u_cloudCover;
-uniform uint u_cloudSeed;
-uniform bool u_cloudDetail;
-uniform vec2 u_meterOrigin;
-uniform vec2 u_meterStep;
-uniform vec2 u_cloudOffset;
+${cloudUniformsGlsl}
 
 out vec4 o_color;
 
@@ -165,13 +252,9 @@ ${skyNoiseGlsl}
 
 // Ambient material only: light emission is composed afterwards, as before.
 float cloudShade = 1.0;
+${cloudGlsl}
 float cloudFactor(vec2 grid) {
-  if (u_daylight <= 0.0) return 1.0;
-  if (u_cloudCover >= 1.0) return 1.0 - ${SKY.shadow} * u_daylight;
-  if (!u_cloudDetail) return 1.0 - 0.5 * ${SKY.shadow} * u_cloudCover * u_daylight;
-  if (u_cloudCover < ${SKY.detailMin}) return 1.0;
-  vec2 world_m = u_meterOrigin + (grid / u_cell) * u_meterStep - u_cloudOffset;
-  return 1.0 - ${SKY.shadow} * u_daylight * cloudShadow(world_m, u_cloudCover, u_cloudSeed);
+  return cloudAt(grid / u_cell);
 }
 
 float darkness() {
@@ -205,70 +288,13 @@ vec3 fillOf(int cls, vec3 color) {
   return mix(u_background * cloudShade, pigment, u_fills[cls]);
 }
 
-float lamps() {
-  return smoothstep(0.25, 0.8, 1.0 - u_daylight);
-}
-
 const vec3 LAMP = vec3(1.0, 0.78, 0.45);
 
 const vec3 LAMP_WHITE = vec3(1.0, 0.9, 0.7);
 // A shop's warm interior light, spilling out of its door.
 const vec3 SHOP_LIGHT = vec3(1.0, 0.74, 0.42);
 
-float effectTime(ivec2 cell, int channel) {
-  if (!u_hasEffectClocks) return u_lifeTime;
-  float token = texelFetch(u_effectClocks, cell, 0)[channel];
-  if (token == ${float(ORDINARY_CLOCK)}) return u_lifeTime;
-  return token <= ${float(HELD_CLOCK_BASE)} ? ${float(HELD_CLOCK_BASE)} - token : u_lifeTime - token;
-}
-
-${hauntLampGlsl}
-${candleFlareGlsl}
-float lampOn(int g, float time, vec2 sampleCell) {
-  int state = g & 7;
-  if (state == ${LampState.dead}) return 0.0;
-  if(u_shimmer && u_hauntCount>0 && (state==${LampState.working} || state==${LampState.flicker} || state==${LampState.candle})) {
-    vec2 world=u_hauntOrigin+sampleCell*u_hauntCell;
-    for(int i=0;i<8;i++) {
-      if(i>=u_hauntCount)break;
-      if(distance(world,u_haunts[i].xy)<u_haunts[i].z) {
-        return hauntLamp(time, g);
-      }
-    }
-  }
-  if (state == ${LampState.candle}) {
-    float beat = 5.0 + float(g >> 3) * 0.23;
-    float flicker = u_shimmer ? 0.8 + 0.2 * sin(time * beat + float(g >> 3)) : 1.0;
-    float flare = candleFlareAt(g,sampleCell);
-    return flare>0.0 ? flicker*(1.0+flare) : flicker;
-  }
-  if (state != ${LampState.flicker} || !u_shimmer) return 1.0; // working, a beam, a flood, or still
-  int seed = g >> 3;
-  float slow = u_time * 0.8 + float(seed) * 0.37;
-  uint spell = cellHash(ivec2(int(floor(slow)), seed + 101));
-  // Humming: a faint waver.
-  if ((spell & 3u) != 0u) return 0.9 + 0.1 * sin(u_time * 23.0 + float(seed));
-  // Stuttering: off and on in quick, uneven snaps.
-  uint tick = cellHash(ivec2(int(floor(u_time * 13.0)), seed + 202));
-  return (tick & 255u) < 120u ? 0.06 : 1.0;
-}
-
-float switchedOn(int g) {
-  int state = g & 7;
-  // Headlight beams and candles shine with the vehicles' own lamps; floodlights come on early.
-  // Shops and carts, open while their lights are needed, light up with the dusk.
-  if (
-    state == ${LampState.beam} ||
-    state == ${LampState.candle} ||
-    state == ${LampState.shop} ||
-    state == ${LampState.bulb}
-  ) {
-    return lamps();
-  }
-  if (state == ${LampState.flood}) return smoothstep(0.2, 0.3, 1.0 - u_daylight);
-  float at = 0.3 + 0.3 * float(g >> 3) / 31.0;
-  return smoothstep(at, at + 0.04, 1.0 - u_daylight);
-}
+${lampGlsl}
 
 float poolGlow() {
   return 0.6 * (1.0 + 0.6 * u_rain);

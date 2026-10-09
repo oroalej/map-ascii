@@ -2324,6 +2324,73 @@ describe('live motion preference', () => {
     expect(vi.mocked(lightPass).mock.calls.at(-1)![5]).toEqual([]);
   });
 
+  it('packs Life and its lights before select, which shares the frame lighting with glyphs', () => {
+    atlas.setLife({ time: 1320 });
+    vi.mocked(lifeRaster).mockReturnValue({
+      life: new Uint8Array(4),
+      owners: new Uint32Array(1),
+      revision: 0,
+      light: new Uint8Array(4),
+      lamps: null,
+      ...vehicleBuffers(),
+    });
+    const visible = vi.spyOn(LifeWorld.prototype, 'visible');
+    const order = () => {
+      const last = (mock: { mock: { invocationCallOrder: number[] } }) =>
+        mock.mock.invocationCallOrder.at(-1) ?? -1;
+      return {
+        life: last(vi.mocked(lifePass)),
+        lights: Math.max(last(vi.mocked(lightPass)), last(vi.mocked(effectClockPass))),
+        select: last(vi.mocked(selectPass)),
+        fixtures: last(vi.mocked(fixturePass)),
+        glyphs: last(vi.mocked(glyphPass)),
+      };
+    };
+    const inOrder = () => {
+      const o = order();
+      expect(o.life).toBeLessThan(o.lights);
+      expect(o.lights).toBeLessThan(o.select);
+      expect(o.select).toBeLessThan(o.fixtures);
+      expect(o.fixtures).toBeLessThan(o.glyphs);
+      // One lighting payload, the clouds the glyph pass gets.
+      const lighting = vi.mocked(selectPass).mock.calls.at(-1)![14]!;
+      const glyphs = vi.mocked(glyphPass).mock.calls.at(-1)!;
+      expect(glyphs[21]).toBe(lighting);
+      expect(lighting.u_cloudCover).toBe(glyphs[11]!.cloudCover ?? 0);
+      expect(lighting.u_cloudOffset).toEqual(glyphs[11]!.cloudOffset ?? [0, 0]);
+      return lighting;
+    };
+    const car = (lng: number) =>
+      ({ kind: 'vehicle', vehicle: 'car', lng, lat: 0, ahead: [lng + 0.01, 0], flap: 0 }) as const;
+    visible.mockReturnValue([car(0)]);
+    draw(100);
+    inOrder();
+    const first = vi.mocked(lightPass).mock.calls.at(-1)![5];
+    // The next frame's accepted agents reach the lights before select reads them.
+    visible.mockReturnValue([car(0.002)]);
+    draw(200);
+    inOrder();
+    const beams = vi.mocked(lightPass).mock.calls.at(-1)![5];
+    expect(beams).toHaveLength(1);
+    expect(beams).not.toBe(first);
+    expect(vi.mocked(lightPass).mock.invocationCallOrder.at(-1)).toBeLessThan(
+      vi.mocked(selectPass).mock.invocationCallOrder.at(-1)!,
+    );
+    // Reduced motion holds the lighting steady: no shimmer, no candle flare.
+    atlas.setReducedMotion(true);
+    draw(300);
+    const still = inOrder();
+    expect(still.u_shimmer).toBe(false);
+    expect(still.u_candleFlare).toEqual([0, 0, 0, -1]);
+    // Life off: its beams clear before select, and the order holds.
+    atlas.setReducedMotion(false);
+    atlas.setLife({ enabled: false });
+    draw(400);
+    inOrder();
+    expect(vi.mocked(lifePass).mock.calls.at(-1)![6]).toEqual([]);
+    expect(vi.mocked(lightPass).mock.calls.at(-1)![5]).toEqual([]);
+  });
+
   it('drives flag motion from renderer time with Life off and freezes it with reduced motion', () => {
     atlas.setLife({ enabled: false, wind: 'breeze' });
     draw(100);

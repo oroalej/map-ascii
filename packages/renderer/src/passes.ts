@@ -509,6 +509,8 @@ export function selectPass(
   awnings = true,
   crop: CropPass | null = null,
   cursor?: CursorWind,
+  /** The frame's lighting (`frameLighting`), shared with the glyph pass; grass ink follows it. */
+  lighting: FrameLighting = NOON,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -549,10 +551,80 @@ export function selectPass(
     u_subId: targets.sub.idTex,
     u_area: areas,
     ...sunUniforms(view, sun),
+    ...lighting,
+    // Unbound samplers still need a valid texture; the flags say they hold nothing.
+    u_light: lighting.u_light ?? targets.lightTex,
+    u_effectClocks: lighting.u_effectClocks ?? targets.lightTex,
   });
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
 }
+
+/**
+ * The frame's lighting uniforms, worked out once a drawn frame (after Life, the lights and their
+ * effect clocks, before select): the time of day, the streetlights' texture and fade-in, the
+ * candle clocks, haunted lamps and a candle flare, and the clouds. The select pass thins grass ink
+ * by them; the glyph pass lights its colours by the same values.
+ */
+export function frameLighting(
+  programs: Programs,
+  targets: CellTargets,
+  view: View,
+  grid: Grid,
+  reducedMotion: boolean,
+  daylight: number,
+  weather: Weather,
+  lampShow: number,
+  lifeTime: number,
+  folklore: FolklorePacket = EMPTY_FOLKLORE,
+  candleFlare?: CandleFlareUniforms,
+) {
+  return {
+    u_daylight: daylight,
+    u_lampShow: lampShow,
+    u_lifeTime: lifeTime,
+    u_shimmer: !reducedMotion,
+    u_light: targets.lightTex as WebGLTexture | undefined,
+    u_effectClocks: (targets.effectClockTex ?? targets.lifeTex) as WebGLTexture | undefined,
+    u_hasEffectClocks: targets.effectClockTex !== undefined,
+    ...hauntUniforms(
+      folklore,
+      view,
+      grid,
+      !reducedMotion,
+      (programs.folkloreUniforms ??= createHauntUniformScratch()),
+    ),
+    u_candleFlare: reducedMotion ? [0, 0, 0, -1] : (candleFlare?.center ?? [0, 0, 0, -1]),
+    u_candleFlareRadius: candleFlare?.radius ?? [1, 1],
+    u_cloudCover: weather.cloudCover ?? 0,
+    u_cloudSeed: weather.cloudSeed ?? 0,
+    u_cloudDetail: weather.cloudDetail ?? false,
+    u_meterOrigin: weather.meterOrigin ?? [0, 0],
+    u_meterStep: weather.meterStep ?? [0, 0],
+    u_cloudOffset: weather.cloudOffset ?? [0, 0],
+  };
+}
+export type FrameLighting = ReturnType<typeof frameLighting>;
+
+/** A clear noon with no lamps: open grass keeps its resting ink (glyphs/select.ts LIGHT_INK). */
+const NOON: FrameLighting = {
+  u_daylight: 1,
+  u_lampShow: 0,
+  u_lifeTime: 0,
+  u_shimmer: false,
+  u_light: undefined,
+  u_effectClocks: undefined,
+  u_hasEffectClocks: false,
+  ...createHauntUniformScratch(),
+  u_candleFlare: [0, 0, 0, -1],
+  u_candleFlareRadius: [1, 1],
+  u_cloudCover: 0,
+  u_cloudSeed: 0,
+  u_cloudDetail: false,
+  u_meterOrigin: [0, 0],
+  u_meterStep: [0, 0],
+  u_cloudOffset: [0, 0],
+};
 
 /**
  * The select pass's sun (glyphs/select.ts shadowAmount): the way toward it in world cells' axes
@@ -1076,6 +1148,20 @@ export function glyphPass(
   crop: CropPass | null = null,
   carnival?: CarnivalUniforms,
   candleFlare?: CandleFlareUniforms,
+  /** The frame's lighting the select pass also got (`frameLighting`); worked out here if absent. */
+  lighting: FrameLighting = frameLighting(
+    programs,
+    targets,
+    view,
+    grid,
+    reducedMotion,
+    daylight,
+    weather,
+    lampShow,
+    lifeTime,
+    folklore,
+    candleFlare,
+  ),
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -1115,21 +1201,11 @@ export function glyphPass(
     u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
     u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
     u_pulse: reducedMotion ? -1 : classId('marker_landmark'),
-    u_lifeTime: lifeTime,
-    ...hauntUniforms(
-      folklore,
-      view,
-      grid,
-      !reducedMotion,
-      (programs.folkloreUniforms ??= createHauntUniformScratch()),
-    ),
+    ...lighting,
     u_overlay: targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
-    u_shimmer: !reducedMotion,
     u_carnivalCount: reducedMotion ? 0 : (carnival?.count ?? 0),
-    u_candleFlare: reducedMotion ? [0, 0, 0, -1] : (candleFlare?.center ?? [0, 0, 0, -1]),
-    u_candleFlareRadius: candleFlare?.radius ?? [1, 1],
     ...(carnival && { u_carnivalCenters: carnival.centers, u_carnivalAxes: carnival.axes }),
     u_buntingWind: buntingWindResponse(weather.wind?.strength ?? 0, reducedMotion),
     u_buntingWindDir: weather.wind?.dir ?? [0, 0],
@@ -1144,27 +1220,16 @@ export function glyphPass(
     u_life: targets.lifeTex,
     u_crowdMask: targets.crowdMaskTex,
     u_hasCrowdMask: !!targets.crowdMaskActive,
-    u_effectClocks: targets.effectClockTex ?? targets.lifeTex,
-    u_hasEffectClocks: hasEffectClocks,
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
-    u_daylight: daylight,
-    u_cloudCover: weather.cloudCover ?? 0,
-    u_cloudSeed: weather.cloudSeed ?? 0,
-    u_cloudDetail: weather.cloudDetail ?? false,
-    u_meterOrigin: weather.meterOrigin ?? [0, 0],
-    u_meterStep: weather.meterStep ?? [0, 0],
-    u_cloudOffset: weather.cloudOffset ?? [0, 0],
-    u_light: targets.lightTex,
     u_fixtures: targets.fixtureTex,
     u_fixturePaints: themeRes.uniforms.fixtures,
     u_signalGlow: (fixturesOf.get(targets)?.packed.signals.length ?? 0) > 0,
     u_signalLight: targets.signalLightTex,
     u_dpr: view.dpr,
-    u_lampShow: lampShow,
     u_moon: moon,
     u_crownClass: classId('tree_crown'),
     u_crownSun:
