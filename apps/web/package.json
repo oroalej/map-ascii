@@ -13,6 +13,7 @@
     "check:budgets": "tsx scripts/check-budgets.ts",
     "serve": "tsx scripts/serve.ts",
     "perf:browser": "pnpm build && tsx ../../scripts/heavy.ts --exclusive scripts/perf-browser.ts",
+    "demo:video": "pnpm build && tsx ../../scripts/heavy.ts scripts/demo-video.ts",
     "test:e2e": "tsx scripts/test-e2e.ts",
     "typecheck": "next typegen && tsc --noEmit"
   },

@@ -12,6 +12,7 @@
     "perf:world": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-world.ts",
     "perf:tiles": "tsx scripts/heavy.ts --exclusive packages/renderer/scripts/perf-tiles.ts",
     "perf:browser": "pnpm --filter @atlas/web perf:browser",
+    "demo:video": "pnpm --filter @atlas/web demo:video",
     "perf:inspection": "tsx packages/renderer/scripts/perf-inspection.ts",
     "dev": "pnpm --filter @atlas/web dev",
     "build": "pnpm --filter @atlas/web build",
