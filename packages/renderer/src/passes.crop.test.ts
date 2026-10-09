@@ -13,6 +13,7 @@ it('sets crop uniforms every pass and clears stale state when the calendar is ab
   const gl = Object.fromEntries(
     [
       'bindFramebuffer',
+      'drawBuffers',
       'viewport',
       'useProgram',
       'bindVertexArray',

@@ -195,20 +195,39 @@ export const isEdgeMask = (mask: number): boolean => mask !== 0 && mask !== 63;
 
 /**
  * The select pass's state byte (glyph texture, blue): bits 0–1 the picking.ts `CellState`, then
- * `EDGE_STATE`, `SHADOW_STATE`, the wind level (2 bits from `WIND_SHIFT`, `windLevel`), and the
- * tone (2 bits from `TONE_SHIFT`, `Tone`). All 8 bits are used.
+ * `EDGE_STATE`, `STANDING_STATE`, the wind level (2 bits from `WIND_SHIFT`, `windLevel`), and the
+ * tone (2 bits from `TONE_SHIFT`, `Tone`). All 8 bits are used. The light itself goes to its own
+ * target (`shadeTexel`).
  */
 
 /** Bit in the select pass's state byte for a sub-cell edge (above picking.ts `CellState`). */
 export const EDGE_STATE = 4;
 
 /**
- * Shadows (SPEC.md §4, flat views): a cell looks toward the sun `steps` cell widths; it is in
- * shadow if something there stands taller than it by more than the sun rises over that
- * distance. Shaded cells (`SHADOW_STATE` in the select pass's state byte) draw `dark` darker.
+ * Shadows and contact shade (SPEC.md §4, flat views). A cell looks toward the sun `steps` cell
+ * widths, then, when the sun is low enough for a `tall` blocker to reach past them, `farSteps`
+ * more samples out to `reach` meters (never beyond). A blocker shades it by how far it stands
+ * above the sun line there, fading over ±`soft` meters; three rays, the centre one and two
+ * `spread` cell widths to either side, average into a penumbra. Fully shaded ground draws `dark`
+ * darker. Ground also darkens by up to `ao` beside things at least `aoRise` meters taller
+ * (contact shade), whatever the sun.
  */
-export const SHADOW = { steps: 6, dark: 0.5 } as const;
-export const SHADOW_STATE = 8;
+export const SHADOW = {
+  steps: 6,
+  farSteps: 3,
+  dark: 0.5,
+  soft: 2,
+  reach: 60,
+  tall: 24,
+  spread: 0.75,
+  ao: 0.25,
+  aoRise: 3,
+} as const;
+/**
+ * Bit in the state byte for a cell where something stands (`standing`): the glyph pass reads its
+ * own light there, and the ground's light, filtered, everywhere else.
+ */
+export const STANDING_STATE = 8;
 
 /** Where the wind level (0–3) and the tone (`Tone`) sit in the state byte. */
 export const WIND_SHIFT = 4;
@@ -237,23 +256,142 @@ export function toneColor(rgb: readonly [number, number, number], tone: number) 
 }
 
 /**
- * Whether a cell `selfHeight` meters tall is in shadow: `heightAt(k)` is the height standing
- * `k` steps of `stepMeters` toward the sun, and `sunTan` the tangent of the sun's altitude
- * (≤ 0: no sun, no shadows).
+ * The distances (meters) a cell looks toward the sun for blockers, nearest first: one per cell
+ * width (`stepMeters`) up to `SHADOW.steps`, then `SHADOW.farSteps` spread evenly beyond them to
+ * where a `SHADOW.tall` blocker's shadow ends. None is farther than `SHADOW.reach`.
  */
-export function inShadow(
+export function shadowSamples(sunTan: number, stepMeters: number): number[] {
+  const out: number[] = [];
+  if (sunTan <= 0) return out;
+  for (let k = 1; k <= SHADOW.steps; k++) {
+    if (k * stepMeters <= SHADOW.reach) out.push(k * stepMeters);
+  }
+  const nearEnd = SHADOW.steps * stepMeters;
+  const farEnd = Math.min(SHADOW.reach, SHADOW.tall / sunTan);
+  if (farEnd > nearEnd) {
+    for (let i = 1; i <= SHADOW.farSteps; i++)
+      out.push(nearEnd + ((farEnd - nearEnd) * i) / SHADOW.farSteps);
+  }
+  return out;
+}
+
+/**
+ * How much of a cell `selfHeight` meters tall is in shadow, 0–1: `heightAt(distance, side)` is
+ * the height standing `distance` meters toward the sun on ray `side` (-1, 0, 1: offset
+ * `SHADOW.spread` cell widths across the sun line), and `sunTan` the tangent of the sun's
+ * altitude (≤ 0: no sun, no shadow). Each ray takes its strongest blocker; the rays average.
+ */
+export function shadowAmount(
   selfHeight: number,
-  heightAt: (k: number) => number,
+  heightAt: (distance: number, side: number) => number,
   sunTan: number,
   stepMeters: number,
-): boolean {
-  if (sunTan <= 0) return false;
-  for (let k = 1; k <= SHADOW.steps; k++) {
-    const h = heightAt(k);
-    if (h > 0 && h - selfHeight >= k * stepMeters * sunTan) return true;
+): number {
+  if (sunTan <= 0) return 0;
+  const distances = shadowSamples(sunTan, stepMeters);
+  let sum = 0;
+  for (const side of [-1, 0, 1]) {
+    let ray = 0;
+    for (const d of distances) {
+      const h = heightAt(d, side);
+      // Only something taller casts on the cell: one roof's cells never shade each other.
+      if (h > 0 && h > selfHeight)
+        ray = Math.max(ray, smoothstep(-SHADOW.soft, SHADOW.soft, h - selfHeight - d * sunTan));
+    }
+    sum += ray;
   }
-  return false;
+  return sum / 3;
 }
+
+/**
+ * Contact shade, 0–1: the share of the 8 cells around one `selfHeight` meters tall (the first 8
+ * `neighbours`, ring 1) and of the 8 two cells out (the next 8, ring 2) standing at least
+ * `SHADOW.aoRise` meters taller, ring 2 counting half, times `SHADOW.ao`. Standing cells get none.
+ */
+export function contactShade(selfHeight: number, neighbours: readonly number[]): number {
+  if (selfHeight > 0) return 0;
+  let near = 0;
+  let far = 0;
+  neighbours.forEach((h, i) => {
+    if (h - selfHeight < SHADOW.aoRise) return;
+    if (i < 8) near++;
+    else far++;
+  });
+  return (near / 8 + (0.5 * far) / 8) * SHADOW.ao;
+}
+
+/** Kinds that stand up from the ground (with a height): they cast shadows and read light crisply. */
+export const STANDING_KINDS: readonly number[] = [
+  kindCodes.building,
+  kindCodes.foliage,
+  kindCodes.variant,
+];
+
+/**
+ * Whether a cell of glyph `kind` and `height` meters stands up from the ground: a building, a
+ * crown or a tree with a height. Height-zero grounds (a school's, a church's) and terrain (whose
+ * height byte is its band) are ground.
+ */
+export const standing = (kind: number, height: number): boolean =>
+  height > 0 && STANDING_KINDS.includes(kind);
+
+/** The classes whose kind can stand (`standing`), as two 32-bit words for the glyph pass. */
+export function standingClasses(kinds: ArrayLike<number>): Uint32Array {
+  const mask = new Uint32Array(2);
+  for (let c = 1; c < Math.min(kinds.length, 64); c++)
+    if (STANDING_KINDS.includes(kinds[c]!)) mask[c >> 5]! |= 1 << (c & 31);
+  return mask;
+}
+
+/**
+ * Whether a glyph pixel reads its cell's own light (`shadeTexel` green) rather than the ground's:
+ * the select pass marks standing cells (`STANDING_STATE`); on a sub-cell edge, only the pixels
+ * whose sample stands too (the crown, or a standing kind with a height: `sampleKind`,
+ * `sampleHeight`), so the ground sextants of a roof's edge cell keep the ground's light.
+ */
+export const pixelStands = (
+  cellStanding: boolean,
+  edge: boolean,
+  sampleKind: number,
+  sampleHeight: number,
+  crown = false,
+): boolean => cellStanding && (!edge || crown || standing(sampleKind, sampleHeight));
+
+/**
+ * A cell's light texel (`shadeTex`, RG8), what the select pass writes from one set of samples:
+ * green is the cell's own light (`cellLight`), which a standing cell's pixels read at its centre,
+ * so outlines stay crisp; red is the light the ground would get there, which ground pixels read
+ * filtered across cells. On ground the two are the same; under a roof or crown, red is that
+ * cell's light as ground (shaded by the building's own height and walls), so filtering toward a
+ * sunlit roof never lifts the shade at its foot. `heightAt` and `neighbours` are as for
+ * `shadowAmount` and `contactShade`.
+ */
+export function shadeTexel(
+  selfHeight: number,
+  heightAt: (distance: number, side: number) => number,
+  neighbours: readonly number[],
+  sunTan: number,
+  stepMeters: number,
+): { ground: number; own: number } {
+  const contact = contactShade(0, neighbours);
+  const ground = cellLight(shadowAmount(0, heightAt, sunTan, stepMeters), contact);
+  if (selfHeight <= 0) return { ground, own: ground };
+  return { ground, own: cellLight(shadowAmount(selfHeight, heightAt, sunTan, stepMeters), 0) };
+}
+
+/**
+ * The light the glyph pass shades a pixel with: a standing cell's own light (`texel.own`, read at
+ * its centre), or the ground's light filtered across cells at the pixel (`filteredGround`).
+ */
+export const pixelLight = (
+  isStanding: boolean,
+  texel: { own: number },
+  filteredGround: number,
+): number => (isStanding ? texel.own : filteredGround);
+
+/** A cell's light, 0–1, from its shadow and contact shade: what the select pass writes. */
+export const cellLight = (shadow: number, contact: number): number =>
+  (1 - SHADOW.dark * shadow) * (1 - contact);
 
 /** An edge's sextant is drawn this far from the feature's fill toward its glyph color, 0–1. */
 export const EDGE_INK = 0.4;
@@ -738,20 +876,82 @@ export const GRASS = {
   uprightBelow: 0.4,
 } as const;
 
-/** Broad bare-earth patches between ground cover, stable in world cells. */
-export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
-export function plantingCell(x: number, y: number, gust: number, dir: WindDir = DEFAULT_WIND_DIR) {
-  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
-    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
-    : grassCell(x, y, gust, dir);
+/**
+ * Light thins and thickens grass and planting ink (SPEC.md §4): a cell's density light
+ * (`densityLight`, 0–1) shifts its tuft score by `gain` per unit away from `neutral`, the light of
+ * open ground at noon on a clear day, so sunny grass is as before. The shift moves the resting
+ * tuft at most one rank of `GRASS_RANKS` either way. A streetlight's pool counts `lampGain` times
+ * its strength.
+ */
+export const LIGHT_INK = { gain: 0.4, neutral: 1, lampGain: 2 } as const;
+
+/** Resting grass glyphs from dense to sparse. */
+export const GRASS_RANKS = [0, 1, 2, GrassGlyph.sparse] as const;
+
+/** A tuft score's rank in `GRASS_RANKS`: 0 dense … 3 sparse. */
+export const grassRank = (score: number): number =>
+  score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : 3;
+
+/**
+ * A resting tuft under `light` (`densityLight`): the score's own rank, moved by the light's bias
+ * but never more than one rank away from it.
+ */
+export function restingGrass(score: number, light: number = LIGHT_INK.neutral): number {
+  const rank = grassRank(score);
+  const lit = grassRank(score + LIGHT_INK.gain * (light - LIGHT_INK.neutral));
+  return GRASS_RANKS[Math.min(rank + 1, Math.max(rank - 1, lit))]!;
 }
 
-/** A grass cell's glyph and tone: the tufts at rest, leaning downwind in a gust, then flat. */
+/**
+ * A streetlight pool's share of a grass cell's density light, 0–1 (the select pass, at the cell
+ * centre): its strength `pool` times how far its lamp is lit (`lit`: on, switched on and faded in
+ * at this zoom, as the glyph pass lights it), times `LIGHT_INK.lampGain`. A cell no lamp claims,
+ * or one only brake glow reaches (that lights roads), gets none.
+ */
+export const lampInk = (pool: number, lit: number, claimed: boolean, brakeGlow = false): number =>
+  claimed && !brakeGlow ? Math.min(1, Math.max(0, pool * lit * LIGHT_INK.lampGain)) : 0;
+
+/**
+ * The light grass ink follows, 0–1: by day the cell's light (`cellLight`) under the cloud's shade
+ * (`cloud`), at night its lamp (`lampInk`), mixed by `daylight`. With shadows off it is neutral.
+ */
+export function densityLight(
+  daylight: number,
+  light: number,
+  cloud: number,
+  lamp: number,
+  shadows = true,
+): number {
+  if (!shadows) return LIGHT_INK.neutral;
+  const day = Math.min(1, Math.max(0, daylight));
+  return Math.min(1, Math.max(0, lamp + (light * cloud - lamp) * day));
+}
+
+/** Broad bare-earth patches between ground cover, stable in world cells. */
+export const PLANTING = { scale: 9, seed: 17, bareBelow: 0.54, bareGlyph: 8 } as const;
+/** A planting cell: bare earth in its patches, else grass (thinned or thickened by `light`). */
+export function plantingCell(
+  x: number,
+  y: number,
+  gust: number,
+  dir: WindDir = DEFAULT_WIND_DIR,
+  light: number = LIGHT_INK.neutral,
+) {
+  return valueNoise(x, y, PLANTING.scale, PLANTING.seed) < PLANTING.bareBelow
+    ? { variant: PLANTING.bareGlyph, tone: Tone.none }
+    : grassCell(x, y, gust, dir, light);
+}
+
+/**
+ * A grass cell's glyph and tone: the tufts at rest (thinner in low `light`, `densityLight`),
+ * leaning downwind in a gust, then flat.
+ */
 export function grassCell(
   x: number,
   y: number,
   gust: number,
   dir: WindDir = DEFAULT_WIND_DIR,
+  light: number = LIGHT_INK.neutral,
 ): { variant: number; tone: number } {
   const lush = valueNoise(x, y, GRASS.lushScale, GRASS.lushSeed);
   const h = cellHash(x, y);
@@ -772,9 +972,7 @@ export function grassCell(
     return { variant: lean, tone };
   }
   const score = lush + (((h >>> 8) & 255) / 256 - 0.5) * GRASS.jitter;
-  const variant =
-    score > GRASS.dense ? 0 : score > GRASS.medium ? 1 : score > GRASS.thin ? 2 : GrassGlyph.sparse;
-  return { variant, tone };
+  return { variant: restingGrass(score, light), tone };
 }
 
 /**

@@ -164,9 +164,13 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
       const live = raster(cols, rows),
         sub = raster(cols * 2, rows * 3);
       const selected = texture(cols, rows);
+      // The select pass also writes each cell's light (gpu.ts shadeTex), as in the renderer.
+      const shade = texture(cols, rows, null, 2);
       const selectFbo = gl.createFramebuffer();
       gl.bindFramebuffer(gl.FRAMEBUFFER, selectFbo);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, selected, 0);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D, shade, 0);
+      gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
       const emptyVao = gl.createVertexArray();
       const meshVao = gl.createVertexArray();
       gl.bindVertexArray(meshVao);
@@ -354,6 +358,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         gl.viewport(0, 0, canvas.width, canvas.height);
         uniforms(glyphFor(Number(focused) | (Number(!!clocks) << 1)), {
           u_glyphs: selected,
+          u_shade: shade,
           u_atlas: atlasTex,
           u_cell: [cw, ch],
           u_height: canvas.height,

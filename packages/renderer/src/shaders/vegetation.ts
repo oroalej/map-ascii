@@ -15,6 +15,7 @@ import {
   FLUTTER,
   GrassGlyph,
   GRASS,
+  LIGHT_INK,
   PLANTING,
   GUST_STEPS,
   STIR,
@@ -92,8 +93,22 @@ int windLevel(float gust, float wake) {
   return (gust >= ${float(STIR.gust)} || wake >= ${float(STIR.wake)}) ? 1 : 0;
 }
 
-// A grass cell's glyph, and its tone (glyphs/select.ts grassCell).
-int grassVariant(ivec2 c, float gust, vec2 dir, out int tone) {
+int grassRank(float score) {
+  return score > ${float(GRASS.dense)} ? 0
+    : score > ${float(GRASS.medium)} ? 1
+    : score > ${float(GRASS.thin)} ? 2 : 3;
+}
+
+// A resting tuft under light (glyphs/select.ts restingGrass): at most one rank from its own.
+int restingGrass(float score, float light) {
+  int rank = grassRank(score);
+  int lit = grassRank(score + ${float(LIGHT_INK.gain)} * (light - ${float(LIGHT_INK.neutral)}));
+  lit = clamp(lit, rank - 1, rank + 1);
+  return lit == 3 ? ${GrassGlyph.sparse} : lit;
+}
+
+// A grass cell's glyph, and its tone (glyphs/select.ts grassCell); light is its density light.
+int grassVariant(ivec2 c, float gust, vec2 dir, float light, out int tone) {
   float lush = valueNoise(c, ${GRASS.lushScale}, ${GRASS.lushSeed});
   uint h = cellHash(c);
   tone = (lush < ${float(GRASS.dryBelow)}
@@ -105,17 +120,15 @@ int grassVariant(ivec2 c, float gust, vec2 dir, out int tone) {
     return dir.x > 0.0 ? ${GrassGlyph.leanRight} : ${GrassGlyph.leanLeft};
   }
   float score = lush + (float((h >> 8u) & 255u) / 256.0 - 0.5) * ${float(GRASS.jitter)};
-  return score > ${float(GRASS.dense)} ? 0
-    : score > ${float(GRASS.medium)} ? 1
-    : score > ${float(GRASS.thin)} ? 2 : ${GrassGlyph.sparse};
+  return restingGrass(score, light);
 }
 
-int plantingVariant(ivec2 c, float gust, vec2 dir, out int tone) {
+int plantingVariant(ivec2 c, float gust, vec2 dir, float light, out int tone) {
   if (valueNoise(c, ${PLANTING.scale}, ${PLANTING.seed}) < ${float(PLANTING.bareBelow)}) {
     tone = ${Tone.none};
     return ${PLANTING.bareGlyph};
   }
-  return grassVariant(c, gust, dir, tone);
+  return grassVariant(c, gust, dir, light, tone);
 }
 
 int cropVariant(ivec2 c, float gust, vec2 dir) {

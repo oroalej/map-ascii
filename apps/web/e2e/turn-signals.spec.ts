@@ -81,6 +81,8 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
           return tex;
         };
         const blank = texture(1, 1, new Uint8Array(4));
+        // Every cell fully lit (the select pass's light, gpu.ts shadeTex): no shadows here.
+        const lit = texture(256, 8, new Uint8Array(256 * 8 * 4).fill(255));
         const crowdMask = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, crowdMask);
         gl.texImage2D(
@@ -145,6 +147,7 @@ test('vehicle lamps and exhaust render by day and night with terrain, canopy and
         colors[input.roof * 3 + 2] = 0.8;
         colors[input.grounds * 3 + 2] = 0.8;
         const common = {
+          u_shade: lit,
           u_atlas: atlas,
           u_cell: [input.cw, input.ch],
           u_columns: input.glyphs.length,

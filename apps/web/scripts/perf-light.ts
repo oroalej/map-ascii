@@ -1,4 +1,7 @@
-/** Hardware glyph-only on/off and control campaign; run under heavy.ts --exclusive. */
+/**
+ * Hardware light-ink on/off and control campaign (select and glyph passes timed together, shadows
+ * off vs on); run under heavy.ts --exclusive. Adapted from perf-clouds.ts.
+ */
 /* eslint-disable @typescript-eslint/unbound-method -- Native GL methods retain their receiver. */
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
@@ -24,8 +27,11 @@ type Capture = {
   disjoint: number;
   probe: boolean;
   probes: { on: boolean; hash: number; mean: number }[];
+  /** Hold the fixture texture as drawn: a flag waves on the CPU even in calm wind. */
+  freeze: boolean;
+  frozenUploads: number;
 };
-type CaptureWindow = Window & { cloudCapture: Capture };
+type CaptureWindow = Window & { lightCapture: Capture };
 
 function installCapture() {
   // Pin only Date. Leave native performance, RAF and timers available for GPU sampling.
@@ -52,21 +58,42 @@ function installCapture() {
     disjoint: 0,
     probe: false,
     probes: [],
+    freeze: false,
+    frozenUploads: 0,
   };
-  (window as unknown as CaptureWindow).cloudCapture = c;
+  (window as unknown as CaptureWindow).lightCapture = c;
   const proto = WebGL2RenderingContext.prototype;
   const location = proto.getUniformLocation,
     scalar = proto.uniform1f,
     integer = proto.uniform1i,
     unsigned = proto.uniform1ui,
     vector = proto.uniform2fv,
+    upload = proto.texSubImage2D,
     draw = proto.drawArrays;
+  // The glyph pass's fixture texture: flag cloth is re-packed from renderer time each frame
+  // (life/fixtures.ts updateFixtureFlags), which no uniform override can hold still. Textures are
+  // recorded only before the freeze, which follows the tile-quiet settle: a fixture texture made
+  // after it (say, a late tile adding fixtures) would upload freely and show up as unstable.
+  const fixtureTextures = new WeakSet<WebGLTexture>();
+  proto.texSubImage2D = function (this: WebGL2RenderingContext, ...args: unknown[]) {
+    const bound = this.getParameter(this.TEXTURE_BINDING_2D) as WebGLTexture | null;
+    if (c.freeze && bound && fixtureTextures.has(bound)) {
+      c.frozenUploads++;
+      return;
+    }
+    return (upload as (...a: unknown[]) => void).apply(this, args);
+  };
   const names = new WeakMap<WebGLUniformLocation, string>();
-  const glyphs = new WeakMap<WebGLProgram, boolean>();
+  // 1: the select pass (it has the sun's steps), 2: the glyph pass (it draws labels), 0: other.
+  const roles = new WeakMap<WebGLProgram, number>();
   type Extension = { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number };
   const contexts = new Map<
     WebGL2RenderingContext,
-    { ext: Extension | null; pending: { query: WebGLQuery; block: number }[] }
+    {
+      ext: Extension | null;
+      pending: { query: WebGLQuery; block: number }[];
+      open: { query: WebGLQuery; block: number } | null;
+    }
   >();
   proto.getUniformLocation = function (program, name) {
     const at = location.call(this, program, name);
@@ -79,9 +106,7 @@ function installCapture() {
       this,
       at,
       name === 'u_cloudCover'
-        ? c.on
-          ? 0.6
-          : 0
+        ? 0.6
         : name === 'u_daylight'
           ? 1
           : name === 'u_wind'
@@ -101,16 +126,21 @@ function installCapture() {
       this,
       at,
       name === 'u_cloudDetail'
-        ? Number(c.on)
-        : name === 'u_shimmer'
-          ? 0
-          : name === 'u_pulse'
-            ? -1
-            : value,
+        ? 1
+        : name === 'u_shadows'
+          ? Number(c.on)
+          : name === 'u_shimmer'
+            ? 0
+            : name === 'u_pulse'
+              ? -1
+              : value,
     );
   };
   proto.uniform1ui = function (at, value) {
-    unsigned.call(this, at, at && names.get(at) === 'u_cloudSeed' ? 1234567 : value);
+    const name = at && names.get(at);
+    // The window is shown on a shared desktop: a real pointer resting on the map would hover a
+    // feature (select pass u_hover) and brighten its cells between probes.
+    unsigned.call(this, at, name === 'u_cloudSeed' ? 1234567 : name === 'u_hover' ? 0 : value);
   };
   proto.uniform2fv = function (at, value, offset, length) {
     const name = at && names.get(at);
@@ -121,18 +151,23 @@ function installCapture() {
   proto.drawArrays = function (mode, first, count) {
     const program = this.getParameter(this.CURRENT_PROGRAM) as WebGLProgram | null;
     if (!program) return draw.call(this, mode, first, count);
-    let glyph = glyphs.get(program);
-    if (glyph === undefined) {
-      // The select pass reads the clouds too (grass ink); only the glyph pass draws labels.
-      glyph = location.call(this, program, 'u_labelAtlas') !== null;
-      glyphs.set(program, glyph);
+    let role = roles.get(program);
+    if (role === undefined) {
+      role =
+        location.call(this, program, 'u_sunStep') !== null
+          ? 1
+          : location.call(this, program, 'u_labelAtlas') !== null
+            ? 2
+            : 0;
+      roles.set(program, role);
     }
-    if (!glyph) return draw.call(this, mode, first, count);
+    if (!role) return draw.call(this, mode, first, count);
     let ctx = contexts.get(this);
     if (!ctx) {
       ctx = {
         ext: this.getExtension('EXT_disjoint_timer_query_webgl2') as Extension | null,
         pending: [],
+        open: null,
       };
       contexts.set(this, ctx);
       c.supported = !!ctx.ext;
@@ -140,50 +175,75 @@ function installCapture() {
       if (info) c.renderer = this.getParameter(info.UNMASKED_RENDERER_WEBGL) as string;
     }
     const { ext, pending } = ctx;
-    const disjoint = !!ext && !!this.getParameter(ext.GPU_DISJOINT_EXT);
-    if (disjoint) {
-      c.disjoint++;
-      for (const p of pending) this.deleteQuery(p.query);
-      pending.length = 0;
-    }
-    for (let i = pending.length - 1; i >= 0; i--) {
-      const p = pending[i]!;
-      if (!this.getQueryParameter(p.query, this.QUERY_RESULT_AVAILABLE)) continue;
-      const ms = Number(this.getQueryParameter(p.query, this.QUERY_RESULT)) / 1e6;
-      if (Number.isFinite(ms) && ms > 0) c.samples.push({ block: p.block, ms });
-      this.deleteQuery(p.query);
-      pending.splice(i, 1);
-    }
-    if (ext && this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY))
-      c.errors.push('Unexpected nested elapsed query');
-    const query =
-      ext &&
-      !disjoint &&
-      c.block >= 0 &&
-      (c.issued[c.block] ?? 0) < 30 &&
-      pending.length < 8 &&
-      !this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY)
-        ? this.createQuery()
-        : null;
-    if (query && ext) this.beginQuery(ext.TIME_ELAPSED_EXT, query);
-    draw.call(this, mode, first, count);
-    if (query && ext) {
-      this.endQuery(ext.TIME_ELAPSED_EXT);
-      pending.push({ query, block: c.block });
-      c.issued[c.block] = (c.issued[c.block] ?? 0) + 1;
-    }
-    if (c.probe) {
-      c.probe = false;
-      const viewport = this.getParameter(this.VIEWPORT) as Int32Array;
-      const pixels = new Uint8Array(viewport[2]! * viewport[3]! * 4);
-      this.readPixels(0, 0, viewport[2]!, viewport[3]!, this.RGBA, this.UNSIGNED_BYTE, pixels);
-      let hash = 2166136261,
-        sum = 0;
-      for (let i = 0; i < pixels.length; i++) {
-        hash = Math.imul(hash ^ pixels[i]!, 16777619);
-        if (i % 4 !== 3) sum += pixels[i]!;
+    if (role === 1) {
+      // A select pass starts a frame's span; one left open (no glyph pass followed) is dropped.
+      if (ctx.open && ext) {
+        this.endQuery(ext.TIME_ELAPSED_EXT);
+        this.deleteQuery(ctx.open.query);
+        ctx.open = null;
       }
-      c.probes.push({ on: c.on, hash: hash >>> 0, mean: sum / ((pixels.length / 4) * 3) });
+      const disjoint = !!ext && !!this.getParameter(ext.GPU_DISJOINT_EXT);
+      if (disjoint) {
+        c.disjoint++;
+        for (const p of pending) this.deleteQuery(p.query);
+        pending.length = 0;
+      }
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const p = pending[i]!;
+        if (!this.getQueryParameter(p.query, this.QUERY_RESULT_AVAILABLE)) continue;
+        const ms = Number(this.getQueryParameter(p.query, this.QUERY_RESULT)) / 1e6;
+        if (Number.isFinite(ms) && ms > 0) c.samples.push({ block: p.block, ms });
+        this.deleteQuery(p.query);
+        pending.splice(i, 1);
+      }
+      if (ext && this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY))
+        c.errors.push('Unexpected nested elapsed query');
+      const query =
+        ext &&
+        !disjoint &&
+        c.block >= 0 &&
+        (c.issued[c.block] ?? 0) < 30 &&
+        pending.length < 8 &&
+        !this.getQuery(ext.TIME_ELAPSED_EXT, this.CURRENT_QUERY)
+          ? this.createQuery()
+          : null;
+      if (query && ext) {
+        this.beginQuery(ext.TIME_ELAPSED_EXT, query);
+        ctx.open = { query, block: c.block };
+      }
+      draw.call(this, mode, first, count);
+    } else {
+      draw.call(this, mode, first, count);
+      if (!c.freeze) {
+        const at = location.call(this, program, 'u_fixtures');
+        if (at) {
+          const unit = this.getUniform(program, at) as number;
+          const active = this.getParameter(this.ACTIVE_TEXTURE) as number;
+          this.activeTexture(this.TEXTURE0 + unit);
+          const texture = this.getParameter(this.TEXTURE_BINDING_2D) as WebGLTexture | null;
+          if (texture) fixtureTextures.add(texture);
+          this.activeTexture(active);
+        }
+      }
+      if (ctx.open && ext) {
+        this.endQuery(ext.TIME_ELAPSED_EXT);
+        pending.push(ctx.open);
+        c.issued[ctx.open.block] = (c.issued[ctx.open.block] ?? 0) + 1;
+        ctx.open = null;
+      }
+      if (c.probe) {
+        c.probe = false;
+        const viewport = this.getParameter(this.VIEWPORT) as Int32Array;
+        const pixels = new Uint8Array(viewport[2]! * viewport[3]! * 4);
+        this.readPixels(0, 0, viewport[2]!, viewport[3]!, this.RGBA, this.UNSIGNED_BYTE, pixels);
+        let hash = 2166136261,
+          sum = 0;
+        for (let i = 0; i < pixels.length; i++) {
+          hash = Math.imul(hash ^ pixels[i]!, 16777619);
+          if (i % 4 !== 3) sum += pixels[i]!;
+        }
+        c.probes.push({ on: c.on, hash: hash >>> 0, mean: sum / ((pixels.length / 4) * 3) });
+      }
     }
     const error = this.getError();
     if (error !== this.NO_ERROR) c.errors.push(`WebGL error ${error}`);
@@ -246,6 +306,21 @@ try {
     page.on('requestfailed', (request) =>
       failedRequests.push(`${request.url()}: ${request.failure()?.errorText}`),
     );
+    // Tile reads (range requests into the archive) still in flight, and when the last one ended.
+    const tiles = { inFlight: 0, lastAt: performance.now() };
+    const tileRequest = (url: string) => url.includes('.pmtiles');
+    page.on('request', (request) => {
+      if (!tileRequest(request.url())) return;
+      tiles.inFlight++;
+      tiles.lastAt = performance.now();
+    });
+    const tileDone = (url: string) => {
+      if (!tileRequest(url)) return;
+      tiles.inFlight = Math.max(0, tiles.inFlight - 1);
+      tiles.lastAt = performance.now();
+    };
+    page.on('requestfinished', (request) => tileDone(request.url()));
+    page.on('requestfailed', (request) => tileDone(request.url()));
     await page.addInitScript({
       content: `globalThis.__name = (value) => value; (${installCapture.toString()})();`,
     });
@@ -258,12 +333,12 @@ try {
       const deadline = performance.now() + 30_000;
       while (performance.now() < deadline) {
         const capture = await page.evaluate(
-          () => (window as unknown as CaptureWindow).cloudCapture,
+          () => (window as unknown as CaptureWindow).lightCapture,
         );
         if (capture && ready(capture)) return;
         await page.waitForTimeout(50);
       }
-      throw new Error('Cloud capture did not become ready within 30 seconds');
+      throw new Error('Light capture did not become ready within 30 seconds');
     };
     try {
       await waitCapture((c) => c.renderer !== null);
@@ -283,18 +358,21 @@ try {
               height: innerHeight,
               canvas: rect && { width: rect.width, height: rect.height },
               visibility: document.visibilityState,
-              capture: (window as unknown as CaptureWindow).cloudCapture,
+              capture: (window as unknown as CaptureWindow).lightCapture,
             };
           }),
         }),
       );
     }
     await page.waitForTimeout(3000);
-    const capture = () => page.evaluate(() => (window as unknown as CaptureWindow).cloudCapture);
+    await page.evaluate(() => {
+      (window as unknown as CaptureWindow).lightCapture.freeze = true;
+    });
+    const capture = () => page.evaluate(() => (window as unknown as CaptureWindow).lightCapture);
     const probe = async (on: boolean) => {
       const before = (await capture()).probes.length;
       await page.evaluate((on) => {
-        const c = (window as unknown as CaptureWindow).cloudCapture;
+        const c = (window as unknown as CaptureWindow).lightCapture;
         c.on = on;
         c.block = -1;
         c.probe = true;
@@ -302,7 +380,22 @@ try {
       }, on);
       await waitCapture((c) => c.probes.length > before);
     };
+    // Settle: tiles keep arriving in bursts after the map is ready. Wait until no tile read has
+    // been in flight for 3 s (at most 60 s), then until two consecutive off frames match (at most
+    // 20 tries); stability counts from there.
+    const quietBy = performance.now() + 60_000;
+    while (
+      (tiles.inFlight > 0 || performance.now() - tiles.lastAt < 3000) &&
+      performance.now() < quietBy
+    )
+      await page.waitForTimeout(250);
     await probe(false);
+    for (let i = 0; i < 20; i++) {
+      await probe(false);
+      const p = (await capture()).probes;
+      if (p.at(-1)!.hash === p.at(-2)!.hash) break;
+    }
+    const settled = (await capture()).probes.length - 1;
     await probe(true);
     await probe(false);
     const initial = await capture();
@@ -329,7 +422,7 @@ try {
       blocks.push({ id: current, label, on, pair, control, warmup });
       await page.evaluate(
         ({ id, on }) => {
-          const c = (window as unknown as CaptureWindow).cloudCapture;
+          const c = (window as unknown as CaptureWindow).lightCapture;
           c.on = on;
           c.block = id;
           window.dispatchEvent(new Event('resize'));
@@ -341,7 +434,7 @@ try {
       } catch {
         return false;
       }
-      console.log(`z${zoom} ${label}: 30 valid glyph timings`);
+      console.log(`z${zoom} ${label}: 30 valid select+glyph timings`);
       return true;
     };
     let complete = hardware && initial.supported;
@@ -360,7 +453,7 @@ try {
     }
     await probe(false);
     const evidence = await capture();
-    const offProbes = evidence.probes.filter((p) => !p.on),
+    const offProbes = evidence.probes.slice(settled).filter((p) => !p.on),
       onProbe = evidence.probes.find((p) => p.on);
     const stable =
       sourceHash === (await currentSourceHash(root)) &&
@@ -395,6 +488,7 @@ try {
       status,
       hardware,
       stable,
+      settledProbe: settled,
       exercised,
       deltaMs,
       controlSpreadMs,

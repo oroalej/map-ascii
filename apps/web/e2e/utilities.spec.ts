@@ -79,6 +79,8 @@ test('utility poles and overhead wires', async ({ page }) => {
       const atlas = new Uint8Array(16 * 8 * 4);
       for (let y = 0; y < 8; y++) for (let x = 8; x < 12; x++) atlas[(y * 16 + x) * 4] = 255;
       texture('u_glyphs', 5, 1, glyphs);
+      // Every cell fully lit (the select pass's light, gpu.ts shadeTex).
+      texture('u_shade', 5, 1, new Uint8Array(20).fill(255));
       texture('u_atlas', 16, 8, atlas);
       texture('u_overlay', 5, 1, labels);
       texture('u_attr', 5, 1, attr);
