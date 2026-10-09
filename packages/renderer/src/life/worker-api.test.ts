@@ -22,6 +22,7 @@ import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testin
 import { signalState } from './signals';
 import { birdFixture, birdLngLat } from './testing/bird-fixture';
 import { deliver } from './testing/worker-reply';
+import { RecentKeys, RETAINED_LIFE_TILES } from './recent-keys';
 import type * as ComlinkModule from 'comlink';
 import { packAgents, packedTransferables, unpackAgents } from './agent-frame';
 import type { VisibleAgent } from './simulate';
@@ -1146,5 +1147,32 @@ describe('packed Life frames', () => {
       expect(deliver(reply).agents).toEqual(expected.agents);
     }
     expect(runLifeFrame(direct, input).agents.length).toBeGreaterThan(0);
+  });
+});
+
+describe('retained worker geometry', () => {
+  it('resolves returning tiles by key exactly while the host still holds them', () => {
+    const base = continuityTile(left);
+    const api = createLifeWorkerApi();
+    api.init({ processions: [] });
+    const host = new RecentKeys();
+    const tile = (i: number) => ({ key: `k${i}`, tile: base.tile, life: base.life });
+    // What the host sends: geometry only for a key the worker doesn't hold.
+    const send = (tiles: ReturnType<typeof tile>[]) => {
+      const payload = tiles.map((t) => (host.has(t.key) ? { key: t.key, tile: t.tile } : t));
+      host.touch(tiles.map((t) => t.key));
+      api.sync(payload);
+      return payload;
+    };
+    send([tile(0)]);
+    send([tile(1)]);
+    const back = send([tile(0)]);
+    expect(back[0]).not.toHaveProperty('life');
+    for (let i = 2; i < 2 + RETAINED_LIFE_TILES + 2; i++) send([tile(i)]);
+    expect(host.has('k0')).toBe(false);
+    expect(host.has(`k${RETAINED_LIFE_TILES}`)).toBe(true);
+    // The worker dropped what the host dropped, and kept what it kept.
+    expect(() => api.sync([{ key: 'k0', tile: base.tile }])).toThrow('Missing Life geometry');
+    expect(() => api.sync([{ key: `k${RETAINED_LIFE_TILES}`, tile: base.tile }])).not.toThrow();
   });
 });

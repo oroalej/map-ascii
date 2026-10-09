@@ -4,6 +4,7 @@
  * its geometry again. The host and the worker each keep one and apply the same syncs in the same
  * order (Comlink preserves it), so they always agree on which keys are held.
  */
+/** Tiles held beyond the current set. */
 export const RETAINED_LIFE_TILES = 64;
 
 export class RecentKeys {
@@ -19,10 +20,8 @@ export class RecentKeys {
     const now = new Set(keys);
     this.order = this.order.filter((key) => !now.has(key));
     this.order.push(...now);
-    const evicted = this.order.splice(
-      0,
-      Math.max(0, this.order.length - Math.max(this.cap, now.size)),
-    );
+    // The current keys, plus up to `cap` that have left.
+    const evicted = this.order.splice(0, Math.max(0, this.order.length - this.cap - now.size));
     for (const key of now) this.held.add(key);
     for (const key of evicted) this.held.delete(key);
     return evicted;

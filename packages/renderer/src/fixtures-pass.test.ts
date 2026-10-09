@@ -257,6 +257,58 @@ it('caches viewport utility visibility and updates it when only the visible boun
   }
 });
 
+it('reports margin streetlights and signals once an offset-only pan brings them on screen', () => {
+  const gl = {
+    bindTexture: vi.fn(),
+    pixelStorei: vi.fn(),
+    texSubImage2D: vi.fn(),
+  } as unknown as GL;
+  const targets = { cols: 100, rows: 100, fixtureTex: {}, signalLightTex: {} } as CellTargets;
+  const resources = { map: { atlas: { index: () => 300 } } } as unknown as ThemeResources;
+  const view: View = {
+    camera: { lng: 0, lat: 0, zoom: 19.5 },
+    dpr: 1,
+    width: 500,
+    height: 500,
+    cellDev: { w: 5, h: 9 },
+    labelDev: { w: 10, h: 18 },
+    detailZoom: 20,
+  };
+  const project = vi.fn((x: number, y: number): [number, number] => [x, y]);
+  const original = placeGrid(view, view.cellDev, 100, 100);
+  const at = (shiftY: number) => ({
+    ...original,
+    fromCell: undefined,
+    grid: { ...original.grid, shiftX: 0, shiftY },
+    toCell: project,
+  });
+  const body = (row: number) => ({
+    base: [40.5, row] as [number, number],
+    tip: [42.5, row] as [number, number],
+    forward: [43.5, row] as [number, number],
+    right: [40.5, row + 1] as [number, number],
+    seed: 3,
+  });
+  // Rows 80+ lie below the 500 px screen (rows 0-55) at shiftY 0: margin only.
+  const fixtures: StreetFixture[] = [
+    { kind: 'streetlight', ...body(80.5), state: 0, roadCenter: [44.5, 80.5] },
+    { kind: 'signal', ...body(90.5), group: 'a', midBlock: false },
+  ];
+  const first = fixturePass(gl, targets, resources, view, at(0), fixtures, 0, false);
+  expect(first).toMatchObject({ streetlights: false, trafficSignals: false });
+  project.mockClear();
+  // Scrolled down 40 rows without repacking: both are now on screen.
+  const shifted = fixturePass(gl, targets, resources, view, at(360), fixtures, 0, false);
+  expect(project).not.toHaveBeenCalled();
+  expect(shifted).toMatchObject({ streetlights: true, trafficSignals: true });
+  // Back again: off screen once more.
+  expect(fixturePass(gl, targets, resources, view, at(0), fixtures, 0, false)).toMatchObject({
+    streetlights: false,
+    trafficSignals: false,
+  });
+  expect(project).not.toHaveBeenCalled();
+});
+
 it('animates cached flag cloth independently of the signal clock and lighting lookup', () => {
   const upload = vi.fn();
   const gl = { bindTexture: vi.fn(), pixelStorei: vi.fn(), texSubImage2D: upload } as unknown as GL;

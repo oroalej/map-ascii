@@ -2145,6 +2145,19 @@ describe('live motion preference', () => {
     draw(20);
     expect(atlas.getProfile()!.samples).toHaveLength(1);
     expect(atlas.getProfile()!.stages.callback.count).toBe(1);
+    // The first drawn frame places the windows: every per-pass stage is recorded once.
+    const stages = atlas.getProfile()!.stages;
+    for (const stage of [
+      'cellPass',
+      'labels',
+      'sideWork',
+      'select',
+      'lifePass',
+      'lights',
+      'fixtures',
+      'glyph',
+    ] as const)
+      expect(stages[stage].count, stage).toBe(1);
     atlas.resetProfile();
     expect(atlas.getProfile()!.samples).toHaveLength(0);
     draw(50);
