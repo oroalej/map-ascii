@@ -16,6 +16,7 @@ import { worldTiles } from './testing/scenarios';
 import { stripRing } from './terrain';
 import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
+import { deliver } from './testing/worker-reply';
 
 const tile = { z: 16, x: 55192, y: 30266 };
 const season: SeasonConfig = {
@@ -604,7 +605,9 @@ describe('seasonal stall lifecycle', () => {
         },
         visible: [20, activityLevels(720), center, { rain: 0, sunAltitude: 45 }],
       };
-      expect(api.frame(structuredClone(input)).agents).toEqual(runLifeFrame(world, input).agents);
+      expect(deliver(api.frame(structuredClone(input))).agents).toEqual(
+        runLifeFrame(world, input).agents,
+      );
     }
   });
 });

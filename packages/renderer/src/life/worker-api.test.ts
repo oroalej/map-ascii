@@ -21,6 +21,10 @@ import { metersPerUnit, tileToLngLat } from '../raster/geometry';
 import { folkloreConfig, folkloreTile, folkloreCenter, calendar } from './testing/folklore';
 import { signalState } from './signals';
 import { birdFixture, birdLngLat } from './testing/bird-fixture';
+import { deliver } from './testing/worker-reply';
+import type * as ComlinkModule from 'comlink';
+import { packAgents, packedTransferables, unpackAgents } from './agent-frame';
+import type { VisibleAgent } from './simulate';
 it('transports pressed canonical signal phases equally and retains them through tile replacement', () => {
   const builder = new LifeBuilder();
   builder.signal({ x: 2048, y: 2048 }, 8, 90, 0, true, undefined, { seed: 0 });
@@ -51,7 +55,7 @@ it('transports pressed canonical signal phases equally and retains them through 
     visible: [19, 1, center],
   };
   const first = runLifeFrame(direct, input);
-  expect(api.frame(input).signalOffsets).toBeUndefined();
+  expect(deliver(api.frame(input)).signalOffsets).toBeUndefined();
   input.step.taps = [
     {
       id: 1,
@@ -64,7 +68,7 @@ it('transports pressed canonical signal phases equally and retains them through 
     },
   ];
   const result = runLifeFrame(direct, input),
-    remote = api.frame(input);
+    remote = deliver(api.frame(input));
   expect(remote.signalOffsets).toEqual(result.signalOffsets);
   expect(remote.tapReceipts).toEqual([{ id: 1, action: 'signal' }]);
   expect(signalState(0, remote.signalClock, false, remote.signalOffsets).a).toBe('amber');
@@ -73,11 +77,11 @@ it('transports pressed canonical signal phases equally and retains them through 
   direct.sync([replacement]);
   api.sync([replacement]);
   expect(runLifeFrame(direct, input).signalOffsets).toEqual(result.signalOffsets);
-  expect(api.frame(input).signalOffsets).toEqual(result.signalOffsets);
+  expect(deliver(api.frame(input)).signalOffsets).toEqual(result.signalOffsets);
   direct.clearTiles();
   api.clearTiles();
   expect(runLifeFrame(direct, input).signalOffsets).toBeUndefined();
-  expect(api.frame(input).signalOffsets).toBeUndefined();
+  expect(deliver(api.frame(input)).signalOffsets).toBeUndefined();
 });
 it('adds independent cursor gusts to perched-bird flushing with cloned worker parity', () => {
   const direct = birdFixture(),
@@ -109,11 +113,11 @@ it('adds independent cursor gusts to perched-bird flushing with cloned worker pa
   };
   for (const f of [direct.flock, remote.flock]) Object.assign(f, { perched: true, perch: 0 });
   runLifeFrame(direct.world, input);
-  const weak = api.frame(structuredClone(input));
+  const weak = deliver(api.frame(structuredClone(input)));
   expect(remote.flock.perched).toBe(true);
   expect(weak.agents).toEqual(direct.world.visible(...input.visible));
   input.step.gust!.strength = 1;
-  const strong = api.frame(structuredClone(input));
+  const strong = deliver(api.frame(structuredClone(input)));
   const expected = runLifeFrame(direct.world, input);
   expect(remote.flock.perched).toBe(false);
   expect(strong.agents).toEqual(expected.agents);
@@ -194,14 +198,26 @@ it('transports independent active folklore identically without detaching observe
   };
   for (let i = 0; i < 3; i++) {
     const a = runLifeFrame(direct, input),
-      b = api.frame(input);
+      b = deliver(api.frame(input));
     expect(structuredClone(b.folklore)).toEqual(a.folklore);
     if (i > 0) expect(b.folklore.sprites.length).toBeGreaterThan(0);
   }
   api.clearTiles();
-  expect(api.frame(input).folklore.sprites).toEqual([]);
+  expect(deliver(api.frame(input)).folklore.sprites).toEqual([]);
 });
 
+/** The transfer list of the latest reply, recorded on the way through Comlink. */
+const transfers = vi.hoisted(() => ({ last: undefined as readonly unknown[] | undefined }));
+vi.mock('comlink', async (load) => {
+  const actual = await load<typeof ComlinkModule>();
+  return {
+    ...actual,
+    transfer: <T>(value: T, list: Transferable[]) => {
+      transfers.last = list;
+      return actual.transfer(value, list);
+    },
+  };
+});
 vi.mock('./moments', async (load) => {
   const actual = await load<typeof MomentsModule>();
   return {
@@ -270,7 +286,7 @@ describe('life worker protocol', () => {
           visible: [21, activityLevels(1), center],
         };
         const inline = runLifeFrame(direct, input),
-          remote = api.frame(input);
+          remote = deliver(api.frame(input));
         expect(remote.agents).toEqual(inline.agents);
         expect(completeScenarioState(worlds[0]!)).toEqual(completeScenarioState(direct));
         indicating ||= remote.agents.some((agent) => agent.turnSignal?.side === 'left');
@@ -357,7 +373,7 @@ describe('life worker protocol', () => {
       let seen = false;
       for (let i = 0; i < Math.ceil(15 / dt); i++) {
         const a = runLifeFrame(direct, input),
-          b = api.frame(input);
+          b = deliver(api.frame(input));
         expect(b.agents).toEqual(a.agents);
         seen ||= a.agents.some((agent) => !!agent.emoji);
       }
@@ -412,7 +428,7 @@ describe('life worker protocol', () => {
       visible: [18, activityLevels(1), center],
     };
     try {
-      expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+      expect(deliver(api.frame(input)).agents).toEqual(runLifeFrame(direct, input).agents);
       expect(delivered).toEqual([seasons, seasons]);
       expect(worldTiles(direct).get(entry.key)!.seasonalStalls).toEqual([]);
     } finally {
@@ -469,7 +485,7 @@ describe('life worker protocol', () => {
           },
           visible: [18, activityLevels(1), center],
         };
-        expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+        expect(deliver(api.frame(input)).agents).toEqual(runLifeFrame(direct, input).agents);
         const car = fixtures[0]!.car;
         braked ||= car.v! < car.speed;
         held ||= !!car.pedestrianHolds?.length;
@@ -557,7 +573,7 @@ describe('life worker protocol', () => {
           visible: [21, activityLevels(1), center],
         };
         const inline = runLifeFrame(direct, input),
-          remote = api.frame(input);
+          remote = deliver(api.frame(input));
         expect(remote.agents).toEqual(inline.agents);
         spoken += remote.agents.filter((agent) => agent.speech).length;
         posed ||= remote.agents.some((agent) => agent.people?.some((person) => person.pose));
@@ -607,10 +623,10 @@ describe('life worker protocol', () => {
       },
       visible: [19, 1, center],
     };
-    api.frame(input);
+    deliver(api.frame(input));
     inline.request(input);
     await vi.runAllTimersAsync();
-    api.frame(input);
+    deliver(api.frame(input));
     inline.request(input);
     expect(remote.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
     expect(local.resident(entry.key)!.flocks.length).toBeGreaterThan(0);
@@ -631,7 +647,7 @@ describe('life worker protocol', () => {
     const b = vi.spyOn(local, 'step');
     for (const pointer of [center, center, undefined]) {
       input.step.pointer = pointer;
-      const actual = api.frame(structuredClone(input));
+      const actual = deliver(api.frame(structuredClone(input)));
       inline.request(input);
       expect(a.mock.calls.at(-1)![9]).toEqual(pointer);
       expect(b.mock.calls.at(-1)![9]).toEqual(pointer);
@@ -679,7 +695,7 @@ describe('life worker protocol', () => {
           view,
         );
         inline.sync(entries, s.center, view);
-        const actual = api.frame(input);
+        const actual = deliver(api.frame(input));
         inline.request(input);
         const expected = inline.latest()!;
         expect(actual.agents).toEqual(
@@ -691,7 +707,7 @@ describe('life worker protocol', () => {
     }
     api.clearTiles();
     inline.clearTiles();
-    expect(api.frame(input).agents).toEqual([]);
+    expect(deliver(api.frame(input)).agents).toEqual([]);
     inline.request(input);
     expect(inline.latest()!.agents).toEqual([]);
     inline.dispose();
@@ -813,7 +829,7 @@ describe('life worker protocol', () => {
         delete plain.consist;
         return plain;
       });
-      const result = api.frame(input);
+      const result = deliver(api.frame(input));
       expect(result.agents).toEqual(agents);
       expect(result.procession).toEqual(direct.procession());
       expect(result.signalClock).toBe(direct.signalClock);
@@ -899,7 +915,7 @@ describe('life worker protocol', () => {
       input.gust.time = frame / 10;
       const expected = runLifeFrame(direct, input);
       for (const agent of expected.agents) delete agent.consist;
-      const actual = api.frame(input);
+      const actual = deliver(api.frame(input));
       expect(actual.agents).toEqual(expected.agents);
       expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
         true,
@@ -921,7 +937,7 @@ describe('life worker protocol', () => {
     }
     expect(seen).toEqual({ brake: true, hazard: true, puff: true });
     const nextExpected = runLifeFrame(direct, input),
-      nextActual = api.frame(input);
+      nextActual = deliver(api.frame(input));
     expect(nextActual.agents).toEqual(nextExpected.agents);
     expect(
       Buffer.from(nextActual.puffs.buffer).equals(Buffer.from(nextExpected.puffs.buffer)),
@@ -960,7 +976,7 @@ describe('life worker protocol', () => {
       for (let frame = 0; frame < 4; frame++) {
         const expected = runLifeFrame(direct, input);
         for (const agent of expected.agents) delete agent.consist;
-        const actual = api.frame(input);
+        const actual = deliver(api.frame(input));
         expect(actual.agents).toEqual(expected.agents);
         expect(Buffer.from(actual.puffs.buffer).equals(Buffer.from(expected.puffs.buffer))).toBe(
           true,
@@ -975,7 +991,7 @@ describe('life worker protocol', () => {
     api.sync([structuredClone(coarse)]);
     const expected = runLifeFrame(direct, input);
     for (const agent of expected.agents) delete agent.consist;
-    expect(api.frame(input).agents).toEqual(expected.agents);
+    expect(deliver(api.frame(input)).agents).toEqual(expected.agents);
   });
 });
 
@@ -1008,14 +1024,14 @@ it('returns worker and inline frames before running private preparation', async 
   try {
     api.sync(scenario.tiles, scenario.center, view);
     inline.sync(scenario.tiles, scenario.center, view);
-    expect(api.frame(input).agents).toEqual([]);
+    expect(deliver(api.frame(input)).agents).toEqual([]);
     inline.request(input);
     expect(slice).not.toHaveBeenCalled();
     await vi.runAllTimersAsync();
     expect(slice).toHaveBeenCalled();
     // Background turns prepare privately, without changing the last published frame.
     expect(inline.latest()!.agents).toEqual([]);
-    api.frame(input);
+    deliver(api.frame(input));
     inline.request(input);
     expect(inline.latest()!.agents.length).toBeGreaterThan(0);
   } finally {
@@ -1024,4 +1040,111 @@ it('returns worker and inline frames before running private preparation', async 
     slice.mockRestore();
     vi.useRealTimers();
   }
+});
+
+describe('packed Life frames', () => {
+  const heading = (lng: number, lat: number): [number, number] => [lng + 1e-9 / 3, lat - 1e-12];
+  const agents = (): VisibleAgent[] => [
+    {
+      kind: 'vehicle',
+      lng: 123.18512345678901,
+      lat: 13.624012345678912,
+      ahead: heading(123.18512345678901, 13.624012345678912),
+      side: [123.185123, 13.6240123],
+      vehicle: 'car',
+      paint: 3,
+      parked: false,
+      flap: 0,
+      lamps: { kind: 'hazard', on: true },
+      turnSignal: { side: 'left', on: false },
+      beacon: { half: 1, colors: [0, 2] },
+    },
+    {
+      kind: 'person',
+      lng: -0,
+      lat: Number.MIN_VALUE,
+      flap: 1,
+      candle: true,
+      effectClock: -2.5,
+      candleSeed: 31,
+      inspectionId: 7,
+      people: [{ figure: 'adult', paint: 2, lateral: 0.5, back: -0.25, flap: 1 }],
+      speech: { id: 's', exchangeId: 'e', line: 2, member: 0 },
+      emoji: { id: 'x', subject: 'person', mood: 'wave' },
+      event: true,
+      eventGround: 'plaza',
+      eventRole: 'seated',
+      eventFootprint: { length: 1, width: 0.5 },
+      mappedPersonMover: true,
+      covered: false,
+      glyph: '',
+    },
+    { kind: 'bird', lng: 1, lat: 2, flap: 0, bird: { species: 'egret', pose: 1 } },
+    {
+      kind: 'boat',
+      lng: 3,
+      lat: 4,
+      flap: 0,
+      aboard: true,
+      stroke: 1,
+      line: { points: [[3, 4]], paints: [1], tip: { glyph: '*', paint: 0 } },
+      prop: 'event',
+      eventScenery: true,
+    },
+    // A present-but-undefined optional field stays present, and absent ones stay absent.
+    { kind: 'dog', lng: 5, lat: 6, flap: 0, speech: undefined },
+  ];
+
+  it('round-trips every field exactly, through a transfer', () => {
+    const original = agents();
+    const packed = packAgents(original);
+    const delivered = structuredClone(packed, { transfer: packedTransferables(packed) });
+    expect(packed.numbers.byteLength).toBe(0);
+    const decoded = unpackAgents(delivered);
+    expect(decoded).toStrictEqual(original);
+    expect(Object.is(decoded[1]!.lng, -0)).toBe(true);
+    expect(decoded[0]!.ahead![0]).toBe(original[0]!.ahead![0]);
+    expect('speech' in decoded[4]!).toBe(true);
+    expect('candle' in decoded[0]!).toBe(false);
+    // Fresh objects each decode: an accepted frame is never shared with the next.
+    expect(unpackAgents(packAgents(original))[0]).not.toBe(decoded[0]);
+  });
+
+  it('transfers the packed columns and decodes to the inline frame', () => {
+    const tile = continuityTile(left);
+    const center = tileToLngLat(left, { x: 1200, y: 2000 });
+    const direct = new LifeWorld();
+    direct.sync([tile]);
+    const api = createLifeWorkerApi();
+    api.init({ processions: [] });
+    api.sync([structuredClone(tile)]);
+    const input: FrameInput = {
+      gust: {
+        camera: { lng: center[0], lat: center[1], zoom: 19 },
+        size: { width: 640, height: 480 },
+        cssCell: { w: 6, h: 11 },
+        time: 0,
+        wind: { dir: [1, 0], strength: 0 },
+      },
+      step: {
+        dt: 0.1,
+        zoom: 19,
+        bounds: undefined,
+        wind: undefined,
+        weather: { minutes: 720, rain: 0 },
+        cellMeters: 0,
+      },
+      visible: [19, activityLevels(1), center],
+    };
+    for (let frame = 0; frame < 5; frame++) {
+      input.gust.time = frame / 10;
+      const expected = runLifeFrame(direct, input);
+      for (const agent of expected.agents) delete agent.consist;
+      const reply = api.frame(input);
+      for (const buffer of packedTransferables(reply.packed))
+        expect(transfers.last).toContain(buffer);
+      expect(deliver(reply).agents).toEqual(expected.agents);
+    }
+    expect(runLifeFrame(direct, input).agents.length).toBeGreaterThan(0);
+  });
 });

@@ -13,6 +13,7 @@ import type { MomentOptions } from './moments-host';
 import type { FrameProfiler } from '../profile';
 import type { LifeWorld, LifeTile, ProcessionRun, VisibleAgent } from './simulate';
 import type { FrameInput, LifeWorkerApi } from './worker-api';
+import { unpackAgents } from './agent-frame';
 import { cellTerrainFrom } from './terrain-snapshot';
 import { makeCellGuard } from './cell-guard';
 import type { LifeViewContext } from './births';
@@ -439,13 +440,20 @@ export function createWorkerHost(
           }
           acceptedPost = posted;
           if (posted !== undefined) profiler!.record('lifeLatency', profiler!.time() - posted);
+          // Fresh agents for each accepted reply: an accepted frame is never mutated, so the
+          // pause, hover, speech and tap snapshots that keep it stay valid. Rejected replies
+          // above are never decoded.
+          const decodeStart = profiler?.time();
+          const agents = unpackAgents(result.packed);
+          if (decodeStart !== undefined)
+            profiler!.record('agentDecode', profiler!.time() - decodeStart);
           // Only frames posted after play() can show that its time-lapse has ended.
           const run = result.procession;
           if (played && frame > playedFrom && !(run && !run.live && run.id === played))
             played = undefined;
           const cellTerrain = terrain;
           view = {
-            agents: result.agents,
+            agents,
             folklore:
               folkloreEpoch === requestedFolkloreEpoch
                 ? (result.folklore ?? EMPTY_FOLKLORE)

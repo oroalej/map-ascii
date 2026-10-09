@@ -8,6 +8,7 @@ import { bounded } from './testing/scenario-checks';
 import { createInlineHost } from './inline-host';
 import { createLifeWorkerApi, type FrameInput } from './worker-api';
 import { UMBRELLA_MOTION } from './config';
+import { deliver } from './testing/worker-reply';
 
 class ItemWorld extends LifeWorld {
   constructor(traffic?: TrafficMix) {
@@ -294,17 +295,17 @@ describe('per-item inspection', () => {
       inspection: { id: null, revision: 0, time: 0 },
     };
     inline.request(input);
-    let reply = worker.frame(input);
+    let reply = deliver(worker.frame(input));
     for (let frame = 0; !reply.agents.length && frame < 300; frame++) {
       await new Promise((resolve) => setTimeout(resolve, 0));
       inline.request(input);
-      reply = worker.frame(input);
+      reply = deliver(worker.frame(input));
     }
     const id = reply.agents[0]!.inspectionId!;
     for (let frame = 1; frame <= 10; frame++) {
       input.inspection = { id: frame < 8 ? id : null, revision: frame, time: frame / 30 };
       inline.request(input);
-      reply = worker.frame(input);
+      reply = deliver(worker.frame(input));
       // Model the real worker boundary: owner-local symbol records are not serialized.
       expect(structuredClone(reply.agents)).toEqual(structuredClone(inline.latest()!.agents));
       expect(reply).not.toHaveProperty('inspection');

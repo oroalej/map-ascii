@@ -182,39 +182,83 @@ const adjacentCells = [
   [-1, 1],
   [-1, -1],
 ] as const;
-let journal:
-  | {
-      before: Map<number, [number, number, number, number, number, number?]>;
-      denied: boolean;
-      incomplete?: boolean;
-      memberCount?: number;
-      members?: MemberRaster[];
+/**
+ * The cells a ground agent (or crowd figure) wrote, in write order, with the texel bytes, owner
+ * and speaker member each replaced. One instance is reused for every agent: membership is a
+ * per-cell stamp, so nothing is allocated per agent or per cell once it has grown.
+ */
+class CellJournal {
+  /** Texel offsets (cell × 4). */
+  cells = new Int32Array(64);
+  bytes = new Uint8Array(256);
+  owners = new Uint32Array(64);
+  members = new Uint8Array(64);
+  size = 0;
+  private stamps = new Uint32Array(0);
+  private stamp = 0;
+  /** Start empty, over a grid of `cells` cells. */
+  reset(cells: number) {
+    if (this.stamps.length < cells) {
+      this.stamps = new Uint32Array(cells);
+      this.stamp = 0;
     }
-  | undefined;
-const crowdJournal: NonNullable<typeof journal> = { before: new Map(), denied: false };
-const CROWD_PREVIOUS: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-let crowdRollbackCells = new Uint32Array(16);
-let crowdRollbackBytes = new Uint8Array(64);
-let crowdRollbackOwners = new Uint32Array(16);
-let crowdRollbackSize = 0;
-function rememberCrowdCell(out: Uint8Array, at: number) {
-  if (crowdRollbackSize === crowdRollbackCells.length) {
-    const capacity = crowdRollbackCells.length * 2;
-    const cells = new Uint32Array(capacity),
-      bytes = new Uint8Array(capacity * 4),
-      owners = new Uint32Array(capacity);
-    cells.set(crowdRollbackCells);
-    bytes.set(crowdRollbackBytes);
-    owners.set(crowdRollbackOwners);
-    crowdRollbackCells = cells;
-    crowdRollbackBytes = bytes;
-    crowdRollbackOwners = owners;
+    if (++this.stamp === 0xffffffff) {
+      this.stamps.fill(0);
+      this.stamp = 1;
+    }
+    this.size = 0;
   }
-  const slot = crowdRollbackSize++;
-  crowdRollbackCells[slot] = at;
-  for (let b = 0; b < 4; b++) crowdRollbackBytes[slot * 4 + b] = out[at + b]!;
-  crowdRollbackOwners[slot] = drawingOwners?.[at / 4] ?? 0;
-  crowdJournal.before.set(at, CROWD_PREVIOUS);
+  has(at: number) {
+    return this.stamps[at / 4] === this.stamp;
+  }
+  /** Record the texel at `at` before its first write. */
+  add(out: Uint8Array, at: number, owner: number, member: number) {
+    if (this.size === this.cells.length) {
+      const grow = <T extends Int32Array | Uint8Array | Uint32Array>(from: T, to: T) => {
+        to.set(from);
+        return to;
+      };
+      const capacity = this.size * 2;
+      this.cells = grow(this.cells, new Int32Array(capacity));
+      this.bytes = grow(this.bytes, new Uint8Array(capacity * 4));
+      this.owners = grow(this.owners, new Uint32Array(capacity));
+      this.members = grow(this.members, new Uint8Array(capacity));
+    }
+    const slot = this.size++;
+    this.cells[slot] = at;
+    for (let b = 0; b < 4; b++) this.bytes[slot * 4 + b] = out[at + b]!;
+    this.owners[slot] = owner;
+    this.members[slot] = member;
+    this.stamps[at / 4] = this.stamp;
+  }
+  /** Forget slot `slot` (its stamp too), keeping the others in order. */
+  remove(slot: number) {
+    this.stamps[this.cells[slot]! / 4] = 0;
+    this.cells.copyWithin(slot, slot + 1, this.size);
+    this.bytes.copyWithin(slot * 4, slot * 4 + 4, this.size * 4);
+    this.owners.copyWithin(slot, slot + 1, this.size);
+    this.members.copyWithin(slot, slot + 1, this.size);
+    this.size--;
+  }
+}
+type Journal = {
+  before: CellJournal;
+  denied: boolean;
+  incomplete?: boolean;
+  memberCount?: number;
+  members?: MemberRaster[];
+};
+let journal: Journal | undefined;
+/** One reused journal for ordinary ground agents and one for crowd figures. */
+const groundJournal: Journal = { before: new CellJournal(), denied: false };
+const crowdJournal: Journal = { before: new CellJournal(), denied: false };
+function beginJournal(target: Journal, cells: number): Journal {
+  target.before.reset(cells);
+  target.denied = false;
+  target.incomplete = undefined;
+  target.memberCount = undefined;
+  target.members = undefined;
+  return target;
 }
 let fallbackStampedVehicles = new Uint8Array(0);
 let detailedStamp = false;
@@ -292,23 +336,12 @@ function figureCellMask(glyph: string, w: number, h: number): number {
 function rememberGroundCell(out: Uint8Array, at: number) {
   if (journal && !journal.before.has(at)) {
     if (groundCells[at / 4]) journal.denied = true;
-    // Preserve the ordinary five-value owner journal; speech adds its member
-    // only when enabled, avoiding an unused slot in every painted-cell array.
-    if (journal === crowdJournal) rememberCrowdCell(out, at);
-    else
-      journal.before.set(
-        at,
-        drawingSpeakers
-          ? [
-              out[at]!,
-              out[at + 1]!,
-              out[at + 2]!,
-              out[at + 3]!,
-              drawingOwners?.[at / 4] ?? 0,
-              drawingSpeakers.members[at / 4]!,
-            ]
-          : [out[at]!, out[at + 1]!, out[at + 2]!, out[at + 3]!, drawingOwners?.[at / 4] ?? 0],
-      );
+    journal.before.add(
+      out,
+      at,
+      drawingOwners?.[at / 4] ?? 0,
+      drawingSpeakers?.members[at / 4] ?? 0,
+    );
   }
   if (drawingSpeakers) drawingSpeakers.members[at / 4] = drawingMember;
 }
@@ -407,14 +440,15 @@ export function packLife(
         drawingMini = false;
         const clockStart = clockCells?.length ?? 0;
         const ground = !agent.aboard && (agent.kind === 'vehicle' || isWalker(agent.kind));
-        journal = ground ? { before: new Map(), denied: false } : undefined;
+        journal = ground ? beginJournal(groundJournal, cells) : undefined;
         detailedStamp = false;
         detailedPeopleStamp = false;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
         const collision = journal?.denied ?? false;
         let cellDenied = false;
         if (journal && grid.allowsGroundCell)
-          for (const at of journal.before.keys())
+          for (let slot = 0; slot < journal.before.size; slot++) {
+            const at = journal.before.cells[slot]!;
             if (
               !grid.allowsGroundCell(agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
             ) {
@@ -422,6 +456,7 @@ export function packLife(
               cellDenied = true;
               break;
             }
+          }
         if (grid.outcomes)
           grid.outcomes[index] = collision
             ? PackingOutcome.collision
@@ -455,22 +490,27 @@ export function packLife(
             journal.before.size <= (agent.kind === 'person' ? 16 : 4);
           // Save the already projected raster; retrying drawAgent would change its scale
           // and heading under an anisotropic projection.
+          const before = journal.before;
           const payload = retry
-            ? [...journal.before.keys()].map((at) => ({
-                at,
-                bytes: out.slice(at, at + 4),
-                member: drawingSpeakers?.members[at / 4] ?? 0,
-              }))
+            ? Array.from({ length: before.size }, (_, slot) => {
+                const at = before.cells[slot]!;
+                return {
+                  at,
+                  bytes: out.slice(at, at + 4),
+                  member: drawingSpeakers?.members[at / 4] ?? 0,
+                };
+              })
             : undefined;
           const point = drawingSpeakers?.points.get(drawingOwner);
           const clocked = retry ? clockCells?.slice(clockStart) : undefined;
           if (clockCells) clockCells.length = clockStart;
           drawingSpeakers?.points.delete(drawingOwner);
-          for (const [at, previous] of journal.before) {
-            // The fifth journal value is CPU ownership, never a fifth texture byte.
-            for (let byte = 0; byte < 4; byte++) out[at + byte] = previous[byte]!;
-            if (drawingOwners) drawingOwners[at / 4] = previous[4]!;
-            if (drawingSpeakers) drawingSpeakers.members[at / 4] = previous[5]!;
+          for (let slot = 0; slot < before.size; slot++) {
+            // Ownership and the speaker member are CPU state, never texture bytes.
+            const at = before.cells[slot]!;
+            for (let byte = 0; byte < 4; byte++) out[at + byte] = before.bytes[slot * 4 + byte]!;
+            if (drawingOwners) drawingOwners[at / 4] = before.owners[slot]!;
+            if (drawingSpeakers) drawingSpeakers.members[at / 4] = before.members[slot]!;
           }
           let placed = false;
           if (payload) {
@@ -590,7 +630,9 @@ export function packLife(
           }
         } else {
           drawn += n;
-          if (!agent.eventScenery) for (const at of journal.before.keys()) groundCells[at / 4] = 1;
+          if (!agent.eventScenery)
+            for (let slot = 0; slot < journal.before.size; slot++)
+              groundCells[journal.before.cells[slot]! / 4] = 1;
           if (
             n &&
             detailedStamp &&
@@ -705,12 +747,8 @@ function prepareCrowdInk(
     occupied = groundCells;
   drawingOwners = undefined;
   groundCells = crowdInkGround;
-  const capture = crowdJournal;
-  capture.before.clear();
-  capture.denied = capture.incomplete = false;
-  capture.memberCount = undefined;
-  capture.members = undefined;
-  crowdRollbackSize = 0;
+  const capture = beginJournal(crowdJournal, size * size);
+  capture.incomplete = false;
   journal = capture;
   let n: number;
   try {
@@ -739,7 +777,8 @@ function prepareCrowdInk(
   const cells = singleCell ? undefined : new Int32Array(capture.before.size * 2),
     bytes = singleCell ? undefined : new Uint8Array(capture.before.size * 4);
   let slot = 0;
-  for (const at of capture.before.keys()) {
+  for (let index = 0; index < capture.before.size; index++) {
+    const at = capture.before.cells[index]!;
     const dc = ((at / 4) % size) - pad,
       dr = Math.floor(at / 4 / size) - pad;
     if (singleCell)
@@ -877,50 +916,48 @@ function packThrong(
       }
       continue;
     } else {
-      reusable.before.clear();
-      reusable.denied = false;
+      journal = beginJournal(reusable, grid.cols * grid.rows);
       reusable.incomplete = false;
-      reusable.memberCount = undefined;
-      reusable.members = undefined;
-      crowdRollbackSize = 0;
-      journal = reusable;
       n = drawAgent(out, grid, cell.agent, theme, glyphIndex, glyphs);
       // Without a margin these cells were off the grid: unwritten, unchecked and uncounted.
       if (payload.clip)
-        for (let slot = 0; slot < crowdRollbackSize; slot++) {
-          const at = crowdRollbackCells[slot]!,
+        for (let slot = reusable.before.size - 1; slot >= 0; slot--) {
+          const at = reusable.before.cells[slot]!,
             col = (at / 4) % grid.cols,
             row = Math.floor(at / 4 / grid.cols);
           if (col >= minCol && col < maxCol && row >= minRow && row < maxRow) continue;
-          for (let b = 0; b < 4; b++) out[at + b] = crowdRollbackBytes[slot * 4 + b]!;
-          if (drawingOwners) drawingOwners[at / 4] = crowdRollbackOwners[slot]!;
-          reusable.before.delete(at);
+          for (let b = 0; b < 4; b++) out[at + b] = reusable.before.bytes[slot * 4 + b]!;
+          if (drawingOwners) drawingOwners[at / 4] = reusable.before.owners[slot]!;
+          reusable.before.remove(slot);
         }
       if (payload.clip && !reusable.before.size) n = 0;
     }
     const attempt = journal;
+    const written = attempt.before;
     if (!cell.mask && grid.allowsGroundCell)
-      for (const at of attempt.before.keys())
+      for (let slot = 0; slot < written.size; slot++) {
+        const at = written.cells[slot]!;
         if (
           !grid.allowsGroundCell(cell.agent, (at / 4) % grid.cols, Math.floor(at / 4 / grid.cols))
         ) {
           attempt.denied = true;
           break;
         }
-    const overCapacity = used + attempt.before.size > payload.cap;
+      }
+    const overCapacity = used + written.size > payload.cap;
     if (!n || attempt.denied || attempt.incomplete || overCapacity) {
-      for (let slot = 0; slot < crowdRollbackSize; slot++) {
-        const at = crowdRollbackCells[slot]!;
-        for (let b = 0; b < 4; b++) out[at + b] = crowdRollbackBytes[slot * 4 + b]!;
-        if (drawingOwners) drawingOwners[at / 4] = crowdRollbackOwners[slot]!;
+      for (let slot = 0; slot < written.size; slot++) {
+        const at = written.cells[slot]!;
+        for (let b = 0; b < 4; b++) out[at + b] = written.bytes[slot * 4 + b]!;
+        if (drawingOwners) drawingOwners[at / 4] = written.owners[slot]!;
       }
       if (overCapacity) break;
       continue;
     }
-    used += attempt.before.size;
+    used += written.size;
     drawn++;
-    for (const at of attempt.before.keys()) {
-      const i = at / 4;
+    for (let slot = 0; slot < written.size; slot++) {
+      const i = written.cells[slot]! / 4;
       groundCells[i] = 1;
       if (metadata.throngMask) metadata.throngMask.set(cell.mask ?? FULL_CROWD_MASK, i * 8);
       metadata.throngCells?.push(i);

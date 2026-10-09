@@ -29,10 +29,22 @@ const mock = vi.hoisted(() => ({
   release: vi.fn(),
   terminate: vi.fn(),
 }));
-vi.mock('comlink', () => ({
-  wrap: () => ({ ...mock, [Symbol.for('release')]: mock.release }),
-  releaseProxy: Symbol.for('release'),
-}));
+// Replies arrive as the worker sends them: agents packed into columns (the other fields keep
+// their identity, so tests can follow buffers through the host).
+vi.mock('comlink', async () => {
+  const { packAgents } = await import('./agent-frame');
+  return {
+    wrap: () => ({
+      ...mock,
+      frame: (input: FrameInput) =>
+        mock
+          .frame(input)
+          .then(({ agents, ...rest }: FrameResult) => ({ ...rest, packed: packAgents(agents) })),
+      [Symbol.for('release')]: mock.release,
+    }),
+    releaseProxy: Symbol.for('release'),
+  };
+});
 const flush = async () => {
   for (let i = 0; i < 6; i++) await Promise.resolve();
   await vi.dynamicImportSettled();
@@ -459,6 +471,55 @@ describe('pipelined Life host', () => {
     expect(mock.sync).toHaveBeenCalledTimes(1);
     host.dispose();
   });
+  it('keeps a retained accepted frame intact across later, absent-field and rejected replies', async () => {
+    const s = fixture(),
+      host = createWorkerHost({}, []);
+    host.sync(s.tiles);
+    await flush();
+    const lit: VisibleAgent = {
+      kind: 'person',
+      lng: 123.12345678901234,
+      lat: 13.98765432109876,
+      ahead: [123.12345678901235, 13.98765432109877],
+      flap: 1,
+      candle: true,
+      effectClock: 4,
+      people: [{ figure: 'adult', paint: 2, lateral: 0, back: 0, flap: 1 }],
+    };
+    mock.frame.mockResolvedValueOnce({ ...result(1), agents: [lit], tapFrame: 5 });
+    host.request(s.input);
+    await flush();
+    // What a pause, hover, speech or tap snapshot keeps: the frame and its owner's agent.
+    const a = host.latest()!;
+    const owner = 1;
+    const kept = structuredClone(a.agents);
+    const plain = { kind: 'person' as const, lng: 120, lat: 10, flap: 0 };
+    for (let reply = 2; reply <= 4; reply++) {
+      mock.frame.mockResolvedValueOnce({ ...result(reply), agents: [plain], tapFrame: 5 + reply });
+      host.request(s.input);
+      await flush();
+      const latest = host.latest()!;
+      // An optional field absent in the reply is absent from its agent.
+      expect(latest.agents[0]).toStrictEqual(plain);
+      expect(latest.agents[0]).not.toBe(a.agents[0]);
+    }
+    let resolve!: (reply: FrameResult) => void;
+    mock.frame.mockImplementationOnce(
+      () =>
+        new Promise<FrameResult>((done) => {
+          resolve = done;
+        }),
+    );
+    host.request(s.input);
+    host.setEmergency(undefined);
+    resolve({ ...result(9), agents: [{ ...lit, lng: 0, candle: false }] });
+    await flush();
+    expect(a.agents).toStrictEqual(kept);
+    expect(a.agents[owner - 1]!.candle).toBe(true);
+    expect(a.tapFrame).toBe(5);
+    host.dispose();
+  });
+
   it('keeps provenance on an accepted frame and drops marked stale replies', async () => {
     const s = fixture(),
       host = createWorkerHost({}, []);

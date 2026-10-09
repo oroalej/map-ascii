@@ -5,6 +5,7 @@ import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api
 import { signalizedCrossingEntry, seedSignalizedCrossing } from './testing/signalized-crossing';
 import { completeScenarioState } from './testing/scenarios';
 import { tileToLngLat } from '../raster/geometry';
+import { deliver } from './testing/worker-reply';
 it('matches controlled-tile frames and final simulation state in worker and inline worlds', () => {
   const worlds: LifeWorld[] = [];
   // eslint-disable-next-line @typescript-eslint/unbound-method -- apply supplies the intercepted instance.
@@ -46,7 +47,7 @@ it('matches controlled-tile frames and final simulation state in worker and inli
         },
         visible: [19, activityLevels(1), center],
       };
-      expect(api.frame(input).agents).toEqual(runLifeFrame(direct, input).agents);
+      expect(deliver(api.frame(input)).agents).toEqual(runLifeFrame(direct, input).agents);
     }
     expect(completeScenarioState(worlds[0]!)).toEqual(completeScenarioState(worlds[1]!));
     api.clearTiles();

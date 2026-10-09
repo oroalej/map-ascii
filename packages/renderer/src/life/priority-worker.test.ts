@@ -10,6 +10,7 @@ import {
   observePriorityTransitions,
 } from './testing/priority-transitions';
 import { createLifeWorkerApi, runLifeFrame, type FrameInput } from './worker-api';
+import { deliver } from './testing/worker-reply';
 
 const direct = priorityFixture(LifeWorld, LifeBuilder, metersPerUnit, false, true);
 const remote = priorityFixture(LifeWorld, LifeBuilder, metersPerUnit, false, true);
@@ -58,7 +59,7 @@ for (let section = 0; section < 4; section++) {
         },
         visible: [18, 1, center],
       };
-      expect(api.frame(input).agents).toEqual(runLifeFrame(direct.world, input).agents);
+      expect(deliver(api.frame(input)).agents).toEqual(runLifeFrame(direct.world, input).agents);
       const car = direct.life.movers[0]!,
         records = [...table.holds(car)];
       multiple ||= records.length >= 2;

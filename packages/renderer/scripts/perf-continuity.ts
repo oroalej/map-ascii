@@ -16,7 +16,7 @@ import { spawnMargin } from '../src/life/births';
 import { DEFAULT_CELLS, cellStep, stepCell } from '../src/density';
 import { metersPerCssPx } from '../src/grid';
 import type { LifeTile } from '../src/life/simulate';
-import type { LifeWorkerApi, FrameInput, FrameResult } from '../src/life/worker-api';
+import type { LifeWorkerApi, FrameInput, FrameReply } from '../src/life/worker-api';
 const require = createRequire(import.meta.url);
 // Comlink ships this Node adapter without an export-map declaration for its .mjs entry.
 const nodeEndpoint = require('comlink/dist/umd/node-adapter.js') as (
@@ -164,7 +164,7 @@ async function measure(from: LifeTile[], to: LifeTile[], eager: boolean) {
         busy = true;
         const posted = now;
         remote.frame(input).then(
-          (reply: FrameResult) => {
+          (reply: FrameReply) => {
             frames++;
             latency.push(performance.now() - posted);
             lastPosted = posted;
