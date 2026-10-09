@@ -12,6 +12,8 @@ export const SCENE_PROFILES: readonly DialogueProfile[] = [
   'vendor-order',
   'vendor-thanks',
   'transit',
+  'transit-call',
+  'procession-cheer',
   'companion',
   'peddler-call',
 ];

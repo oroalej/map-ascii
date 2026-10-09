@@ -8,12 +8,15 @@ import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
 import {
   FIREWORKS,
   createFireworkDisplay,
+  clearRequestedFireworks,
   fireworkInstances,
   fireworkScale,
   fireworkShellCount,
   fireworkShells,
   fireworkVariantCodes,
+  requestFirework,
   type FireworkDisplay,
+  type FireworkRequest,
 } from './fireworks-layout';
 import { fireworksFragment, fireworksVertex } from './shaders/fireworks';
 
@@ -77,14 +80,26 @@ export function fireworksPass(
   wind: WindNow,
   daylight: number,
   sites: FireworkSiteSampler = NO_FIREWORK_SITES,
+  requests?: readonly FireworkRequest[],
 ) {
-  if (!config?.variants.length || !fireworkShellCount(view.camera.zoom)) return;
+  if (!config?.variants.length || reduced) {
+    if (programs.fireworks) clearRequestedFireworks(programs.fireworks.display);
+    if (!config?.variants.length) return;
+  }
+  if (
+    !fireworkShellCount(view.camera.zoom) &&
+    !(requests?.length && !reduced) &&
+    !programs.fireworks?.display.requested?.size
+  )
+    return;
   const resources = (programs.fireworks ??= createFireworks(gl, programs));
   if (resources.config !== config) {
+    if (resources.config) clearRequestedFireworks(resources.display);
     resources.variants.fill(0);
     resources.variants.set(fireworkVariantCodes(config));
     resources.config = config;
   }
+  if (!reduced) for (const request of requests ?? []) requestFirework(resources.display, request);
   const count = fireworkShells(
     view,
     grid,

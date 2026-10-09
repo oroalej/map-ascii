@@ -21,6 +21,8 @@ export const DialogueProfile = z.enum([
   'vendor-order',
   'vendor-thanks',
   'transit',
+  'transit-call',
+  'procession-cheer',
   'companion',
   'play',
   'place-reaction',

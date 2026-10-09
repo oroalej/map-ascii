@@ -9,7 +9,7 @@ import {
   type Point,
 } from './occupancy';
 import type { GroundAgent, GroundGuard } from './simulate';
-import { pedestrianState } from './signals';
+import { pedestrianState, type SignalOffsets } from './signals';
 import type { RoadAccess } from './terrain';
 
 /** Immutable metre offsets from the route cursor; formation arrays remain untouched. */
@@ -171,6 +171,7 @@ const signed = (p: Point, side: CrossingSide) =>
 
 /** Cached gate index, with permission independent of a scene walker's original route line. */
 export class CrossingWaits {
+  signalOffsets?: SignalOffsets;
   readonly records: readonly Record[];
   private readonly byId = new Map<string, Record>();
   private readonly bins = new Map<number, Record[]>();
@@ -272,7 +273,7 @@ export class CrossingWaits {
   }
   private walk(record: Record, clock: number) {
     const c = record.controller;
-    return pedestrianState(c.seed, clock, c.midBlock, c.walk) === 'walk';
+    return pedestrianState(c.seed, clock, c.midBlock, c.walk, this.signalOffsets) === 'walk';
   }
   private entry(before: Body, after: Body, side: CrossingSide): boolean {
     if (this.front(before, side) > 1e-6 || this.front(after, side) <= 1e-6) return false;

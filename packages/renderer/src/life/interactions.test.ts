@@ -75,6 +75,24 @@ const shadeFixture = (covered = false) => {
   const p = { ...person(), rank, group: [{ ...walker }] };
   return { scene, p };
 };
+it('tries a reachable passerby after an unreachable nearest buyer and reserves only one', () => {
+  const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };
+  const scene = setup(0, [stall]);
+  const first = { ...person(49), group: [{ ...walker }] },
+    second = { ...person(45), group: [{ ...walker }] };
+  const reserve = scene.reserve.bind(scene);
+  const spy = vi
+    .spyOn(scene, 'reserve')
+    .mockImplementation((m, index) => (m === first ? false : reserve(m, index)));
+  expect(scene.purchase(stall, [second, first])).toBe(true);
+  expect(spy.mock.calls.map(([m]) => m)).toEqual([first, second]);
+  expect(scene.visits.size).toBe(1);
+  stall.open = false;
+  expect(scene.purchase(stall, [first])).toBe(false);
+  stall.open = true;
+  scene.step(0.1, [first, second], { rain: 1 });
+  expect(scene.purchase(stall, [first])).toBe(false);
+});
 describe('local interaction scenes', () => {
   it('releases a resting cat through its checked return route at flee pace', () => {
     const stall: Stall = { x: 50, y: 30, hx: 1, hy: 0, paint: 0, shirt: 0, side: 1, rank: 0 };

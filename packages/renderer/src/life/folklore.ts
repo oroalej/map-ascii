@@ -121,6 +121,23 @@ const routeLength = (route: readonly Point[]) =>
 
 /** Independent observer state. It never receives mutable physical owners or their RNGs. */
 export class FolkloreObserver {
+  private tapNight?: string;
+  private tapGhosts?: Map<string, { sprite: FolkloreSprite; start: number }>;
+  private tapMan?: { sprite: FolkloreSprite; lower: FolkloreSprite; start: number };
+  tap(id: string, clock: number) {
+    if (this.tapGhosts?.has(id) || this.tapMan?.sprite.id === id) return true;
+    const sprite = this.sprites.find((s) => s.id === id && s.kind !== 'lower-half');
+    if (!sprite) return false;
+    this.tapNight = this.nightKey;
+    if (sprite.kind === 'ghost')
+      (this.tapGhosts ??= new Map()).set(id, { sprite: { ...sprite }, start: clock });
+    else {
+      const lower = this.sprites.find((s) => s.id === `${id}/lower`);
+      if (!lower) return false;
+      this.tapMan = { sprite: { ...sprite }, lower: { ...lower }, start: clock };
+    }
+    return true;
+  }
   private config: RuntimeFolklore | undefined;
   private geometry: FolkloreGeometry | undefined;
   private ref: Pick<FolkloreTile, 'tile' | 'perMeter'> | undefined;
@@ -142,7 +159,12 @@ export class FolkloreObserver {
     this.config = config;
     this.clear();
   }
-  clear() {
+  clear(preserveTaps = false) {
+    if (!preserveTaps) {
+      this.tapNight = undefined;
+      this.tapGhosts = undefined;
+      this.tapMan = undefined;
+    }
     this.cursorShift = { x: 0, y: 0 };
     this.geometry = undefined;
     this.ref = undefined;
@@ -183,6 +205,11 @@ export class FolkloreObserver {
       return;
     }
     const key = `${night.day}/${night.undas}/${env.calendar?.preview ?? ''}`;
+    if (this.tapNight !== undefined && key !== this.tapNight) {
+      this.tapGhosts = undefined;
+      this.tapMan = undefined;
+      this.tapNight = undefined;
+    }
     if (key !== this.nightKey) {
       this.ghosts.clear();
       this.selection = undefined;
@@ -225,7 +252,7 @@ export class FolkloreObserver {
         !geometry.admitsRoof(this.selection.landing.id, this.selection.landing.at))
     )
       this.selection = undefined;
-    if (night.manananggal && !this.selection) {
+    if (night.manananggal && !this.selection && !this.tapMan) {
       const farmland = geometry.candidates.filter((c) => c.kind === 'farmland');
       const candidate = (farmland.length ? farmland : geometry.candidates)
         .map((candidate) => ({ candidate, rank: unitHash(`${candidate.id}/${night.day}`) }))
@@ -245,7 +272,7 @@ export class FolkloreObserver {
           landing: { ...landing, at: { ...landing.at } },
         };
     }
-    if (this.selection) {
+    if (this.selection && !this.tapMan) {
       const selected = this.selection,
         elapsed = env.clock - selected.born;
       const cycle = Math.floor(elapsed / manananggalTiming(selected.candidate, night.day).span);
@@ -324,6 +351,7 @@ export class FolkloreObserver {
       const count = ghostCount(config, site, night);
       for (let index = 0; index < count; index++) {
         const id = `ghost/${site.kind}/${site.id}/${night.day}/${index}`;
+        if (this.tapGhosts?.has(id)) continue;
         keep.add(id);
         let ghost = this.ghosts.get(id);
         if (!ghost) {
@@ -444,6 +472,27 @@ export class FolkloreObserver {
         phase: Math.sin(elapsed * 2),
         wisp,
       });
+    }
+    if (this.tapGhosts)
+      for (const { sprite, start } of this.tapGhosts.values()) {
+        const age = env.clock - start;
+        if (age >= 0 && age < 0.8) this.sprites.push({ ...sprite, pose: 'wisp', wisp: age / 0.8 });
+      }
+    if (this.tapMan) {
+      const { sprite, lower, start } = this.tapMan;
+      const age = Math.max(0, env.clock - start),
+        fraction = Math.min(1, age / 2),
+        blend = fraction * fraction * (3 - 2 * fraction);
+      if (fraction < 1) {
+        this.creature = {
+          ...sprite,
+          lng: sprite.lng + (lower.lng - sprite.lng) * blend,
+          lat: sprite.lat + (lower.lat - sprite.lat) * blend,
+          pose: age === 0 ? sprite.pose : 'flying',
+          alpha: sprite.alpha * (1 - blend),
+        };
+        this.sprites.push(this.creature, { ...lower, alpha: this.creature.alpha });
+      }
     }
   }
   packet(zoom: number, center: readonly [number, number]): FolklorePacket {

@@ -271,6 +271,12 @@ export class DialogueSelector {
     if (remember) this.admit(entry!, owners);
     return entry;
   }
+  /** Explicit speech has a stable choice and leaves the ordinary shuffle bags/RNG alone. */
+  request(kind: DialogueChoice['kind'], context: DialogueContext) {
+    return (this.byKind.get(kind) ?? [])
+      .filter((entry) => dialogueEligible(entry, context, this.periods))
+      .sort((a, b) => a.id.localeCompare(b.id))[0];
+  }
   /** Commit history only after physical and service-lifetime admission succeeds. */
   admit(entry: DialogueChoice, owners: readonly object[]) {
     this.memory.remember(entry.id, owners);

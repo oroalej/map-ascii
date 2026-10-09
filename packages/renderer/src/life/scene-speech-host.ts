@@ -5,7 +5,7 @@ import { MOMENTS, type MomentAnchor } from './moments';
 import { inTile } from './geometry';
 import { SceneSpeech, type SceneSpeaker } from './scene-speech';
 import type { Gatherer, LifeEnv, Mover, Stall, TileLife } from './simulate';
-import { DIALOGUE_WEATHER } from '@atlas/shared';
+import { DIALOGUE_WEATHER, type DialogueProfile } from '@atlas/shared';
 import { makeDialogueContext } from './dialogue';
 import { hotAt } from './config';
 import type { LocalScenes } from './interactions';
@@ -21,6 +21,42 @@ export class SceneSpeechHost {
   private sceneEnv: LifeEnv | undefined;
   private sceneNear?: (x: number, y: number) => boolean;
   private sceneKeys = new WeakMap<object, { state: string; key: object }>();
+  private requestedAt = new WeakMap<object, number>();
+  /** Tapped people can speak independently of group size, seasonal status and ambient rolls. */
+  request(
+    owner: Mover | Gatherer,
+    clock: number,
+    minutes: number,
+    profile: DialogueProfile = 'greeting',
+  ) {
+    const { tile } = this;
+    const walker = 'kind' in owner ? owner.group?.[0] : owner.walker;
+    if (
+      !this.enabled ||
+      !walker ||
+      tile.momentHost.moments.busy(owner) ||
+      clock - (this.requestedAt.get(owner) ?? -Infinity) < 5
+    )
+      return false;
+    const admitted = this.speech.admit(
+      {
+        key: {},
+        requested: true,
+        kind: profile === 'greeting' ? 'greet' : 'talk',
+        speakers: [{ owner, member: 0, figure: walker.figure }],
+        profiles: [profile],
+        context: { minutes, rain: 0, wind: 0, figures: [walker.figure], delivery: 'utterance' },
+        stationary: () => owner.pause > 0,
+        valid: () =>
+          'kind' in owner
+            ? tile.movers.includes(owner) && !tile.scenes.hidden(owner)
+            : tile.gatherers.includes(owner),
+      },
+      MOMENTS.capacity - tile.momentHost.moments.size,
+    );
+    if (admitted) this.requestedAt.set(owner, clock);
+    return admitted;
+  }
   constructor(
     private readonly tile: TileLife,
     seed: number,
@@ -32,6 +68,7 @@ export class SceneSpeechHost {
   clear() {
     this.speech.clear();
     this.sceneKeys = new WeakMap();
+    this.requestedAt = new WeakMap();
   }
   step(
     dt: number,

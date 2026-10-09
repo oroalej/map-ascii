@@ -74,6 +74,26 @@ const order: DialogueChoice = {
   turns: 2,
   speakers: [0, 1],
 };
+it('greets a grouped walker explicitly, retains owner exclusion and uses a separate five-second limit', () => {
+  const choice: DialogueChoice = {
+    id: 'greet',
+    kind: 'greet',
+    profile: 'greeting',
+    period: 'afternoon',
+    delivery: 'utterance',
+    speakers: [0],
+    turns: 1,
+  };
+  const f = fixture(choice);
+  f.person.group!.push({ ...member });
+  f.host.speech.selector.memory.reserve([f.person], 1000);
+  expect(f.host.request(f.person, 0, 780)).toBe(true);
+  expect(f.host.speech.speech(f.person)?.exchangeId).toBe('greet');
+  expect(f.host.request(f.person, 0.1, 780)).toBe(false);
+  f.host.speech.step(4, true);
+  expect(f.host.request(f.person, 4, 780)).toBe(false);
+  expect(f.host.request(f.person, 5, 780)).toBe(true);
+});
 describe('real local-scene adapters', () => {
   const weather = (condition: 'heat' | 'clearing'): DialogueChoice => ({
     id: condition,
