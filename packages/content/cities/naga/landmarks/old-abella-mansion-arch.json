@@ -1,6 +1,18 @@
 {
   "id": "landmark/old-abella-mansion-arch",
-  "osm_id": "osm:way/23671432",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [123.1874953, 13.6231064],
+        [123.1875141, 13.6231572],
+        [123.1875245, 13.6231536],
+        [123.1875058, 13.6231028],
+        [123.1874953, 13.6231064]
+      ]
+    ]
+  },
+  "height_m": 3,
   "name": {
     "en": "Old Abella Mansion Arch"
   },
@@ -8,9 +20,8 @@
   "certainty": "unknown",
   "sources": [
     {
-      "title": "OpenStreetMap RAD Building host footprint",
-      "url": "https://www.openstreetmap.org/way/23671432",
-      "note": "ODbL. The existing footprint on the northwest corner of Panganiban Drive and Blumentritt Street hosts selection and display for the surviving arch, which stands on its northeast edge along Blumentritt; it is not the historic mansion. Geometry is retained and edit dates are not construction dates. No construction date is assigned to the modern host. Corrected October 8, 2026 from way/23665222, the older building across Panganiban Drive."
+      "title": "Arch outline traced from satellite and Street View",
+      "note": "Traced October 9, 2026 from Google satellite (z21) and the October 2025 Street View panorama: a 6 m by 1.2 m strip on the west line of Blumentritt Street just north of Panganiban Drive, covering the two red-brick gate piers and the opening between them under the bougainvillea crown, about 3 m tall. It stands just east of OSM way/23671432, the corner building it was attached to before, which stays an ordinary building. Dimensions and height are estimates; capture dates are not construction dates; no image is saved or distributed."
     },
     {
       "title": "Naga City Ordinance No. 2003-003, Section 6",

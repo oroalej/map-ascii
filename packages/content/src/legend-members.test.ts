@@ -21,7 +21,7 @@ it('keeps every Landmark legend member within the renderer highlight list', () =
     landmarks
       .filter(
         (l) =>
-          (l.osm_id || l.replaces) &&
+          (l.osm_id || l.replaces || l.height_m) &&
           ((l.facts && l.type !== 'food') || l.type === 'heritage' || l.heritage),
       )
       .map((l) => l.osm_id ?? l.id),

@@ -79,6 +79,14 @@ describe('Naga heritage scope', () => {
 
   it('sources each heritage identity and attaches it to a unique OSM footprint or outline', () => {
     for (const landmark of heritage) {
+      // A standalone outline (the arch) is traced, not taken from an OSM feature.
+      if (landmark.height_m !== undefined) {
+        expect(landmark.osm_id ?? landmark.replaces).toBeUndefined();
+        expect(landmark.geometry?.type).toBe('Polygon');
+        expect(landmark.sources[0]!.title).toMatch(/traced/);
+        expect(landmark.sources.some((source) => source.url === ordinance)).toBe(true);
+        continue;
+      }
       const way = landmark.osm_id ?? landmark.replaces;
       expect(way).toMatch(/^osm:(way|relation)\/\d+$/);
       // Curated outlines replace an OSM building; every other site keeps its OSM footprint.
@@ -109,11 +117,13 @@ describe('Naga heritage scope', () => {
     }
   });
 
-  it('keeps the arch host undated and distinguishes it from the former mansion', () => {
+  it('draws only the surviving arch, undated, beside the corner building it once borrowed', () => {
     const arch = heritage.find((landmark) => landmark.id === 'landmark/old-abella-mansion-arch')!;
-    expect(arch.osm_id).toBe('osm:way/23671432');
+    expect(arch.osm_id).toBeUndefined();
+    expect(arch.height_m).toBe(3);
     expect(arch.start_year).toBeUndefined();
-    expect(arch.sources[0]!.note).toContain('it is not the historic mansion');
+    expect(arch.sources[0]!.note).toContain('way/23671432');
+    expect(landmarks.some((landmark) => landmark.osm_id === 'osm:way/23671432')).toBe(false);
     expect(arch.facts).toHaveLength(4);
   });
 
