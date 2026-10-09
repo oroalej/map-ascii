@@ -27,6 +27,9 @@ type Capture = {
   disjoint: number;
   probe: boolean;
   probes: { on: boolean; hash: number; mean: number }[];
+  /** Hold the fixture texture as drawn: a flag waves on the CPU even in calm wind. */
+  freeze: boolean;
+  frozenUploads: number;
 };
 type CaptureWindow = Window & { lightCapture: Capture };
 
@@ -55,6 +58,8 @@ function installCapture() {
     disjoint: 0,
     probe: false,
     probes: [],
+    freeze: false,
+    frozenUploads: 0,
   };
   (window as unknown as CaptureWindow).lightCapture = c;
   const proto = WebGL2RenderingContext.prototype;
@@ -63,7 +68,19 @@ function installCapture() {
     integer = proto.uniform1i,
     unsigned = proto.uniform1ui,
     vector = proto.uniform2fv,
+    upload = proto.texSubImage2D,
     draw = proto.drawArrays;
+  // The glyph pass's fixture texture: flag cloth is re-packed from renderer time each frame
+  // (life/fixtures.ts updateFixtureFlags), which no uniform override can hold still.
+  const fixtureTextures = new WeakSet<WebGLTexture>();
+  proto.texSubImage2D = function (this: WebGL2RenderingContext, ...args: unknown[]) {
+    const bound = this.getParameter(this.TEXTURE_BINDING_2D) as WebGLTexture | null;
+    if (c.freeze && bound && fixtureTextures.has(bound)) {
+      c.frozenUploads++;
+      return;
+    }
+    return (upload as (...a: unknown[]) => void).apply(this, args);
+  };
   const names = new WeakMap<WebGLUniformLocation, string>();
   // 1: the select pass (it has the sun's steps), 2: the glyph pass (it draws labels), 0: other.
   const roles = new WeakMap<WebGLProgram, number>();
@@ -192,6 +209,17 @@ function installCapture() {
       draw.call(this, mode, first, count);
     } else {
       draw.call(this, mode, first, count);
+      if (!c.freeze) {
+        const at = location.call(this, program, 'u_fixtures');
+        if (at) {
+          const unit = this.getUniform(program, at) as number;
+          const active = this.getParameter(this.ACTIVE_TEXTURE) as number;
+          this.activeTexture(this.TEXTURE0 + unit);
+          const texture = this.getParameter(this.TEXTURE_BINDING_2D) as WebGLTexture | null;
+          if (texture) fixtureTextures.add(texture);
+          this.activeTexture(active);
+        }
+      }
       if (ctx.open && ext) {
         this.endQuery(ext.TIME_ELAPSED_EXT);
         pending.push(ctx.open);
@@ -317,6 +345,9 @@ try {
       );
     }
     await page.waitForTimeout(3000);
+    await page.evaluate(() => {
+      (window as unknown as CaptureWindow).lightCapture.freeze = true;
+    });
     const capture = () => page.evaluate(() => (window as unknown as CaptureWindow).lightCapture);
     const probe = async (on: boolean) => {
       const before = (await capture()).probes.length;
@@ -329,7 +360,15 @@ try {
       }, on);
       await waitCapture((c) => c.probes.length > before);
     };
+    // Settle: tiles keep arriving for a few seconds after the map is ready. Measure once two
+    // consecutive off frames match (at most 20 tries); stability counts from there.
     await probe(false);
+    for (let i = 0; i < 20; i++) {
+      await probe(false);
+      const p = (await capture()).probes;
+      if (p.at(-1)!.hash === p.at(-2)!.hash) break;
+    }
+    const settled = (await capture()).probes.length - 1;
     await probe(true);
     await probe(false);
     const initial = await capture();
@@ -387,7 +426,7 @@ try {
     }
     await probe(false);
     const evidence = await capture();
-    const offProbes = evidence.probes.filter((p) => !p.on),
+    const offProbes = evidence.probes.slice(settled).filter((p) => !p.on),
       onProbe = evidence.probes.find((p) => p.on);
     const stable =
       sourceHash === (await currentSourceHash(root)) &&
@@ -422,6 +461,7 @@ try {
       status,
       hardware,
       stable,
+      settledProbe: settled,
       exercised,
       deltaMs,
       controlSpreadMs,
