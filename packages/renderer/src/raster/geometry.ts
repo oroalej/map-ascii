@@ -59,6 +59,7 @@ import {
   Marking,
   markingByte,
   markerFor,
+  TREE_KINDS,
   variantCode,
   type RenderClass,
 } from '../classes';
@@ -77,7 +78,7 @@ import {
   type LifeGeometry,
   type SeasonalPayload,
 } from '../life/geometry';
-import { ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
+import { CROWN_LIGHT, CROWN_MASS, ROAD_AREA_ZOOM, ROOF_ZOOM, SWAY } from '../glyphs/select';
 import { RoadAccess, stripRing } from '../life/terrain';
 import {
   finalizeControlledCrossings,
@@ -523,15 +524,20 @@ function random(seed: number): () => number {
  * repeated last), lobed and a little oval like a real canopy, its shape picked by `seed`. Its
  * mean radius is `radius`, so the crown keeps the tree's diameter.
  */
-export function crownRing(center: TilePoint, radius: number, seed: number): TilePoint[] {
+export function crownRing(
+  center: TilePoint,
+  radius: number,
+  seed: number,
+  sides = CROWN_SIDES,
+): TilePoint[] {
   const next = random(seed);
   const lobes = 3 + Math.floor(next() * 3);
   const phase1 = next() * 2 * Math.PI;
   const phase2 = next() * 2 * Math.PI;
   const stretch = 0.88 + next() * 0.24;
   const axis = next() * Math.PI;
-  const shape = Array.from({ length: CROWN_SIDES }, (_, i) => {
-    const a = (-2 * Math.PI * i) / CROWN_SIDES;
+  const shape = Array.from({ length: sides }, (_, i) => {
+    const a = (-2 * Math.PI * i) / sides;
     const lumps =
       1 +
       0.14 * Math.sin(lobes * a + phase1) +
@@ -549,6 +555,107 @@ export function crownRing(center: TilePoint, radius: number, seed: number): Tile
     y: center.y + (radius * r * Math.sin(a)) / mean,
   }));
   return [...ring, ring[0]!];
+}
+
+/** Sides of a leaf mass on a crown. */
+export const CROWN_MASS_SIDES = 12;
+
+/** One leaf mass on a crown: an open outline around `center`, on `tier` (1 to `CROWN_MASS.top`). */
+export type CrownMass = { center: TilePoint; ring: TilePoint[]; tier: number };
+
+const PALM_VARIANT = TREE_KINDS.indexOf('palm') + 1;
+
+/**
+ * The leaf masses over a tree's crown, inside its `base` ring (`crownRing`, whose silhouette is the
+ * crown's), by `seed`: 5 to 9 lobed banks staggered around the trunk on three tiers, or for a palm
+ * (`variant`, classes.ts `TREE_KINDS`) 9 to 13 fronds around a small crownshaft.
+ */
+export function crownMasses(
+  trunk: TilePoint,
+  radius: number,
+  base: readonly TilePoint[],
+  seed: number,
+  variant = 0,
+): CrownMass[] {
+  const next = random(seed ^ 0x5bd1e995);
+  const between = (low: number, high: number) => low + next() * (high - low);
+  // The base's reach toward a point, from the trunk: its sides are evenly spaced by angle, so the
+  // ray leaves through a known side.
+  const sides = base.length - 1;
+  const reachAt = (q: TilePoint) => {
+    const dx = q.x - trunk.x;
+    const dy = q.y - trunk.y;
+    const turn = -Math.atan2(dy, dx) / (2 * Math.PI);
+    const i = Math.floor((turn - Math.floor(turn)) * sides) % sides;
+    const ax = base[i]!.x - trunk.x;
+    const ay = base[i]!.y - trunk.y;
+    const ex = base[i + 1]!.x - base[i]!.x;
+    const ey = base[i + 1]!.y - base[i]!.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return (ax * ey - ay * ex) / ((dx * ey - dy * ex) / length || 1);
+  };
+  const inside = (q: TilePoint, margin = 0.97): TilePoint => {
+    const r = Math.hypot(q.x - trunk.x, q.y - trunk.y);
+    if (r === 0) return q;
+    const limit = reachAt(q) * margin;
+    return r <= limit
+      ? q
+      : { x: trunk.x + ((q.x - trunk.x) * limit) / r, y: trunk.y + ((q.y - trunk.y) * limit) / r };
+  };
+  const polar = (angle: number, r: number): TilePoint => ({
+    x: trunk.x + Math.cos(angle) * r,
+    y: trunk.y + Math.sin(angle) * r,
+  });
+  const banks = (
+    tier: number,
+    count: number,
+    [nearest, farthest]: readonly [number, number],
+    [smallest, largest]: readonly [number, number],
+  ): CrownMass[] => {
+    const phase = next() * 2 * Math.PI;
+    return Array.from({ length: count }, (_, i) => {
+      const angle = phase + ((i + (next() - 0.5) * 0.7) * 2 * Math.PI) / count;
+      const center = inside(polar(angle, between(nearest, farthest) * radius), 0.8);
+      const shapeSeed = Math.floor(next() * 0x100000000);
+      const size = between(smallest, largest) * radius;
+      const ring = crownRing(center, size, shapeSeed, CROWN_MASS_SIDES)
+        .slice(0, -1)
+        .map((q) => inside(q));
+      return { center, ring, tier };
+    });
+  };
+  if (variant === PALM_VARIANT) {
+    const count = 9 + Math.floor(next() * 5);
+    const phase = next() * 2 * Math.PI;
+    const fronds = Array.from({ length: count }, (_, i): CrownMass => {
+      const tier = i % 2 === 0 ? 1 : 2;
+      const angle = phase + ((i + (next() - 0.5) * 0.5) * 2 * Math.PI) / count;
+      const length = (tier === 1 ? between(0.92, 1) : between(0.7, 0.82)) * radius;
+      const width = between(0.13, 0.17) * radius;
+      const at = (along: number, across: number) => {
+        const r = 0.06 * radius + along * length;
+        return inside({
+          x: trunk.x + Math.cos(angle) * r - Math.sin(angle) * across * width,
+          y: trunk.y + Math.sin(angle) * r + Math.cos(angle) * across * width,
+        });
+      };
+      return {
+        center: at(0.45, 0),
+        ring: [at(0, 0), at(0.4, 1), at(0.75, 0.6), at(1, 0), at(0.75, -0.6), at(0.4, -1)],
+        tier,
+      };
+    });
+    return [...fronds, ...banks(CROWN_MASS.top, 1, [0, 0.03], [0.14, 0.18])];
+  }
+  const count = 5 + Math.floor(next() * 5);
+  const top = count >= 8 ? 2 : 1;
+  const middle = count >= 7 ? 2 : 1;
+  // Most go around the outside, so the base shows only in the crevices between them.
+  return [
+    ...banks(1, count - top - middle, [0.5, 0.66], [0.44, 0.56]),
+    ...banks(2, middle, [0.24, 0.4], [0.36, 0.46]),
+    ...banks(CROWN_MASS.top, top, [0.04, 0.2], [0.26, 0.36]),
+  ];
 }
 
 /** Triangles over a closed ring's points (indices into the ring; the lobes aren't convex). */
@@ -975,7 +1082,9 @@ export function buildTileGeometry(
       const crownSeed = hashString(featureId);
       const addCrown = (p: TilePoint, index = 0) => {
         if (!unitMeters || !(crown > 0)) return;
-        const ring = crownRing(p, crown / 2 / unitMeters, crownSeed + Math.imul(index, 0x9e3779b9));
+        const treeSeed = crownSeed + Math.imul(index, 0x9e3779b9);
+        const crownRadius = crown / 2 / unitMeters;
+        const ring = crownRing(p, crownRadius, treeSeed);
         // A conservative swept crown envelope: branches lean and flutter in any wind direction.
         // The flutter bound follows swayOffset, including its wake term, independently of cells.
         const radius = Math.max(...ring.map((q) => Math.hypot(q.x - p.x, q.y - p.y)));
@@ -988,18 +1097,35 @@ export function buildTileGeometry(
         life.area('parking-exclusion', [envelope]);
         const crownCls = classId('tree_crown' satisfies RenderClass);
         const reach = (q: TilePoint) => Math.hypot(q.x - p.x, q.y - p.y);
-        const first = crowns.count;
-        // A center vertex gives both wind reach and canopy lighting an interior, rather
-        // than interpolating only between rim vertices. The radial outline is star-shaped.
-        crowns.vertex(p.x, p.y, crownCls, height, flags, id, variant, 0);
-        crownSurface.push(0, 0);
-        for (const q of ring.slice(0, -1)) {
-          const r = reach(q);
-          crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, r);
-          crownSurface.push((q.x - p.x) / (r || 1), (q.y - p.y) / (r || 1));
-        }
-        for (let i = 0; i < CROWN_SIDES; i++)
-          crowns.indices.push(first, first + 1 + i, first + 1 + ((i + 1) % CROWN_SIDES));
+        // One tint per tree, the same in every tile (glyphs/select.ts CROWN_LIGHT).
+        const tint = (treeSeed >>> 0) % CROWN_LIGHT.tints.length;
+        // A fan around a center vertex, which gives lighting an interior, rather than interpolating
+        // only between rim vertices. Its surface is its own: 0 at its center, 1 around its rim.
+        const addFan = (center: TilePoint, outline: readonly TilePoint[], tier: number) => {
+          const first = crowns.count;
+          crowns.vertex(center.x, center.y, crownCls, height, flags, id, variant, reach(center));
+          crownSurface.push(0, 0, tier, tint);
+          for (const q of outline) {
+            const r = Math.hypot(q.x - center.x, q.y - center.y);
+            crowns.vertex(q.x, q.y, crownCls, height, flags, id, variant, reach(q));
+            crownSurface.push((q.x - center.x) / (r || 1), (q.y - center.y) / (r || 1), tier, tint);
+          }
+          const triangles: number[] = [];
+          for (let i = 0; i < outline.length; i++)
+            triangles.push(first, first + 1 + i, first + 1 + ((i + 1) % outline.length));
+          return triangles;
+        };
+        const base = addFan(p, ring.slice(0, -1), 0);
+        const masses = crownMasses(p, crownRadius, ring, treeSeed, variant)
+          .map(({ center, ring: outline, tier }) => ({
+            tier,
+            triangles: addFan(center, outline, tier),
+          }))
+          .sort((a, b) => b.tier - a.tier);
+        // Drawn top first: all of a crown has one depth, and the first drawn keeps a cell. So a
+        // crown's masses stack, and two crowns of a height overlap whole, not mass by mass.
+        for (const { triangles } of masses) crowns.indices.push(...triangles);
+        crowns.indices.push(...base);
       };
       const isTree = className === 'tree' && !isRegion;
 
@@ -1684,7 +1810,7 @@ export function buildTileGeometry(
       ...crowns.finish(),
       indices: Uint32Array.from(crowns.indices),
       surface: Float32Array.from(crownSurface),
-      surfaceSize: 2,
+      surfaceSize: 4,
     },
     region: finish(regional),
     labels,

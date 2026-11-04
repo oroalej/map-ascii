@@ -1,7 +1,7 @@
 import { uprightStreetAngle } from './label-layout';
 import { describe, expect, it } from 'vitest';
 import { createOverlay, placeLabels, rotatedLabelVertices, resetOverlay } from './labels';
-import { crownLight } from './glyphs/select';
+import { CROWN_LIGHT, crownLight } from './glyphs/select';
 import { legendEntries } from './legend';
 
 describe('rotated street names', () => {
@@ -67,6 +67,26 @@ it('lights a rounded tree crown through its interior, with a shaded far side', (
   expect(crownLight(-0.5, 0, sun)).toBeGreaterThan(crownLight(0.5, 0, sun));
   expect(crownLight(0, 0, sun)).toBeGreaterThan(crownLight(0.95, 0, sun));
   expect(crownLight(0.5, 0, [1, 0, 1])).toBeCloseTo(crownLight(-0.5, 0, sun));
+});
+
+it('lights a crown by its masses, dark in the crevices, and never above the map', () => {
+  const sun: [number, number, number] = [-1, 0, 1];
+  // A mass's top against the rim it overlaps.
+  expect(crownLight(0, 0, sun, 3) / crownLight(0.98, 0, sun, 3)).toBeGreaterThan(1.4);
+  // Lower tiers are darker at the same place on their mass.
+  for (const tier of [1, 2, 3])
+    expect(crownLight(0, 0, sun, tier)).toBeGreaterThan(crownLight(0, 0, sun, tier - 1));
+  // Trees differ a little, in brightness and not in hue.
+  expect(crownLight(0, 0, sun, 2, 0)).toBeLessThan(crownLight(0, 0, sun, 2, 2));
+  for (let x = -1; x <= 1; x += 0.1)
+    for (let y = -1; y <= 1; y += 0.1)
+      for (const s of [sun, [1, 0, 1], [0, 0, 1], [0, 1, 0.1]])
+        for (const tier of [0, 1, 2, 3])
+          for (const tint of [0, 1, 2]) {
+            const light = crownLight(x, y, s, tier, tint);
+            expect(light).toBeLessThanOrEqual(CROWN_LIGHT.max);
+            expect(light).toBeGreaterThan(0.1);
+          }
 });
 
 it('shows solid boat hulls and outriggers in the legend in both themes', () => {

@@ -16,7 +16,7 @@ import {
   PavingVariant,
   pavingOverrideDepth,
 } from '../classes';
-import { ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
+import { CROWN_MASS, ROAD_AREA_ZOOM, RoofCode } from '../glyphs/select';
 import { cellHashGlsl } from './hash';
 import { vegetationGlsl } from './vegetation';
 import { WIND_PRESETS, WIND_VARIATION } from '../life/wind';
@@ -32,7 +32,7 @@ layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec4 a_meta; // class, height, flags, variant
 layout(location = 2) in uint a_id;
 layout(location = 3) in float a_ridge; // crowns: reach from the trunk; zero on ground geometry
-layout(location = 4) in vec4 a_surface; // crowns: xy; roofs: along, across, ridgeHalf, endScale
+layout(location = 4) in vec4 a_surface; // crowns: x, y, tier, tint; roofs: along, across, ridgeHalf, endScale
 
 uniform mat4 u_matrix; // tile units -> cell-grid clip space (affine: the map is flat)
 uniform vec2 u_surfaceScale; // packed roofs: distance meters/step and endScale/step; float surfaces: 1,1
@@ -53,6 +53,7 @@ flat out uint v_id;
 flat out float v_vis;
 out vec4 v_surface;
 flat out int v_crown;
+flat out float v_layer; // crowns: the attribute alpha (glyphs/select.ts crownLayer)
 
 // Features' depths fall in [0.2, 1); anything past 1 is clipped.
 const float SPLIT = 0.2;
@@ -65,6 +66,13 @@ int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
 void main() {
   int cls = int(a_meta.x + 0.5);
   bool crown = cls == u_crownClass;
+  // A crown's masses dissolve in with zoom; until they start, they cost no more than this.
+  float massFade = clamp((u_zoom - ${float(CROWN_MASS.zoom)}) / ${float(CROWN_MASS.fade)}, 0.0, 1.0);
+  bool mass = crown && a_surface.z > 0.5;
+  if (mass && massFade <= 0.0) {
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+    return;
+  }
   vec4 clip = u_matrix * vec4(a_pos, 0.0, 1.0);
   // Branches swing in the wind (glyphs/select.ts swayOffset): each vertex by the gust where it
   // is and its reach from the trunk (a_ridge, tile units), so the tips swing most and the lobes
@@ -101,9 +109,11 @@ void main() {
   gl_PointSize = 1.0;
   v_meta = a_meta;
   v_id = a_id;
-  v_vis = vis;
+  v_vis = mass ? vis * massFade : vis;
   v_surface = crown ? a_surface : a_surface * vec4(vec3(u_surfaceScale.x), u_surfaceScale.y);
   v_crown = crown ? 1 : 0;
+  float tier = mass ? a_surface.z : ${float(CROWN_MASS.top)} - floor(${float(CROWN_MASS.top)} * massFade + 0.5);
+  v_layer = crown ? tier + 4.0 * floor(a_surface.w + 0.5) : 0.0;
 }
 `;
 
@@ -116,6 +126,7 @@ flat in uint v_id;
 flat in float v_vis;
 in vec4 v_surface;
 flat in int v_crown;
+flat in float v_layer;
 
 uniform ivec2 u_origin; // world cell of texel (0, 0)
 uniform ivec2 u_sub;    // samples per cell: 1 x 1, or SUB for the sub-cell targets
@@ -175,8 +186,11 @@ void main() {
     }
   }
   o_attr = vec4(v_meta.y / 255.0, v_meta.z / 255.0, angle / 255.0, roof / 255.0);
-  // Crown cells don't need building flags/roof variants. Carry their local surface instead.
-  if (v_crown == 1) o_attr.gb = v_surface.xy * 0.5 + 0.5;
+  // Crown cells don't need building flags/roof variants. Carry their local surface and layer.
+  if (v_crown == 1) {
+    o_attr.gb = v_surface.xy * 0.5 + 0.5;
+    o_attr.a = v_layer / 255.0;
+  }
   o_id = vec4(uvec4(v_id, v_id >> 8u, v_id >> 16u, v_id >> 24u) & 255u) / 255.0;
 }
 `;

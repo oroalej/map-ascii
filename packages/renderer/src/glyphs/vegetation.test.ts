@@ -76,7 +76,11 @@ import {
   cropTone,
   cropVariant,
   CROWN,
-  CrownGlyph,
+  CROWN_LEVEL,
+  CROWN_MASS,
+  crownLevel,
+  crownMassFade,
+  crownTier,
   crownIsDry,
   DEFAULT_SUN,
   foliageVariant,
@@ -372,14 +376,16 @@ describe('trees in the wind', () => {
     expect(SWAY.recoil).toBeLessThan(1);
   });
 
-  it('flutter their leaves between % and & in a gust, and hold still without wind', () => {
+  it('flutter their leaves one level sparser in a gust, and hold still without wind', () => {
+    const surface = { x: 0.2, y: -0.1, tier: 2 };
+    const at = (x: number, y: number, time: number, gust: number) =>
+      foliageVariant(x, y, time, gust, false, surface);
     for (const [x, y] of field) {
-      expect(foliageVariant(x, y, 20, 0)).toBe(foliageVariant(x, y, 21, 0));
-      expect([0, 1]).toContain(foliageVariant(x, y, 20, 1));
+      const still = at(x, y, 20, 0);
+      expect(still).toBe(at(x, y, 21, 0));
+      expect([still, Math.max(0, still - 1)]).toContain(at(x, y, 20, 1));
     }
-    const flips = field.filter(
-      ([x, y]) => foliageVariant(x, y, 20, 1) !== foliageVariant(x, y, 20.4, 1),
-    );
+    const flips = field.filter(([x, y]) => at(x, y, 20, 1) !== at(x, y, 20.4, 1));
     expect(flips.length).toBeGreaterThan(field.length / 8);
     const crown = (time: number, wind: number) =>
       field.map(([x, y]) =>
@@ -387,36 +393,64 @@ describe('trees in the wind', () => {
           x,
           y,
           height: 0,
-          neighbor: () => null,
+          neighbor: () => 'tree_crown',
           time,
           wind,
+          crown: surface,
         }),
       );
-    for (const glyph of crown(20, 1)) expect(['%', '&']).toContain(glyph);
     expect(crown(20, 0)).toEqual(crown(25, 0));
   });
 
-  it('draw a crown as a rim of leaves around an inside, with a dense core here and there', () => {
-    const rim = field.map(([x, y]) => foliageVariant(x, y, 0, 0, true));
-    expect(new Set(rim)).toEqual(new Set([CrownGlyph.rim]));
-    const inside = field.map(([x, y]) => foliageVariant(x, y, 0, 0, false));
-    expect(new Set(inside)).toEqual(new Set([CrownGlyph.interior, CrownGlyph.core]));
-    const cores = inside.filter((v) => v === CrownGlyph.core).length / field.length;
-    // About a quarter of the inside.
-    expect(cores).toBeGreaterThan(0.15);
-    expect(cores).toBeLessThan(0.35);
-    // In a gust the leaves flutter whatever their place in the crown.
-    for (const [x, y] of field.slice(0, 200)) {
-      expect([0, 1]).toContain(foliageVariant(x, y, 20, 1, false));
+  it('are dense on top of a mass and sparse at its rim, with no glyph from the world grid', () => {
+    const mean = (x: number, y: number, tier: number) =>
+      field.reduce((sum, [cx, cy]) => sum + crownLevel(x, y, tier, [0, -1], cellHash(cx, cy)), 0) /
+      field.length;
+    expect(mean(0, 0, CROWN_MASS.top)).toBeGreaterThan(CROWN_LEVEL.steps.length - 0.5);
+    expect(mean(0, 0, CROWN_MASS.top)).toBeGreaterThan(mean(0.6, 0, CROWN_MASS.top) + 0.5);
+    expect(mean(0.6, 0, CROWN_MASS.top)).toBeGreaterThan(mean(0.98, 0, CROWN_MASS.top) + 0.5);
+    // Higher tiers read denser than lower ones at the same place on their mass.
+    expect(mean(0.5, 0, 3)).toBeGreaterThan(mean(0.5, 0, 1));
+  });
+
+  it('thicken on the sunny side of each mass, which follows the sun', () => {
+    const mean = (x: number, sun: readonly [number, number]) =>
+      field.reduce((sum, [cx, cy]) => sum + crownLevel(x, 0, 2, sun, cellHash(cx, cy)), 0) /
+      field.length;
+    expect(mean(0.7, [1, 0])).toBeGreaterThan(mean(-0.7, [1, 0]));
+    expect(mean(-0.7, [-1, 0])).toBeGreaterThan(mean(0.7, [-1, 0]));
+  });
+
+  it('keep the base sparse under the masses, and the silhouette from going dense', () => {
+    for (const [x, y] of field) {
+      const h = cellHash(x, y);
+      expect(crownLevel(0, 0, 0, [0, -1], h)).toBeLessThanOrEqual(CROWN_LEVEL.baseCap);
+      expect(crownLevel(0, 0, CROWN_MASS.top, [0, -1], h, true)).toBeLessThanOrEqual(
+        CROWN_LEVEL.rimCap,
+      );
     }
+  });
+
+  it('dissolve their masses in with zoom, the base standing for the crown until then', () => {
+    const { zoom, fade, top } = CROWN_MASS;
+    expect(crownMassFade(zoom - 1)).toBe(0);
+    expect(crownMassFade(zoom + fade / 2)).toBeCloseTo(0.5);
+    expect(crownMassFade(zoom + fade)).toBe(1);
+    // The whole crown is lit and drawn like the top until the masses come in over it.
+    expect(crownTier(0, zoom - 1)).toBe(top);
+    expect(crownTier(0, zoom + fade)).toBe(0);
+    for (const tier of [1, 2, 3]) expect(crownTier(tier, zoom + fade / 2)).toBe(tier);
+    for (let z = zoom; z < zoom + fade; z += 0.05)
+      expect(crownTier(0, z + 0.05)).toBeLessThanOrEqual(crownTier(0, z));
   });
 
   it('draw a crown from the rim of its neighbors', () => {
     const glyph = (neighbor: () => 'tree_crown' | 'grass' | null, x: number, y: number) =>
       selectGlyph(themes.dark, 'tree_crown', { x, y, height: 0, neighbor, time: 0, wind: 0 });
     for (const [x, y] of field.slice(0, 100)) {
-      expect(glyph(() => 'grass', x, y)).toBe('%'); // rim: something else all around
-      expect(['&', '@']).toContain(glyph(() => 'tree_crown', x, y)); // inside
+      // The rim stops at %: something else all around.
+      expect(['.', ':', '%']).toContain(glyph(() => 'grass', x, y));
+      expect(['&', '@']).toContain(glyph(() => 'tree_crown', x, y)); // the top of the crown
     }
   });
 

@@ -1169,47 +1169,126 @@ function flutters(h: number, gust: number, time: number): boolean {
 /** Where the sun is when there is none (night): to the northwest, a unit vector (x east, y south). */
 export const DEFAULT_SUN: WindDir = [-Math.SQRT1_2, -Math.SQRT1_2];
 
-/** Crown glyphs by role (theme.ts `tree_crown`): the rim's leaf, a thick interior, a dense core. */
-export const CrownGlyph = { rim: 0, interior: 1, core: 4 } as const;
+/** One crown in `dryEvery` is yellowing (`Tone.dry`). */
+export const CROWN = { dryEvery: 12 } as const;
+
 /**
- * Individual crowns (flat views): a cell with a non-crown neighbor is the rim (`%`); inside, a
- * dense `@` where value noise (`scale`, `seed`) is over `above`, except one cell in `skip`, and
- * `&` elsewhere. One crown in `dryEvery` is yellowing (`Tone.dry`).
+ * A crown is stacked from leaf masses (raster/geometry.ts `crownMasses`): a tier 0 base under
+ * tiers 1 to `top`. Masses are too small to read on a small crown, so they dissolve in over
+ * `fade` from detail zoom `zoom`; until then the base alone stands for the whole crown.
  */
-export const CROWN = {
-  core: { scale: 3, seed: 17, above: 0.62, skip: 3 },
-  dryEvery: 12,
+export const CROWN_MASS = { zoom: 19.5, fade: 0.5, top: 3 } as const;
+
+/** How far a crown's masses have dissolved in at a detail zoom, 0–1. */
+export const crownMassFade = (detailZoom: number): number =>
+  Math.max(0, Math.min(1, (detailZoom - CROWN_MASS.zoom) / CROWN_MASS.fade));
+
+/**
+ * The tier a mass draws at a detail zoom: its own, except the base, which is the crown's top until
+ * the masses have come in over it and then sinks under them.
+ */
+export const crownTier = (tier: number, detailZoom: number): number =>
+  tier > 0 ? tier : CROWN_MASS.top - Math.round(CROWN_MASS.top * crownMassFade(detailZoom));
+
+/** The attribute buffer's alpha on a crown cell: its tier, and its tree's tint above that. */
+export const crownLayer = (tier: number, tint: number): number => tier | (tint << 2);
+
+/**
+ * How tall a crown cell casts: a metre lower per tier below the top, at most a quarter of the
+ * tree, so taller masses shade lower ones and the crown's shadow on the ground is domed. The height
+ * byte itself stays the tree's: it decides what the crown covers.
+ */
+export const crownCastHeight = (height: number, tier: number): number =>
+  height - Math.min(CROWN_MASS.top - tier, height * 0.25);
+
+/**
+ * A mass lit as a rounded leaf bank (shaders/glyph.ts): its surface normal leans outward by `tilt`
+ * with at least `minZ` up, and the light `base + gain · (normal · sun)`, within [min, max], darkens
+ * by up to `rim` from `rimFrom` out to its edge, which is the crevice where it meets what it
+ * overlaps. Lower `tiers` are darker, and each tree has one of `tints`. Never above `max`.
+ */
+export const CROWN_LIGHT = {
+  tilt: 0.7,
+  minZ: 0.08,
+  base: 0.62,
+  gain: 0.42,
+  min: 0.45,
+  max: 1.08,
+  rim: 0.35,
+  rimFrom: 0.55,
+  tiers: [0.72, 0.84, 0.94, 1],
+  tints: [0.92, 1, 1.06],
 } as const;
 
-/**
- * A crown lit as a rounded canopy (shaders/glyph.ts): its surface normal leans outward by `tilt`
- * with at least `minZ` up, and the light is `base + gain · (normal · sun)`, within [min, max].
- */
-export const CROWN_LIGHT = { tilt: 1.2, minZ: 0.08, base: 0.55, gain: 0.7, min: 0.38, max: 1.25 };
-
-/** `CROWN_LIGHT` at crown-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
-export function crownLight(x: number, y: number, [sx, sy, sz]: readonly number[]): number {
-  const { tilt, minZ, base, gain, min, max } = CROWN_LIGHT;
+/** `CROWN_LIGHT` at mass-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
+export function crownLight(
+  x: number,
+  y: number,
+  [sx, sy, sz]: readonly number[],
+  tier: number = CROWN_MASS.top,
+  tint = 1,
+): number {
+  const { tilt, minZ, base, gain, min, max, rim, rimFrom, tiers, tints } = CROWN_LIGHT;
   const z = Math.sqrt(Math.max(minZ, 1 - x * x - y * y));
   const norm = Math.hypot(x * tilt, y * tilt, z);
   const light = Math.hypot(sx!, sy!, sz!) || 1;
   const dot = (x * tilt * sx! + y * tilt * sy! + z * sz!) / norm / light;
-  return Math.max(min, Math.min(max, base + gain * dot));
+  const dome = Math.max(min, Math.min(max, base + gain * dot));
+  const edge = 1 - rim * smoothstep(rimFrom, 1, Math.hypot(x, y));
+  return Math.min(max, dome * edge * tiers[tier]! * tints[tint]!);
 }
 
 /**
- * A crown cell's glyph (theme.ts `tree_crown`): at rest the rim (`rim`: some neighbor isn't
- * crown) is `%` and the inside `&` or a dense `@` by hash; in a gust (`gust`, already scaled by
- * the wind), the leaves flutter, flipping between `%` and `&`.
+ * How dense a crown cell's leaves are (theme.ts `tree_crown`, sparse to dense): a score of how near
+ * the top of its mass it is (`top`), how far toward `sun` (`sun`), and how high its tier (`tier`),
+ * jittered per cell, against `steps`. A silhouette cell goes up to `rimCap`; the base, seen only
+ * in the crevices between masses, up to `baseCap`.
  */
-export function foliageVariant(x: number, y: number, time = 0, gust = 0, rim = true): number {
+export const CROWN_LEVEL = {
+  top: 0.8,
+  sun: 0.25,
+  tier: 0.12,
+  jitter: 0.18,
+  steps: [0.35, 0.6, 0.85, 1.05],
+  rimCap: 2,
+  baseCap: 1,
+} as const;
+
+/** A crown cell's density at mass-local (`x`, `y`), given its cell hash `h`. */
+export function crownLevel(
+  x: number,
+  y: number,
+  tier: number,
+  sun: WindDir,
+  h: number,
+  rim = false,
+): number {
+  const { top, sun: toSun, tier: perTier, jitter, steps, rimCap, baseCap } = CROWN_LEVEL;
+  const score =
+    top * Math.max(0, 1 - x * x - y * y) +
+    toSun * (x * sun[0] + y * sun[1]) +
+    perTier * tier +
+    (((h >>> 16) & 255) / 256 - 0.5) * jitter;
+  const level = steps.filter((step) => score >= step).length;
+  return Math.min(level, rim ? rimCap : steps.length, tier === 0 ? baseCap : steps.length);
+}
+
+/**
+ * A crown cell's glyph: its density at rest (`crownLevel`; `rim`: some neighbor isn't crown); in a
+ * gust (`gust`, already scaled by the wind), the leaves flutter, flipping to one level sparser.
+ */
+export function foliageVariant(
+  x: number,
+  y: number,
+  time = 0,
+  gust = 0,
+  rim = true,
+  surface: { x: number; y: number; tier: number } = { x: 0, y: 0, tier: CROWN_MASS.top },
+  sun: WindDir = DEFAULT_SUN,
+): number {
   const h = cellHash(x, y);
-  if (gust >= TREE_WIND.step) return flutters(h, gust, time) ? 0 : 1;
-  if (rim) return CrownGlyph.rim;
-  const { scale, seed, above, skip } = CROWN.core;
-  return valueNoise(x, y, scale, seed) > above && h % skip !== 0
-    ? CrownGlyph.core
-    : CrownGlyph.interior;
+  const level = crownLevel(surface.x, surface.y, surface.tier, sun, h, rim);
+  return gust >= TREE_WIND.step && flutters(h, gust, time) ? Math.max(0, level - 1) : level;
 }
 
 /** Whether the crown of feature `id` is yellowing: one in `CROWN.dryEvery`. */
@@ -1354,6 +1433,10 @@ export type CellContext = {
   /** The feature's variant byte (classes.ts `variantCode`). */
   variant?: number;
   crop?: { stage: number; progress: number };
+  /** A crown cell's mass-local position and tier (the attribute buffer's surface and alpha). */
+  crown?: { x: number; y: number; tier: number };
+  /** Where the sun is (a unit vector); default `DEFAULT_SUN`. */
+  sun?: WindDir;
 };
 
 /** The variant a class with `count` glyphs shows in a cell: the CPU twin of the select shader. */
@@ -1445,7 +1528,10 @@ export function variantFor(
           [0, -1],
         ] as const
       ).some(([dx, dy]) => ctx.neighbor(dx, dy) !== cls);
-      return Math.min(foliageVariant(ctx.x, ctx.y, ctx.time, gust, rim), count - 1);
+      return Math.min(
+        foliageVariant(ctx.x, ctx.y, ctx.time, gust, rim, ctx.crown, ctx.sun),
+        count - 1,
+      );
     }
   }
 }
