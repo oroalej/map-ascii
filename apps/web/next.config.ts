@@ -14,7 +14,17 @@ const nextConfig: NextConfig = {
   output: 'export',
   images: { unoptimized: true },
   outputFileTracingRoot: root,
-  turbopack: { root },
+  turbopack: {
+    root,
+    rules: {
+      '*.ts': {
+        // Shaders ship without comments or indentation (lib/strip-glsl-loader.cjs).
+        condition: { all: ['production', { content: /[/][*] glsl [*][/]/ }] },
+        loaders: ['./lib/strip-glsl-loader.cjs'],
+        as: '*.ts',
+      },
+    },
+  },
   transpilePackages: ['@atlas/content', '@atlas/renderer', '@atlas/shared'],
 };
 

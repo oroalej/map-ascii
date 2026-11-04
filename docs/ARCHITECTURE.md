@@ -455,6 +455,8 @@ Zod schemas live behind the server/pipeline-only `@atlas/shared/schemas` entry. 
 
 Naga extent release (2026-10-07): the verified, pinned [whole-city archive](https://github.com/oroalej/map-ascii/releases/tag/tiles-naga-20261007-1229) is 4,449,946 bytes, up from the downtown archive's 2,862,278 bytes and below the enforced 40 MiB (41,943,040-byte) cap. It contains all 27 subdivision areas and their search entries. The emergency sidecar is 31,491 bytes gzip, below its 32 KiB (32,768-byte) cap; budget reduction retains every service target and the shortest directed dispatch and hospital routes needed by the selected destinations. Territory admission and complete source church rings pass verification, and all eight published file hashes match the tested candidate. Existing experiment measurements below remain historical.
 
+Production builds strip comments, indentation and blank lines from `/* glsl */` template strings (`apps/web/lib/strip-glsl-loader.cjs`, wired in `next.config.ts`), which the minifier can't see inside strings. That is about 9 KB gzipped of the renderer chunk. `pnpm dev` keeps them, so shader errors there have useful line numbers.
+
 ### Device baseline
 
 The frame-rate budget above has no physical phone measurement yet. A visible `?debug=1` panel on the deployed site is enough to take one: it shows `ready`, the slowest shader link and the main-thread time blocked on links, and whether the device has `KHR_parallel_shader_compile` and a GPU timer (many phones have no timer, so `gpu` reads `n/a`). Its Download button saves the JSON report, whose `stats.shaders` lists every base program.
