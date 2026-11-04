@@ -41,6 +41,13 @@ import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
 import { BEACON_BIT, type Beacon } from './emergency';
 import { BRAKE_LAMP } from './lamps';
 import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
+import {
+  PartsFlag,
+  PartsQueue,
+  partsTexel,
+  withSextant,
+  type LifePartsTarget,
+} from './parts-layer';
 import { PUFF_AGE_MASK, PUFF_KIND_BIT } from './puff-style';
 import {
   placeCoarseGroup,
@@ -113,13 +120,20 @@ const STAMP_BITS: Readonly<Partial<Record<AgentKind, number>>> = {
 
 /** At most this many cells per vehicle (a bus at the closest zoom is well under). */
 const MAX_STAMP_CELLS = 20_000;
+/** The two middle sixths: what a thin vehicle's cell shows when no sixth falls inside it. */
+const FORCED_BITS = [2, 3] as const;
+const FORCED_SEXTANTS = 0b001100;
+const NO_TEXEL = [0, 0, 0, 0] as const;
 const COVERED_CART: VehicleSpec = {
   ...VEHICLES.cart,
   plan: VEHICLES.cart.plan.map((row) => row.replace(/[A-Z]/g, 'R')),
 };
 
-/** Each vehicle part's glyph index (`PART_GLYPHS`). */
-export type LifeGlyphs = { parts: Uint16Array };
+/**
+ * Each vehicle part's glyph index (`PART_GLYPHS`), and each sextant mask's (`sextantGlyphs`), which
+ * draw a vehicle once the part layer colors its sixths (life/parts-layer.ts).
+ */
+export type LifeGlyphs = { parts: Uint16Array; sextants: Uint16Array };
 
 /**
  * The ground agent `packLife` is drawing (a vehicle or person): the cells it overwrote, and
@@ -268,6 +282,9 @@ let drawingOwner = 0;
 let drawingFocus = 0;
 let drawingClockCells: number[] | undefined;
 let clockCells: number[] | undefined;
+const partsQueue = new PartsQueue();
+/** While packing with a part layer outside crowds, the sextant glyphs to draw vehicles with. */
+let layerSextants: Uint16Array | undefined;
 
 export type LifePackMetadata = {
   /** Observe only the new rejection tier; never used to select a placement. */
@@ -280,6 +297,8 @@ export type LifePackMetadata = {
   throng?: ThrongPayload;
   throngMask?: Uint32Array;
   throngCells?: number[];
+  /** Color vehicles sextant by sextant (life/parts-layer.ts); without it, one color per cell. */
+  parts?: LifePartsTarget;
 };
 
 /** Every complete texel write also replaces its frame-local owner. */
@@ -349,7 +368,7 @@ function rememberGroundCell(out: Uint8Array, at: number) {
 export function buildLifeGlyphs(glyphIndex: (glyph: string) => number): LifeGlyphs {
   const parts = new Uint16Array(VehiclePart.accent + 1);
   for (const [part, glyph] of Object.entries(PART_GLYPHS)) parts[Number(part)] = glyphIndex(glyph);
-  return { parts };
+  return { parts, sextants: Uint16Array.from(sextantGlyphs, glyphIndex) };
 }
 
 /**
@@ -409,6 +428,8 @@ export function packLife(
     throw new RangeError('Speaker packing requires matching owner and member grids');
   drawingSpeakers?.members.fill(0);
   drawingSpeakers?.points.clear();
+  partsQueue.reset();
+  layerSextants = metadata.parts && glyphs.sextants;
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
@@ -418,8 +439,12 @@ export function packLife(
     // vendor carts and ordinary movers follow in that order.
     // Owner indices still refer to the caller's original array.
     for (const priority of [-2, -1, 0, 1, 2, 3]) {
-      if (priority === 0 && metadata.throng)
+      if (priority === 0 && metadata.throng) {
+        // A crowd keeps its one-color figures, whose ink is reused between cells.
+        layerSextants = undefined;
         drawn += packThrong(out, grid, metadata.throng, theme, glyphIndex, glyphs, metadata);
+        layerSextants = metadata.parts && glyphs.sextants;
+      }
       for (let index = 0; index < agents.length; index++) {
         const agent = agents[index]!;
         const stage = agent.eventScenery
@@ -443,6 +468,8 @@ export function packLife(
         journal = ground ? beginJournal(groundJournal, cells) : undefined;
         detailedStamp = false;
         detailedPeopleStamp = false;
+        const coreMark = partsQueue.coreCount,
+          softMark = partsQueue.softCount;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
         const collision = journal?.denied ?? false;
         let cellDenied = false;
@@ -468,6 +495,7 @@ export function packLife(
         if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
         else if (journal.denied) {
+          partsQueue.rollback(coreMark, softMark);
           if (journal.memberCount !== undefined)
             journal.members = capturedMembers(journal.memberCount);
           const eligible =
@@ -644,6 +672,7 @@ export function packLife(
     }
     journal = undefined;
     drawingOwner = 0;
+    partsQueue.seal(out, drawingOwners, grid.cols, metadata.parts);
     drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
@@ -655,6 +684,7 @@ export function packLife(
     drawingSpeakers = undefined;
     drawingMember = 0;
     drawingMini = false;
+    layerSextants = undefined;
   }
 }
 
@@ -1184,6 +1214,7 @@ function drawAgent(
         agent.kind === 'vehicle' && (!agent.parked || agent.vehicle === 'firetruck') && agent.beacon
           ? { ...agent.beacon, glyph: parts[VehiclePart.headlight]! }
           : undefined,
+        brake && !agent.parked,
       );
       detailedStamp = stamped;
       if (stamped && agent.emoji && agent.kind === 'vehicle')
@@ -1799,6 +1830,11 @@ function drawPet(
  * Draw a vehicle from its plan: every cell whose center falls inside its footprint, which is
  * centered on `center` with `along` and `across` the screen vectors (in cells) of a meter
  * forward and a meter to the right. Returns whether any cell landed on the grid.
+ *
+ * With the part layer (life/parts-layer.ts), those same cells hold the agent, but each shows only
+ * the sixths of it inside the true footprint, each sixth its own part. Cells whose center misses
+ * but whose edge is reached become soft cells, drawn after every agent is admitted, wherever no
+ * agent stands. What the agent occupies, and so what it collides with, doesn't change.
  */
 function stamp(
   out: Uint8Array,
@@ -1810,6 +1846,7 @@ function stamp(
   texel: (part: VehiclePart) => [number, number, number, number],
   indicator?: { sides: readonly TurnSide[]; glyph: number },
   beacon?: Beacon & { glyph: number },
+  brake = false,
 ): boolean {
   const { cols, rows } = grid;
   const [ax, ay] = along;
@@ -1830,6 +1867,12 @@ function stamp(
   const r1 = Math.min(rows - 1, Math.floor(cy + extentY));
   if (c1 < c0 || r1 < r0 || (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_STAMP_CELLS) return false;
   let any = false;
+  const sextants = layerSextants;
+  // Every sixth of the agent shares its class, kind bits, paint and whether it is parked.
+  const [, layerCls, layerBits, bodyByte] = sextants ? texel(VehiclePart.body) : NO_TEXEL;
+  const trueHw = spec.width / 2;
+  const coreMark = partsQueue.coreCount;
+  const flags = PartsFlag.valid | (brake ? PartsFlag.brake : 0);
   const barCells: { at: number; forward: number; right: number }[] | undefined = beacon
     ? []
     : undefined;
@@ -1859,14 +1902,54 @@ function stamp(
       const py = r + 0.5 - cy;
       const forward = (px * sy - py * sx) / det;
       const right = (ax * py - ay * px) / det;
-      if (Math.abs(forward) >= hl || Math.abs(right) >= hw) continue;
-      const part = planPart(spec, forward / length + 0.5, right / width + 0.5);
-      if (part === null) continue;
-      const [glyph, cls, bits, byte] = texel(part);
+      const inside = Math.abs(forward) < hl && Math.abs(right) < hw;
+      const part = inside ? planPart(spec, forward / length + 0.5, right / width + 0.5) : null;
+      if (part === null && !sextants) continue;
+      let mask = 0;
+      let rgb = 0;
+      if (sextants) {
+        for (let bit = 0; bit < 6; bit++) {
+          const qx = c + ((bit & 1) + 0.5) / 2 - cx;
+          const qy = r + ((bit >> 1) + 0.5) / 3 - cy;
+          const sampleForward = (qx * sy - qy * sx) / det;
+          const sampleRight = (ax * qy - ay * qx) / det;
+          if (Math.abs(sampleForward) >= hl || Math.abs(sampleRight) >= trueHw) continue;
+          const shown = planPart(
+            spec,
+            sampleForward / length + 0.5,
+            sampleRight / spec.width + 0.5,
+          );
+          if (shown === null) continue;
+          mask |= 1 << bit;
+          rgb = withSextant(rgb, bit, shown);
+        }
+        // A thin vehicle's own cell can miss every sixth: it still shows, without a gap.
+        if (part !== null && mask === 0) {
+          mask = FORCED_SEXTANTS;
+          for (const bit of FORCED_BITS) rgb = withSextant(rgb, bit, part);
+        }
+        if (mask === 0) continue;
+      }
+      if (part === null) {
+        const glyph = sextants![mask]!;
+        if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
+        const [low, high] = packGlyph(glyph, layerCls);
+        partsQueue.addSoft(
+          (r * cols + c) * 4,
+          partsTexel(rgb, flags),
+          (low | (high << 8) | ((layerBits | drawingFocus) << 16) | ((bodyByte & 0x8f) << 24)) >>> 0,
+          drawingOwner,
+        );
+        continue;
+      }
+      const [glyph, cls, bits, byte] = sextants
+        ? [sextants[mask]!, layerCls, layerBits, (bodyByte & 0x8f) | (part << 4)]
+        : texel(part);
       if (glyph <= 0 || glyph > MAX_GLYPHS) continue;
       const at = (r * cols + c) * 4;
       rememberGroundCell(out, at);
       writeCell(out, at, glyph, cls, bits, byte);
+      if (sextants) partsQueue.addCore(at, partsTexel(rgb, flags));
       barCells?.push({ at, forward, right });
       if (lamps)
         for (const lamp of lamps) {
@@ -1886,7 +1969,8 @@ function stamp(
     for (const lamp of lamps) {
       if (lamp.at < 0) continue;
       const cls = out[lamp.at + 1]! & 63;
-      [out[lamp.at], out[lamp.at + 1]] = packGlyph(indicator.glyph, cls);
+      // With sextants the lamp keeps the cell's own edge, so it can't widen the vehicle.
+      if (!sextants) [out[lamp.at], out[lamp.at + 1]] = packGlyph(indicator.glyph, cls);
       out[lamp.at + 2] = out[lamp.at + 2]! | TURN_SIGNAL_BIT;
     }
   if (beacon && barCells?.length && beacon.glyph > 0 && beacon.glyph <= MAX_GLYPHS) {
@@ -1912,6 +1996,7 @@ function stamp(
       out[at + 3] = (out[at + 3]! & ~3) | beacon.colors[beacon.half];
     }
   }
+  if (sextants) partsQueue.settleCore(out, coreMark);
   return any;
 }
 

@@ -56,6 +56,7 @@ import {
   drawGround,
   uploadLife,
   uploadCrowdMask,
+  uploadLifeParts,
   uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
@@ -87,6 +88,8 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
+import { createLifeParts, type LifePartsTarget } from './life/parts-layer';
+import { sextantSplits } from './glyphs/atlas';
 import { EffectClocks, ORDINARY_CLOCK, heldClock } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
@@ -697,6 +700,8 @@ type Texels = {
   crowdMask?: Uint32Array;
   crowdCells?: number[];
   crowdPending?: boolean;
+  /** The part layer's CPU copy, from the first frame that draws with it. */
+  lifeParts?: LifePartsTarget;
   owners: Uint32Array;
   revision: number;
   light: Uint8Array;
@@ -754,6 +759,12 @@ export function labelCovers(targets: CellTargets, col: number, row: number): boo
   );
 }
 
+/** Where a cell's sextants divide, device px (glyphs/atlas.ts): the column, then two rows. */
+export function sextantSplit({ w, h }: { w: number; h: number }): [number, number, number] {
+  const { xs, ys } = sextantSplits(w, h);
+  return [xs[1], ys[1], ys[2]];
+}
+
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
  * is up, and upload them to the life texture. Returns how many landed on the grid.
@@ -784,6 +795,8 @@ export function lifePass(
     /** Absolute cells crowds may use (`grid.ts` `coreCells`), when the grid has a pan margin. */
     bounds?: { left: number; top: number; right: number; bottom: number };
   },
+  /** Color agents sextant by sextant (quality.ts `lifeDetail`). */
+  detail = false,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -813,6 +826,7 @@ export function lifePass(
         bounds?.top,
         bounds?.right,
         bounds?.bottom,
+        detail,
       ]
     : undefined;
   if (
@@ -847,6 +861,8 @@ export function lifePass(
 
   if (buffers.stampedVehicles.length < agents.length)
     buffers.stampedVehicles = new Uint8Array(agents.length);
+  if (detail) buffers.lifeParts ??= createLifeParts(cols * rows, rows);
+  const lifeParts = detail ? buffers.lifeParts : undefined;
   const packStart = profiler?.time();
   buffers.candles = buffers.clockCandidates = !!crowdPayload?.cells.some((c) => c.agent.candle);
   for (const agent of agents) {
@@ -886,6 +902,7 @@ export function lifePass(
       throng: crowdPayload,
       throngMask: buffers.crowdMask,
       throngCells: buffers.crowdCells,
+      parts: lifeParts,
     },
     puffs,
   );
@@ -918,6 +935,7 @@ export function lifePass(
   }
   uploadCrowdMask(gl, targets, crowdEnd ? buffers.crowdMask : undefined, [crowdFirst, crowdEnd]);
   uploadLife(gl, targets, lifeTexels);
+  uploadLifeParts(gl, targets, lifeParts?.texels, lifeParts && [lifeParts.first, lifeParts.end]);
   if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
@@ -1308,6 +1326,9 @@ export function glyphPass(
     u_life: targets.lifeTex,
     u_crowdMask: targets.crowdMaskTex,
     u_hasCrowdMask: !!targets.crowdMaskActive,
+    u_lifeParts: targets.lifePartsTex,
+    u_hasLifeParts: !!targets.lifePartsActive,
+    u_sextantSplit: sextantSplit(cellDev),
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,

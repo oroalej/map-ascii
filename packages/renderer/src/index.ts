@@ -1504,6 +1504,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             bounds: coreCells(grid, cellDev(), view()),
           }
         : undefined,
+      knobs.lifeDetail,
     );
     lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;

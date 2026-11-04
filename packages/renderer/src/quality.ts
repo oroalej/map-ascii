@@ -15,6 +15,8 @@ export type Knobs = {
   morph: boolean;
   /** The lights' halo at night (bloom.ts). */
   bloom: boolean;
+  /** Vehicles and figures colored sextant by sextant (life/parts-layer.ts). */
+  lifeDetail: boolean;
   maxDpr: number;
 };
 const high: Knobs = {
@@ -30,6 +32,7 @@ const high: Knobs = {
   beams: true,
   morph: true,
   bloom: true,
+  lifeDetail: true,
   /** High-DPI screens draw at most 2× (cell targets and the glyph pass scale with it). */
   maxDpr: 2,
 };
@@ -46,6 +49,7 @@ const effects: Knobs = {
   fish: false,
   beams: false,
   bloom: false,
+  lifeDetail: false,
   // Never sharper than the tier above it.
   maxDpr: 1.5,
 };
