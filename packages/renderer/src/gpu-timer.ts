@@ -15,6 +15,8 @@ export class GpuTimer {
   constructor(
     private readonly gl: GL,
     enabled: boolean,
+    /** Receives each accepted result in milliseconds, before smoothing (the profile's `gpu`). */
+    private readonly onSample?: (ms: number) => void,
   ) {
     this.extension = enabled
       ? (gl.getExtension('EXT_disjoint_timer_query_webgl2') as TimerExtension | null)
@@ -63,8 +65,10 @@ export class GpuTimer {
       const query = this.pending[0]!;
       if (!gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE)) break;
       const ms = Number(gl.getQueryParameter(query, gl.QUERY_RESULT)) / 1_000_000;
-      if (Number.isFinite(ms) && ms >= 0)
+      if (Number.isFinite(ms) && ms >= 0) {
         this.average = this.average === null ? ms : this.average + 0.1 * (ms - this.average);
+        this.onSample?.(ms);
+      }
       gl.deleteQuery(query);
       this.pending.shift();
     }

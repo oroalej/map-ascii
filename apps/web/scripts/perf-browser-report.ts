@@ -111,6 +111,8 @@ export function summarize(
       ];
     }),
   ) as Record<(typeof SUMMARY_STAGES)[number], StageSummary>;
+  // A disabled or unsupported timer leaves no samples: null, not zero cost.
+  const gpu = sorted(profile.samples.flatMap((s) => (s.ms.gpu === undefined ? [] : [s.ms.gpu])));
   const drawnCallbacks = sorted(
     drawn.flatMap((s) => (s.ms.callback === undefined ? [] : [s.ms.callback])),
   );
@@ -123,6 +125,8 @@ export function summarize(
     frameIntervalP95Ms: quantile(intervals, 0.95),
     callbackP95Ms: stages.callback.p95Ms,
     drawnCallbackP95Ms: quantile(drawnCallbacks, 0.95),
+    gpuMedianMs: quantile(gpu, 0.5),
+    gpuSamples: gpu.length,
     stages,
     smoothed: stats
       ? { lifeMs: stats.lifeMs, cellPassMs: stats.cellPassMs, frameMs: stats.frameMs }

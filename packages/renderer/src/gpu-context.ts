@@ -73,9 +73,11 @@ export type Programs = {
   demandWaitMs?: number;
   /** For the full-screen passes, which have no vertex attributes. */
   emptyVao: WebGLVertexArrayObject;
+  /** Upload every select and glyph uniform each draw (`AtlasOptions.fullUniforms`). */
+  fullUniforms?: boolean;
 };
 
-export function createPrograms(gl: GL): Programs {
+export function createPrograms(gl: GL, fullUniforms = false): Programs {
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -141,6 +143,7 @@ export function createPrograms(gl: GL): Programs {
       streetText: { vao, buffer, count: 0 },
       glyphVariants: variants,
       emptyVao,
+      fullUniforms,
     };
   } catch (error) {
     for (const pending of links.pending.values()) pending.cancel();

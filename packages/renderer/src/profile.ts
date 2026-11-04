@@ -42,6 +42,8 @@ export const PROFILE_STAGES = [
   'lights',
   'fixtures',
   'glyph',
+  // One raw GPU elapsed query for a drawn frame, at most every GPU_SAMPLE_MS (gpu-timer.ts).
+  'gpu',
 ] as const;
 export type ProfileStage = (typeof PROFILE_STAGES)[number];
 export type ProfileSample = {

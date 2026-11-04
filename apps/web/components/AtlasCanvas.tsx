@@ -11,12 +11,18 @@ import {
 } from '@atlas/shared';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { isCityEmergency } from '@/lib/guards';
-import { isDebugRequested } from '@/lib/debug';
+import { fullUniformsRequested, isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { SMALL_SCREEN } from '@/lib/screen';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
 import { lifeSettings, loadLifePrefs, saveLifePrefs, useLifeStore } from '@/state/life';
-import { loadQualityPref, saveQualityPref, useQualityStore } from '@/state/quality';
+import {
+  loadQualityPref,
+  loadQualityTier,
+  saveQualityPref,
+  saveQualityTier,
+  useQualityStore,
+} from '@/state/quality';
 import { loadSpeechPrefs, saveSpeechPrefs, useSpeechStore } from '@/state/speech';
 import { useAtlasInstance, useAtlasStore } from '@/state/store';
 import { isPickable, useUiStore } from '@/state/ui';
@@ -173,6 +179,7 @@ export function AtlasCanvas({
       atlas = createAtlas(canvas, {
         lifeHoverPause,
         quality,
+        qualityTier: loadQualityTier(),
         utilities: { derive: utilitiesDerived },
         tilesUrl: `/tiles/${slug}.pmtiles`,
         tilesVersion,
@@ -183,6 +190,7 @@ export function AtlasCanvas({
         year: store.year,
         reducedMotion: prefersReducedMotion(),
         gpuTiming: isDebugRequested(),
+        fullUniforms: fullUniformsRequested(),
         profiling: isDebugRequested(),
         interactive: (feature) => {
           if (feature?.landmarkId) landmarkRequest.current?.();
@@ -230,6 +238,9 @@ export function AtlasCanvas({
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('ready', markReady),
+      atlas.on('qualitychange', ({ choice, tier }) => {
+        if (choice === 'auto') saveQualityTier(tier);
+      }),
       atlas.on('contextlost', () => {
         useUiStore.setState({ startup: { city: slug, atlas, status: 'restoring' } });
       }),

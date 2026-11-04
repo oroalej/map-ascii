@@ -88,12 +88,27 @@ export class QualityController {
   private severeAt?: number;
   private probeAt?: number;
   private probeWait: number;
+  /** Auto began on a remembered lower tier and hasn't seen a frame yet. */
+  private restored = false;
+  /** Recovery trials also wait from here: the first frame of a remembered tier. */
+  private restoredAt = -Infinity;
+  /** `startTier`: where Auto begins, usually the tier this device last reached. Default: 0. */
   constructor(
     choice: QualityChoice,
     private readonly cfg = QUALITY,
+    startTier?: number,
   ) {
     this.selected = choice;
-    this.applied = choice === 'low' ? 3 : 0;
+    const start =
+      choice === 'auto' &&
+      startTier !== undefined &&
+      Number.isInteger(startTier) &&
+      startTier >= 0 &&
+      startTier < TIERS.length
+        ? startTier
+        : 0;
+    this.applied = choice === 'low' ? 3 : start;
+    this.restored = start > 0;
     this.probeWait = cfg.probeMs;
   }
   get tier() {
@@ -109,6 +124,8 @@ export class QualityController {
     if (choice === this.selected) return;
     this.selected = choice;
     this.forced = choice === 'low' ? 3 : 0;
+    this.restored = false;
+    this.restoredAt = -Infinity;
     this.probeAt = undefined;
     this.probeWait = this.cfg.probeMs;
     this.reset();
@@ -130,6 +147,10 @@ export class QualityController {
       return;
     if (this.samples.length && s.at <= this.samples.at(-1)!.at) return;
     this.firstAt ??= s.at;
+    if (this.restored) {
+      this.restored = false;
+      this.restoredAt = s.at;
+    }
     this.samples.push({ ...s });
     let remove = 0;
     while (remove < this.samples.length && this.samples[remove]!.at < s.at - this.cfg.windowMs)
@@ -185,7 +206,7 @@ export class QualityController {
     if (!quiet) return;
     if (
       this.tier > 0 &&
-      at - this.changedAt >= this.probeWait &&
+      at - Math.max(this.changedAt, this.restoredAt) >= this.probeWait &&
       at - this.firstAt! >= this.cfg.windowMs &&
       percentile(intervals, 0.9) <= this.cfg.recoverIntervalMs &&
       percentile(

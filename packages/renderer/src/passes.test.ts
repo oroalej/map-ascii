@@ -439,7 +439,7 @@ it('allows paving edge sampling only where the cell pass can rasterize paving', 
     scissor: vi.fn(),
   } as unknown as GL;
   const targets = { cols: 83, rows: 37, base: {}, sub: {} } as CellTargets;
-  const programs = { select: { program: {} } } as unknown as Programs;
+  const programs = { select: { program: {} }, fullUniforms: true } as unknown as Programs;
   const resources = { map: { tables: {} } } as unknown as ThemeResources;
   try {
     for (const zoom of [10, 12, 12.25, 12.5, 18]) {
@@ -793,6 +793,7 @@ it('binds the cell light to every glyph program', () => {
     glyph: program,
     glyphVariants: new Map([0, 1, 2, 3, 4, 5, 6, 7].map((key) => [key, program])),
     emptyVao: null,
+    fullUniforms: true,
   } as unknown as Programs;
   const resources = {
     map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
@@ -872,6 +873,7 @@ it('lights grass with the frame lighting the glyph pass gets, and a clear noon w
     select: { program: {} },
     glyph: { program: {}, uniformSetters: {} },
     emptyVao: null,
+    fullUniforms: true,
   } as unknown as Programs;
   const resources = {
     map: { atlas: { columns: 16, index: () => 1 }, tables: {} },

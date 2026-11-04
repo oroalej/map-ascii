@@ -752,8 +752,10 @@ void main() {
   // Streetlights (life/lights.ts): a pool of light on the ground around each lamp, once it has
   // switched on. The pool is read filtered, so it fades smoothly across cells; which lamp it
   // belongs to (its state and seed) and its head are per cell.
-  vec4 light = texelFetch(u_light, cell, 0);
+  // With no lamps on nothing below uses the light, so daylight skips both of its reads.
   float lampsNow = lamps() * u_lampShow;
+  vec4 light = vec4(0.0);
+  if (lampsNow > 0.0) light = texelFetch(u_light, cell, 0);
   int lampG = int(light.g * 255.0 + 0.5);
   bool brakeGlow = (lampG & 7) == ${LampState.beam} && (lampG >> 3) == ${BRAKE_GLOW.seed};
   float lampClock = (lampG & 7) == ${LampState.candle} ? effectTime(cell, 1) : u_lifeTime;
@@ -766,19 +768,21 @@ void main() {
   bool everywhere = flood || shop || (lampG & 7) == ${LampState.candle};
   poolColor = flood ? LAMP_WHITE : shop ? SHOP_LIGHT : LAMP;
   vec3 brakeColor = vec3(${BRAKE_COLOR.night.map(float).join(', ')});
-  // Brake falloff belongs to its own cone; filtering must not borrow neighboring light strength.
-  float poolR = brakeGlow ? light.r : texture(u_light, grid / u_cell / vec2(textureSize(u_light, 0))).r;
   // Streetlights light the ground, fading across its edges.
   float pool = 0.0;
-  if (poolR > 0.01 && light.a > 0.5 && lampLight > 0.0) {
-    if (brakeGlow) {
-      // Like ground agents, the glow uses the visible subcell surface beneath canopy edges;
-      // trunks remain occluders. Only road pixels receive the red spill.
-      int surface = cls == u_vehicleOccluders.x ? cls :
-        int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
-      if ((u_cellBits[surface] & ${CellBit.vehicle}) != 0) pool = poolR * lampLight;
-    } else {
-      pool = poolR * lampLight * (everywhere ? 1.0 : groundMask(grid / u_cell));
+  if (light.a > 0.5 && lampLight > 0.0) {
+    // Brake falloff belongs to its own cone; filtering must not borrow neighboring light strength.
+    float poolR = brakeGlow ? light.r : textureLod(u_light, grid / u_cell / vec2(textureSize(u_light, 0)), 0.0).r;
+    if (poolR > 0.01) {
+      if (brakeGlow) {
+        // Like ground agents, the glow uses the visible subcell surface beneath canopy edges;
+        // trunks remain occluders. Only road pixels receive the red spill.
+        int surface = cls == u_vehicleOccluders.x ? cls :
+          int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+        if ((u_cellBits[surface] & ${CellBit.vehicle}) != 0) pool = poolR * lampLight;
+      } else {
+        pool = poolR * lampLight * (everywhere ? 1.0 : groundMask(grid / u_cell));
+      }
     }
   }
   // Road spill never recolors fixture ink or rain streaks.
@@ -802,7 +806,8 @@ void main() {
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
   vec4 fixture = texelFetch(u_fixtures, cell, 0);
-  bool fixtureAllowed = fixtureSurface(cls, cell);
+  // Only a fixture's ink or a signal's glow asks; other cells skip fixtureSurface's height read.
+  bool fixtureAllowed = (fixture.a != 0.0 || u_signalGlow) && fixtureSurface(cls, cell);
   vec3 signalHalo = signalGlow(grid, cell, night, fixtureAllowed);
 
   // Agents stand on top where the cell under them allows; people also on grounds (a church's

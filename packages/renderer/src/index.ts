@@ -183,7 +183,13 @@ import {
 import { Readback } from './readback';
 import { GpuTimer } from './gpu-timer';
 import { FrameProfiler, type AtlasProfile, type ProfileStage } from './profile';
-import { QualityController, TIERS, type QualityChoice, type QualityState } from './quality';
+import {
+  QUALITY,
+  QualityController,
+  TIERS,
+  type QualityChoice,
+  type QualityState,
+} from './quality';
 import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
@@ -261,6 +267,13 @@ export type AtlasOptions = {
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
+  /** Where Auto begins, usually the tier from this device's last `qualitychange`. Default: 0. */
+  qualityTier?: number | undefined;
+  /**
+   * Upload every select and glyph uniform on each draw instead of only changed ones, for
+   * harnesses that override uniform values as they're uploaded. Default: false.
+   */
+  fullUniforms?: boolean;
   tilesUrl: string;
   /** Content pin, supplied only for archive bytes matching the published lock. */
   tilesVersion?: string | undefined;
@@ -514,7 +527,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return ext ? (gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string) : null;
   };
   let gpuRenderer = readGpuRenderer();
-  const quality = new QualityController(options.quality ?? 'auto');
+  const quality = new QualityController(options.quality ?? 'auto', QUALITY, options.qualityTier);
   let knobs = TIERS[quality.tier]!.knobs;
   let previousDraw: { at: number; cpuMs: number } | undefined;
   let qualityWarmupDraw = true;
@@ -658,7 +671,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // GPU resources (gpu-context.ts). Glyphs depend on the device pixel ratio (atlas resolution)
   // and, for the map's, on the cell size step (density.ts), so each step's are kept once built.
   // The render targets are the map and label grids, each plus a one-cell margin on every side.
-  let programs: Programs | undefined = createPrograms(gl);
+  let programs: Programs | undefined = createPrograms(gl, options.fullUniforms);
   let dpr = 0;
   /** The map cell size step (density.ts `cellStep`), set by `resize`. */
   let step: number | undefined;
@@ -734,7 +747,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   // Label-only redraws also invalidate speech and hover visibility evidence.
   let speechGeometry = 0;
-  let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
+  const createGpuTimer = () =>
+    new GpuTimer(gl, options.gpuTiming ?? false, (ms) => profiler?.gauge('gpu', ms));
+  let gpuTimer = createGpuTimer();
 
   const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
   const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
@@ -2440,9 +2455,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
-    programs = createPrograms(gl);
+    programs = createPrograms(gl, options.fullUniforms);
     if (season) warmSeasonalPrograms();
-    gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
+    gpuTimer = createGpuTimer();
     tileCache.resume();
     // `resize` rebuilds the theme resources and render targets.
     sizeDirty = true;

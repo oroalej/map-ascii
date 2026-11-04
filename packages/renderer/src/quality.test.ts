@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QualityController, TIERS } from './quality';
+import { QUALITY, QualityController, TIERS } from './quality';
 
 const drive = (
   q: QualityController,
@@ -62,6 +62,33 @@ describe('adaptive quality', () => {
     expect(q.decide(90_001, true)).toBe(0);
     expect(q.state).toEqual({ choice: 'auto', tier: 0, name: 'high' });
     expect(q.decide(100_000, true)).toBeUndefined();
+  });
+  it('starts Auto on a remembered tier, and only Auto', () => {
+    const start = (choice: 'auto' | 'high' | 'low', tier?: number) =>
+      new QualityController(choice, QUALITY, tier).tier;
+    expect(start('auto')).toBe(0);
+    expect(start('auto', 2)).toBe(2);
+    expect(start('auto', 3)).toBe(3);
+    expect(start('high', 2)).toBe(0);
+    expect(start('low', 1)).toBe(3);
+    for (const bad of [-1, 4, 1.5, Number.NaN]) expect(start('auto', bad)).toBe(0);
+  });
+  it('keeps stepping down from a remembered tier without waiting out a cooldown', () => {
+    const q = new QualityController('auto', QUALITY, 1);
+    expect(drive(q, 0, 4000, 50, 30)).toEqual([2]);
+  });
+  it('waits a full probe before trying to recover from a remembered tier, then does', () => {
+    const q = new QualityController('auto', QUALITY, 1);
+    expect(drive(q, 1000, 1000 + QUALITY.probeMs - 16)).toEqual([]);
+    expect(drive(q, 1000 + QUALITY.probeMs, 1000 + QUALITY.probeMs + 1000)).toEqual([0]);
+  });
+  it('forgets a remembered tier when the choice changes', () => {
+    const q = new QualityController('auto', QUALITY, 2);
+    q.setChoice('high');
+    expect(q.decide(1, true)).toBe(0);
+    q.setChoice('auto');
+    expect(q.decide(2, true)).toBe(0);
+    expect(q.state).toEqual({ choice: 'auto', tier: 0, name: 'high' });
   });
   it('caps the pixel ratio by tier and never raises it on the way down', () => {
     expect(TIERS.map((tier) => tier.knobs.maxDpr)).toEqual([2, 1.5, 1.5, 1.25]);
