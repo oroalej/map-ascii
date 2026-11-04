@@ -175,6 +175,7 @@ export function AtlasCanvas({
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     let atlas: Atlas;
+    delete canvas.dataset.detail;
     try {
       atlas = createAtlas(canvas, {
         lifeHoverPause,
@@ -239,10 +240,15 @@ export function AtlasCanvas({
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('ready', markReady),
+      // For e2e: the full shaders are drawing, not the boot ones.
+      atlas.on('detailready', () => {
+        canvas.dataset.detail = 'ready';
+      }),
       atlas.on('qualitychange', ({ choice, tier }) => {
         if (choice === 'auto') saveQualityTier(tier);
       }),
       atlas.on('contextlost', () => {
+        delete canvas.dataset.detail;
         useUiStore.setState({ startup: { city: slug, atlas, status: 'restoring' } });
       }),
       atlas.on('contextrestored', () => {
