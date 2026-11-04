@@ -152,11 +152,14 @@ const STALL_ICON = [
  * People as the map draws them (life/people.ts): someone walking, in a shirt, their skin in the
  * theme's person color; and an umbrella from above, its ribs darker.
  */
+/** A figure as a legend draws it: two inks, its hair in the tone. */
+const legendFigure = (rows: readonly string[]) => rows.map((row) => row.replace(/h/g, 'o'));
+
 function peopleIcons(theme: Theme): LegendIcon[] {
   const paint = (p: number) => theme.vehiclePaints[p]!;
   const skin = css(theme.styles.life_person!.color);
   return [
-    { pixels: FIGURE_MASTERS.adult[10]!, paint: css(paint(Paint.red)), tone: skin },
+    { pixels: legendFigure(FIGURE_MASTERS.adult[10]!), paint: css(paint(Paint.red)), tone: skin },
     {
       pixels: FIGURE_MASTERS.umbrella[10]!,
       paint: css(paint(Paint.blue)),
@@ -181,8 +184,12 @@ function vendorsEntry(theme: Theme): LegendEntry {
     color: css(paint(Paint.orange)),
     icons: [
       { pixels: STALL_ICON, paint: css(paint(Paint.orange)), tone: skin },
-      { pixels: FIGURE_MASTERS.adult[10]!, paint: css(paint(Paint.green)), tone: skin },
-      { pixels: FIGURE_MASTERS['pole-buckets'][10]!, paint: css(paint(Paint.orange)), tone: skin },
+      { pixels: legendFigure(FIGURE_MASTERS.adult[10]!), paint: css(paint(Paint.green)), tone: skin },
+      {
+        pixels: legendFigure(FIGURE_MASTERS['pole-buckets'][10]!),
+        paint: css(paint(Paint.orange)),
+        tone: skin,
+      },
     ],
   };
 }

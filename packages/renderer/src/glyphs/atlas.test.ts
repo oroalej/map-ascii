@@ -25,6 +25,7 @@ import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
 import { PUFF_GLYPHS } from '../life/puff-style';
 import {
+  FIGURE_HAIR,
   FIGURE_TONE,
   figureGlyph,
   figureOf,
@@ -197,7 +198,7 @@ describe('people', () => {
         const { drawn, data } = pixels(glyph, w, h);
         expect(drawn, `${figureOf(glyph)!.figure} ${w}×${h}`).toBe(true);
         const inks = new Set(data);
-        for (const ink of inks) expect([0, 255, FIGURE_TONE]).toContain(ink);
+        for (const ink of inks) expect([0, 255, FIGURE_TONE, FIGURE_HAIR]).toContain(ink);
         // A 2×2 figure's corner may hold only one ink.
         if (figureOf(glyph)!.slice === undefined) {
           expect(inks.has(255) && inks.has(FIGURE_TONE), `${w}×${h}`).toBe(true);

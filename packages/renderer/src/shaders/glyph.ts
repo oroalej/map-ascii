@@ -30,10 +30,15 @@ import {
 } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
-import { CANDLE_BIT, PersonPart } from '../life/people';
+import {
+  CANDLE_BIT,
+  FIGURE_HAIR_SPLIT,
+  HAIR_COLORS,
+  PersonPart,
+} from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
-import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
+import { PAINT_COUNT, VehiclePart, WHEEL_PART } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BEACON_BIT, BEACON_COLORS } from '../life/emergency';
 import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
@@ -411,6 +416,13 @@ vec3 vehicleColor(int byte, bool brake, float light, float night) {
   return color;
 }
 
+// A person's hair: their paint picks it from a small palette of real colors, so it stays theirs.
+vec3 hairColor(int index) {
+  int k = index % ${HAIR_COLORS.length};
+  ${HAIR_COLORS.slice(0, -1).map((c, i) => `if (k == ${i}) return vec3(${c.map(float).join(', ')});`).join('\n  ')}
+  return vec3(${HAIR_COLORS.at(-1)!.map(float).join(', ')});
+}
+
 // A person's color (life/people.ts): full ink is their paint (a shirt, an umbrella's canopy); the
 // tone ink is their skin (the theme's person color) or a canopy's ribs. No paint, the person color.
 vec3 personColor(int byte, float coverage) {
@@ -424,8 +436,10 @@ vec3 personColor(int byte, float coverage) {
   }
   if (part == ${PersonPart.skin}) return daylit(u_colors[u_person]);
   if (part == ${PersonPart.rib}) return daylit(paint * 0.6);
+  if (part == ${PersonPart.hair}) return daylit(hairColor(index));
   bool tone = coverage < 0.7;
   if (part == ${PersonPart.canopy}) return daylit(tone ? paint * 0.6 : paint);
+  if (coverage < ${float(FIGURE_HAIR_SPLIT)}) return daylit(hairColor(index));
   return daylit(tone ? u_colors[u_person] : paint);
 }
 
@@ -886,23 +900,29 @@ void main() {
     int colorByte = lifeByte;
     bool brake = (lifeByte & ${BRAKE_LAMP}) != 0;
     float bodyLight = 1.0;
+    bool wheel = false;
     if (u_hasLifeParts) {
       vec4 parts = texelFetch(u_lifeParts, cell, 0);
       int partFlags = int(parts.a * 255.0 + 0.5);
       if ((partFlags & ${PartsFlag.shadowUnder}) != 0 && shadowFalls(cls, subAt)) back *= groundShadow();
-      if (painted && (partFlags & ${PartsFlag.valid}) != 0) {
+      if ((partFlags & ${PartsFlag.valid}) != 0) {
         int sextant = (inCell.y < u_sextantSplit.y ? 0 : inCell.y < u_sextantSplit.z ? 2 : 4) +
           (inCell.x < u_sextantSplit.x ? 0 : 1);
         int value = (int(parts[sextant >> 1] * 255.0 + 0.5) >> ((sextant & 1) * 4)) & 15;
-        colorByte = (lifeByte & 143) | ((value & 7) << 4);
-        brake = (partFlags & ${PartsFlag.brake}) != 0;
-        bodyLight = mix(1.0, (value & ${SHADE_NIBBLE}) != 0 ? ${float(BODY_LIGHT.shaded)} : ${float(BODY_LIGHT.lit)}, directSun());
+        if (bird) {
+          colorByte = (lifeByte & ~${BIRD_ACCENT_BIT}) | ((value & 1) != 0 ? ${BIRD_ACCENT_BIT} : 0);
+        } else {
+          colorByte = (lifeByte & 143) | ((value & 7) << 4);
+          wheel = painted && (value & 7) == ${WHEEL_PART};
+          brake = (partFlags & ${PartsFlag.brake}) != 0;
+          bodyLight = mix(1.0, (value & ${SHADE_NIBBLE}) != 0 ? ${float(BODY_LIGHT.shaded)} : ${float(BODY_LIGHT.lit)}, directSun());
+        }
       }
     }
-    vec3 color = painted
-      ? vehicleColor(colorByte, brake, bodyLight, night)
-      : person ? personColor(lifeByte, coverage)
-      : bird ? birdColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
+    vec3 color = wheel ? daylit(vec3(0.09, 0.09, 0.1))
+      : painted ? vehicleColor(colorByte, brake, bodyLight, night)
+      : person ? personColor(colorByte, coverage)
+      : bird ? birdColor(colorByte, coverage) : daylit(u_colors[lifeClass]);
     if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)
       color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.

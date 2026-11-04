@@ -10,6 +10,7 @@ import { DOG_SCALE, dogOf, dogPixels, MIN_DOG_PX } from '../life/dogs';
 import { catOf, catPixels } from '../life/cats';
 import {
   FIGURE_SCALES,
+  FIGURE_HAIR,
   FIGURE_TONE,
   figureOf,
   figurePixels,
@@ -254,7 +255,8 @@ function drawFigure(slot: Slot, g: FigureGlyph) {
       if (bx < 0 || by < 0 || bx >= box || by >= box) continue;
       const ink = pixel(bx, by);
       if (ink === '.') continue;
-      data[(slot.y0 + y) * stride + slot.x0 + x] = ink === '#' ? 255 : FIGURE_TONE;
+      data[(slot.y0 + y) * stride + slot.x0 + x] =
+        ink === '#' ? 255 : ink === 'h' ? FIGURE_HAIR : FIGURE_TONE;
     }
   }
 }

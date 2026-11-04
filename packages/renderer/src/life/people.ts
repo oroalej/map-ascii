@@ -6,9 +6,9 @@
  * its real size (`FIGURE_SIZE_M`, `figureFit`), in proportion to the cars around it: part of a
  * cell, a whole one, 2×2 cells, and closest up stamped over as many cells as it covers
  * (life/draw.ts), but never smaller than `MIN_FIGURE_PX` on screen.
- * Each figure glyph has two inks: full for its paint (a shirt, a canopy),
- * and `FIGURE_TONE` for its skin (the theme's person color) or a canopy's ribs, which the glyph
- * shader tells apart (shaders/glyph.ts `personColor`).
+ * Each figure glyph has up to three inks: full for its paint (a shirt, a canopy), `FIGURE_TONE` for
+ * its skin (the theme's person color) or a canopy's ribs, and `FIGURE_HAIR` for its hair, which the
+ * glyph shader tells apart (shaders/glyph.ts `personColor`).
  */
 import { doubled, inkAt, turnedPixels, type Heading } from './masters';
 import { Paint } from './vehicles';
@@ -92,11 +92,24 @@ export function figureFit(
  * How the shader colors a person texel. A figure glyph's tone ink is skin, or a canopy's ribs;
  * a stamped figure's cells (all full ink) say which they show.
  */
-export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3, puff: 4 } as const;
+export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3, puff: 4, hair: 5 } as const;
 export type PersonPart = (typeof PersonPart)[keyof typeof PersonPart];
 
 /** Coverage of the tone ink (0–255); the shader splits full ink from tone at 0.7. */
 export const FIGURE_TONE = 110;
+/** Coverage of the hair ink (0–255); the shader splits it from tone at `FIGURE_HAIR_SPLIT`. */
+export const FIGURE_HAIR = 56;
+export const FIGURE_HAIR_SPLIT = 0.33;
+/**
+ * Hair colors, RGB 0–1: black and very dark brown mostly, some going grey, a little lifted so a
+ * head doesn't vanish into the dark theme. A person's paint picks one, so it stays theirs.
+ */
+export const HAIR_COLORS = [
+  [0.17, 0.15, 0.15],
+  [0.17, 0.15, 0.15],
+  [0.27, 0.18, 0.12],
+  [0.45, 0.44, 0.43],
+] as const;
 /** No paint: the figure takes the theme's person color. */
 export const PAINT_NONE = 15;
 /** Holding a candle (lit at dusk and night). */
@@ -140,9 +153,9 @@ export const UMBRELLA_PAINTS: readonly number[] = [
 ];
 
 /*
- * Figures seen from above, heading up, left hand forward: `#` paint, `o` tone, `.` empty. Solid,
- * so a person has the weight of the cars beside them: the shoulders across the whole width, the
- * head in their middle, and the arms swinging forward and back. Each is the same turned half
+ * Figures seen from above, heading up, left hand forward: `#` paint, `o` tone, `h` hair, `.` empty.
+ * Solid, so a person has the weight of the cars beside them: the shoulders across the whole width,
+ * the head in their middle, its crown of hair ringed by skin, and the arms swinging forward and back. Each is the same turned half
  * round, so heading down draws the same; the other step is its mirror, and heading across the
  * screen, it turned a quarter. Drawn from the smallest master at least as big as the glyph
  * (`figurePixels`).
@@ -152,13 +165,37 @@ const ADULT_10 = [
   '..........',
   'oo........',
   '##..oo....',
-  '###oooo###',
-  '###oooo###',
-  '###oooo###',
-  '###oooo###',
+  '###ohho###',
+  '###hhhh###',
+  '###hhhh###',
+  '###ohho###',
   '....oo..##',
   '........oo',
   '..........',
+];
+
+// prettier-ignore
+const ADULT_20 = [
+  '....................',
+  '....................',
+  '.ooo................',
+  'oooo................',
+  '####.....oo.........',
+  '#####...oooo........',
+  '#######oooooo#######',
+  '######oohhhhoo######',
+  '######ohhhhhho######',
+  '######hhhhhhhh######',
+  '######hhhhhhhh######',
+  '######ohhhhhho######',
+  '######oohhhhoo######',
+  '#######oooooo#######',
+  '........oooo...#####',
+  '.........oo.....####',
+  '................oooo',
+  '................ooo.',
+  '....................',
+  '....................',
 ];
 
 // prettier-ignore
@@ -166,12 +203,12 @@ const ADULT: Readonly<Record<number, readonly string[]>> = {
   5: [
     'o....',
     '##o##',
-    '#ooo#',
+    '#oho#',
     '##o##',
     '....o',
   ],
   10: ADULT_10,
-  20: doubled(ADULT_10),
+  20: ADULT_20,
 };
 
 /** A child: slighter shoulders, a larger head for them. */
@@ -180,7 +217,7 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
   5: [
     '.....',
     '.o...',
-    '#ooo#',
+    '#oho#',
     '...o.',
     '.....',
   ],
@@ -188,10 +225,10 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
     '..........',
     '.oo.......',
     '.##.oo....',
-    '.##oooo##.',
-    '.##oooo##.',
-    '.##oooo##.',
-    '.##oooo##.',
+    '.##ohho##.',
+    '.##hhhh##.',
+    '.##hhhh##.',
+    '.##ohho##.',
     '....oo.##.',
     '.......oo.',
     '..........',
@@ -201,23 +238,23 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
 /** Stationary shoulders and an off-center head make all four headings readable from above. */
 // prettier-ignore
 const ATTENTIVE_ADULT_10 = [
-  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
-  '..##oo##..', '.########.', '.########.', '..######..', '..........',
+  '..........', '..........', '....oo....', '...ohho...', '...hhhh...',
+  '..##hh##..', '.########.', '.########.', '..######..', '..........',
 ];
 // prettier-ignore
 const GESTURE_ADULT_10 = [
-  '.oo.......', '.##.......', '.##.oo....', '.##oooo...', '.##oooo...',
-  '.###oo##..', '.########.', '..#######.', '..######..', '..........',
+  '.oo.......', '.##.......', '.##.oo....', '.##ohho...', '.##hhhh...',
+  '.###hh##..', '.########.', '..#######.', '..######..', '..........',
 ];
 // prettier-ignore
 const ATTENTIVE_CHILD_10 = [
-  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
-  '...#oo#...', '..######..', '..######..', '...####...', '..........',
+  '..........', '..........', '....oo....', '...ohho...', '...hhhh...',
+  '...#hh#...', '..######..', '..######..', '...####...', '..........',
 ];
 // prettier-ignore
 const GESTURE_CHILD_10 = [
-  '..oo......', '..##......', '..##oo....', '..#oooo...', '..#oooo...',
-  '..##oo#...', '..######..', '...#####..', '...####...', '..........',
+  '..oo......', '..##......', '..##oo....', '..#ohho...', '..#hhhh...',
+  '..##hh#...', '..######..', '...#####..', '...####...', '..........',
 ];
 const stationaryMasters = (small: readonly string[], medium: readonly string[]) => ({
   5: small,
@@ -226,12 +263,12 @@ const stationaryMasters = (small: readonly string[], medium: readonly string[]) 
 });
 export const POSE_MASTERS = {
   adult: {
-    attentive: stationaryMasters(['.....', '..o..', '.#o#.', '.###.', '.###.'], ATTENTIVE_ADULT_10),
-    gesture: stationaryMasters(['o....', '#.o..', '##o#.', '.###.', '.###.'], GESTURE_ADULT_10),
+    attentive: stationaryMasters(['.....', '..o..', '.#h#.', '.###.', '.###.'], ATTENTIVE_ADULT_10),
+    gesture: stationaryMasters(['o....', '#.o..', '##h#.', '.###.', '.###.'], GESTURE_ADULT_10),
   },
   child: {
-    attentive: stationaryMasters(['.....', '..o..', '..o..', '.###.', '..#..'], ATTENTIVE_CHILD_10),
-    gesture: stationaryMasters(['.o...', '.#o..', '.#o..', '.###.', '..#..'], GESTURE_CHILD_10),
+    attentive: stationaryMasters(['.....', '..o..', '..h..', '.###.', '..#..'], ATTENTIVE_CHILD_10),
+    gesture: stationaryMasters(['.o...', '.#o..', '.#h..', '.###.', '..#..'], GESTURE_CHILD_10),
   },
 } as const;
 
@@ -284,9 +321,9 @@ const ROWER_10 = [
   'oo........',
   '..o.......',
   '...o......',
-  '....o#ooo#',
-  '....##ooo#',
-  '.....#ooo#',
+  '....o#ohh#',
+  '....##hhh#',
+  '.....#ohh#',
   '..........',
   '..........',
   '..........',
@@ -297,7 +334,7 @@ const ROWER: Readonly<Record<number, readonly string[]>> = {
   5: [
     'o....',
     '.o...',
-    '..#o#',
+    '..#h#',
     '.....',
     '.....',
   ],
@@ -313,15 +350,15 @@ const SEATED_10 = [
   '..##..##..',
   '..######..',
   '..######..',
-  '..#oooo#..',
-  '..#oooo#..',
-  '...oooo...',
+  '..#ohho#..',
+  '..#hhhh#..',
+  '...hhhh...',
   '..........',
   '..........',
 ];
 // prettier-ignore
 const SEATED: Readonly<Record<number, readonly string[]>> = {
-  5: ['.o.o.', '.###.', '.#o#.', '..o..', '.....'],
+  5: ['.o.o.', '.###.', '.#h#.', '..o..', '.....'],
   10: SEATED_10,
   20: doubled(SEATED_10),
 };
@@ -329,10 +366,10 @@ const SEATED: Readonly<Record<number, readonly string[]>> = {
 // Carrier props are stamped masters only: coarse views retain the existing adult glyphs.
 // prettier-ignore
 const CARRIERS: Record<CarrierFigure, readonly string[]> = {
-  'pole-buckets': ['..........', '..........', '.ooo..ooo.', '.o#o..o#o.', '.ooo##ooo.', '....oo....', '...####...', '...####...', '....##....', '..........'],
-  basket: ['..........', '..........', '....oo....', '...####...', '..######..', '...###ooo.', '...###o#o.', '....##ooo.', '....##....', '..........'],
+  'pole-buckets': ['..........', '..........', '.ooo..ooo.', '.o#o..o#o.', '.ooo##ooo.', '....hh....', '...####...', '...####...', '....##....', '..........'],
+  basket: ['..........', '..........', '....hh....', '...####...', '..######..', '...###ooo.', '...###o#o.', '....##ooo.', '....##....', '..........'],
   'head-tray': ['..........', '..oooooo..', '.oo####oo.', '.o######o.', '.oo####oo.', '..oooooo..', '..######..', '...####...', '....##....', '..........'],
-  'chest-tray': ['..........', '..........', '....oo....', '...####...', '..######..', '...oooo...', '...o##o...', '...oooo...', '....##....', '..........'],
+  'chest-tray': ['..........', '..........', '....hh....', '...####...', '..######..', '...oooo...', '...o##o...', '...oooo...', '....##....', '..........'],
 };
 const carrierMasters = (figure: CarrierFigure) => ({
   10: CARRIERS[figure],
@@ -500,7 +537,7 @@ export function personGlyphs(): string[] {
 }
 
 /**
- * A figure's pixels in a `box` × `box` square: '#' paint, 'o' tone, '.' empty. The smallest
+ * A figure's pixels in a `box` × `box` square: '#' paint, 'o' tone, 'h' hair, '.' empty. The smallest
  * master at least `box` wide is sampled down to it (the largest, if none is), then turned and
  * mirrored for its heading and step.
  * Staged canopies instead generate their pixels directly at the requested box size.

@@ -44,6 +44,7 @@ import { hasTurnSignals, TURN_SIGNAL_BIT, type TurnSide } from './turn-signals';
 import { BEACON_BIT, type Beacon } from './emergency';
 import { BRAKE_LAMP } from './lamps';
 import { puffGlyph, EMPTY_PUFFS, PUFF_STRIDE } from './exhaust';
+import { lookOf } from './vehicle-plans';
 import {
   PartsFlag,
   PartsQueue,
@@ -61,10 +62,12 @@ import {
   type LonePlacement,
 } from './group-placement';
 import {
+  fineplanFor,
   LINE_GLYPHS,
   miniSector,
   PART_GLYPHS,
   planPart,
+  planPartIn,
   SILHOUETTE_MIN_CELLS,
   STAMP_MIN_CELLS,
   VehiclePart,
@@ -133,6 +136,7 @@ const NO_TEXEL = [0, 0, 0, 0] as const;
 const COVERED_CART: VehicleSpec = {
   ...VEHICLES.cart,
   plan: VEHICLES.cart.plan.map((row) => row.replace(/[A-Z]/g, 'R')),
+  fine: VEHICLES.cart.fine?.map((plan) => plan.map((row) => row.replace(/[A-Z]/g, 'R'))),
 };
 
 /**
@@ -293,6 +297,8 @@ const partsQueue = new PartsQueue();
 let layerSextants: Uint16Array | undefined;
 /** The sun on vehicles' bodies, while it is up. */
 let bodySun: Sun | undefined;
+/** Which of its close-up plans the agent being drawn shows (life/vehicle-plans.ts). */
+let drawingLook = 0;
 const litPart = (part: number) =>
   part === VehiclePart.body || part === VehiclePart.roof || part === VehiclePart.accent;
 
@@ -479,6 +485,7 @@ export function packLife(
         journal = ground ? beginJournal(groundJournal, cells) : undefined;
         detailedStamp = false;
         detailedPeopleStamp = false;
+        drawingLook = agent.inspectionId === undefined ? 0 : lookOf(agent.inspectionId);
         const coreMark = partsQueue.coreCount,
           softMark = partsQueue.softCount,
           shadowMark = partsQueue.shadowCount;
@@ -708,6 +715,7 @@ export function packLife(
     drawingMini = false;
     layerSextants = undefined;
     bodySun = undefined;
+    drawingLook = 0;
   }
 }
 
@@ -1717,6 +1725,9 @@ function stampFigure(
     glyphIndex,
     texel,
     options,
+    look.figure === 'umbrella'
+      ? [PersonPart.canopy, PersonPart.rib, PersonPart.rib]
+      : [PersonPart.figure, PersonPart.skin, PersonPart.hair],
   );
 }
 
@@ -1740,6 +1751,8 @@ function stampMaster(
   glyphIndex: (glyph: string) => number,
   texel: (tone: boolean) => [number, number, number],
   options?: Pick<StampOptions, 'underneath' | 'coverage'>,
+  /** With the part layer: the value each sixth takes for its ink, paint, tone and hair. */
+  inks?: readonly [number, number, number],
 ): boolean {
   const { cols, rows } = grid;
   const det = ax * sy - ay * sx;
@@ -1753,11 +1766,14 @@ function stampMaster(
   // How many sixths (2 across a cell, 3 down it) the master spans, the fewer way.
   const detail = 2 * half * Math.min(Math.hypot(2 * ax, 3 * ay), Math.hypot(2 * sx, 3 * sy));
   let any = false;
+  const layered = layerSextants && inks;
+  const coreMark = partsQueue.coreCount;
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
       let mask = 0;
       let inked = 0;
       let tone = 0;
+      let rgb = 0;
       for (let bit = 0; bit < 6; bit++) {
         // The sixth's center, in meters forward and to the right of the master's center.
         const px = c + ((bit & 1) + 0.5) / 2 - cx;
@@ -1769,13 +1785,19 @@ function stampMaster(
         if (mark === '.') continue;
         mask |= 1 << bit;
         inked++;
-        if (mark === 'o') tone++;
+        // Without its sixths' own colors, hair reads as the skin it replaced.
+        if (mark === 'o' || mark === 'h') tone++;
+        if (layered)
+          rgb = withSextant(rgb, bit, inks[mark === 'o' ? 1 : mark === 'h' ? 2 : 0]);
       }
       if (mask === 0) continue;
       const at = (r * cols + c) * 4;
       const underMask = options?.underneath?.get(at) ?? 0;
       // Count only newly covered sixths; retain the canopy's actual rib samples.
       let added = underMask & ~mask;
+      if (layered)
+        for (let bit = 0; bit < 6; bit++)
+          if (added & (1 << bit)) rgb = withSextant(rgb, bit, inks[0]);
       while (added) {
         inked++;
         added &= added - 1;
@@ -1786,10 +1808,12 @@ function stampMaster(
       if (index <= 0 || index > MAX_GLYPHS) continue;
       rememberGroundCell(out, at);
       writeCell(out, at, index, cls, bits, byte);
+      if (layered) partsQueue.addCore(at, partsTexel(rgb, PartsFlag.valid));
       options?.coverage?.set(at, mask);
       any = true;
     }
   }
+  if (layered) partsQueue.settleCore(out, coreMark);
   return any;
 }
 
@@ -1832,6 +1856,9 @@ function drawBird(
       1 / 2,
       glyphIndex,
       (tone) => [cls, bits, shadow ? LIFE_SHADOW : birdByte(species, tone)],
+      undefined,
+      // A bird's sixths: its body or its accent.
+      shadow ? undefined : [0, 1, 1],
     );
   }
   const c = Math.floor(col);
@@ -1942,6 +1969,8 @@ function drawPet(
       1 / 2,
       glyphIndex,
       (tone) => [cls, bits, personByte(paint, tone ? PersonPart.rib : PersonPart.canopy)],
+      undefined,
+      [PersonPart.canopy, PersonPart.rib, PersonPart.rib],
     );
   }
   const c = Math.floor(col);
@@ -2002,6 +2031,11 @@ function stamp(
   const [, layerCls, layerBits, bodyByte] = sextants ? texel(VehiclePart.body) : NO_TEXEL;
   const trueHw = spec.width / 2;
   const coreMark = partsQueue.coreCount;
+  // Which cells it holds always follows the coarse plan; what they show may be finer.
+  const shownPlan = sextants
+    ? (fineplanFor(spec, drawingLook, Math.hypot(2 * ax, 3 * ay), Math.hypot(2 * sx, 3 * sy)) ??
+      spec.plan)
+    : spec.plan;
   const flags = PartsFlag.valid | (brake ? PartsFlag.brake : 0);
   // The sun's direction in the vehicle's own frame, on screen, where a meter is square.
   let sunForward = 0;
@@ -2060,8 +2094,8 @@ function stamp(
           const sampleForward = (qx * sy - qy * sx) / det;
           const sampleRight = (ax * qy - ay * qx) / det;
           if (Math.abs(sampleForward) >= hl || Math.abs(sampleRight) >= trueHw) continue;
-          const shown = planPart(
-            spec,
+          const shown = planPartIn(
+            shownPlan,
             sampleForward / length + 0.5,
             sampleRight / spec.width + 0.5,
           );
