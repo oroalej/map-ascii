@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { prepareProgram, type GL, type PendingProgram } from './gpu';
+import { prepareProgram, type GL } from './gpu';
 import { deleteOptionalPrograms, optionalProgram, type OptionalLinks } from './optional-programs';
 import type * as twgl from 'twgl.js';
 
@@ -11,7 +11,7 @@ const gl = {
 };
 const context = gl as unknown as GL;
 const info = { program: {} } as twgl.ProgramInfo;
-const link = (ready = true): PendingProgram => ({
+const link = (ready = true) => ({
   ready: vi.fn(() => ready),
   finish: vi.fn(() => info),
   cancel: vi.fn(),
@@ -32,7 +32,7 @@ it('submits once, never waits, and returns the program once linked', () => {
   expect(optionalProgram(context, programs, 'morph', 'v', 'f')).toBeUndefined();
   expect(prepareProgram).toHaveBeenCalledOnce();
   expect(pending.finish).not.toHaveBeenCalled();
-  vi.mocked(pending.ready).mockReturnValue(true);
+  pending.ready.mockReturnValue(true);
   expect(optionalProgram(context, programs, 'morph', 'v', 'f')).toBe(info);
   expect(optionalProgram(context, programs, 'morph', 'v', 'f')).toBe(info);
   expect(pending.finish).toHaveBeenCalledOnce();
@@ -40,7 +40,7 @@ it('submits once, never waits, and returns the program once linked', () => {
 
 it('stays off after a failed link or a failed submission, without throwing', () => {
   const failing = link();
-  vi.mocked(failing.finish).mockImplementation(() => {
+  failing.finish.mockImplementation(() => {
     throw new Error('driver');
   });
   vi.mocked(prepareProgram).mockReturnValueOnce(failing);

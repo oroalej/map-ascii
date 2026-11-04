@@ -974,13 +974,14 @@ it('lights grass with the frame lighting the glyph pass gets, and a clear noon w
 
 it('draws into a given target with a given overlay, so the morph keeps a frame without labels', () => {
   const setOverlay = vi.fn();
+  const bindFramebuffer = vi.fn();
   const programs = {
     glyph: { program: {}, uniformSetters: { u_overlay: setOverlay } },
     emptyVao: null,
   } as unknown as Programs;
   const gl = {
     FRAMEBUFFER: 1,
-    bindFramebuffer: vi.fn(),
+    bindFramebuffer,
     viewport: vi.fn(),
     useProgram: vi.fn(),
     bindVertexArray: vi.fn(),
@@ -1021,11 +1022,11 @@ it('draws into a given target with a given overlay, so the morph keeps a frame w
       snapshot,
     );
   draw();
-  expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(1, null);
+  expect(bindFramebuffer).toHaveBeenLastCalledWith(1, null);
   expect(setOverlay).toHaveBeenLastCalledWith(labels);
   const framebuffer = { name: 'snapshot' } as WebGLFramebuffer;
   const overlay = { name: 'blank' } as WebGLTexture;
   draw({ framebuffer, overlay });
-  expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(1, framebuffer);
+  expect(bindFramebuffer).toHaveBeenLastCalledWith(1, framebuffer);
   expect(setOverlay).toHaveBeenLastCalledWith(overlay);
 });
