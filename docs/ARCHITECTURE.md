@@ -480,7 +480,28 @@ Matched `pnpm perf:browser --scene` captures (two repeats each, baseline `fb9dd8
 
 Every row meets the no-regression gate, but these captures show no reliable desktop gain: only pan's GPU median moved beyond the noise, its second final repeat accounts for that, and both idle repeats landed above both baseline repeats (within the noise). No phone was measured. D3D11 may also flatten the new branches, so the shader changes may do less under ANGLE than on other drivers.
 
-**Cold shader compile.** A fresh browser profile on that machine took about 59 to 60 s to the first tile frame, with the main thread blocked for nearly all of it (`perf:browser --cold`, two runs). The boot shaders (§3) now draw first: one probe run had the first frame at 1.4 s, the longest main-thread task at 175 ms, and full detail at 37.5 s, before the select reduction. Each GLSL call inlines the whole function on ANGLE D3D11, so select now shares its `subcellEdge`, `wallMask` and `partyCache` call sites and works out the party walls' external masks once. That took its link from about 30 s to 15.8 s in one fresh-profile run, with the logic unchanged. `verifyPartyWalls` (`apps/web/scripts/party-wall-shader.ts`) checks the party walls on the GPU against their CPU twin.
+**Cold shader compile.** A fresh browser profile on that machine took about 59 to 60 s to the first tile frame, with the main thread blocked for nearly all of it. The boot shaders (§3) now draw first: see "Render polish" below. Each GLSL call inlines the whole function on ANGLE D3D11, so select shares its `subcellEdge`, `wallMask` and `partyCache` call sites and works out the party walls' external masks once, with the logic unchanged. `verifyPartyWalls` (`apps/web/scripts/party-wall-shader.ts`) checks the party walls on the GPU against their CPU twin.
+
+### Render polish (2026-11-04)
+
+GTX 1650 SUPER through ANGLE D3D11, 1920×1080. Cold runs use a fresh profile per run (`perf:browser --cold --runs=3`), against two runs before the boot shaders. Scene runs are two interleaved pairs against an export of the branch point, with each scene's repeat difference as its noise floor.
+
+| Cold load | Before | After |
+| --- | --- | --- |
+| First frame | 58.9 s | 1.29 s |
+| Longest main-thread task | 57.7 s | 183 ms |
+| Full detail | 58.9 s | 19.2 s |
+| Boot programs ready | none | 200 ms |
+| Blocked in `finish()`: select, glyph | 27.4 s, 28.4 s | 0.9 ms, 0.7 ms |
+
+| Scene | Metric | Baseline | With this work | Change | Baseline repeat difference |
+| --- | --- | --- | --- | --- | --- |
+| Idle | GPU median | 1.97, 7.27 ms | 4.85, 4.41 ms | +0.2 % | 5.3 ms |
+| Pan | GPU median | 3.40, 3.74 ms | 3.70, 3.94 ms | +7.1 % | 0.35 ms |
+| Zoom | Callback p95 | 7.0, 8.1 ms | 7.1, 7.6 ms | −2.6 % | 1.1 ms |
+| Night | GPU median | 5.21, 5.20 ms | 5.63, 5.78 ms | +9.5 % | 0.01 ms |
+
+Idle's noise is too large for the result to say much. Pan rose in both pairs, so it may be a small real cost, though it is within its noise floor. Night's rise is the bloom. The dissolve drew 13 and 17 frames across its two measured crossings. At the boot-to-full swap it drew only 2, because the first full draw uses up most of its 280 ms.
 
 ### Frame pacing and pan margin (2026-10-09)
 
