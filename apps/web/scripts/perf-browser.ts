@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { cities } from '../e2e/helpers';
 import { serveExport } from './serve-export';
 import { runStartup } from './startup-browser';
+import { runCold } from './cold-browser';
 import { browserOptions, summarize, type CapturedProfile, type Scene } from './perf-browser-report';
 // This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
@@ -22,6 +23,10 @@ const city = cities.find((c) => c.hasMeta);
 if (!city) throw new Error('Build city tiles before capturing a profile');
 if (options.startup) {
   await runStartup(root, port, city.slug, process.argv.slice(2));
+  process.exit(0);
+}
+if (options.cold) {
+  await runCold(root, port, city.slug, options.cold);
   process.exit(0);
 }
 

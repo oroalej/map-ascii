@@ -3,9 +3,12 @@ import { isAbsolute } from 'node:path';
 /** Matched browser scenes (`pnpm perf:browser --scene <scene> --output <absolute path>`). */
 export const SCENES = ['idle', 'pan', 'zoom', 'night', 'fiesta'] as const;
 export type Scene = (typeof SCENES)[number];
+export type ColdOptions = { runs: number; output: string };
 export type BrowserOptions = {
   /** `--startup` hands every argument to startup-browser.ts. */
   startup: boolean;
+  /** `--cold`: fresh-profile shader compile timing (cold-browser.ts). */
+  cold?: ColdOptions;
   /** The legacy `--pan` capture, kept for its existing root report. */
   pan: boolean;
   scene?: Scene;
@@ -14,6 +17,7 @@ export type BrowserOptions = {
 
 export function browserOptions(args: readonly string[]): BrowserOptions {
   if (args.includes('--startup')) return { startup: true, pan: false };
+  if (args.includes('--cold')) return { startup: false, pan: false, cold: coldOptions(args) };
   const values = new Map<string, string>();
   let pan = false;
   for (let i = 0; i < args.length; i++) {
@@ -43,6 +47,72 @@ export function browserOptions(args: readonly string[]): BrowserOptions {
     pan,
     ...(scene !== undefined && { scene: scene as Scene }),
     ...(output !== undefined && { output }),
+  };
+}
+
+function coldOptions(args: readonly string[]): ColdOptions {
+  let runs = 3;
+  let output: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--' || arg === '--cold') continue;
+    const [key, inline] = arg.split('=', 2);
+    if (key !== '--runs' && key !== '--output') throw new Error(`Unknown --cold argument: ${arg}`);
+    const value = inline ?? args[++i];
+    if (!value || value.startsWith('--')) throw new Error(`Invalid ${key}`);
+    if (key === '--runs') {
+      runs = Number(value);
+      if (!Number.isInteger(runs) || runs < 1) throw new Error('--runs must be a positive integer');
+    } else output = value;
+  }
+  if (!output || !isAbsolute(output))
+    throw new Error('--cold requires --output with an absolute task-folder path');
+  return { runs, output };
+}
+
+export type ShaderRecord = {
+  name: string;
+  chars: number;
+  submittedMs: number;
+  readyMs: number | null;
+  blockedMs: number | null;
+};
+export type ColdRun = {
+  run: number;
+  /** Navigation to the first tile frame, ms. */
+  readyMs: number | null;
+  /** Navigation to the first tile frame from the full shaders, ms. */
+  detailMs: number | null;
+  /** The longest main-thread task of the load, ms. */
+  longestTaskMs: number;
+  shaders: readonly ShaderRecord[];
+  parallelCompile: boolean | null;
+  gpuBackend: string | null;
+};
+
+const medianOf = (values: readonly (number | null)[]) => {
+  const known = values.filter((v): v is number => v !== null).sort((a, b) => a - b);
+  return known.length > 0 ? known[Math.floor((known.length - 1) / 2)]! : null;
+};
+
+/** Medians over the runs; lower middle on an even count, so a median is a measured value. */
+export function coldSummary(runs: readonly ColdRun[]) {
+  const names = [...new Set(runs.flatMap((run) => run.shaders.map((shader) => shader.name)))];
+  const shader = (run: ColdRun, name: string) => run.shaders.find((s) => s.name === name);
+  return {
+    runs: runs.length,
+    readyMedianMs: medianOf(runs.map((run) => run.readyMs)),
+    detailMedianMs: medianOf(runs.map((run) => run.detailMs)),
+    longestTaskMedianMs: medianOf(runs.map((run) => run.longestTaskMs)),
+    programs: Object.fromEntries(
+      names.map((name) => [
+        name,
+        {
+          readyMedianMs: medianOf(runs.map((run) => shader(run, name)?.readyMs ?? null)),
+          blockedMedianMs: medianOf(runs.map((run) => shader(run, name)?.blockedMs ?? null)),
+        },
+      ]),
+    ),
   };
 }
 
