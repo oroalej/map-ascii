@@ -971,3 +971,61 @@ it('lights grass with the frame lighting the glyph pass gets, and a clear noon w
     uniforms.mockRestore();
   }
 });
+
+it('draws into a given target with a given overlay, so the morph keeps a frame without labels', () => {
+  const setOverlay = vi.fn();
+  const programs = {
+    glyph: { program: {}, uniformSetters: { u_overlay: setOverlay } },
+    emptyVao: null,
+  } as unknown as Programs;
+  const gl = {
+    FRAMEBUFFER: 1,
+    bindFramebuffer: vi.fn(),
+    viewport: vi.fn(),
+    useProgram: vi.fn(),
+    bindVertexArray: vi.fn(),
+    drawArrays: vi.fn(),
+  } as unknown as GL;
+  const resources = {
+    map: { atlas: { columns: 16, index: () => 1 }, tables: {} },
+    label: { cellDev: view.labelDev, atlas: { columns: 16 } },
+    uniforms: themeUniforms(themes.dark),
+  } as unknown as ThemeResources;
+  const labels = { name: 'labels' } as WebGLTexture;
+  const targets = { sub: {}, overlayTex: labels } as unknown as CellTargets;
+  const grid = placeGrid(view, view.cellDev, 80, 34).grid;
+  const draw = (snapshot?: { framebuffer: WebGLFramebuffer; overlay: WebGLTexture }) =>
+    glyphPass(
+      gl,
+      programs,
+      targets,
+      resources,
+      themes.dark,
+      view,
+      grid,
+      grid,
+      0,
+      false,
+      1,
+      undefined,
+      0,
+      0,
+      null,
+      normalizeFocus(null),
+      0,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      snapshot,
+    );
+  draw();
+  expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(1, null);
+  expect(setOverlay).toHaveBeenLastCalledWith(labels);
+  const framebuffer = { name: 'snapshot' } as WebGLFramebuffer;
+  const overlay = { name: 'blank' } as WebGLTexture;
+  draw({ framebuffer, overlay });
+  expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(1, framebuffer);
+  expect(setOverlay).toHaveBeenLastCalledWith(overlay);
+});

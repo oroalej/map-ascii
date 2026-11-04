@@ -16,7 +16,7 @@ import type { GL } from './gpu';
 const fullPrograms = (gl: GL) => {
   const programs = createPrograms(gl);
   programs.boot!.drewTiles();
-  programs.boot!.poll(Infinity);
+  if (programs.boot!.poll(Infinity) === 'full') programs.boot?.commit();
   programs.boot = undefined;
   return programs;
 };
@@ -140,6 +140,9 @@ describe('glyph program variants', () => {
       expect(made[SELECT]!.finish).not.toHaveBeenCalled();
       done.add(GLYPH);
       expect(programs.boot!.poll(start + BOOT_GRACE_MS + 3)).toBe('full');
+      // Until committed, the boot programs still draw: the morph snapshots the last boot frame.
+      expect(programs.glyph).toBe(made[BOOT_GLYPH]!.finish.mock.results[0]!.value);
+      programs.boot!.commit();
       expect(programs.boot).toBeUndefined();
       expect(programs.select).toBe(made[SELECT]!.finish.mock.results[0]!.value);
       expect(programs.glyph).toBe(made[GLYPH]!.finish.mock.results[0]!.value);
@@ -151,6 +154,7 @@ describe('glyph program variants', () => {
       const made = links(new Set([...SMALL, SELECT, GLYPH]));
       const programs = createPrograms(parallelContext());
       expect(programs.boot!.poll(performance.now())).toBe('full');
+      programs.boot!.commit();
       expect(made[BOOT_SELECT]!.finish).not.toHaveBeenCalled();
       expect(made[BOOT_SELECT]!.cancel).toHaveBeenCalledOnce();
       expect(made[BOOT_GLYPH]!.cancel).toHaveBeenCalledOnce();

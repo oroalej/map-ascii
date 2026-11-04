@@ -11,6 +11,8 @@ export type Knobs = {
   waterDetail: boolean;
   fish: boolean;
   beams: boolean;
+  /** The dissolve between cell-size steps (morph.ts). */
+  morph: boolean;
   maxDpr: number;
 };
 const high: Knobs = {
@@ -24,6 +26,7 @@ const high: Knobs = {
   waterDetail: true,
   fish: true,
   beams: true,
+  morph: true,
   /** High-DPI screens draw at most 2× (cell targets and the glyph pass scale with it). */
   maxDpr: 2,
 };
@@ -46,7 +49,7 @@ export const TIERS = [
   { name: 'high', knobs: high },
   { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5 } },
   { name: 'effects', knobs: effects },
-  { name: 'pixels', knobs: { ...effects, crowd: 0.3, maxDpr: 1.25 } },
+  { name: 'pixels', knobs: { ...effects, crowd: 0.3, morph: false, maxDpr: 1.25 } },
 ] as const;
 export type QualityState = {
   choice: QualityChoice;

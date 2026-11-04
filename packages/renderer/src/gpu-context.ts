@@ -14,6 +14,7 @@ import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
 import { createProgram, createTexture, prepareProgram, type GL, type PendingProgram } from './gpu';
+import { deleteOptionalPrograms, type OptionalLinks } from './optional-programs';
 import { bootGlyphFragment, bootSelectFragment } from './shaders/boot';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
@@ -60,6 +61,8 @@ export const BOOT_GRACE_MS = 500;
 export type Boot = {
   /** Once per frame, before drawing. Never waits on a link. */
   poll(now: number): BootStage;
+  /** After `poll` said `full`: drop the boot programs. Until now they are still the ones drawn. */
+  commit(): void;
   /** A boot frame with tiles was drawn. Without parallel compile, the next poll links the rest. */
   drewTiles(): void;
 };
@@ -73,6 +76,8 @@ type BaseLinks = {
 export type Programs = {
   /** Present until the full programs are in use; the `select` and `glyph` getters draw boot. */
   boot?: Boot;
+  /** Small programs for optional passes (optional-programs.ts). */
+  optional?: OptionalLinks;
   /** Base program compile times, for the device report (ARCHITECTURE.md §8 "Device baseline"). */
   timings?: ShaderTiming[];
   /** Separate ownership lets teardown cancel links without resolving lazy getters. */
@@ -214,8 +219,6 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
         if (select && glyph) {
           finish('select');
           finish('glyph');
-          programs.boot = undefined;
-          dropBootPrograms();
           return 'full';
         }
       }
@@ -232,6 +235,10 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
         return 'wait';
       }
       return 'boot';
+    },
+    commit() {
+      programs.boot = undefined;
+      dropBootPrograms();
     },
     drewTiles() {
       drewBootTiles = true;
@@ -263,6 +270,7 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
       },
       streetText: { vao, buffer, count: 0 },
       glyphVariants: variants,
+      optional: new Map(),
       emptyVao,
       fullUniforms,
     };
@@ -457,6 +465,7 @@ export function prewarmGlyphPrograms(
 
 export function deletePrograms(gl: GL, p: Programs) {
   p.boot = undefined;
+  deleteOptionalPrograms(gl, p.optional);
   p.glyphWarmup?.cancel();
   for (const pending of p.baseLinks?.pending.values() ?? []) pending.cancel();
   p.baseLinks?.pending.clear();

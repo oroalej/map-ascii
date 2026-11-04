@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAtlas, type Atlas } from './index';
 import type * as GpuModule from './gpu';
 import type * as PassesModule from './passes';
@@ -9,6 +9,7 @@ import { LifeBuilder } from './life/geometry';
 import type { LoadedTile } from './tile-cache';
 import { cellPass, glyphPass, streetTextPass } from './passes';
 import { fireworksPass } from './fireworks-pass';
+import { createMorphSnapshot, morphPass, releaseMorph } from './morph';
 import * as Hosts from './life/host';
 
 const fixture = vi.hoisted(() => ({
@@ -19,6 +20,17 @@ const fixture = vi.hoisted(() => ({
   /** What `programs.boot.poll` answers in turn; empty means no boot shaders at all. */
   bootStages: [] as string[],
   drewTiles: vi.fn(),
+  /** Whether the morph program has linked, and what the pass answers. */
+  morphProgram: undefined as object | undefined,
+  morphRunning: true,
+  createMapGlyphs: vi.fn(() => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } })),
+}));
+vi.mock('./optional-programs', () => ({ optionalProgram: () => fixture.morphProgram }));
+vi.mock('./morph', () => ({
+  morphFragment: '',
+  createMorphSnapshot: vi.fn(() => ({ framebuffer: 'snapshot fbo', blankOverlay: 'blank' })),
+  morphPass: vi.fn(() => fixture.morphRunning),
+  releaseMorph: vi.fn(),
 }));
 vi.mock('./gpu-context', () => ({
   createPrograms: () => {
@@ -27,10 +39,9 @@ vi.mock('./gpu-context', () => ({
     };
     if (fixture.bootStages.length > 0)
       programs.boot = {
-        poll: () => {
-          const stage = fixture.bootStages.shift();
-          if (stage === 'full') programs.boot = undefined;
-          return stage;
+        poll: () => fixture.bootStages.shift(),
+        commit: () => {
+          programs.boot = undefined;
         },
         drewTiles: fixture.drewTiles,
       };
@@ -38,7 +49,7 @@ vi.mock('./gpu-context', () => ({
   },
   deletePrograms: vi.fn(),
   prewarmGlyphPrograms: vi.fn(),
-  createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
+  createMapGlyphs: fixture.createMapGlyphs,
   createLabelGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
   deleteMapGlyphs: vi.fn(),
   deleteLabelGlyphs: vi.fn(),
@@ -149,6 +160,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   fixture.view = fixture.region = undefined;
   fixture.bootStages = [];
+  fixture.morphProgram = undefined;
+  fixture.morphRunning = true;
   time = 0;
   turns.clear();
   vi.spyOn(performance, 'now').mockImplementation(() => time);
@@ -168,6 +181,7 @@ beforeEach(() => {
   Object.defineProperties(canvas, { clientWidth: { value: 400 }, clientHeight: { value: 300 } });
   vi.spyOn(canvas, 'getContext').mockReturnValue({
     getExtension: () => null,
+    isContextLost: () => false,
   } as unknown as WebGL2RenderingContext);
   atlas = createAtlas(canvas, {
     tilesUrl: '/tiles/fixture.pmtiles?existing=yes',
@@ -262,6 +276,126 @@ it('draws boot frames while the full shaders compile, and marks each readiness o
   expect(ready).toHaveBeenCalledOnce();
   expect(detail).toHaveBeenCalledExactlyOnceWith({ firstDetailFrame: 500 });
   expect(atlas.getStats()).toMatchObject({ readyMs: 300, detailReadyMs: 500 });
+});
+describe('the dissolve', () => {
+  const start = (zoom: number, options: { reducedMotion?: boolean; quality?: 'low' } = {}) => {
+    atlas.destroy();
+    vi.clearAllMocks();
+    fixture.morphProgram = { program: {} };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/fixture.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom },
+      year: 2026,
+      life: { enabled: false },
+      ...options,
+    });
+    fixture.view = tile();
+    fixture.arrive();
+    draw(100);
+    expect(glyphPass).toHaveBeenCalled();
+    vi.mocked(glyphPass).mockClear();
+  };
+
+  it('keeps the last frame when a step is crossed, and runs until it has gone', () => {
+    start(16.4);
+    atlas.setCamera({ zoom: 16.7 });
+    draw(200);
+    expect(createMorphSnapshot).toHaveBeenCalledOnce();
+    const passes = vi.mocked(glyphPass).mock.calls;
+    expect(passes).toHaveLength(2);
+    // The old frame first, into the snapshot without labels; then the new one to the canvas.
+    expect(passes[0]![22]).toEqual({ framebuffer: 'snapshot fbo', overlay: 'blank' });
+    expect(passes[1]![22]).toBeUndefined();
+    expect(morphPass).toHaveBeenCalledOnce();
+    // Still running: the next display frame draws without input.
+    vi.mocked(glyphPass).mockClear();
+    draw(210);
+    expect(glyphPass).toHaveBeenCalledOnce();
+    fixture.morphRunning = false;
+    draw(220);
+    expect(releaseMorph).toHaveBeenCalledOnce();
+    expect(createMorphSnapshot).toHaveBeenCalledOnce();
+  });
+
+  it('gets out of the way of a resize at the same moment', () => {
+    let resized = () => {};
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: () => void) {
+          resized = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    start(16.4);
+    atlas.setCamera({ zoom: 16.7 });
+    resized();
+    draw(200);
+    expect(createMorphSnapshot).not.toHaveBeenCalled();
+  });
+
+  it('stays out of a move that keeps the same cell size', () => {
+    start(18);
+    atlas.setCamera({ zoom: 18.5 });
+    draw(200);
+    expect(createMorphSnapshot).not.toHaveBeenCalled();
+    expect(morphPass).not.toHaveBeenCalled();
+  });
+
+  it('never runs with reduced motion or on the lowest quality', () => {
+    for (const options of [{ reducedMotion: true }, { quality: 'low' as const }]) {
+      start(16.4, options);
+      atlas.setCamera({ zoom: 16.7 });
+      draw(200);
+      expect(createMorphSnapshot).not.toHaveBeenCalled();
+    }
+  });
+
+  it('crosses plainly until its program has linked', () => {
+    start(16.4);
+    fixture.morphProgram = undefined;
+    atlas.setCamera({ zoom: 16.7 });
+    draw(200);
+    expect(createMorphSnapshot).not.toHaveBeenCalled();
+    expect(glyphPass).toHaveBeenCalledOnce();
+  });
+
+  it('dissolves from the last boot frame at the swap', () => {
+    atlas.destroy();
+    vi.clearAllMocks();
+    fixture.morphProgram = { program: {} };
+    fixture.bootStages = ['boot', 'full'];
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/fixture.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      life: { enabled: false },
+    });
+    fixture.view = tile();
+    fixture.arrive();
+    draw(100);
+    expect(createMorphSnapshot).not.toHaveBeenCalled();
+    draw(200);
+    expect(createMorphSnapshot).toHaveBeenCalledOnce();
+    expect(morphPass).toHaveBeenCalledOnce();
+  });
+
+  it('builds the next step ahead of a crossing, only when near it', () => {
+    vi.stubGlobal('requestIdleCallback', (callback: () => void) => callback());
+    start(18);
+    fixture.createMapGlyphs.mockClear();
+    draw(200);
+    expect(fixture.createMapGlyphs).not.toHaveBeenCalled();
+    start(16.3);
+    // The near step, then the one past the edge at 16.5.
+    expect(fixture.createMapGlyphs).toHaveBeenCalledTimes(2);
+    draw(200);
+    expect(fixture.createMapGlyphs).toHaveBeenCalledTimes(2);
+  });
 });
 it('preserves query parameters while forwarding the pinned URL', () => {
   const url = new URL(fixture.url);
