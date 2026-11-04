@@ -556,7 +556,8 @@ void main() {
   if (isArea(cls) && subcellEdge(p, cls, id)) return;
 
   int v = 0;
-  if ((int(attr.g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
+  // Crown gb attributes encode the local surface, rather than feature flags.
+  if (kind != ${kindCodes.foliage} && (int(attr.g * 255.0 + 0.5) & ${Flags.sidewalk}) != 0 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
     emit(texelFetch(u_table, ivec2(0, ${classId('path')}), 0).rg, cls);
     return;
   }

@@ -202,6 +202,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         x1: number,
         y1: number,
         flags = 0,
+        surface: readonly [number, number, number, number] = [0, 0, 0, 1],
       ) => {
         gl.bindVertexArray(meshVao);
         gl.bindBuffer(gl.ARRAY_BUFFER, positions);
@@ -213,7 +214,7 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         gl.vertexAttrib4f(1, cls, height, flags, 0);
         gl.vertexAttribI4ui(2, id, 0, 0, 0);
         gl.vertexAttrib1f(3, 4);
-        gl.vertexAttrib2f(4, 0, 0);
+        gl.vertexAttrib4f(4, ...surface);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       };
       for (const target of [base, subBase]) {
@@ -271,8 +272,9 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
             u_crownBaseClass: under!.textures[0]!,
             u_crownBaseAttr: under!.textures[1]!,
           });
-          const low = () => quad(input.crown, 10, 20, 1.4, 1.8, 11.2, 6.8);
-          const high = () => quad(input.crown, 12, 21, 3.2, 3.2, 5.8, 5.8);
+          // East of its trunk (surface x > 0), where the surface byte has the sidewalk flag's bit.
+          const low = () => quad(input.crown, 10, 20, 1.4, 1.8, 11.2, 6.8, 0, [0.5, 0, 3, 1]);
+          const high = () => quad(input.crown, 12, 21, 3.2, 3.2, 5.8, 5.8, 0, [-0.5, 0, 3, 1]);
           if (reverse) {
             high();
             low();
@@ -560,6 +562,8 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         orderIndependent,
         ...saved,
         falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
+        crownEastGlyph: selectedBytes[(2 * cols + 2) * 4]! + ((selectedBytes[(2 * cols + 2) * 4 + 1]! >> 6) << 8),
+        crownWestGlyph: selectedBytes[(4 * cols + 4) * 4]! + ((selectedBytes[(4 * cols + 4) * 4 + 1]! >> 6) << 8),
         lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
         roadJoinGlyph,
         revealedRoad,
@@ -679,6 +683,10 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
     expect(p[0]).toBeLessThan(10);
   }
   expect(result.falseCurbGlyph).toBe(0);
+  // A crown's surface isn't read as flags: neither side of the trunk draws the path's sidewalk dot.
+  const crownGlyphs = themes.dark.styles.tree_crown!.glyphs.map(index);
+  expect(crownGlyphs).toContain(result.crownEastGlyph);
+  expect(crownGlyphs).toContain(result.crownWestGlyph);
   expect(result.lowerRoofEdgeClass).toBe(classId('tree_crown'));
   expect(result.roadJoinGlyph).toBe(index('┼'));
   expect(result.revealedRoad).toBe(true);
