@@ -65,6 +65,7 @@ import {
   miniSector,
   PART_GLYPHS,
   planPart,
+  SILHOUETTE_MIN_CELLS,
   STAMP_MIN_CELLS,
   VehiclePart,
   VEHICLES,
@@ -1272,7 +1273,16 @@ function drawAgent(
     variant =
       layerSextants && mini.length === 4 ? miniSector(x, y) : Math.abs(x) >= Math.abs(y) ? 0 : 1;
   }
-  const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
+  const silhouette =
+    spec &&
+    layerSextants &&
+    agent.ahead &&
+    agent.side &&
+    !agent.glyph &&
+    (agent.kind === 'vehicle' || agent.kind === 'boat' || agent.kind === 'train')
+      ? silhouetteGlyph(grid, spec, [col, row], agent.ahead, agent.side, c, r, cls, agent)
+      : 0;
+  const index = silhouette || glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
   if (index <= 0 || index > MAX_GLYPHS) return people;
   const at = (r * cols + c) * 4;
   drawingMini = agent.kind === 'vehicle';
@@ -1296,6 +1306,81 @@ function drawAgent(
   if (agent.emoji && agent.kind !== 'person')
     drawingSpeakers?.points.set(drawingOwner, [c + 0.5, r + 0.5]);
   return people + 1;
+}
+
+/**
+ * Between one glyph and its plan (`SILHOUETTE_MIN_CELLS`), a vehicle's outline: the glyph its own
+ * cell shows (0 outside that size range), and queued soft cells for the rest of it, all in its
+ * one-glyph paint so it glows the same at night. It holds exactly the cell a glyph would.
+ */
+function silhouetteGlyph(
+  grid: LifeGrid,
+  spec: VehicleSpec,
+  [cx, cy]: [number, number],
+  ahead: readonly [number, number],
+  side: readonly [number, number],
+  coreCol: number,
+  coreRow: number,
+  cls: string,
+  agent: VisibleAgent,
+): number {
+  const sextants = layerSextants!;
+  const { cols, rows, toCell } = grid;
+  const [aheadCol, aheadRow] = toCell(ahead[0], ahead[1]);
+  const [sideCol, sideRow] = toCell(side[0], side[1]);
+  const ax = aheadCol - cx,
+    ay = aheadRow - cy,
+    sx = sideCol - cx,
+    sy = sideRow - cy;
+  const cellsLong = Math.hypot(ax, ay) * spec.length;
+  if (cellsLong < SILHOUETTE_MIN_CELLS || cellsLong >= STAMP_MIN_CELLS) return 0;
+  const det = ax * sy - ay * sx;
+  if (Math.abs(det) < 1e-9) return 0;
+  const hl = spec.length / 2,
+    hw = spec.width / 2;
+  const extentX = Math.abs(ax) * hl + Math.abs(sx) * hw;
+  const extentY = Math.abs(ay) * hl + Math.abs(sy) * hw;
+  const c0 = Math.max(0, Math.floor(cx - extentX));
+  const c1 = Math.min(cols - 1, Math.floor(cx + extentX));
+  const r0 = Math.max(0, Math.floor(cy - extentY));
+  const r1 = Math.min(rows - 1, Math.floor(cy + extentY));
+  const byte = vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked);
+  const id = classId(cls);
+  const bits = (agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind]) | drawingFocus;
+  let core = 0;
+  for (let r = r0; r <= r1; r++)
+    for (let c = c0; c <= c1; c++) {
+      let mask = 0;
+      for (let bit = 0; bit < 6; bit++) {
+        const qx = c + ((bit & 1) + 0.5) / 2 - cx;
+        const qy = r + ((bit >> 1) + 0.5) / 3 - cy;
+        const forward = (qx * sy - qy * sx) / det;
+        const right = (ax * qy - ay * qx) / det;
+        if (Math.abs(forward) >= hl || Math.abs(right) >= hw) continue;
+        if (planPart(spec, forward / spec.length + 0.5, right / spec.width + 0.5) !== null)
+          mask |= 1 << bit;
+      }
+      if (c === coreCol && r === coreRow) {
+        core = mask;
+        continue;
+      }
+      const glyph = sextants[mask]!;
+      if (mask === 0 || glyph <= 0 || glyph > MAX_GLYPHS) continue;
+      const [low, high] = packGlyph(glyph, id);
+      partsQueue.addSoft(
+        (r * cols + c) * 4,
+        0,
+        (low | (high << 8) | (bits << 16) | (byte << 24)) >>> 0,
+        drawingOwner,
+      );
+    }
+  // A thin vehicle can fall between its own cell's sixths: the one nearest its center shows.
+  if (core === 0) {
+    const across = cx - coreCol >= 0.5 ? 1 : 0;
+    const down = Math.min(2, Math.max(0, Math.floor((cy - coreRow) * 3)));
+    core = 1 << (down * 2 + across);
+  }
+  return sextants[core]!;
 }
 
 /**

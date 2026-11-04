@@ -23,12 +23,21 @@ import {
   miniSector,
   Paint,
   PART_GLYPHS,
+  SILHOUETTE_MIN_CELLS,
+  STAMP_MIN_CELLS,
   VehiclePart,
   VEHICLES,
   type CraftType,
 } from './vehicles';
 
-const glyphs = [...new Set([' ', ...Object.values(PART_GLYPHS), ...sextantGlyphs])];
+const glyphs = [
+  ...new Set([
+    ' ',
+    ...Object.values(PART_GLYPHS),
+    ...sextantGlyphs,
+    ...Object.values(VEHICLES).flatMap((spec) => [...spec.mini]),
+  ]),
+];
 const glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
 const lifeGlyphs = buildLifeGlyphs(glyphIndex);
 const COLS = 60;
@@ -445,5 +454,75 @@ describe('small vehicles', () => {
       expect(VEHICLES[craft].mini).toHaveLength(2);
     for (const craft of ['car', 'jeepney', 'bus', 'truck', 'locomotive', 'coach'] as const)
       expect(VEHICLES[craft].mini).toHaveLength(4);
+  });
+});
+
+describe('softer size change', () => {
+  /** A car along a slanted road with `cells` of length on screen. */
+  const carOfLength = (cells: number) => {
+    const scale = cells / VEHICLES.car.length;
+    return vehicleAt('car', 30.3, 20.4, 0.3, scale);
+  };
+  const inked = (out: Uint8Array) => {
+    let total = 0;
+    for (const cell of cellsOf(out)) {
+      const glyph = glyphs[unpackGlyph(out[cell * 4]!, out[cell * 4 + 1]!).glyph]!;
+      const mask = sextantGlyphs.indexOf(glyph);
+      total += mask >= 0 ? [...mask.toString(2)].filter((d) => d === '1').length : 6;
+    }
+    return total;
+  };
+
+  it('grows steadily from one glyph to the real shape', () => {
+    let last = 0;
+    for (let cells = SILHOUETTE_MIN_CELLS; cells <= STAMP_MIN_CELLS + 0.5; cells += 0.05) {
+      const ink = inked(pack([carOfLength(cells)], layer()).out);
+      expect(ink).toBeGreaterThan(0);
+      // A row of sixths can cross together, but never the jump of a whole new shape.
+      if (last) expect(Math.abs(ink - last)).toBeLessThanOrEqual(4);
+      last = ink;
+    }
+    // The plan takes over exactly where the outline was.
+    const below = inked(pack([carOfLength(STAMP_MIN_CELLS - 0.001)], layer()).out);
+    const above = inked(pack([carOfLength(STAMP_MIN_CELLS + 0.001)], layer()).out);
+    expect(Math.abs(above - below)).toBeLessThanOrEqual(1);
+  });
+
+  it('holds one cell and counts as one glyph until the old threshold', () => {
+    for (let cells = 0.5; cells <= 4; cells += 0.25) {
+      const agent = carOfLength(cells);
+      const before = pack([agent]);
+      const after = pack([agent], layer());
+      expect([...after.stamped]).toEqual([...before.stamped]);
+      expect([...after.outcomes]).toEqual([...before.outcomes]);
+      if (cells >= SILHOUETTE_MIN_CELLS && cells < STAMP_MIN_CELLS) {
+        expect(after.stamped[0]).toBe(0);
+        expect(cellsOf(before.out)).toHaveLength(1);
+        expect(after.out[(20 * COLS + 30) * 4 + 2]).toBe(before.out[(20 * COLS + 30) * 4 + 2]);
+        // It glows like the one glyph it replaces.
+        for (const cell of cellsOf(after.out))
+          expect((after.out[cell * 4 + 3]! >> 4) & 7).toBe(VehiclePart.mini);
+      }
+    }
+  });
+
+  it('collides over the same one cell', () => {
+    const first = carOfLength(1.6);
+    const second = { ...first, lng: first.lng + 0.1 };
+    const before = pack([first, second]);
+    const after = pack([first, second], layer());
+    expect([...after.outcomes]).toEqual([...before.outcomes]);
+    // A neighbour in a cell the first only reaches softly isn't denied either.
+    const near = { ...first, lng: first.lng + 1, ahead: [first.ahead![0] + 1, first.ahead![1]] };
+    expect([...pack([first, near as VisibleAgent], layer()).outcomes]).toEqual([
+      ...pack([first, near as VisibleAgent]).outcomes,
+    ]);
+  });
+
+  it('stays one glyph on Low, and for agents with their own glyph', () => {
+    const agent = carOfLength(1.6);
+    expect(cellsOf(pack([agent]).out)).toHaveLength(1);
+    const withGlyph = { ...agent, glyph: '█' };
+    expect(cellsOf(pack([withGlyph], layer()).out)).toHaveLength(1);
   });
 });

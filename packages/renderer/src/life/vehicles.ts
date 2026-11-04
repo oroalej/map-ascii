@@ -447,6 +447,12 @@ export function planPart(spec: VehicleSpec, u: number, v: number): VehiclePart |
 
 /** Once a vehicle is this many cells long on screen, it is drawn from its plan. */
 export const STAMP_MIN_CELLS = 2;
+/**
+ * From this many cells long until `STAMP_MIN_CELLS`, a one-glyph vehicle already shows its true
+ * outline in sextants, so its size changes smoothly. It still counts as one glyph for everything
+ * else: its cell, its lamps and whatever anchors to it.
+ */
+export const SILHOUETTE_MIN_CELLS = 1.25;
 
 /** What a traffic mix is set for: road classes, rivers, and parked vehicles. */
 export type MixKey = TrafficRoad | 'river' | 'canal' | 'parked';
