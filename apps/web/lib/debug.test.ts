@@ -30,11 +30,16 @@ it.each(['', '0', '-1', 'invalid', 'Infinity'])(
 
 it('asks for full uniform uploads only when named, with or without debug mode', async () => {
   window.history.replaceState(null, '', '/example?fullUniforms=1');
-  const { fullUniformsRequested, isDebugRequested } = await import('./debug');
+  const { fullUniformsRequested, holdBootShadersRequested, isDebugRequested } =
+    await import('./debug');
   expect(fullUniformsRequested()).toBe(true);
+  expect(holdBootShadersRequested()).toBe(false);
   expect(isDebugRequested()).toBe(false);
   vi.resetModules();
   window.history.replaceState(null, '', '/example?debug=1');
   const later = await import('./debug');
   expect(later.fullUniformsRequested()).toBe(false);
+  vi.resetModules();
+  window.history.replaceState(null, '', '/example?boot=1');
+  expect((await import('./debug')).holdBootShadersRequested()).toBe(true);
 });

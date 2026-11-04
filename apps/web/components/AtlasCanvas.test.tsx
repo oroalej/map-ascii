@@ -145,6 +145,10 @@ it.each([
         qualityTier: 2,
       });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
+      const element = container.querySelector('canvas')!;
+      expect(element.dataset.detail).toBeUndefined();
+      handlers.get('detailready')!();
+      expect(element.dataset.detail).toBe('ready');
       const qualityChange = handlers.get('qualitychange') as unknown as (state: {
         choice: string;
         tier: number;

@@ -1248,6 +1248,8 @@ export function glyphPass(
     folklore,
     candleFlare,
   ),
+  /** Draw elsewhere, without labels: the morph's snapshot of the last frame (morph.ts). */
+  snapshot?: { framebuffer: WebGLFramebuffer; overlay: WebGLTexture },
 ) {
   const { atlas, tables } = themeRes.map;
   const label = themeRes.label;
@@ -1262,7 +1264,7 @@ export function glyphPass(
     hasEffectClocks,
     fixturesOf.get(targets)?.seasonal === true,
   );
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, snapshot?.framebuffer ?? null);
   gl.viewport(0, 0, view.width, view.height);
   gl.useProgram(program.program);
   const glyphUniforms: Record<string, unknown> = {
@@ -1288,7 +1290,7 @@ export function glyphPass(
     u_ripples: rippleUniforms(weather.ripples),
     u_pulse: reducedMotion ? [-1, -1] : [classId('marker_landmark'), classId('marker_heritage')],
     ...lighting,
-    u_overlay: targets.overlayTex,
+    u_overlay: snapshot?.overlay ?? targets.overlayTex,
     u_labelColor: themeRes.uniforms.label,
     u_accent: themeRes.uniforms.accent,
     u_carnivalCount: reducedMotion ? 0 : (carnival?.count ?? 0),

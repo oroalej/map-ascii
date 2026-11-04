@@ -174,7 +174,13 @@ export async function drawnShare(page: Page, png: Buffer): Promise<number> {
  */
 export const MIN_DRAWN = 0.01;
 
-/** Wait until the atlas is live (the HUD shows its zoom), so keyboard input reaches the map. */
+/**
+ * Wait until the atlas is live (the HUD shows its zoom), so keyboard input reaches the map, and
+ * has left the boot shaders (shaders/boot.ts), so what a test looks at is the full map. The HUD
+ * alone now shows before the first full draw, which holds the main thread on software WebGL.
+ */
 export async function mapReady(page: Page) {
   await expect(page.getByLabel('Zoom')).toHaveText(/^z \d/, { timeout: 20_000 });
+  // Not the atlas:detail mark: page.clock fakes performance's entry lists.
+  await expect(page.locator('canvas[data-detail]').first()).toBeAttached({ timeout: 20_000 });
 }

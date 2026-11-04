@@ -11,7 +11,7 @@ import {
 } from '@atlas/shared';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { isCityEmergency } from '@/lib/guards';
-import { fullUniformsRequested, isDebugRequested } from '@/lib/debug';
+import { fullUniformsRequested, holdBootShadersRequested, isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { SMALL_SCREEN } from '@/lib/screen';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
@@ -175,6 +175,7 @@ export function AtlasCanvas({
     const quality = loadQualityPref();
     useQualityStore.setState({ choice: quality });
     let atlas: Atlas;
+    delete canvas.dataset.detail;
     try {
       atlas = createAtlas(canvas, {
         lifeHoverPause,
@@ -191,6 +192,7 @@ export function AtlasCanvas({
         reducedMotion: prefersReducedMotion(),
         gpuTiming: isDebugRequested(),
         fullUniforms: fullUniformsRequested(),
+        holdBootShaders: holdBootShadersRequested(),
         profiling: isDebugRequested(),
         interactive: (feature) => {
           if (feature?.landmarkId) landmarkRequest.current?.();
@@ -238,10 +240,15 @@ export function AtlasCanvas({
       listenReducedMotion(atlas),
       atlas.on('camerachange', (next) => useAtlasStore.getState().setCamera(next)),
       atlas.on('ready', markReady),
+      // For e2e: the full shaders are drawing, not the boot ones.
+      atlas.on('detailready', () => {
+        canvas.dataset.detail = 'ready';
+      }),
       atlas.on('qualitychange', ({ choice, tier }) => {
         if (choice === 'auto') saveQualityTier(tier);
       }),
       atlas.on('contextlost', () => {
+        delete canvas.dataset.detail;
         useUiStore.setState({ startup: { city: slug, atlas, status: 'restoring' } });
       }),
       atlas.on('contextrestored', () => {

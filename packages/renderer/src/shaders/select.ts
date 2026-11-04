@@ -489,25 +489,36 @@ void main() {
   vec2 shade = cellLight(p, self);
   float light = shade.y;
   o_shade = vec4(shade, 0.0, 1.0);
-  if (cls == 0 || kind == 0) {
-    // An empty cell may still hold part of an area's edge; its light is the ground's.
-    if (!subcellEdge(p, 0, vec4(0.0))) o_glyph = vec4(0.0);
-    return;
+  // Shared call sites below, here and for the walls: each call inlines the whole function, and
+  // these two dominate this shader's compile time on ANGLE D3D11.
+  bool empty = cls == 0 || kind == 0;
+  vec4 id = empty ? vec4(0.0) : idAt(p);
+  if (!empty) {
+    g_state = stateOf(unpackId(id));
+    g_bg = fillClass(cls);
   }
-  vec4 id = idAt(p);
-  g_state = stateOf(unpackId(id));
-  g_bg = fillClass(cls);
 
   ivec2 w = u_origin + p;
   vec4 attr = texelFetch(u_attr, p, 0);
   int variant = int(attr.b * 255.0 + 0.5);
 
-  // Test crown edges before road curbs and roof walls, including centers outside the crown.
-  if ((maskBit(u_roadMask, cls) == 1 || isBuilding(cls) || (u_pavingVisible && !isArea(cls) && belowPavingOverride(cls, attr))) && subcellEdge(p, cls, id)) return;
+  // An empty cell may still hold part of an area's edge; its light is the ground's.
+  // Otherwise, test crown edges before road curbs and roof walls, including centers outside the crown.
+  if (empty || maskBit(u_roadMask, cls) == 1 || isBuilding(cls) || (u_pavingVisible && !isArea(cls) && belowPavingOverride(cls, attr))) {
+    if (subcellEdge(p, empty ? 0 : cls, id)) return;
+    if (empty) {
+      o_glyph = vec4(0.0);
+      return;
+    }
+  }
+
+  bool strip = maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)};
+  int wallRow = strip ? -1 : wallRowFor(kind, attr, cls);
+  int wall = strip || wallRow >= 0 ? wallMask(p, strip ? CURBS : OUTLINE) : -1;
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
-  if (maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)}) {
-    int curb = wallMask(p, CURBS);
+  if (strip) {
+    int curb = wall;
     vec2 glyph = curb >= 0 ? texelFetch(u_table, ivec2(curb, ${WALL_SINGLE_ROW}), 0).rg : vec2(0.0);
     if (curb < 0 && (int(attr.g * 255.0 + 0.5) & ${Flags.crossing}) != 0) {
       int axis = variant & 31;
@@ -531,9 +542,8 @@ void main() {
   }
 
   // Outlines at close zoom (glyphs/select.ts wallStyle).
-  int wallRow = wallRowFor(kind, attr, cls);
   if (wallRow >= 0) {
-    int mask = wallMask(p, OUTLINE);
+    int mask = wall;
     if (mask >= 0) {
       int flags = int(attr.g * 255.0 + 0.5);
       if (u_awnings && kind == ${kindCodes.building} && (flags & ${Flags.frontage}) != 0) {

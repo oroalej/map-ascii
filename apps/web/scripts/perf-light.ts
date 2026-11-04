@@ -13,6 +13,7 @@ import { cities } from '../e2e/helpers';
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
 import { e2ePort } from './e2e-port';
 import { prepareExport } from './static-export';
+import { detailReady } from './detail-ready';
 import { serveExport } from './serve-export';
 
 type Sample = { block: number; ms: number };
@@ -364,6 +365,7 @@ try {
         }),
       );
     }
+    await detailReady(page);
     await page.waitForTimeout(3000);
     await page.evaluate(() => {
       (window as unknown as CaptureWindow).lightCapture.freeze = true;

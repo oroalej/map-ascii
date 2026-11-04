@@ -27,6 +27,14 @@ describe('adaptive quality', () => {
       ['pixels', false],
     ]);
   });
+  it('keeps the step dissolve on every tier but pixels', () => {
+    expect(TIERS.map((tier) => [tier.name, tier.knobs.morph])).toEqual([
+      ['high', true],
+      ['crowd', true],
+      ['effects', true],
+      ['pixels', false],
+    ]);
+  });
   it('steps down under sustained load, waits for quiet, and observes cooldown', () => {
     const q = new QualityController('auto');
     expect(drive(q, 0, 4500, 30, 15, false)).toEqual([]);

@@ -62,12 +62,33 @@ import {
   deleteMapGlyphs,
   deletePrograms,
   prewarmGlyphPrograms,
+  type BootStage,
   type LabelGlyphs,
   type MapGlyphs,
   type Programs,
+  type ShaderTiming,
   type ThemeResources,
 } from './gpu-context';
+import {
+  bloomCompositePass,
+  bloomExtractPass,
+  bloomPrograms,
+  bloomStrength,
+  createBloomTarget,
+  releaseBloom,
+  sparkViewport,
+  type BloomTarget,
+} from './bloom';
 import { startFlight, stepFlight, type Flight } from './flight';
+import {
+  createMorphSnapshot,
+  morphFragment,
+  morphPass,
+  releaseMorph,
+  type MorphSnapshot,
+} from './morph';
+import { optionalProgram } from './optional-programs';
+import { fullscreenVertex } from './shaders/fullscreen';
 import { attachInput } from './input';
 import {
   cellPass,
@@ -87,6 +108,7 @@ import {
   streetTextPass,
   placeGrid,
   selectPass,
+  type FrameLighting,
   type Grid,
   type GridPlacement,
   type TileDraw,
@@ -215,6 +237,7 @@ export type { RenderClass } from './classes';
 export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
+export type { ShaderTiming } from './gpu-context';
 export type { WindChoice } from './life/wind';
 export { cityTime, type LocalTime } from './life/clock';
 
@@ -274,6 +297,11 @@ export type AtlasOptions = {
    * harnesses that override uniform values as they're uploaded. Default: false.
    */
   fullUniforms?: boolean;
+  /**
+   * Stay on the boot shaders (shaders/boot.ts) and never submit the full programs, so they can be
+   * reviewed on a machine whose warm shader cache would skip them. Default: false.
+   */
+  holdBootShaders?: boolean;
   tilesUrl: string;
   /** Content pin, supplied only for archive bytes matching the published lock. */
   tilesVersion?: string | undefined;
@@ -347,6 +375,8 @@ export type { ProcessionRun } from './life/simulate';
 export type AtlasEventMap = {
   /** First qualifying canvas draw submission in this context generation. */
   ready: { firstTileFrame: number };
+  /** The first tile frame from the full shaders; the same frame as `ready` on a warm cache. */
+  detailready: { firstDetailFrame: number };
   folklorechange: boolean;
   /** A visible simulated agent under the mouse, in canvas CSS pixels. */
   lifehover: LifeHover;
@@ -419,6 +449,8 @@ export type LabelInView = {
 /** Performance counters for the debug overlay (`?debug=1`, ARCHITECTURE.md §8). */
 export type AtlasStats = {
   readyMs: number | null;
+  /** The first tile frame from the full shaders, which can come after `readyMs`. */
+  detailReadyMs: number | null;
   /** A glyph pass has completed using at least one actual tile mesh since context creation. */
   hasDrawnTileFrame: boolean;
   quality: QualityState;
@@ -438,6 +470,10 @@ export type AtlasStats = {
   tilesPending: number;
   /** Worker time to decode a tile, averaged over recent tiles, in ms. */
   decodeMs: number;
+  /** How each base program compiled on this device (ARCHITECTURE.md §8 "Device baseline"). */
+  shaders: readonly ShaderTiming[];
+  /** Reads the device report's numbers: many phones have no GPU timer. */
+  extensions: { parallelCompile: boolean; timerQuery: boolean };
   /** Life layer agents on the grid in the last frame. */
   agents: number;
 };
@@ -488,6 +524,24 @@ export type Atlas = {
   destroy(): void;
 };
 
+/** How close to a cell-size step, in zoom levels, its glyphs get built ahead of the crossing. */
+const GLYPH_PREBUILD_ZOOM = 0.5;
+
+/** What a frame's glyph pass drew from, for the morph to draw it once more. */
+type GlyphPassInput = {
+  view: View;
+  grid: Grid;
+  labelGrid: Grid;
+  time: number;
+  weather: Weather;
+  lampShow: number;
+  lifeTime: number;
+  folklore: Parameters<typeof glyphPass>[17];
+  carnival: Parameters<typeof glyphPass>[19];
+  flare: Parameters<typeof glyphPass>[20];
+  lighting: FrameLighting;
+};
+
 const sameCamera = (a: CameraState, b: CameraState) =>
   a.lat === b.lat && a.lng === b.lng && a.zoom === b.zoom;
 /** The on-screen classes are read back at most this often. */
@@ -516,6 +570,7 @@ const smooth = (average: number, sample: number) =>
 export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): Atlas {
   const createdAt = performance.now();
   let readyMs: number | null = null;
+  let detailReadyMs: number | null = null;
   let drawableBuffers = false;
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false });
   if (!gl) {
@@ -671,7 +726,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // GPU resources (gpu-context.ts). Glyphs depend on the device pixel ratio (atlas resolution)
   // and, for the map's, on the cell size step (density.ts), so each step's are kept once built.
   // The render targets are the map and label grids, each plus a one-cell margin on every side.
-  let programs: Programs | undefined = createPrograms(gl, options.fullUniforms);
+  let programs: Programs | undefined = createPrograms(
+    gl,
+    options.fullUniforms,
+    options.holdBootShaders,
+  );
+  let lastGlyphPass: GlyphPassInput | undefined;
+  let morph: MorphSnapshot | undefined;
+  let bloomTarget: BloomTarget | undefined;
   let dpr = 0;
   /** The map cell size step (density.ts `cellStep`), set by `resize`. */
   let step: number | undefined;
@@ -819,6 +881,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       targets.labelRows !== labelRows
     ) {
       if (targets) deleteCellTargets(gl, targets);
+      lastGlyphPass = undefined;
       targets = createCellTargets(gl, cols, rows, labelCols, labelRows);
       targetsGeneration++;
       lifeHover.clear();
@@ -1450,6 +1513,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const raster = targets && lifeRaster(targets);
     if (
       !raster ||
+      programs?.boot ||
       (kind === 'speech' ? !speechEnabled || !options.dialogue : !emojiEnabled) ||
       now - lastInput < 150 ||
       !lifeActive() ||
@@ -2047,7 +2111,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? lastDraw !== -Infinity
       : !flight && performance.now() - Math.max(lastInput, lastPointerInput) >= 1000);
   const warmSeasonalPrograms = (clocks = false) => {
-    if (!programs || lost || destroyed) return;
+    if (!programs || programs.boot || lost || destroyed) return;
     const seasonal =
       !!season &&
       ((!!season.candles && bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0) ||
@@ -2066,13 +2130,108 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       () => drawnFrames,
     );
   };
+  let glyphPrebuild = false;
+  /** Near a step's edge, build the next step's glyphs while idle, not on the frame crossing it. */
+  const prebuildGlyphs = () => {
+    if (glyphPrebuild || step === undefined) return;
+    for (const direction of [-1, 1]) {
+      const next = cellStep(schedule, camera.zoom + direction * GLYPH_PREBUILD_ZOOM, step);
+      if (next === step || mapGlyphs.has(next)) continue;
+      glyphPrebuild = true;
+      const build = () => {
+        glyphPrebuild = false;
+        if (destroyed || lost || mapGlyphs.has(next)) return;
+        mapGlyphs.set(next, createMapGlyphs(gl, theme, stepCell(schedule, next), dpr, font));
+      };
+      if (typeof requestIdleCallback === 'function') requestIdleCallback(build);
+      else setTimeout(build, 100);
+      return;
+    }
+  };
+  const endBloom = () => {
+    if (bloomTarget && !gl.isContextLost()) releaseBloom(gl, bloomTarget);
+    bloomTarget = undefined;
+  };
+  /** The lights drawn into their halo's target, when there is a halo to draw this frame. */
+  const bloomFrame = (
+    v: View,
+    frameTargets: NonNullable<typeof targets>,
+    rain: number,
+    lighting: FrameLighting,
+    time: number,
+  ) => {
+    const strength =
+      knobs.bloom && theme === themes.dark
+        ? bloomStrength(daylight, lampShow(), rain, !!season?.fireworks)
+        : 0;
+    if (strength <= 0 || !programs) {
+      endBloom();
+      return undefined;
+    }
+    const linked = bloomPrograms(gl, programs);
+    if (!linked) return undefined;
+    if (bloomTarget?.cols !== frameTargets.cols || bloomTarget.rows !== frameTargets.rows) {
+      endBloom();
+      bloomTarget = createBloomTarget(gl, frameTargets.cols, frameTargets.rows);
+    }
+    bloomExtractPass(gl, programs, linked, bloomTarget, frameTargets.lightTex, lighting, time);
+    return { programs: linked, target: bloomTarget, strength };
+  };
+  const drawGlyphPass = (input: GlyphPassInput, snapshot?: Parameters<typeof glyphPass>[22]) =>
+    glyphPass(
+      gl,
+      programs!,
+      targets!,
+      themeRes!,
+      theme,
+      input.view,
+      input.grid,
+      input.labelGrid,
+      input.time,
+      reducedMotion,
+      daylight,
+      input.weather,
+      input.lampShow,
+      moon,
+      sun,
+      focus,
+      input.lifeTime,
+      input.folklore,
+      cropPass,
+      input.carnival,
+      input.flare,
+      input.lighting,
+      snapshot,
+    );
+  const endMorph = () => {
+    if (morph && !gl.isContextLost()) releaseMorph(gl, morph);
+    morph = undefined;
+  };
+  /** Before the map changes: keep the last frame, without labels, to dissolve from (morph.ts). */
+  const beginMorph = (now: number) => {
+    endMorph();
+    const last = lastGlyphPass;
+    if (!last || !programs || !targets || !themeRes) return;
+    if (reducedMotion || !knobs.morph || !watch.watched()) return;
+    if (!optionalProgram(gl, programs, 'morph', fullscreenVertex, morphFragment)) return;
+    morph = createMorphSnapshot(
+      gl,
+      now,
+      last.view.camera,
+      last.view.width,
+      last.view.height,
+      targets.labelCols,
+      targets.labelRows,
+    );
+    drawGlyphPass(last, { framebuffer: morph.framebuffer, overlay: morph.blankOverlay });
+  };
   const frame = (now: number) => {
     if (destroyed || lost) return;
     lifePause.tick(now, lifeRunning());
     profiler?.begin(now);
     raf = requestAnimationFrame(frame);
     gpuTimer.poll();
-    if (previousDraw && watch.watched()) {
+    if (previousDraw && watch.watched() && !programs?.boot) {
       quality.sample({
         at: now,
         intervalMs: now - previousDraw.at,
@@ -2082,7 +2241,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     previousDraw = undefined;
     // Zooming across a cell size step rebuilds the grid at the new size (density.ts).
-    if (step !== undefined && cellStep(schedule, camera.zoom, step) !== step) sizeDirty = true;
+    if (step !== undefined && cellStep(schedule, camera.zoom, step) !== step) {
+      // A resize or new pixel ratio at the same moment gets no dissolve.
+      if (!sizeDirty) beginMorph(now);
+      sizeDirty = true;
+    }
     if (sizeDirty) {
       sizeDirty = false;
       resize();
@@ -2114,6 +2277,20 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     if (!targets || !programs || !themeRes) {
       profiler?.end();
       return;
+    }
+    let bootStage: BootStage | undefined;
+    if (programs.boot) {
+      bootStage = programs.boot.poll(now);
+      if (bootStage === 'wait') {
+        profiler?.end();
+        return;
+      }
+      if (bootStage === 'full') {
+        beginMorph(now);
+        programs.boot?.commit();
+        drawDirty = true;
+        resetQualitySamples();
+      }
     }
     const animating = animationDue(now, frameAnchor, lastInput, {
       reducedMotion,
@@ -2231,101 +2408,131 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;
-      const lighting = frameLighting(
-        programs,
-        targets,
-        v,
-        grid,
-        reducedMotion,
-        daylight,
-        weather,
-        lampShow(),
-        lifePause.time,
-        folklorePacket,
-        flare,
-      );
-      timed('select', () =>
-        selectPass(
-          gl,
-          programs!,
-          targets!,
-          themeRes!,
+      if (bootStage === 'grace') {
+        // Tiles and cells keep coming; the screen waits for the full shaders or the grace to end.
+        drawDirty = true;
+      } else {
+        const lighting = frameLighting(
+          programs,
+          targets,
           v,
           grid,
-          reducedMotion ? 0 : time,
-          highlights(),
-          knobs.groundWind ? wind : { ...wind, strength: 0 },
-          sun,
-          knobs.shadows,
-          true,
-          cropPass,
-          knobs.groundWind ? cursor : undefined,
+          reducedMotion,
+          daylight,
+          weather,
+          lampShow(),
+          lifePause.time,
+          folklorePacket,
+          flare,
+        );
+        timed('select', () =>
+          selectPass(
+            gl,
+            programs!,
+            targets!,
+            themeRes!,
+            v,
+            grid,
+            reducedMotion ? 0 : time,
+            highlights(),
+            knobs.groundWind ? wind : { ...wind, strength: 0 },
+            sun,
+            knobs.shadows,
+            true,
+            cropPass,
+            knobs.groundWind ? cursor : undefined,
+            lighting,
+          ),
+        );
+        timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));
+        const glyphStart = profiler?.time();
+        lastGlyphPass = {
+          view: v,
+          grid,
+          labelGrid,
+          time,
+          weather,
+          lampShow: lampShow(),
+          lifeTime: lifePause.time,
+          folklore: folklorePacket,
+          carnival:
+            placement && carnivalBoosts
+              ? carnivalBoosts.uniforms(time, placement.toCell)
+              : undefined,
+          flare,
           lighting,
-        ),
-      );
-      timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));
-      const glyphStart = profiler?.time();
-      glyphPass(
-        gl,
-        programs,
-        targets,
-        themeRes,
-        theme,
-        v,
-        grid,
-        labelGrid,
-        time,
-        reducedMotion,
-        daylight,
-        weather,
-        lampShow(),
-        moon,
-        sun,
-        focus,
-        lifePause.time,
-        folklorePacket,
-        cropPass,
-        placement && carnivalBoosts ? carnivalBoosts.uniforms(time, placement.toCell) : undefined,
-        flare,
-        lighting,
-      );
-      if (glyphStart !== undefined) profiler!.add('glyph', profiler!.time() - glyphStart);
-      drawDirty = false;
-      fireworksPass(
-        gl,
-        programs,
-        targets,
-        themeRes,
-        v,
-        grid,
-        labelGrid,
-        season?.fireworks,
-        time,
-        reducedMotion,
-        wind,
-        daylight,
-        fireworkSites,
-        requestedFireworks,
-      );
-      requestedFireworks = undefined;
-      folklorePass(
-        gl,
-        programs,
-        targets,
-        themeRes,
-        v,
-        labelGrid,
-        folkloreQuads,
-        focus,
-        time,
-        reducedMotion,
-      );
-      streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
-      if (readyMs === null && drawableBuffers && !destroyed && !lost) {
-        readyMs = performance.now() - createdAt;
-        if (typeof performance.mark === 'function') performance.mark('atlas:ready');
-        scheduleHost();
-        emit('ready', { firstTileFrame: readyMs });
+        };
+        drawGlyphPass(lastGlyphPass);
+        if (glyphStart !== undefined) profiler!.add('glyph', profiler!.time() - glyphStart);
+        drawDirty = false;
+        if (morph) {
+          const program = optionalProgram(gl, programs, 'morph', fullscreenVertex, morphFragment);
+          if (
+            program &&
+            !reducedMotion &&
+            watch.watched() &&
+            morphPass(gl, programs, program, morph, targets.overlayTex, v, grid, labelGrid, now)
+          ) {
+            // Keep drawing until it has gone, at every display frame.
+            drawDirty = true;
+          } else endMorph();
+        } else {
+          // Linked ahead of the first step crossing, and of the boot shaders' swap.
+          optionalProgram(gl, programs, 'morph', fullscreenVertex, morphFragment);
+        }
+        // The boot shaders stand in for everything that needs a full program.
+        if (!programs.boot) {
+          const glow = bloomFrame(v, targets, weather.rain, lighting, time);
+          fireworksPass(
+            gl,
+            programs,
+            targets,
+            themeRes,
+            v,
+            grid,
+            labelGrid,
+            season?.fireworks,
+            time,
+            reducedMotion,
+            wind,
+            daylight,
+            fireworkSites,
+            requestedFireworks,
+            glow && {
+              framebuffer: glow.target.lit.framebuffer,
+              viewport: sparkViewport(glow.target, v, grid),
+              rows: glow.target.rows,
+            },
+          );
+          requestedFireworks = undefined;
+          if (glow)
+            bloomCompositePass(gl, programs, glow.programs, glow.target, v, grid, glow.strength);
+          folklorePass(
+            gl,
+            programs,
+            targets,
+            themeRes,
+            v,
+            labelGrid,
+            folkloreQuads,
+            focus,
+            time,
+            reducedMotion,
+          );
+        }
+        streetTextPass(gl, programs, themeRes, theme, v, labelGrid);
+        if (readyMs === null && drawableBuffers && !destroyed && !lost) {
+          readyMs = performance.now() - createdAt;
+          if (typeof performance.mark === 'function') performance.mark('atlas:ready');
+          scheduleHost();
+          emit('ready', { firstTileFrame: readyMs });
+        }
+        if (drawableBuffers) programs.boot?.drewTiles();
+        if (detailReadyMs === null && readyMs !== null && !programs.boot && !destroyed && !lost) {
+          detailReadyMs = performance.now() - createdAt;
+          if (typeof performance.mark === 'function') performance.mark('atlas:detail');
+          emit('detailready', { firstDetailFrame: detailReadyMs });
+        }
       }
       gpuTimer.end();
       if (programs.demandWaitMs) {
@@ -2367,8 +2574,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     readback.poll();
     const raster = lifeRaster(targets);
     if (lastDraw !== -Infinity) warmSeasonalPrograms(Boolean(raster?.candles));
+    if (lastDraw !== -Infinity && !programs.boot) prebuildGlyphs();
     lifeHover.update(
       lifeHover.hasPointer &&
+        !programs.boot &&
         (lifeShown || folkloreQuads.length > 0) &&
         lifeActive() &&
         !flight &&
@@ -2415,7 +2624,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lost = true;
     clearTaps();
     readyMs = null;
+    detailReadyMs = null;
     drawableBuffers = false;
+    // Their handles went with the context.
+    morph = undefined;
+    bloomTarget = undefined;
+    lastGlyphPass = undefined;
     cancelHostTurn();
     if (!host.started) host.clearTiles();
     lastCloudAt = performance.now();
@@ -2455,7 +2669,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
-    programs = createPrograms(gl, options.fullUniforms);
+    programs = createPrograms(gl, options.fullUniforms, options.holdBootShaders);
     if (season) warmSeasonalPrograms();
     gpuTimer = createGpuTimer();
     tileCache.resume();
@@ -2706,6 +2920,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     getFeature: (featureId) => source.featureById(featureId),
     getStats: () => ({
       readyMs,
+      detailReadyMs,
       hasDrawnTileFrame: readyMs !== null,
       quality: quality.state,
       fps: drawTimes.length,
@@ -2718,6 +2933,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       tilesPending: source.pendingCount,
       decodeMs: source.decodeMsAverage,
       agents: agentsDrawn,
+      shaders: programs?.timings ?? [],
+      extensions: {
+        parallelCompile: !!gl.getExtension('KHR_parallel_shader_compile'),
+        timerQuery: !!gl.getExtension('EXT_disjoint_timer_query_webgl2'),
+      },
     }),
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),
@@ -2809,6 +3029,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       };
     },
     destroy() {
+      endMorph();
+      endBloom();
       crowdPool?.destroy();
       names.clear();
       clearLifePointer();
