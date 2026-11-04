@@ -51,9 +51,13 @@ async function oneRun(port: number, city: string, index: number): Promise<ColdRu
       localStorage.setItem('atlas.quality', JSON.stringify('high'));
     });
     await page.goto(`http://localhost:${port}/${city}?debug=1&z=18&captureMs=${CAPTURE_MS}`);
-    await page.waitForFunction(`performance.getEntriesByName('atlas:ready').length > 0`, undefined, {
-      timeout: WAIT_MS,
-    });
+    await page.waitForFunction(
+      `performance.getEntriesByName('atlas:ready').length > 0`,
+      undefined,
+      {
+        timeout: WAIT_MS,
+      },
+    );
     // An export from before the boot shaders has no detail line: its first frame was the full one.
     const hasDetail = await page
       .waitForFunction(
