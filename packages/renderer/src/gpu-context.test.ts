@@ -62,6 +62,34 @@ describe('glyph program variants', () => {
     expect(pending[1]!.cancel).toHaveBeenCalledOnce();
     expect(pending[3]!.cancel).toHaveBeenCalledOnce();
   });
+  it('records each base program without querying a pending link', () => {
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    const ready = vi.fn(() => false);
+    const finish = vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>);
+    vi.mocked(prepareProgram).mockImplementation(() => ({ ready, finish, cancel: vi.fn() }));
+    const programs = createPrograms(context);
+    expect(programs.timings!.map((t) => t.name).sort()).toEqual([
+      'cell',
+      'glyph',
+      'labels',
+      'select',
+    ]);
+    expect(programs.timings!.every((t) => t.chars > 0 && t.readyMs === null)).toBe(true);
+    expect(finish).not.toHaveBeenCalled();
+    expect(ready).not.toHaveBeenCalled();
+    void programs.cell;
+    const cell = programs.timings!.find((t) => t.name === 'cell')!;
+    expect(cell.blockedMs).toEqual(expect.any(Number));
+    expect(cell.readyMs).toEqual(expect.any(Number));
+    expect(programs.timings!.find((t) => t.name === 'select')!.blockedMs).toBeNull();
+  });
+  it('records a synchronous link as both ready and blocking', () => {
+    const programs = createPrograms(context);
+    for (const timing of programs.timings!) {
+      expect(timing.readyMs).toEqual(expect.any(Number));
+      expect(timing.blockedMs).toBe(timing.readyMs);
+    }
+  });
   it('cancels unused links and cleans partial construction without finalization', () => {
     gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     const links: {

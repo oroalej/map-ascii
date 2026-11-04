@@ -439,6 +439,20 @@ Zod schemas live behind the server/pipeline-only `@atlas/shared/schemas` entry. 
 
 Naga extent release (2026-10-07): the verified, pinned [whole-city archive](https://github.com/oroalej/map-ascii/releases/tag/tiles-naga-20261007-1229) is 4,449,946 bytes, up from the downtown archive's 2,862,278 bytes and below the enforced 40 MiB (41,943,040-byte) cap. It contains all 27 subdivision areas and their search entries. The emergency sidecar is 31,491 bytes gzip, below its 32 KiB (32,768-byte) cap; budget reduction retains every service target and the shortest directed dispatch and hospital routes needed by the selected destinations. Territory admission and complete source church rings pass verification, and all eight published file hashes match the tested candidate. Existing experiment measurements below remain historical.
 
+### Device baseline
+
+The frame-rate budget above has no physical phone measurement yet. A visible `?debug=1` panel on the deployed site is enough to take one: it shows `ready`, the slowest shader link and the main-thread time blocked on links, and whether the device has `KHR_parallel_shader_compile` and a GPU timer (many phones have no timer, so `gpu` reads `n/a`). Its Download button saves the JSON report, whose `stats.shaders` lists every base program.
+
+In Android Chrome, with a build that has this report:
+
+1. The first load on a phone is the only reliable cold sample, so note whether the site was opened there before. A deploy that changes shader source should make the next load cold again; treat that as expected, not proven.
+2. Open `/naga?debug=1&lat=13.62504&lng=123.185948&z=16` and record `ready`.
+3. Press Capture and pan during it, then Download.
+4. Repeat at `z=18`, then at `z=18` with the time chip on 22:00.
+
+| Device | Chrome | Cold? | `ready` (ms) | Slowest link (ms) | Blocked (ms) | Parallel | z16 pan fps / tier | z18 pan fps / tier | z18 night fps / tier |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+
 ### Light-ink GPU acceptance (2026-10-09)
 
 `apps/web/scripts/perf-light.ts` (adapted from the cloud campaign) times the select and glyph draws together with one `TIME_ELAPSED_EXT` query per frame, shadows off (`u_shadows` false, which also neutralises grass density) against on, at the default camera, z16 and z18, 1920x1080, DPR 1, high quality, Life off, fixed noon and a frozen 0.6 cloud cover. It keeps the cloud campaign's two warmups, six balanced off/on pairs and six off/off control pairs of 30 samples each. The gate is the median paired change at most max(0.5 ms, 2 x control p95-p5 spread) per zoom. Before probing, the harness waits until no archive range request has been in flight for 3 s and two consecutive off frames match, and it holds the fixture texture once the map is ready: calm wind is strength 0.25, so `life/fixtures.ts` re-packs a waving flag's cloth from renderer time every frame, which no uniform override freezes. That flag was the off-mode drift that left the first campaign (61b1054) pending at both zooms. On GTX 1650 SUPER / ANGLE D3D11 at a3ee9e3: z18 passes, +0.737 ms median against a 1.949 ms control spread and a 3.898 ms allowance, with stable output; z16 measures +0.208 ms against a 0.293 ms spread and a 0.587 ms allowance, every paired change between +0.137 and +0.316 ms, but stays pending because its off frames alternate between two pixel states of equal mean brightness (nothing frozen at z16, and not tile loading). The one diagnosis and re-measure are spent; the z16 pending gate is carried in the PR. These numbers do not establish whole-frame performance.

@@ -65,6 +65,7 @@ import {
   type LabelGlyphs,
   type MapGlyphs,
   type Programs,
+  type ShaderTiming,
   type ThemeResources,
 } from './gpu-context';
 import { startFlight, stepFlight, type Flight } from './flight';
@@ -215,6 +216,7 @@ export type { RenderClass } from './classes';
 export type { LifeFocus, LegendFocus } from './focus';
 export type { AtlasProfile } from './profile';
 export type { QualityChoice, QualityState } from './quality';
+export type { ShaderTiming } from './gpu-context';
 export type { WindChoice } from './life/wind';
 export { cityTime, type LocalTime } from './life/clock';
 
@@ -438,6 +440,10 @@ export type AtlasStats = {
   tilesPending: number;
   /** Worker time to decode a tile, averaged over recent tiles, in ms. */
   decodeMs: number;
+  /** How each base program compiled on this device (ARCHITECTURE.md §8 "Device baseline"). */
+  shaders: readonly ShaderTiming[];
+  /** Reads the device report's numbers: many phones have no GPU timer. */
+  extensions: { parallelCompile: boolean; timerQuery: boolean };
   /** Life layer agents on the grid in the last frame. */
   agents: number;
 };
@@ -2718,6 +2724,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       tilesPending: source.pendingCount,
       decodeMs: source.decodeMsAverage,
       agents: agentsDrawn,
+      shaders: programs?.timings ?? [],
+      extensions: {
+        parallelCompile: !!gl.getExtension('KHR_parallel_shader_compile'),
+        timerQuery: !!gl.getExtension('EXT_disjoint_timer_query_webgl2'),
+      },
     }),
     getProfile: () => profiler?.snapshot(gpuRenderer) ?? null,
     resetProfile: () => profiler?.reset(),

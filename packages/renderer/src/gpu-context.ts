@@ -35,6 +35,19 @@ export type StreetTextMesh = {
   count: number;
 };
 
+/** How one program's compile went on this device (`AtlasStats.shaders`). */
+export type ShaderTiming = {
+  name: string;
+  /** Vertex and fragment source length. */
+  chars: number;
+  /** Since the program set was created, ms. */
+  submittedMs: number;
+  /** From submission until the link was first seen complete, ms; null until then. */
+  readyMs: number | null;
+  /** Main-thread time spent finishing the link, ms; null until it finished. */
+  blockedMs: number | null;
+};
+
 type BaseName = 'labels' | 'cell' | 'select' | 'glyph';
 type BaseLinks = {
   pending: Map<BaseName, PendingProgram>;
@@ -42,6 +55,8 @@ type BaseLinks = {
 };
 
 export type Programs = {
+  /** Base program compile times, for the device report (ARCHITECTURE.md §8 "Device baseline"). */
+  timings?: ShaderTiming[];
   /** Separate ownership lets teardown cancel links without resolving lazy getters. */
   baseLinks?: BaseLinks;
   folklore?: FolkloreResources;
@@ -93,6 +108,8 @@ export function createPrograms(gl: GL, fullUniforms = false): Programs {
   }
   gl.bindVertexArray(null);
   const links: BaseLinks = { pending: new Map(), finished: new Map() };
+  const created = performance.now();
+  const timings: ShaderTiming[] = [];
   const sources = {
     glyph: [
       fullscreenVertex,
@@ -110,7 +127,14 @@ export function createPrograms(gl: GL, fullUniforms = false): Programs {
     if (!info) {
       const pending = links.pending.get(name);
       if (!pending) throw new Error('ASCII Atlas: program set disposed');
+      const start = performance.now();
       info = pending.finish();
+      const end = performance.now();
+      const timing = timings.find((t) => t.name === name);
+      if (timing) {
+        timing.blockedMs = end - start;
+        timing.readyMs ??= end - created - timing.submittedMs;
+      }
       links.pending.delete(name);
       links.finished.set(name, info);
       if (name === 'glyph') variants.set(0, info);
@@ -120,13 +144,26 @@ export function createPrograms(gl: GL, fullUniforms = false): Programs {
   try {
     for (const name of Object.keys(sources) as BaseName[]) {
       const [vertex, fragment] = sources[name];
+      const submitted = performance.now();
+      const timing: ShaderTiming = {
+        name,
+        chars: vertex.length + fragment.length,
+        submittedMs: submitted - created,
+        readyMs: null,
+        blockedMs: null,
+      };
+      timings.push(timing);
       if (parallel) links.pending.set(name, prepareProgram(gl, vertex, fragment));
-      else links.finished.set(name, createProgram(gl, vertex, fragment));
+      else {
+        links.finished.set(name, createProgram(gl, vertex, fragment));
+        timing.readyMs = timing.blockedMs = performance.now() - submitted;
+      }
     }
     if (!parallel) variants.set(0, links.finished.get('glyph')!);
     emptyVao = gl.createVertexArray();
     if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
     return {
+      timings,
       baseLinks: links,
       get labels() {
         return finish('labels');

@@ -93,6 +93,8 @@ export default function DebugStatsPanel() {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   const ms = (n: number) => n.toFixed(1).padStart(5);
+  const slowestLink = Math.max(0, ...stats.shaders.map((s) => s.readyMs ?? 0));
+  const blocked = stats.shaders.reduce((sum, s) => sum + (s.blockedMs ?? 0), 0);
   return (
     <div className={styles.stats}>
       <pre aria-hidden="true">
@@ -108,6 +110,8 @@ export default function DebugStatsPanel() {
           `decode ${ms(stats.decodeMs)} ms`,
           `tiles  ${String(stats.tilesLoaded).padStart(5)} (+${stats.tilesPending})`,
           `agents ${String(stats.agents).padStart(5)}`,
+          `shader ${ms(slowestLink)} ms link, ${ms(blocked)} ms blocked`,
+          `gl     parallel ${stats.extensions.parallelCompile ? 'yes' : 'no'}, timer ${stats.extensions.timerQuery ? 'yes' : 'no'}`,
         ].join('\n')}
       </pre>
       <div className={styles.controls}>

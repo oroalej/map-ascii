@@ -21,6 +21,12 @@ const stats: AtlasStats = {
   tilesLoaded: 1,
   tilesPending: 0,
   agents: 0,
+  shaders: [
+    { name: 'cell', chars: 3000, submittedMs: 0, readyMs: 200, blockedMs: 1 },
+    { name: 'select', chars: 40000, submittedMs: 1, readyMs: 31000, blockedMs: 30000 },
+    { name: 'glyph', chars: 37000, submittedMs: 2, readyMs: null, blockedMs: null },
+  ],
+  extensions: { parallelCompile: true, timerQuery: false },
 };
 const instance = () => ({
   getStats: vi.fn(() => stats),
