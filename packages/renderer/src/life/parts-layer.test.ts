@@ -18,7 +18,15 @@ import {
 import type { VisibleAgent } from './simulate';
 import type { Sun } from './sun';
 import { TURN_SIGNAL_BIT } from './turn-signals';
-import { Paint, PART_GLYPHS, VehiclePart, VEHICLES, type CraftType } from './vehicles';
+import {
+  MINI_DIAGONALS,
+  miniSector,
+  Paint,
+  PART_GLYPHS,
+  VehiclePart,
+  VEHICLES,
+  type CraftType,
+} from './vehicles';
 
 const glyphs = [...new Set([' ', ...Object.values(PART_GLYPHS), ...sextantGlyphs])];
 const glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
@@ -374,5 +382,68 @@ describe('sunlit bodies', () => {
     const plain = pack([agent]);
     const sunny = pack([agent], undefined, {}, { azimuth: 90, altitude: 40 });
     expect([...sunny.out]).toEqual([...plain.out]);
+  });
+});
+
+describe('small vehicles', () => {
+  const sector = (degrees: number) => {
+    const angle = (degrees * Math.PI) / 180;
+    // Rows run down the screen.
+    return miniSector(Math.cos(angle) * 100, -Math.sin(angle) * 100);
+  };
+
+  it('picks four orientations by the angle on screen, in device pixels', () => {
+    for (const [degrees, expected] of [
+      [0, 0],
+      [20, 0],
+      [25, 2],
+      [45, 2],
+      [65, 2],
+      [70, 1],
+      [90, 1],
+      [115, 3],
+      [135, 3],
+      [160, 0],
+      [180, 0],
+      [225, 2],
+      [270, 1],
+      [315, 3],
+    ] as const)
+      expect(sector(degrees), String(degrees)).toBe(expected);
+  });
+
+  const miniAt = (dx: number, dy: number, parts?: LifePartsTarget) => {
+    // Tiny on screen: a car much under its stamped size.
+    const agent = {
+      kind: 'vehicle',
+      vehicle: 'car',
+      lng: 30.5,
+      lat: 20.5,
+      paint: Paint.red,
+      flap: 0,
+      ahead: [30.5 + dx, 20.5 + dy],
+      side: [30.5 - dy, 20.5 + dx],
+    } as VisibleAgent;
+    const allGlyphs = [...glyphs, '▬', '▮', ...MINI_DIAGONALS];
+    const index = (g: string) => Math.max(0, allGlyphs.indexOf(g));
+    const out = new Uint8Array(COLS * ROWS * 4);
+    packLife(out, grid(), [agent], themes.dark, index, null, buildLifeGlyphs(index), { parts });
+    return allGlyphs[unpackGlyph(out[(20 * COLS + 30) * 4]!, out[(20 * COLS + 30) * 4 + 1]!).glyph];
+  };
+
+  it('accounts for the cell aspect, and keeps two orientations on Low', () => {
+    // 0.08 columns and 0.044 rows per meter are the same distance on screen: 45°, rising.
+    expect(miniAt(0.08, -0.044, layer())).toBe(MINI_DIAGONALS[0]);
+    expect(miniAt(0.08, 0.044, layer())).toBe(MINI_DIAGONALS[1]);
+    expect(miniAt(0.08, 0, layer())).toBe('▬');
+    expect(miniAt(0, 0.08, layer())).toBe('▮');
+    expect(miniAt(0.08, -0.044)).toBe('▬');
+  });
+
+  it('leaves small round crafts as they were', () => {
+    for (const craft of ['motorcycle', 'tricycle', 'rowboat', 'bicycle'] as const)
+      expect(VEHICLES[craft].mini).toHaveLength(2);
+    for (const craft of ['car', 'jeepney', 'bus', 'truck', 'locomotive', 'coach'] as const)
+      expect(VEHICLES[craft].mini).toHaveLength(4);
   });
 });

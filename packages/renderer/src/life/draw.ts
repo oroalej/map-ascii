@@ -62,6 +62,7 @@ import {
 } from './group-placement';
 import {
   LINE_GLYPHS,
+  miniSector,
   PART_GLYPHS,
   planPart,
   STAMP_MIN_CELLS,
@@ -1265,9 +1266,11 @@ function drawAgent(
     variant = agent.flap;
   } else if (agent.ahead) {
     const [aheadCol, aheadRow] = toCell(agent.ahead[0], agent.ahead[1]);
-    const x = Math.abs((aheadCol - col) * grid.cellWidth);
-    const y = Math.abs((aheadRow - row) * grid.cellHeight);
-    variant = x >= y ? 0 : 1;
+    const x = (aheadCol - col) * grid.cellWidth;
+    const y = (aheadRow - row) * grid.cellHeight;
+    // Low quality keeps its two orientations (quality.ts `lifeDetail`).
+    variant =
+      layerSextants && mini.length === 4 ? miniSector(x, y) : Math.abs(x) >= Math.abs(y) ? 0 : 1;
   }
   const index = glyphIndex(mini[Math.min(variant, mini.length - 1)]!);
   if (index <= 0 || index > MAX_GLYPHS) return people;

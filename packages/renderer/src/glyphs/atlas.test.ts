@@ -32,7 +32,7 @@ import {
   MIN_FIGURE_PX,
   personGlyphs,
 } from '../life/people';
-import { STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
+import { MINI_DIAGONALS, STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
 import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
 
 const W = 10;
@@ -321,6 +321,7 @@ describe('glyph set', () => {
         ...FOLKLORE_GLYPHS,
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
+        ...MINI_DIAGONALS,
       ]);
       for (const glyph of peddlerGlyphs) {
         expect(draw(glyph).drawn).toBe(true);
@@ -343,6 +344,7 @@ describe('glyph set', () => {
         ...FOLKLORE_GLYPHS,
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
+        ...MINI_DIAGONALS,
       ]);
       expect(glyphs.slice(408, 409 + PEDESTRIAN_GLYPHS.length)).toEqual([
         ...CANDLE_GLYPHS,
@@ -387,12 +389,18 @@ describe('glyph set', () => {
       // Index 0 of the atlas is blank, so the glyphs take indices 1 on.
       expect(glyphs.length).toBeLessThanOrEqual(MAX_GLYPHS);
       expect(
-        glyphs.slice(-PROCESSION_GLYPHS.length - FOLKLORE_GLYPHS.length - peddlerGlyphs.length),
+        glyphs.slice(
+          -PROCESSION_GLYPHS.length -
+            FOLKLORE_GLYPHS.length -
+            peddlerGlyphs.length -
+            MINI_DIAGONALS.length,
+        ),
       ).toEqual([
         ...PROCESSION_GLYPHS.slice(0, 4),
         ...FOLKLORE_GLYPHS,
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
+        ...MINI_DIAGONALS,
       ]);
       for (const glyph of [...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS]) {
         const rendered = draw(glyph);
@@ -403,6 +411,28 @@ describe('glyph set', () => {
           ),
         ).toBe(true);
       }
+    }
+  });
+
+  it('appends rising and falling small vehicles, leaving the atlas before them unchanged', () => {
+    for (const theme of Object.values(themes)) {
+      const glyphs = mapGlyphs(theme);
+      expect(glyphs.slice(0, 442).some((g) => (MINI_DIAGONALS as readonly string[]).includes(g))).toBe(
+        false,
+      );
+      expect(glyphs.slice(442, 444)).toEqual([...MINI_DIAGONALS]);
+      for (const glyph of MINI_DIAGONALS) expect(draw(glyph).drawn).toBe(true);
+      // Each leans its own way: a rising bar inks the top right, a falling one the top left.
+      const corner = (glyph: string, right: boolean) => {
+        const { at } = draw(glyph);
+        const start = right ? W - 3 : 0;
+        let ink = 0;
+        for (let y = 0; y < H / 2; y++)
+          for (let x = start; x < start + 3; x++) if (at(x, y) > 0) ink++;
+        return ink;
+      };
+      expect(corner(MINI_DIAGONALS[0], true)).toBeGreaterThan(corner(MINI_DIAGONALS[0], false));
+      expect(corner(MINI_DIAGONALS[1], false)).toBeGreaterThan(corner(MINI_DIAGONALS[1], true));
     }
   });
 

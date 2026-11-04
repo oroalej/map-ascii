@@ -92,8 +92,8 @@ export type VehicleSpec = {
   height: number;
   /** Paints it may have, each equally likely. */
   paints: readonly number[];
-  /** One glyph when small: across the screen, then up or down. */
-  mini: readonly [string, string];
+  /** One glyph when small: across the screen, up or down, then rising and falling if it has them. */
+  mini: readonly [string, string] | readonly [string, string, string, string];
   /**
    * Seen from above, front to the right: one string per row across the vehicle, its left side
    * first. Letters are parts (`planLetters`).
@@ -102,6 +102,25 @@ export type VehicleSpec = {
 };
 
 const P = Paint;
+
+/**
+ * A long vehicle in one glyph on a diagonal road, rising and falling on screen (glyphs/atlas.ts).
+ * Private Use code points after folklore's; `BAR` is the whole set, in `miniSector`'s order.
+ */
+export const MINI_DIAGONALS = ['\uE430', '\uE431'] as const;
+const BAR = ['▬', '▮', ...MINI_DIAGONALS] as const;
+
+/**
+ * Which of a four-glyph `mini` faces a heading of (`x`, `y`) device px, `y` down the screen:
+ * across (0), up or down (1), rising (2) or falling (3), each within 22.5° of its own axis.
+ */
+export function miniSector(x: number, y: number): 0 | 1 | 2 | 3 {
+  const ax = Math.abs(x);
+  const ay = Math.abs(y);
+  if (ay <= ax * Math.SQRT2 - ax) return 0;
+  if (ax <= ay * Math.SQRT2 - ay) return 1;
+  return x * y < 0 ? 2 : 3;
+}
 
 /** Boat paints never use these: they vanish on water. */
 export const BOAT_PAINTS_AVOID: readonly number[] = [P.blue, P.sky, P.teal, P.green];
@@ -158,7 +177,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     ...PROCESSION_GEOMETRY.vehicles.car,
     speed: 1,
     paints: [P.white, P.white, P.silver, P.graphite, P.red, P.blue, P.maroon, P.cream],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Trunk, rear window, roof, windshield, hood.
     plan: ['TBGRRRRGGBBH', 'BBGRRRRGGBBB', 'BBGRRRRGGBBB', 'TBGRRRRGGBBH'],
   },
@@ -187,7 +206,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2,
     speed: 0.9,
     paints: [P.chrome, P.chrome, P.white, P.blue, P.red, P.yellow, P.green, P.purple, P.pink],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A long roof striped down its sides, the open door at the back, a short hood.
     plan: ['TAAAAAAAAAGBBH', 'DRRRRRRRRRGBBB', 'TAAAAAAAAAGBBH'],
   },
@@ -197,7 +216,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2.5,
     speed: 0.85,
     paints: [P.white, P.blue, P.yellow, P.green, P.red],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Air conditioners on the roof.
     plan: ['TBBBBBBBBBBBBBBBGH', 'BRRDDRRRRRRDDRRRGB', 'TBBBBBBBBBBBBBBBGH'],
   },
@@ -206,7 +225,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     ...PROCESSION_GEOMETRY.vehicles.truck,
     speed: 0.85,
     paints: [P.blue, P.red, P.white, P.green, P.yellow],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A cargo bed behind the cab.
     plan: ['TDDDDDDDDDDBBBGH', 'DDDDDDDDDDDBBRGB', 'TDDDDDDDDDDBBBGH'],
   },
@@ -258,7 +277,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2.8,
     speed: 1,
     paints: TRAIN_PAINTS,
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A long hood behind the cab: roof vents down the middle, the cab's windows and lamps at
     // the front.
     plan: ['TDBBBBBBBBBBGGBH', 'DDRRDDRRDDRRRGBB', 'DDRRDDRRDDRRRGBB', 'TDBBBBBBBBBBGGBH'],
@@ -269,7 +288,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2.8,
     speed: 1,
     paints: TRAIN_PAINTS,
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Windows down both sides of a long roof, the couplings at the ends.
     plan: ['BBGGBGGBGGBGGBGGBB', 'DRRRRRRRRRRRRRRRRD', 'DRRRRRRRRRRRRRRRRD', 'BBGGBGGBGGBGGBGGBB'],
   },
@@ -352,7 +371,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2,
     speed: 1,
     paints: [P.chrome],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TAARRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAARRRLGGBAH'],
   },
   police: {
@@ -361,7 +380,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 1.8,
     speed: 1,
     paints: [P.blue],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TAGRRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAGRRRLGGBAH'],
   },
   firetruck: {
@@ -370,7 +389,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     width: 2.5,
     speed: 0.85,
     paints: [P.red],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TBBDRRLLGBBH', 'BBBDRRLLGBBB', 'BBBDRRLLGBBB', 'TBBDRRLLGBBH'],
   },
   'box-cart': {

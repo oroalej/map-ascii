@@ -16,7 +16,13 @@ import {
   MIN_FIGURE_PX,
   type FigureGlyph,
 } from '../life/people';
-import { PEDDLER_GLYPHS, STALL_GLYPH, VEHICLES, planPart } from '../life/vehicles';
+import {
+  MINI_DIAGONALS,
+  PEDDLER_GLYPHS,
+  STALL_GLYPH,
+  VEHICLES,
+  planPart,
+} from '../life/vehicles';
 import { CANDLE_GLYPHS, SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 import { FOLKLORE_GLYPHS } from '../life/folklore-glyphs';
@@ -292,6 +298,24 @@ function drawPet(slot: Slot, pixels: (box: number) => (x: number, y: number) => 
   }
 }
 
+/**
+ * A long vehicle on a diagonal (life/vehicles.ts `MINI_DIAGONALS`): a bar at 45° on screen, as long
+ * and as thick as `▬` looks, so it doesn't change weight as the road turns.
+ */
+function drawMiniDiagonal(slot: Slot, rising: boolean) {
+  const { w, h } = slot;
+  const half = w * 0.55;
+  const thick = Math.max(0.75, w * 0.17);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const dx = x + 0.5 - w / 2;
+      const dy = y + 0.5 - h / 2;
+      const along = (rising ? dx - dy : dx + dy) * Math.SQRT1_2;
+      const across = (rising ? dx + dy : dx - dy) * Math.SQRT1_2;
+      if (Math.abs(along) <= half && Math.abs(across) <= thick) fill(slot, x, y, x + 1, y + 1);
+    }
+}
+
 /** A vendor's cart (life/vehicles.ts `STALL_GLYPH`): a square awning in stripes. */
 function drawStall(slot: Slot) {
   const { w, h } = slot;
@@ -419,6 +443,8 @@ export function drawProcedural(slot: Slot, glyph: string): boolean {
   else if (catOf(glyph)) drawPet(slot, (box) => catPixels(catOf(glyph)!, box));
   else if (glyph === PED_STOP || glyph === PED_WALK) drawPedestrian(slot, glyph === PED_WALK);
   else if (glyph === STALL_GLYPH) drawStall(slot);
+  else if ((MINI_DIAGONALS as readonly string[]).includes(glyph))
+    drawMiniDiagonal(slot, glyph === MINI_DIAGONALS[0]);
   else if ((PEDDLER_GLYPHS as readonly string[]).includes(glyph)) {
     const craft = (['box-cart', 'fry-cart', 'flatbed-cart'] as const)[
       PEDDLER_GLYPHS.indexOf(glyph as (typeof PEDDLER_GLYPHS)[number])
