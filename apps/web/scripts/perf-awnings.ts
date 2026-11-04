@@ -379,7 +379,7 @@ int partyWallMask(ivec2 p){return -2;} bool partySeam(ivec2 p,int cls,vec4 attr)
     )});`,
   });
   await page.goto(
-    `http://localhost:${port}/${city.slug}?lat=${camera.lat}&lng=${camera.lng}&z=${camera.zoom}`,
+    `http://localhost:${port}/${city.slug}?lat=${camera.lat}&lng=${camera.lng}&z=${camera.zoom}&fullUniforms=1`,
   );
   await page.bringToFront();
   await page.waitForLoadState('networkidle');

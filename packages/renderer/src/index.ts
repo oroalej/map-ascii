@@ -261,6 +261,11 @@ export type AtlasOptions = {
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
+  /**
+   * Upload every select and glyph uniform on each draw instead of only changed ones, for
+   * harnesses that override uniform values as they're uploaded. Default: false.
+   */
+  fullUniforms?: boolean;
   tilesUrl: string;
   /** Content pin, supplied only for archive bytes matching the published lock. */
   tilesVersion?: string | undefined;
@@ -658,7 +663,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   // GPU resources (gpu-context.ts). Glyphs depend on the device pixel ratio (atlas resolution)
   // and, for the map's, on the cell size step (density.ts), so each step's are kept once built.
   // The render targets are the map and label grids, each plus a one-cell margin on every side.
-  let programs: Programs | undefined = createPrograms(gl);
+  let programs: Programs | undefined = createPrograms(gl, options.fullUniforms);
   let dpr = 0;
   /** The map cell size step (density.ts `cellStep`), set by `resize`. */
   let step: number | undefined;
@@ -2442,7 +2447,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     lifePause.tick(performance.now(), lifeRunning());
     resetQualitySamples();
     gpuRenderer = readGpuRenderer();
-    programs = createPrograms(gl);
+    programs = createPrograms(gl, options.fullUniforms);
     if (season) warmSeasonalPrograms();
     gpuTimer = createGpuTimer();
     tileCache.resume();

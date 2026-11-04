@@ -64,6 +64,7 @@ import {
   type CellTargets,
   type GL,
   type TileMesh,
+  setChangedUniforms,
 } from './gpu';
 import {
   createOverlay,
@@ -520,7 +521,7 @@ export function selectPass(
   gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
   gl.viewport(0, 0, targets.cols, targets.rows);
   gl.useProgram(programs.select.program);
-  twgl.setUniforms(programs.select, {
+  const selectUniforms: Record<string, unknown> = {
     u_class: targets.classTex,
     u_baseClass: targets.base.classTex,
     u_baseAttr: targets.base.attrTex,
@@ -557,7 +558,8 @@ export function selectPass(
     // Unbound samplers still need a valid texture; the flags say they hold nothing.
     u_light: lighting.u_light ?? targets.lightTex,
     u_effectClocks: lighting.u_effectClocks ?? targets.lightTex,
-  });
+  };
+  setChangedUniforms(programs.select, selectUniforms, programs.fullUniforms);
   // Only cells on screen, partly or whole, and one more each side: the margin a pan
   // window keeps beyond them is selected once it comes into view.
   const area = screenArea(view, grid);
@@ -641,6 +643,13 @@ const NOON: FrameLighting = {
   u_cloudOffset: [0, 0],
 };
 
+/** The way toward the sun in world cells' axes (x east, y south) and its altitude's tangent. */
+function sunVector(sun: Sun | null): [number, number, number] {
+  const az = ((sun?.azimuth ?? 0) * Math.PI) / 180;
+  const tan = sun ? Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180) : 0;
+  return [Math.sin(az), -Math.cos(az), tan];
+}
+
 /**
  * The select pass's sun (glyphs/select.ts shadowAmount): the way toward it in world cells' axes
  * (x east, y south) and the tangent of its altitude (0: no sun), a cell's size in meters at the
@@ -650,10 +659,7 @@ const NOON: FrameLighting = {
 export function sunUniforms(view: View, sun: Sun | null) {
   const { cellDev, dpr } = view;
   const metersPerPx = metersPerCssPx(view.camera);
-  const az = ((sun?.azimuth ?? 0) * Math.PI) / 180;
-  const tan = sun ? Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180) : 0;
-  const x = Math.sin(az);
-  const y = -Math.cos(az);
+  const [x, y, tan] = sunVector(sun);
   const meters = [(cellDev.w / dpr) * metersPerPx, (cellDev.h / dpr) * metersPerPx] as const;
   const across = SHADOW.spread * meters[0];
   return {
@@ -662,6 +668,17 @@ export function sunUniforms(view: View, sun: Sun | null) {
     u_sunStep: [x / meters[0], y / meters[1]],
     u_sunSide: [(-y * across) / meters[0], (x * across) / meters[1]],
   };
+}
+
+const RIPPLE_SLOTS = 4;
+const rippleScratch = new Array<number>(RIPPLE_SLOTS * 3).fill(0);
+/** Flat `u_ripples`, in a buffer reused between frames; empty slots hold zeros. */
+function rippleUniforms(ripples: Weather['ripples']) {
+  for (let i = 0; i < RIPPLE_SLOTS; i++) {
+    const ripple = ripples?.[i];
+    for (let j = 0; j < 3; j++) rippleScratch[i * 3 + j] = ripple?.[j] ?? 0;
+  }
+  return rippleScratch;
 }
 
 /**
@@ -1248,7 +1265,7 @@ export function glyphPass(
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
   gl.useProgram(program.program);
-  twgl.setUniforms(program, {
+  const glyphUniforms: Record<string, unknown> = {
     u_glyphs: targets.glyphTex,
     u_shade: targets.shadeTex,
     u_standing: standingOf(tables.kinds),
@@ -1268,7 +1285,7 @@ export function glyphPass(
     u_background: theme.background.slice(0, 3),
     u_time: time,
     u_rippleCount: reducedMotion ? 0 : (weather.ripples?.length ?? 0),
-    u_ripples: Array.from({ length: 4 }, (_, i) => weather.ripples?.[i] ?? [0, 0, 0]).flat(),
+    u_ripples: rippleUniforms(weather.ripples),
     u_pulse: reducedMotion ? [-1, -1] : [classId('marker_landmark'), classId('marker_heritage')],
     ...lighting,
     u_overlay: targets.overlayTex,
@@ -1301,8 +1318,7 @@ export function glyphPass(
     u_dpr: view.dpr,
     u_moon: moon,
     u_crownClass: classId('tree_crown'),
-    u_crownSun:
-      sun && sun.altitude > 0 ? sunUniforms(view, sun).u_sun : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
+    u_crownSun: sun && sun.altitude > 0 ? sunVector(sun) : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),
     u_vehicleOccluders: LIFE_OCCLUDERS,
     u_boat: classId('life_boat'),
@@ -1317,7 +1333,8 @@ export function glyphPass(
     u_rainGlyph: atlas.index(rainGlyphs[weather.wind ? rainGlyphIndex(weather.wind.dir) : 0]!),
     // The label color, a little blue: pale drops on the dark theme, dark ones on the light.
     u_rainColor: themeRes.uniforms.rain,
-  });
+  };
+  setChangedUniforms(program, glyphUniforms, programs.fullUniforms);
   gl.bindVertexArray(programs.emptyVao);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   gl.bindVertexArray(null);

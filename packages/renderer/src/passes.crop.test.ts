@@ -26,6 +26,7 @@ it('sets crop uniforms every pass and clears stale state when the calendar is ab
   const programs = {
     select: { program: {} },
     glyph: { program: {} },
+    fullUniforms: true,
     emptyVao: null,
   } as unknown as Programs;
   const targets = { cols: 10, rows: 10, base: {}, sub: {} } as CellTargets;

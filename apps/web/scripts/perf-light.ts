@@ -325,7 +325,7 @@ try {
       content: `globalThis.__name = (value) => value; (${installCapture.toString()})();`,
     });
     await page.goto(
-      `${server.origin}/${city.slug}?lat=${meta.defaultCamera.lat}&lng=${meta.defaultCamera.lng}&z=${zoom}`,
+      `${server.origin}/${city.slug}?lat=${meta.defaultCamera.lat}&lng=${meta.defaultCamera.lng}&z=${zoom}&fullUniforms=1`,
     );
     await page.bringToFront();
     // Read actual GL readiness rather than waiting for unrelated network requests.

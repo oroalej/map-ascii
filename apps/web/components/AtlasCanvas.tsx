@@ -11,7 +11,7 @@ import {
 } from '@atlas/shared';
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { isCityEmergency } from '@/lib/guards';
-import { isDebugRequested } from '@/lib/debug';
+import { fullUniformsRequested, isDebugRequested } from '@/lib/debug';
 import { parseLifeHoverPause } from '@/lib/life-hover-config';
 import { SMALL_SCREEN } from '@/lib/screen';
 import { listenReducedMotion, prefersReducedMotion } from '@/lib/motion';
@@ -183,6 +183,7 @@ export function AtlasCanvas({
         year: store.year,
         reducedMotion: prefersReducedMotion(),
         gpuTiming: isDebugRequested(),
+        fullUniforms: fullUniformsRequested(),
         profiling: isDebugRequested(),
         interactive: (feature) => {
           if (feature?.landmarkId) landmarkRequest.current?.();

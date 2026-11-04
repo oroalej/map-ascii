@@ -11,6 +11,56 @@ export function createProgram(gl: GL, vertex: string, fragment: string): twgl.Pr
   });
 }
 
+/** The numbers last uploaded to each program; a new variant or restored context starts empty. */
+const uploadedUniforms = new WeakMap<twgl.ProgramInfo, Map<string, unknown>>();
+const isNumeric = (value: unknown) => typeof value === 'number' || typeof value === 'boolean';
+const numericList = (value: unknown): ArrayLike<unknown> | undefined =>
+  Array.isArray(value) ? value : ArrayBuffer.isView(value) ? (value as Uint8Array) : undefined;
+
+function sameUniform(uploaded: unknown, value: unknown) {
+  if (uploaded === value) return true;
+  const a = numericList(uploaded),
+    b = numericList(value);
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * `twgl.setUniforms` for a program drawn every frame, skipping numbers and numeric lists that
+ * haven't changed. A uniform keeps its value in its program, and each program's uniforms are set
+ * only here. Everything else (textures above all, whose units other passes rebind) always goes
+ * through. `uploadAll` is for harnesses that override values as they're uploaded
+ * (`AtlasOptions.fullUniforms`), which need an upload to intercept on every draw.
+ */
+export function setChangedUniforms(
+  program: twgl.ProgramInfo,
+  values: Record<string, unknown>,
+  uploadAll = false,
+) {
+  if (uploadAll) {
+    twgl.setUniforms(program, values);
+    return;
+  }
+  let uploaded = uploadedUniforms.get(program);
+  if (!uploaded) uploadedUniforms.set(program, (uploaded = new Map()));
+  const changed: Record<string, unknown> = {};
+  for (const name in values) {
+    const value = values[name];
+    if (uploaded.has(name) && sameUniform(uploaded.get(name), value)) continue;
+    changed[name] = value;
+    if (isNumeric(value)) uploaded.set(name, value);
+    else {
+      const list = numericList(value);
+      // Keep a copy: callers reuse scratch arrays, which would otherwise always compare equal.
+      if (list && Array.prototype.every.call(list, isNumeric))
+        uploaded.set(name, (list as unknown as number[]).slice());
+      else uploaded.delete(name);
+    }
+  }
+  twgl.setUniforms(program, changed);
+}
+
 export type PendingProgram = {
   ready(): boolean;
   finish(): twgl.ProgramInfo;
