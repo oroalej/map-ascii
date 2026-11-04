@@ -183,7 +183,13 @@ import {
 import { Readback } from './readback';
 import { GpuTimer } from './gpu-timer';
 import { FrameProfiler, type AtlasProfile, type ProfileStage } from './profile';
-import { QualityController, TIERS, type QualityChoice, type QualityState } from './quality';
+import {
+  QUALITY,
+  QualityController,
+  TIERS,
+  type QualityChoice,
+  type QualityState,
+} from './quality';
 import { themes, type ThemeName } from './theme';
 import { themeUniforms } from './theme-uniforms';
 import { TileCache, type LoadedTile } from './tile-cache';
@@ -261,6 +267,8 @@ export type AtlasOptions = {
   utilities?: { derive: boolean };
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
+  /** Where Auto begins, usually the tier from this device's last `qualitychange`. Default: 0. */
+  qualityTier?: number | undefined;
   /**
    * Upload every select and glyph uniform on each draw instead of only changed ones, for
    * harnesses that override uniform values as they're uploaded. Default: false.
@@ -519,7 +527,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     return ext ? (gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string) : null;
   };
   let gpuRenderer = readGpuRenderer();
-  const quality = new QualityController(options.quality ?? 'auto');
+  const quality = new QualityController(options.quality ?? 'auto', QUALITY, options.qualityTier);
   let knobs = TIERS[quality.tier]!.knobs;
   let previousDraw: { at: number; cpuMs: number } | undefined;
   let qualityWarmupDraw = true;

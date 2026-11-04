@@ -116,6 +116,7 @@ it.each([
       window.history.replaceState(null, '', '/fixture?z=10');
       detachUrlSync = attachUrlSync();
     }
+    window.localStorage.setItem('atlas.quality.tier', '2');
     const container = document.createElement('div'),
       root = createRoot(container);
     document.body.append(container);
@@ -139,8 +140,20 @@ it.each([
         );
         await Promise.resolve();
       });
-      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ tilesVersion: '1234abcd' });
+      expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({
+        tilesVersion: '1234abcd',
+        qualityTier: 2,
+      });
       expect(mock.createAtlas).toHaveBeenCalledTimes(1);
+      const qualityChange = handlers.get('qualitychange') as unknown as (state: {
+        choice: string;
+        tier: number;
+      }) => void;
+      qualityChange({ choice: 'auto', tier: 3 });
+      expect(window.localStorage.getItem('atlas.quality.tier')).toBe('3');
+      qualityChange({ choice: 'low', tier: 1 });
+      expect(window.localStorage.getItem('atlas.quality.tier')).toBe('3');
+      window.localStorage.removeItem('atlas.quality.tier');
       if (mode === 'zoom-floor') {
         expect(mock.createAtlas.mock.calls[0]![1]).toMatchObject({ initialCamera: { zoom: 10 } });
         expect(useAtlasStore.getState().camera?.zoom).toBe(15);
