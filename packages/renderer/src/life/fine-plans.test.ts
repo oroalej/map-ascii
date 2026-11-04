@@ -192,7 +192,8 @@ describe('figures in close-up', () => {
       for (const rows of Object.values(FIGURE_MASTERS[figure]))
         expect(inks(rows).has('h'), figure).toBe(true);
     // Umbrellas and props have no hair of their own.
-    for (const rows of Object.values(FIGURE_MASTERS.umbrella)) expect(inks(rows).has('h')).toBe(false);
+    for (const rows of Object.values(FIGURE_MASTERS.umbrella))
+      expect(inks(rows).has('h')).toBe(false);
   });
 
   it('draws a true large adult, not the small one doubled', () => {
@@ -335,16 +336,15 @@ describe('walk cycle', () => {
     }
   });
 
-  const walker = (scale: number, flap: number): VisibleAgent =>
-    ({
-      kind: 'person',
-      lng: 60.5,
-      lat: 40.5,
-      paint: Paint.red,
-      flap: 0,
-      ahead: [60.5 + scale, 40.5],
-      people: [{ figure: 'adult', paint: Paint.red, lateral: 0, back: 0, flap }],
-    }) as VisibleAgent;
+  const walker = (scale: number, flap: number): VisibleAgent => ({
+    kind: 'person',
+    lng: 60.5,
+    lat: 40.5,
+    paint: Paint.red,
+    flap: 0,
+    ahead: [60.5 + scale, 40.5],
+    people: [{ figure: 'adult', paint: Paint.red, lateral: 0, back: 0, flap }],
+  });
   const pack = (agent: VisibleAgent, withLayer = true) => {
     const out = new Uint8Array(COLS * ROWS * 4);
     const parts = withLayer ? createLifeParts(COLS * ROWS, ROWS) : undefined;
@@ -357,7 +357,9 @@ describe('walk cycle', () => {
   it('keeps the one-cell figures on their two steps', () => {
     const scale = 1.5;
     for (const frame of [0, 1])
-      expect([...pack(walker(scale, frame | FLAP_PASSING))]).toEqual([...pack(walker(scale, frame))]);
+      expect([...pack(walker(scale, frame | FLAP_PASSING))]).toEqual([
+        ...pack(walker(scale, frame)),
+      ]);
   });
 
   it('draws passing poses at 2×2 and stamped, only with the layer', () => {
@@ -379,10 +381,12 @@ describe('walk cycle', () => {
   });
 
   it('keeps posed figures still', () => {
-    const posed = walker(3.5, FLAP_PASSING);
-    posed.people![0] = { ...posed.people![0]!, pose: 'attentive' };
-    const still = walker(3.5, 0);
-    still.people![0] = { ...still.people![0]!, pose: 'attentive' };
+    const withPose = (agent: VisibleAgent): VisibleAgent => ({
+      ...agent,
+      people: [{ ...agent.people![0]!, pose: 'attentive' }],
+    });
+    const posed = withPose(walker(3.5, FLAP_PASSING));
+    const still = withPose(walker(3.5, 0));
     expect([...pack(posed)]).toEqual([...pack(still)]);
   });
 

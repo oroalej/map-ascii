@@ -34,7 +34,11 @@ const lamp: StreetFixture = {
   seed: 1,
 };
 
-function pack(sun: { azimuth: number; altitude: number } | undefined, zoom = 20, fixtures = [lamp]) {
+function pack(
+  sun: { azimuth: number; altitude: number } | undefined,
+  zoom = 20,
+  fixtures = [lamp],
+) {
   const out = new Uint8Array(100 * 100 * 4);
   packFixtures(
     out,
@@ -61,7 +65,9 @@ describe('fixture shadows', () => {
     const west = pack({ azimuth: 90, altitude: 45 }).shadow;
     expect(west.length).toBeGreaterThan(0);
     expect(Math.max(...west.map((c) => c[0]))).toBeLessThanOrEqual(50);
-    expect(Math.min(...west.map((c) => c[0]))).toBe(Math.floor(50.5 - FIXTURE_SHADOW.height.streetlight));
+    expect(Math.min(...west.map((c) => c[0]))).toBe(
+      Math.floor(50.5 - FIXTURE_SHADOW.height.streetlight),
+    );
     const north = pack({ azimuth: 180, altitude: 45 }).shadow;
     expect(Math.max(...north.map((c) => c[1]))).toBeLessThanOrEqual(50);
     const long = pack({ azimuth: 90, altitude: 3 }).shadow;
@@ -78,7 +84,8 @@ describe('fixture shadows', () => {
     const plain = pack(undefined);
     const shaded = pack({ azimuth: 270, altitude: 30 });
     for (let i = 0; i < plain.out.length; i += 4)
-      if (plain.out[i + 3]) expect(shaded.out.subarray(i, i + 4)).toEqual(plain.out.subarray(i, i + 4));
+      if (plain.out[i + 3])
+        expect(shaded.out.subarray(i, i + 4)).toEqual(plain.out.subarray(i, i + 4));
   });
 
   it('joins crossing shadows into a single cell', () => {

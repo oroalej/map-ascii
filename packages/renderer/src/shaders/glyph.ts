@@ -30,12 +30,7 @@ import {
 } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
-import {
-  CANDLE_BIT,
-  FIGURE_HAIR_SPLIT,
-  HAIR_COLORS,
-  PersonPart,
-} from '../life/people';
+import { CANDLE_BIT, FIGURE_HAIR_SPLIT, HAIR_COLORS, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart, WHEEL_PART } from '../life/vehicles';
@@ -419,7 +414,9 @@ vec3 vehicleColor(int byte, bool brake, float light, float night) {
 // A person's hair: their paint picks it from a small palette of real colors, so it stays theirs.
 vec3 hairColor(int index) {
   int k = index % ${HAIR_COLORS.length};
-  ${HAIR_COLORS.slice(0, -1).map((c, i) => `if (k == ${i}) return vec3(${c.map(float).join(', ')});`).join('\n  ')}
+  ${HAIR_COLORS.slice(0, -1)
+    .map((c, i) => `if (k == ${i}) return vec3(${c.map(float).join(', ')});`)
+    .join('\n  ')}
   return vec3(${HAIR_COLORS.at(-1)!.map(float).join(', ')});
 }
 

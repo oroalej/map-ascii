@@ -1357,7 +1357,8 @@ function silhouetteGlyph(
   const r1 = Math.min(rows - 1, Math.floor(cy + extentY));
   const byte = vehicleByte(agent.paint ?? 0, VehiclePart.mini, agent.parked);
   const id = classId(cls);
-  const bits = (agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind]) | drawingFocus;
+  const bits =
+    (agent.kind === 'vehicle' ? STAMP_BITS.vehicle! : agentBit[agent.kind]) | drawingFocus;
   let core = 0;
   for (let r = r0; r <= r1; r++)
     for (let c = c0; c <= c1; c++) {
@@ -1805,8 +1806,7 @@ function stampMaster(
         inked++;
         // Without its sixths' own colors, hair reads as the skin it replaced.
         if (mark === 'o' || mark === 'h') tone++;
-        if (layered)
-          rgb = withSextant(rgb, bit, inks[mark === 'o' ? 1 : mark === 'h' ? 2 : 0]);
+        if (layered) rgb = withSextant(rgb, bit, inks[mark === 'o' ? 1 : mark === 'h' ? 2 : 0]);
       }
       if (mask === 0) continue;
       const at = (r * cols + c) * 4;
@@ -2138,7 +2138,8 @@ function stamp(
         partsQueue.addSoft(
           (r * cols + c) * 4,
           partsTexel(rgb, flags),
-          (low | (high << 8) | ((layerBits | drawingFocus) << 16) | ((bodyByte & 0x8f) << 24)) >>> 0,
+          (low | (high << 8) | ((layerBits | drawingFocus) << 16) | ((bodyByte & 0x8f) << 24)) >>>
+            0,
           drawingOwner,
         );
         continue;

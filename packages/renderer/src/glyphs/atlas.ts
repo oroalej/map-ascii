@@ -17,13 +17,7 @@ import {
   MIN_FIGURE_PX,
   type FigureGlyph,
 } from '../life/people';
-import {
-  MINI_DIAGONALS,
-  PEDDLER_GLYPHS,
-  STALL_GLYPH,
-  VEHICLES,
-  planPart,
-} from '../life/vehicles';
+import { MINI_DIAGONALS, PEDDLER_GLYPHS, STALL_GLYPH, VEHICLES, planPart } from '../life/vehicles';
 import { CANDLE_GLYPHS, SEASONAL_GLYPHS, SeasonalGlyph } from '../life/seasonal-glyphs';
 import { sextantGlyphs } from '../theme';
 import { FOLKLORE_GLYPHS } from '../life/folklore-glyphs';

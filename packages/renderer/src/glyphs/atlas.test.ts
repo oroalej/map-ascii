@@ -424,9 +424,9 @@ describe('glyph set', () => {
   it('appends rising and falling small vehicles, leaving the atlas before them unchanged', () => {
     for (const theme of Object.values(themes)) {
       const glyphs = mapGlyphs(theme);
-      expect(glyphs.slice(0, 442).some((g) => (MINI_DIAGONALS as readonly string[]).includes(g))).toBe(
-        false,
-      );
+      expect(
+        glyphs.slice(0, 442).some((g) => (MINI_DIAGONALS as readonly string[]).includes(g)),
+      ).toBe(false);
       expect(glyphs.slice(442, 444)).toEqual([...MINI_DIAGONALS]);
       for (const glyph of MINI_DIAGONALS) expect(draw(glyph).drawn).toBe(true);
       // Each leans its own way: a rising bar inks the top right, a falling one the top left.

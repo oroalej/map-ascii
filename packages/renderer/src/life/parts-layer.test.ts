@@ -64,7 +64,7 @@ function vehicleAt(
     ahead: [x + fx * scale, y + (fy * scale * 5) / 9],
     side: [x - fy * scale, y + (fx * scale * 5) / 9],
     ...extra,
-  } as VisibleAgent;
+  };
 }
 
 const grid = (extra: Partial<LifeGrid> = {}): LifeGrid => ({
@@ -169,8 +169,8 @@ describe('stamping with the part layer', () => {
       agents.push(
         vehicleAt(
           (['car', 'jeepney', 'motorcycle', 'bus'] as const)[i % 4]!,
-          5 + (i * 7.3) % 50,
-          5 + (i * 4.1) % 30,
+          5 + ((i * 7.3) % 50),
+          5 + ((i * 4.1) % 30),
           i * 0.7,
           1 + (i % 3),
         ),
@@ -266,10 +266,7 @@ describe('stamping with the part layer', () => {
       expect(parts.texels[cell * 4 + 3]! & PartsFlag.brake).toBe(PartsFlag.brake);
     }
     const parked = layer();
-    pack(
-      [vehicleAt('car', 30, 20.5, 0, 2.8, { lamps: { kind: 'brake' }, parked: true })],
-      parked,
-    );
+    pack([vehicleAt('car', 30, 20.5, 0, 2.8, { lamps: { kind: 'brake' }, parked: true })], parked);
     for (const cell of cells) expect(parked.texels[cell * 4 + 3]! & PartsFlag.brake).toBe(0);
   });
 
@@ -319,10 +316,15 @@ describe('sunlit bodies', () => {
   /** How many shaded sixths each end of a vehicle crossing the screen has. */
   const shadedEnds = (heading: number, azimuth: number, altitude = 25) => {
     const parts = layer();
-    const { out } = pack([vehicleAt('bus', 30, 20.5, heading, 2.8)], parts, {}, {
-      azimuth,
-      altitude,
-    });
+    const { out } = pack(
+      [vehicleAt('bus', 30, 20.5, heading, 2.8)],
+      parts,
+      {},
+      {
+        azimuth,
+        altitude,
+      },
+    );
     const ends = { low: 0, high: 0, left: 0, right: 0 };
     for (const cell of cellsOf(out)) {
       const rgb =
@@ -364,10 +366,15 @@ describe('sunlit bodies', () => {
 
   it('never shades lamps or glass', () => {
     const parts = layer();
-    const { out } = pack([vehicleAt('car', 30, 20.5, 0, 5.5)], parts, {}, {
-      azimuth: 270,
-      altitude: 10,
-    });
+    const { out } = pack(
+      [vehicleAt('car', 30, 20.5, 0, 5.5)],
+      parts,
+      {},
+      {
+        azimuth: 270,
+        altitude: 10,
+      },
+    );
     let lit = 0;
     for (const cell of cellsOf(out)) {
       const rgb =
@@ -377,7 +384,11 @@ describe('sunlit bodies', () => {
       for (let s = 0; s < 6; s++) {
         const value = sextantOf(rgb, s);
         const part = value & 7;
-        if (part === VehiclePart.glass || part === VehiclePart.taillight || part === VehiclePart.headlight) {
+        if (
+          part === VehiclePart.glass ||
+          part === VehiclePart.taillight ||
+          part === VehiclePart.headlight
+        ) {
           expect(value & SHADE_NIBBLE).toBe(0);
           lit++;
         }

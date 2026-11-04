@@ -422,17 +422,7 @@ export function uploadLifeParts(
   gl.bindTexture(gl.TEXTURE_2D, t.lifePartsTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   if (t.lifePartsCols !== t.cols || t.lifePartsRows !== t.rows) {
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA8,
-      t.cols,
-      t.rows,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      texels,
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, t.cols, t.rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, texels);
     t.lifePartsCols = t.cols;
     t.lifePartsRows = t.rows;
   } else {

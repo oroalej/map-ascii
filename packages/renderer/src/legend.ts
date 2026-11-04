@@ -184,7 +184,11 @@ function vendorsEntry(theme: Theme): LegendEntry {
     color: css(paint(Paint.orange)),
     icons: [
       { pixels: STALL_ICON, paint: css(paint(Paint.orange)), tone: skin },
-      { pixels: legendFigure(FIGURE_MASTERS.adult[10]!), paint: css(paint(Paint.green)), tone: skin },
+      {
+        pixels: legendFigure(FIGURE_MASTERS.adult[10]!),
+        paint: css(paint(Paint.green)),
+        tone: skin,
+      },
       {
         pixels: legendFigure(FIGURE_MASTERS['pole-buckets'][10]!),
         paint: css(paint(Paint.orange)),

@@ -645,7 +645,7 @@ export const figureOf = (glyph: string): FigureGlyph | undefined => byGlyph.get(
  * which it appends after all of these.
  */
 export function personGlyphs(): string[] {
-  return [...byGlyph.keys()].filter((glyph) => !(PASSING_GLYPHS as readonly string[]).includes(glyph));
+  return [...byGlyph.keys()].filter((glyph) => !PASSING_GLYPHS.includes(glyph));
 }
 
 /**
@@ -694,7 +694,8 @@ export function figureInk(
 ): string {
   const posed = poseMasters(figure, pose);
   if (posed) return inkAt(posed, u, v, detail);
-  const masters = passing && hasPassingPose(figure) ? PASSING_MASTERS[figure] : FIGURE_MASTERS[figure];
+  const masters =
+    passing && hasPassingPose(figure) ? PASSING_MASTERS[figure] : FIGURE_MASTERS[figure];
   const sizes = MASTER_SIZES[figure];
   let size = sizes[0]!;
   for (const s of sizes) if (s <= detail) size = s;

@@ -13,7 +13,9 @@ import type { Sun } from './sun';
 import { LIFE_AGENT_MASK } from './turn-signals';
 import { Paint, PART_GLYPHS, VEHICLES } from './vehicles';
 
-const glyphs = [...new Set([' ', ...Object.values(PART_GLYPHS), ...sextantGlyphs, ...personGlyphs()])];
+const glyphs = [
+  ...new Set([' ', ...Object.values(PART_GLYPHS), ...sextantGlyphs, ...personGlyphs()]),
+];
 const glyphIndex = (g: string) => Math.max(0, glyphs.indexOf(g));
 const lifeGlyphs = buildLifeGlyphs(glyphIndex);
 const COLS = 80;
@@ -133,8 +135,7 @@ describe('ground shadows', () => {
   });
 
   it('starts only once a vehicle is big enough to show one', () => {
-    const tiny = (x: number, y: number) =>
-      car(x, y, { ahead: [x + 1, y], side: [x, y + 5 / 9] }) as VisibleAgent;
+    const tiny = (x: number, y: number) => car(x, y, { ahead: [x + 1, y], side: [x, y + 5 / 9] });
     expect(shadowCells(pack([tiny(40, 30)], { azimuth: 90, altitude: 20 }).out)).toEqual([]);
   });
 
@@ -171,7 +172,9 @@ describe('ground shadows', () => {
     const shader = glyphFragmentFor();
     expect(shader).toContain('bool shadowFalls(int cls, ivec2 subAt)');
     // Not over the occluders, nor a building's height on grounds.
-    expect(shader).toMatch(/surface == u_vehicleOccluders\.y \|\| surface == u_vehicleOccluders\.z/);
+    expect(shader).toMatch(
+      /surface == u_vehicleOccluders\.y \|\| surface == u_vehicleOccluders\.z/,
+    );
     expect(shader).toContain(`1.0 - ${GROUND_SHADOW.dark} * directSun()`);
     expect(shader).toContain('else if (shadowFalls(cls, subAt))');
   });

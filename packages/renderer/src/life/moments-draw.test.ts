@@ -5,7 +5,8 @@ import { MINI_DIAGONALS } from './vehicles';
 import { mapGlyphs, sextantGlyphs, themes } from '../theme';
 import { CellBit } from './config';
 import { packLife, type LifeGrid } from './draw';
-import { PASSING_GLYPHS,
+import {
+  PASSING_GLYPHS,
   CANDLE_BIT,
   figureOf,
   PAINT_NONE,

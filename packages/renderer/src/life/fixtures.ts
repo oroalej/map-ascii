@@ -1025,7 +1025,7 @@ function fixtureFoot(fixture: StreetFixture): { foot: Point; height: number } | 
     case 'flagpole':
       return { foot: fixture.base, height: height[fixture.kind] };
     case 'utility-pole':
-      return { foot: fixture.pole.at as Point, height: height['utility-pole'] };
+      return { foot: fixture.pole.at, height: height['utility-pole'] };
     default:
       return undefined;
   }
