@@ -8,6 +8,7 @@ import type * as PacingModule from './pacing';
 import { LifeBuilder } from './life/geometry';
 import type { LoadedTile } from './tile-cache';
 import { cellPass, glyphPass, streetTextPass } from './passes';
+import { fireworksPass } from './fireworks-pass';
 import * as Hosts from './life/host';
 
 const fixture = vi.hoisted(() => ({
@@ -15,9 +16,26 @@ const fixture = vi.hoisted(() => ({
   region: undefined as LoadedTile | undefined,
   arrive: () => {},
   url: '',
+  /** What `programs.boot.poll` answers in turn; empty means no boot shaders at all. */
+  bootStages: [] as string[],
+  drewTiles: vi.fn(),
 }));
 vi.mock('./gpu-context', () => ({
-  createPrograms: () => ({ streetText: { count: 0 } }),
+  createPrograms: () => {
+    const programs: { streetText: { count: number }; boot?: object } = {
+      streetText: { count: 0 },
+    };
+    if (fixture.bootStages.length > 0)
+      programs.boot = {
+        poll: () => {
+          const stage = fixture.bootStages.shift();
+          if (stage === 'full') programs.boot = undefined;
+          return stage;
+        },
+        drewTiles: fixture.drewTiles,
+      };
+    return programs;
+  },
   deletePrograms: vi.fn(),
   prewarmGlyphPrograms: vi.fn(),
   createMapGlyphs: () => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } }),
@@ -130,6 +148,7 @@ const tile = () =>
 beforeEach(() => {
   vi.clearAllMocks();
   fixture.view = fixture.region = undefined;
+  fixture.bootStages = [];
   time = 0;
   turns.clear();
   vi.spyOn(performance, 'now').mockImplementation(() => time);
@@ -183,7 +202,8 @@ it.each(['view', 'region'] as const)(
     fixture.arrive();
     draw(200);
     expect(ready).toHaveBeenCalledExactlyOnceWith({ firstTileFrame: 200 });
-    expect(mark).toHaveBeenCalledExactlyOnceWith('atlas:ready');
+    expect(mark.mock.calls.filter(([name]) => name === 'atlas:ready')).toHaveLength(1);
+    expect(atlas.getStats().detailReadyMs).toBe(200);
     draw(300);
     expect(ready).toHaveBeenCalledTimes(1);
     canvas.dispatchEvent(new Event('webglcontextlost', { cancelable: true }));
@@ -198,6 +218,51 @@ it.each(['view', 'region'] as const)(
     expect(cellPass).toHaveBeenCalled();
   },
 );
+it('draws boot frames while the full shaders compile, and marks each readiness once', () => {
+  atlas.destroy();
+  vi.clearAllMocks();
+  fixture.bootStages = ['wait', 'grace', 'boot', 'boot', 'full'];
+  atlas = createAtlas(canvas, {
+    tilesUrl: '/fixture.pmtiles',
+    bounds: [-1, -1, 1, 1],
+    initialCamera: { lng: 0, lat: 0, zoom: 18 },
+    year: 2026,
+    life: { enabled: false },
+  });
+  const ready = vi.fn();
+  const detail = vi.fn();
+  atlas.on('ready', ready);
+  atlas.on('detailready', detail);
+  fixture.view = tile();
+  fixture.arrive();
+  // Nothing has linked: nothing draws.
+  draw(100);
+  expect(cellPass).not.toHaveBeenCalled();
+  expect(glyphPass).not.toHaveBeenCalled();
+  // The grace: tiles reach the cells, the screen holds.
+  draw(200);
+  expect(cellPass).toHaveBeenCalled();
+  expect(glyphPass).not.toHaveBeenCalled();
+  expect(ready).not.toHaveBeenCalled();
+  // Boot: the map shows, without anything that needs a full program.
+  draw(300);
+  expect(glyphPass).toHaveBeenCalled();
+  expect(fireworksPass).not.toHaveBeenCalled();
+  expect(ready).toHaveBeenCalledExactlyOnceWith({ firstTileFrame: 300 });
+  expect(fixture.drewTiles).toHaveBeenCalled();
+  expect(detail).not.toHaveBeenCalled();
+  expect(atlas.getStats().detailReadyMs).toBeNull();
+  draw(400);
+  expect(detail).not.toHaveBeenCalled();
+  // The swap draws at once, whatever the frame pacing wants.
+  vi.mocked(glyphPass).mockClear();
+  draw(500);
+  expect(glyphPass).toHaveBeenCalledOnce();
+  expect(fireworksPass).toHaveBeenCalled();
+  expect(ready).toHaveBeenCalledOnce();
+  expect(detail).toHaveBeenCalledExactlyOnceWith({ firstDetailFrame: 500 });
+  expect(atlas.getStats()).toMatchObject({ readyMs: 300, detailReadyMs: 500 });
+});
 it('preserves query parameters while forwarding the pinned URL', () => {
   const url = new URL(fixture.url);
   expect(url.searchParams.get('existing')).toBe('yes');

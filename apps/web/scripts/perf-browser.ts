@@ -9,6 +9,7 @@ import { cities } from '../e2e/helpers';
 import { serveExport } from './serve-export';
 import { runStartup } from './startup-browser';
 import { runCold } from './cold-browser';
+import { detailReady } from './detail-ready';
 import { browserOptions, summarize, type CapturedProfile, type Scene } from './perf-browser-report';
 // This dev-only capture intentionally shares the renderer's runtime source hash.
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
@@ -210,6 +211,7 @@ try {
       .getByRole('button', { name: 'Capture 30 seconds', exact: true })
       .waitFor({ timeout: 180_000 });
     // Wait for tile loading to finish, then give shader compilation and the simulation a warmup.
+    await detailReady(page);
     await tilesSettled(page);
     if (run.scene === 'fiesta') {
       await playEvent(page);

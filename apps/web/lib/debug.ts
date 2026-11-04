@@ -1,5 +1,7 @@
 /** Capture before URL mirroring removes parameters that aren't view state. */
-let requested: { enabled: boolean; captureMs: number; fullUniforms: boolean } | undefined;
+let requested:
+  | { enabled: boolean; captureMs: number; fullUniforms: boolean; holdBootShaders: boolean }
+  | undefined;
 const debugRequest = () => {
   if (!requested) {
     const query = new URLSearchParams(window.location.search);
@@ -9,6 +11,7 @@ const debugRequest = () => {
       enabled,
       captureMs: enabled && Number.isFinite(duration) && duration > 0 ? duration : 30_000,
       fullUniforms: query.get('fullUniforms') === '1',
+      holdBootShaders: query.get('boot') === '1',
     };
   }
   return requested;
@@ -18,3 +21,5 @@ export const isDebugRequested = () => debugRequest().enabled;
 export const debugCaptureMs = () => debugRequest().captureMs;
 /** For GPU campaigns (`scripts/perf-light.ts`) that override uniform values as they're uploaded. */
 export const fullUniformsRequested = () => debugRequest().fullUniforms;
+/** For reviewing the boot shaders, which a warm shader cache otherwise never shows. */
+export const holdBootShadersRequested = () => debugRequest().holdBootShaders;

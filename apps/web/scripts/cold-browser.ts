@@ -8,6 +8,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { detailReady } from './detail-ready';
 import {
   coldSummary,
   type ColdOptions,
@@ -53,13 +54,18 @@ async function oneRun(port: number, city: string, index: number): Promise<ColdRu
     await page.waitForFunction(`performance.getEntriesByName('atlas:ready').length > 0`, undefined, {
       timeout: WAIT_MS,
     });
-    const first = await marks(page);
-    // Before the boot shaders exist, the first frame already uses the full ones.
-    await page
-      .waitForFunction(`performance.getEntriesByName('atlas:detail').length > 0`, undefined, {
-        timeout: first.detail === null ? 5000 : WAIT_MS,
-      })
-      .catch(() => undefined);
+    // An export from before the boot shaders has no detail line: its first frame was the full one.
+    const hasDetail = await page
+      .waitForFunction(
+        `/detail\\s/.test(document.querySelector('[class*="stats"]')?.textContent ?? '')`,
+        undefined,
+        { timeout: 5000 },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+    if (hasDetail) await detailReady(page);
     const final = await marks(page);
     const capture = page.getByRole('button', { name: /^Capture \d+ seconds$/ });
     await capture.waitFor({ timeout: WAIT_MS });
