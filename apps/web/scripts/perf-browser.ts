@@ -65,6 +65,7 @@ const SCENE_RUNS: Record<Scene, Omit<Run, 'output' | 'name' | 'scene'>> = {
     input: 'wheel 9 notches in then 9 out every 100 ms at the view center, z16-z19',
   },
   night: { time: 'night', wind: 'breeze', zoom: 18, input: 'none; pointer off the canvas' },
+  close: { time: 'noon', wind: 'breeze', zoom: 20.5, input: 'none; pointer off the canvas' },
   fiesta: {
     time: 'noon',
     wind: 'breeze',
@@ -125,7 +126,7 @@ async function playEvent(page: Page) {
 /** The input played while the capture runs. */
 async function play(page: Page, run: Run) {
   const canvas = page.locator('canvas');
-  if (run.scene === 'idle' || run.scene === 'night') {
+  if (run.scene === 'idle' || run.scene === 'night' || run.scene === 'close') {
     await page.mouse.move(-10, -10);
     return;
   }

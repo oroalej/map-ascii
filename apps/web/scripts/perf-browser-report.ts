@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path';
 
 /** Matched browser scenes (`pnpm perf:browser --scene <scene> --output <absolute path>`). */
-export const SCENES = ['idle', 'pan', 'zoom', 'night', 'fiesta'] as const;
+export const SCENES = ['idle', 'pan', 'zoom', 'night', 'fiesta', 'close'] as const;
 export type Scene = (typeof SCENES)[number];
 export type ColdOptions = { runs: number; output: string };
 export type BrowserOptions = {
