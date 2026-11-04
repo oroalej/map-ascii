@@ -734,7 +734,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   // Label-only redraws also invalidate speech and hover visibility evidence.
   let speechGeometry = 0;
-  let gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
+  const createGpuTimer = () =>
+    new GpuTimer(gl, options.gpuTiming ?? false, (ms) => profiler?.gauge('gpu', ms));
+  let gpuTimer = createGpuTimer();
 
   const cellDev = () => themeRes?.map.cellDev ?? { w: 1, h: 1 };
   const cssSize = () => ({ width: canvas.width / dpr, height: canvas.height / dpr });
@@ -2442,7 +2444,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     gpuRenderer = readGpuRenderer();
     programs = createPrograms(gl);
     if (season) warmSeasonalPrograms();
-    gpuTimer = new GpuTimer(gl, options.gpuTiming ?? false);
+    gpuTimer = createGpuTimer();
     tileCache.resume();
     // `resize` rebuilds the theme resources and render targets.
     sizeDirty = true;

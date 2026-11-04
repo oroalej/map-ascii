@@ -66,3 +66,19 @@ it('reports no interval or rate without two drawn frames', () => {
   expect(summary.drawnFps).toBeNull();
   expect(summary.smoothed).toEqual({ lifeMs: 1, cellPassMs: 2, frameMs: 3 });
 });
+
+it('reports median GPU time, and no time at all without samples', () => {
+  const samples = [
+    { at: 0, drawn: true, ms: { gpu: 4 } },
+    { at: 16, drawn: true, ms: {} },
+    { at: 33, drawn: true, ms: { gpu: 2 } },
+    { at: 66, drawn: true, ms: { gpu: 9 } },
+  ];
+  expect(summarize({ dropped: 0, spanMs: 66, samples }, undefined, [])).toMatchObject({
+    gpuMedianMs: 4,
+    gpuSamples: 3,
+  });
+  expect(
+    summarize({ dropped: 0, spanMs: 16, samples: [samples[1]!] }, undefined, []),
+  ).toMatchObject({ gpuMedianMs: null, gpuSamples: 0 });
+});

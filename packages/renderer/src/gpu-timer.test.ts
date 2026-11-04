@@ -2,7 +2,7 @@ import { expect, it, vi } from 'vitest';
 import type { GL } from './gpu';
 import { GpuTimer, GPU_SAMPLE_MS, MAX_GPU_QUERIES } from './gpu-timer';
 
-function setup(enabled = true, supported = true) {
+function setup(enabled = true, supported = true, onSample?: (ms: number) => void) {
   let available = false;
   let disjoint = false;
   const gl = {
@@ -18,7 +18,7 @@ function setup(enabled = true, supported = true) {
       parameter === 1 ? available : 2_000_000,
     ),
   };
-  const timer = new GpuTimer(gl as unknown as GL, enabled);
+  const timer = new GpuTimer(gl as unknown as GL, enabled, onSample);
   return {
     timer,
     gl,
@@ -113,4 +113,22 @@ it('smooths valid samples and discards invalid or disjoint samples', () => {
   disjoint();
   timer.begin(750);
   expect(timer.milliseconds).toBeNull();
+});
+
+it('hands each raw accepted result to its listener, once', () => {
+  const onSample = vi.fn();
+  const { timer, ready, disjoint } = setup(true, true, onSample);
+  timer.begin(0);
+  timer.end();
+  timer.poll();
+  expect(onSample).not.toHaveBeenCalled();
+  ready();
+  timer.poll();
+  timer.poll();
+  expect(onSample.mock.calls).toEqual([[2]]);
+  timer.begin(GPU_SAMPLE_MS);
+  timer.end();
+  disjoint();
+  timer.poll();
+  expect(onSample).toHaveBeenCalledTimes(1);
 });
