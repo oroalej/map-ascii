@@ -200,7 +200,10 @@ try {
       },
     );
     await page.goto(`http://localhost:${port}/${city.slug}?debug=1&z=${run.zoom}`);
-    await page.getByRole('button', { name: 'Capture 30 seconds', exact: true }).waitFor();
+    // A fresh browser profile compiles the shaders cold, about a minute on ANGLE D3D11.
+    await page
+      .getByRole('button', { name: 'Capture 30 seconds', exact: true })
+      .waitFor({ timeout: 180_000 });
     // Wait for tile loading to finish, then give shader compilation and the simulation a warmup.
     await tilesSettled(page);
     if (run.scene === 'fiesta') {
