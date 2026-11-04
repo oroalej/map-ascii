@@ -187,6 +187,7 @@ More of the city's life (SPEC.md §4 "Life layer"), in milestones that each ship
 - [x] Versioned static tile delivery, owned range caching and renderer readiness instrumentation (PR #60).
 - [x] Frame pacing, retained Life tile geometry, fixture culling and per-pass profiling (PR #68). Tested desktop idle/night draw at 30 fps, with improved pan/zoom callback times.
 - [x] Current-frame lighting composition (PR #67).
+- [x] First frame from small boot shaders while the full ones link, a halved select compile, a cold-load harness (`perf:browser --cold`) and a device-baseline protocol, with a dissolve at cell-size steps and night bloom.
 
 Performance budgets and hardware measurements are documented in `ARCHITECTURE.md` §8; task-specific review and measurement history stays in the task plans.
 

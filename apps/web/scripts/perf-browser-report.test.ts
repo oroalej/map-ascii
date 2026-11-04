@@ -1,9 +1,43 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { browserOptions, drawnIntervals, summarize } from './perf-browser-report';
+import { browserOptions, coldSummary, drawnIntervals, summarize } from './perf-browser-report';
 
 const output = resolve('fixture-scene.json');
+
+it('parses the cold capture and requires an absolute output', () => {
+  expect(browserOptions(['--cold', '--output', output]).cold).toEqual({ runs: 3, output });
+  expect(browserOptions(['--cold', '--runs=2', `--output=${output}`]).cold).toEqual({
+    runs: 2,
+    output,
+  });
+  for (const args of [
+    ['--cold'],
+    ['--cold', '--output', 'relative.json'],
+    ['--cold', '--runs=0', '--output', output],
+    ['--cold', '--scene', 'idle', '--output', output],
+  ])
+    expect(() => browserOptions(args)).toThrow();
+});
+
+it('summarizes cold runs by program with measured medians', () => {
+  const run = (index: number, ready: number, selectReady: number | null) => ({
+    run: index,
+    readyMs: ready,
+    detailMs: ready + 100,
+    longestTaskMs: ready / 2,
+    parallelCompile: true,
+    gpuBackend: 'GPU',
+    shaders: [{ name: 'select', chars: 1, submittedMs: 0, readyMs: selectReady, blockedMs: 5 }],
+  });
+  expect(coldSummary([run(0, 300, 30), run(1, 100, null), run(2, 200, 10)])).toEqual({
+    runs: 3,
+    readyMedianMs: 200,
+    detailMedianMs: 300,
+    longestTaskMedianMs: 100,
+    programs: { select: { readyMedianMs: 10, blockedMedianMs: 5 } },
+  });
+});
 
 it('keeps the legacy captures and requires an absolute output for a scene', () => {
   expect(browserOptions([])).toEqual({ startup: false, pan: false });

@@ -11,6 +11,38 @@ bool partyMembers[25];
 bool partyThrough[25];
 bool partyRoof[25];
 bool partyCached3 = false;
+// The 3x3 first, then the rest of the 5x5, which only a contact needs.
+const ivec2 PARTY_CACHE_ORDER[25] = ivec2[25](
+  ${[
+    [-1, -1],
+    [0, -1],
+    [1, -1],
+    [-1, 0],
+    [0, 0],
+    [1, 0],
+    [-1, 1],
+    [0, 1],
+    [1, 1],
+    [-2, -2],
+    [-1, -2],
+    [0, -2],
+    [1, -2],
+    [2, -2],
+    [-2, -1],
+    [2, -1],
+    [-2, 0],
+    [2, 0],
+    [-2, 1],
+    [2, 1],
+    [-2, 2],
+    [-1, 2],
+    [0, 2],
+    [1, 2],
+    [2, 2],
+  ]
+    .map(([x, y]) => `ivec2(${x},${y})`)
+    .join(',')}
+);
 int partyIndex(ivec2 p) { return (p.y + 2) * 5 + p.x + 2; }
 bool partyMember(ivec2 p) { return partyMembers[partyIndex(p)]; }
 bool partyOutside(ivec2 p) { return !partyMember(p) && !partyThrough[partyIndex(p)]; }
@@ -25,11 +57,14 @@ int partyExternal(ivec2 p) {
   }
   return joinMask(o);
 }
-bool partyActive(ivec2 p) {
-  return partyMember(p) && (partyExternal(p) >= 0 || partyShared(p,ivec2(1,0)) || partyShared(p,ivec2(0,1)));
+// The center's and its four neighbors' external masks, worked out once: each use otherwise inlines
+// another 9-cell scan, and that repetition was most of this shader's compile time on ANGLE D3D11.
+int partyExternals[5];
+bool partyActive(ivec2 p, int outer) {
+  return partyMember(p) && (outer >= 0 || partyShared(p,ivec2(1,0)) || partyShared(p,ivec2(0,1)));
 }
-bool partyProposes(ivec2 p, ivec2 d, int bit) {
-  if ((max(0,partyExternal(p)) & bit) != 0) return true;
+bool partyProposes(ivec2 p, ivec2 d, int bit, int outer) {
+  if ((max(0,outer) & bit) != 0) return true;
   ivec2 q=p+d;
   if (d.y != 0 && partyShared(p,ivec2(1,0)))
     return partyShared(q,ivec2(1,0)) || (d.y<0 && partyShared(q,ivec2(0,1))) || partyOutside(q+ivec2(1,0));
@@ -61,19 +96,23 @@ int partyWallMask(ivec2 p) {
   vec4 attr=groundAttrAt(p);
   int style=wallRowFor(u_kind[cls],attr,cls);
   if (attr.r<=0.0 || style<0) return -2;
-  for (int y=-1;y<=1;y++) for (int x=-1;x<=1;x++) partyCache(p,ivec2(x,y),attr,style);
-  partyCached3=true;
-  bool contact=false;
-  for (int side=0;side<4;side++) if (partyShared(ivec2(0),partyDirection(side))) contact=true;
-  if (!contact) return -2;
-  for (int y=-2;y<=2;y++) for (int x=-2;x<=2;x++) {
-    if (abs(x)==2 || abs(y)==2) partyCache(p,ivec2(x,y),attr,style);
+  // One call site, since each one inlines the whole cache fill.
+  for (int i=0;i<25;i++) {
+    if (i==9) {
+      partyCached3=true;
+      bool contact=false;
+      for (int side=0;side<4;side++) if (partyShared(ivec2(0),partyDirection(side))) contact=true;
+      if (!contact) return -2;
+    }
+    partyCache(p,PARTY_CACHE_ORDER[i],attr,style);
   }
-  if (!partyActive(ivec2(0))) return -1;
+  for (int i=0;i<5;i++) partyExternals[i]=partyExternal(i==0 ? ivec2(0) : partyDirection(i-1));
+  if (!partyActive(ivec2(0),partyExternals[0])) return -1;
   int mask=0;
   for (int side=0;side<4;side++) {
     ivec2 d=partyDirection(side); int bit=1<<side, reverse=1<<((side+2)%4);
-    if (partyActive(d) && (partyProposes(ivec2(0),d,bit) || partyProposes(d,-d,reverse))) mask |= bit;
+    int beside=partyExternals[side+1];
+    if (partyActive(d,beside) && (partyProposes(ivec2(0),d,bit,partyExternals[0]) || partyProposes(d,-d,reverse,beside))) mask |= bit;
   }
   return mask;
 }

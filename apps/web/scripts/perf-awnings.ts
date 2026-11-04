@@ -7,6 +7,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { cities } from '../e2e/helpers';
+import { detailReady } from './detail-ready';
 import { serveExport } from './serve-export';
 import { classId, Flags, groundClasses } from '../../../packages/renderer/src/classes';
 import { awningReport, type AwningSample } from './awning-report';
@@ -382,6 +383,7 @@ int partyWallMask(ivec2 p){return -2;} bool partySeam(ivec2 p,int cls,vec4 attr)
     `http://localhost:${port}/${city.slug}?lat=${camera.lat}&lng=${camera.lng}&z=${camera.zoom}&fullUniforms=1`,
   );
   await page.bringToFront();
+  await detailReady(page);
   await page.waitForLoadState('networkidle');
   console.log(
     'Loaded',

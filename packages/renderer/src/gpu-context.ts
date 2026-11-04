@@ -14,6 +14,8 @@ import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
 import { createProgram, createTexture, prepareProgram, type GL, type PendingProgram } from './gpu';
+import { deleteOptionalPrograms, type OptionalLinks } from './optional-programs';
+import { bootGlyphFragment, bootSelectFragment } from './shaders/boot';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragmentFor } from './shaders/glyph';
@@ -35,13 +37,49 @@ export type StreetTextMesh = {
   count: number;
 };
 
-type BaseName = 'labels' | 'cell' | 'select' | 'glyph';
+/** How one program's compile went on this device (`AtlasStats.shaders`). */
+export type ShaderTiming = {
+  name: string;
+  /** Vertex and fragment source length. */
+  chars: number;
+  /** Since the program set was created, ms. */
+  submittedMs: number;
+  /** From submission until the link was first seen complete, ms; null until then. */
+  readyMs: number | null;
+  /** Main-thread time spent finishing the link, ms; null until it finished. */
+  blockedMs: number | null;
+};
+
+/**
+ * Where a frame stands while the full select and glyph programs compile: `wait`, nothing can draw
+ * yet; `grace`, tiles load but the screen holds, since a warm cache finishes about now; `boot`,
+ * draw from the boot shaders; `full`, they just swapped for the full programs.
+ */
+export type BootStage = 'wait' | 'grace' | 'boot' | 'full';
+/** Long enough for a warm shader cache to skip the boot shaders; unnoticeable on a cold one. */
+export const BOOT_GRACE_MS = 500;
+export type Boot = {
+  /** Once per frame, before drawing. Never waits on a link. */
+  poll(now: number): BootStage;
+  /** After `poll` said `full`: drop the boot programs. Until now they are still the ones drawn. */
+  commit(): void;
+  /** A boot frame with tiles was drawn. Without parallel compile, the next poll links the rest. */
+  drewTiles(): void;
+};
+
+type BaseName = 'labels' | 'cell' | 'select' | 'glyph' | 'bootSelect' | 'bootGlyph';
 type BaseLinks = {
   pending: Map<BaseName, PendingProgram>;
   finished: Map<BaseName, twgl.ProgramInfo>;
 };
 
 export type Programs = {
+  /** Present until the full programs are in use; the `select` and `glyph` getters draw boot. */
+  boot?: Boot;
+  /** Small programs for optional passes (optional-programs.ts). */
+  optional?: OptionalLinks;
+  /** Base program compile times, for the device report (ARCHITECTURE.md §8 "Device baseline"). */
+  timings?: ShaderTiming[];
   /** Separate ownership lets teardown cancel links without resolving lazy getters. */
   baseLinks?: BaseLinks;
   folklore?: FolkloreResources;
@@ -77,7 +115,7 @@ export type Programs = {
   fullUniforms?: boolean;
 };
 
-export function createPrograms(gl: GL, fullUniforms = false): Programs {
+export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): Programs {
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -93,40 +131,130 @@ export function createPrograms(gl: GL, fullUniforms = false): Programs {
   }
   gl.bindVertexArray(null);
   const links: BaseLinks = { pending: new Map(), finished: new Map() };
+  const created = performance.now();
+  const timings: ShaderTiming[] = [];
+  // The small programs go first: drivers can work through links one at a time.
   const sources = {
+    bootSelect: [fullscreenVertex, bootSelectFragment],
+    bootGlyph: [fullscreenVertex, bootGlyphFragment],
+    labels: [labelVertex, labelFragment],
+    cell: [cellVertex, cellFragment],
+    select: [fullscreenVertex, selectFragment],
     glyph: [
       fullscreenVertex,
       glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
     ],
-    labels: [labelVertex, labelFragment],
-    cell: [cellVertex, cellFragment],
-    select: [fullscreenVertex, selectFragment],
   } as const;
   const parallel = !!gl.getExtension('KHR_parallel_shader_compile');
   const variants = new Map<number, twgl.ProgramInfo>();
   let emptyVao: WebGLVertexArrayObject | null = null;
+  const timingOf = (name: BaseName) => timings.find((t) => t.name === name);
   const finish = (name: BaseName) => {
     let info = links.finished.get(name);
     if (!info) {
       const pending = links.pending.get(name);
       if (!pending) throw new Error('ASCII Atlas: program set disposed');
+      const start = performance.now();
       info = pending.finish();
+      const end = performance.now();
+      const timing = timingOf(name);
+      if (timing) {
+        timing.blockedMs = end - start;
+        timing.readyMs ??= end - created - timing.submittedMs;
+      }
       links.pending.delete(name);
       links.finished.set(name, info);
       if (name === 'glyph') variants.set(0, info);
     }
     return info;
   };
-  try {
-    for (const name of Object.keys(sources) as BaseName[]) {
-      const [vertex, fragment] = sources[name];
-      if (parallel) links.pending.set(name, prepareProgram(gl, vertex, fragment));
-      else links.finished.set(name, createProgram(gl, vertex, fragment));
+  const submit = (name: BaseName) => {
+    const [vertex, fragment] = sources[name];
+    const submitted = performance.now();
+    const timing: ShaderTiming = {
+      name,
+      chars: vertex.length + fragment.length,
+      submittedMs: submitted - created,
+      readyMs: null,
+      blockedMs: null,
+    };
+    timings.push(timing);
+    if (parallel) links.pending.set(name, prepareProgram(gl, vertex, fragment));
+    else {
+      links.finished.set(name, createProgram(gl, vertex, fragment));
+      timing.readyMs = timing.blockedMs = performance.now() - submitted;
+      if (name === 'glyph') variants.set(0, links.finished.get('glyph')!);
     }
-    if (!parallel) variants.set(0, links.finished.get('glyph')!);
+  };
+  /** Whether a link has finished, without waiting; records when it was first seen done. */
+  const linked = (name: BaseName) => {
+    if (links.finished.has(name)) return true;
+    const pending = links.pending.get(name);
+    if (!pending?.ready()) return false;
+    const timing = timingOf(name);
+    if (timing) timing.readyMs ??= performance.now() - created - timing.submittedMs;
+    return true;
+  };
+  let drewBootTiles = false;
+  let bootFailed = false;
+  const dropBootPrograms = () => {
+    for (const name of ['bootSelect', 'bootGlyph'] as const) {
+      links.pending.get(name)?.cancel();
+      links.pending.delete(name);
+      const info = links.finished.get(name);
+      if (info) gl.deleteProgram(info.program);
+      links.finished.delete(name);
+    }
+  };
+  const boot = (programs: Programs): Boot => ({
+    poll(now) {
+      if (!holdBoot) {
+        if (!parallel && drewBootTiles && !links.finished.has('select')) {
+          submit('select');
+          submit('glyph');
+        }
+        // Both polled, so each one's own finish time is recorded.
+        const select = linked('select');
+        const glyph = linked('glyph');
+        if (select && glyph) {
+          finish('select');
+          finish('glyph');
+          return 'full';
+        }
+      }
+      if (bootFailed) return 'wait';
+      const small = (['bootSelect', 'bootGlyph', 'labels', 'cell'] as const).map(linked);
+      if (!small.every(Boolean)) return 'wait';
+      if (!holdBoot && now - created < BOOT_GRACE_MS) return 'grace';
+      try {
+        finish('bootSelect');
+        finish('bootGlyph');
+      } catch {
+        // A driver that rejects these still gets the full programs; only the early map is lost.
+        bootFailed = true;
+        return 'wait';
+      }
+      return 'boot';
+    },
+    commit() {
+      programs.boot = undefined;
+      dropBootPrograms();
+    },
+    drewTiles() {
+      drewBootTiles = true;
+    },
+  });
+  try {
+    for (const name of ['bootSelect', 'bootGlyph', 'labels', 'cell'] as const) submit(name);
+    // Without parallel compile, the full programs link once a boot frame is on screen.
+    if (parallel && !holdBoot) {
+      submit('select');
+      submit('glyph');
+    }
     emptyVao = gl.createVertexArray();
     if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
-    return {
+    const programs: Programs = {
+      timings,
       baseLinks: links,
       get labels() {
         return finish('labels');
@@ -135,16 +263,19 @@ export function createPrograms(gl: GL, fullUniforms = false): Programs {
         return finish('cell');
       },
       get select() {
-        return finish('select');
+        return finish(programs.boot ? 'bootSelect' : 'select');
       },
       get glyph() {
-        return finish('glyph');
+        return finish(programs.boot ? 'bootGlyph' : 'glyph');
       },
       streetText: { vao, buffer, count: 0 },
       glyphVariants: variants,
+      optional: new Map(),
       emptyVao,
       fullUniforms,
     };
+    programs.boot = boot(programs);
+    return programs;
   } catch (error) {
     for (const pending of links.pending.values()) pending.cancel();
     if (!gl.isContextLost()) {
@@ -168,7 +299,8 @@ export function glyphProgram(
 ) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
-  if (!variants) return programs.glyph;
+  // No variant is compiled for the boot shaders, which have none of these features.
+  if (!variants || programs.boot) return programs.glyph;
   const key = Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2);
   if (key === 0) return programs.glyph;
   let program = variants.get(key);
@@ -332,6 +464,8 @@ export function prewarmGlyphPrograms(
 }
 
 export function deletePrograms(gl: GL, p: Programs) {
+  p.boot = undefined;
+  deleteOptionalPrograms(gl, p.optional);
   p.glyphWarmup?.cancel();
   for (const pending of p.baseLinks?.pending.values() ?? []) pending.cancel();
   p.baseLinks?.pending.clear();

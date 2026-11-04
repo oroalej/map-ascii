@@ -32,6 +32,9 @@ const setters = vi.hoisted(() => ({
   u_wind: vi.fn(),
   u_variants: vi.fn(),
   u_variantCount: vi.fn(),
+  u_labelCell: vi.fn(),
+  u_labelShift: vi.fn(),
+  u_height: vi.fn(),
 }));
 vi.mock('./gpu', () => ({
   createProgram: vi.fn(() => ({ program: {}, uniformSetters: setters })),
@@ -210,6 +213,36 @@ describe('seasonal GPU fireworks', () => {
     expect(gl.bufferData).toHaveBeenCalledTimes(1);
     expect(gl.createBuffer).toHaveBeenCalledTimes(1);
     expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(8);
+  });
+  it('draws the sparks again into the halo target, finding labels in its cells', () => {
+    const gl = gpu();
+    const framebuffer = {} as WebGLFramebuffer;
+    const grid = placeGrid(view, view.cellDev, 202, 92).grid;
+    fireworksPass(
+      gl as unknown as GL,
+      {} as Programs,
+      {} as CellTargets,
+      resources,
+      view,
+      grid,
+      { ...grid, shiftX: grid.shiftX + 5, shiftY: grid.shiftY + 18 },
+      config,
+      2.6,
+      false,
+      wind,
+      0,
+      undefined,
+      undefined,
+      { framebuffer, viewport: [1, 2, 200, 89], rows: 92 },
+    );
+    expect(gl.drawArraysInstanced).toHaveBeenCalledTimes(3);
+    expect(gl.bindFramebuffer).toHaveBeenLastCalledWith(undefined, framebuffer);
+    expect(gl.viewport).toHaveBeenLastCalledWith(1, 2, 200, 89);
+    expect(setters.u_height).toHaveBeenLastCalledWith(92);
+    // A label cell is two map cells on each axis here, offset by the two grids' difference.
+    expect(setters.u_labelCell).toHaveBeenLastCalledWith([2, 2]);
+    expect(setters.u_labelShift).toHaveBeenLastCalledWith([1, 2]);
+    expect(gl.disable).toHaveBeenLastCalledWith(gl.BLEND);
   });
   it('creates nothing for old packs, inactive seasons or low zoom, and does not leave a stale overlay', () => {
     const gl = gpu(),
