@@ -20,7 +20,14 @@
  */
 import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
-import { BIRD_SHADOW, CellBit, EVENT_PERSON_BITS, LIFE_SHADOW } from '../life/config';
+import {
+  BIRD_SHADOW,
+  CellBit,
+  EVENT_PERSON_BITS,
+  GROUND_SHADOW,
+  LIFE_GROUND_SHADOW,
+  LIFE_SHADOW,
+} from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
 import { CANDLE_BIT, PersonPart } from '../life/people';
@@ -673,6 +680,21 @@ bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
   return lifeAllowedAt(life, cls, surface, height, height);
 }
 
+// Ground shadows fall on open ground and water, never over a roof or foliage. Same sampled
+// surface as an agent standing here (lifeAllowed).
+bool shadowFalls(int cls, ivec2 subAt) {
+  if (cls == u_vehicleOccluders.x) return false;
+  int surface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+  if (surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z) return false;
+  int bits = u_cellBits[surface];
+  if ((bits & ${CellBit.person | CellBit.vehicle | CellBit.boat | CellBit.train}) != 0) return true;
+  return (bits & ${CellBit.grounds}) != 0 && texelFetch(u_subAttr, subAt, 0).r == 0.0;
+}
+
+float groundShadow() {
+  return 1.0 - ${float(GROUND_SHADOW.dark)} * directSun();
+}
+
 vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   if (!u_focus) return vec3(0.0);
   float halo = 0.0;
@@ -826,9 +848,21 @@ void main() {
   vec4 life = texelFetch(u_life, cell, 0);
   int lifeFlags = int(life.b * 255.0 + 0.5);
   int lifeBit = lifeFlags & ${LIFE_AGENT_MASK};
-  // A flying bird's shadow on the ground (life/draw.ts drawShadows).
-  if (lifeBit == 0 && int(life.a * 255.0 + 0.5) == ${LIFE_SHADOW}) {
-    back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
+  // A flying bird's shadow, or a ground shadow, as much of the cell as its sextants cover (a
+  // bird's shadow in one cell has no glyph, and covers it whole). Ground shadows reach the map's
+  // ink too, or the dark theme's faint fills wouldn't show them (life/ground-shadows.ts).
+  int shadowByte = lifeBit == 0 ? int(life.a * 255.0 + 0.5) : 0;
+  if (shadowByte == ${LIFE_SHADOW} || shadowByte == ${LIFE_GROUND_SHADOW}) {
+    int shadowGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
+    ivec2 shadowSlot = ivec2(shadowGlyph % u_columns, shadowGlyph / u_columns) * ivec2(u_cell);
+    if (shadowGlyph == 0 || texelFetch(u_atlas, shadowSlot + inCell, 0).r > 0.0) {
+      if (shadowByte == ${LIFE_SHADOW}) back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
+      else if (shadowFalls(cls, subAt)) {
+        float darkened = groundShadow();
+        back *= darkened;
+        shade *= darkened;
+      }
+    }
   }
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   bool crowdCell=false,crowdInk=false;
@@ -852,10 +886,11 @@ void main() {
     int colorByte = lifeByte;
     bool brake = (lifeByte & ${BRAKE_LAMP}) != 0;
     float bodyLight = 1.0;
-    if (painted && u_hasLifeParts) {
+    if (u_hasLifeParts) {
       vec4 parts = texelFetch(u_lifeParts, cell, 0);
       int partFlags = int(parts.a * 255.0 + 0.5);
-      if ((partFlags & ${PartsFlag.valid}) != 0) {
+      if ((partFlags & ${PartsFlag.shadowUnder}) != 0 && shadowFalls(cls, subAt)) back *= groundShadow();
+      if (painted && (partFlags & ${PartsFlag.valid}) != 0) {
         int sextant = (inCell.y < u_sextantSplit.y ? 0 : inCell.y < u_sextantSplit.z ? 2 : 4) +
           (inCell.x < u_sextantSplit.x ? 0 : 1);
         int value = (int(parts[sextant >> 1] * 255.0 + 0.5) >> ((sextant & 1) * 4)) & 15;

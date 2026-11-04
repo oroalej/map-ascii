@@ -88,6 +88,8 @@ export type VehicleSpec = {
   maxSpeed?: number;
   /** Rides by the road's right edge instead of in a lane (config.ts `laneOffset`). */
   curb?: boolean;
+  /** Meters tall, for its shadow on the ground. */
+  height: number;
   /** Paints it may have, each equally likely. */
   paints: readonly number[];
   /** One glyph when small: across the screen, then up or down. */
@@ -152,6 +154,7 @@ export type ProcessionCraft = 'pagoda' | 'voyador' | 'baroto' | 'sailboat';
 
 export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   car: {
+    height: 1.5,
     ...PROCESSION_GEOMETRY.vehicles.car,
     speed: 1,
     paints: [P.white, P.white, P.silver, P.graphite, P.red, P.blue, P.maroon, P.cream],
@@ -160,6 +163,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBGRRRRGGBBH', 'BBGRRRRGGBBB', 'BBGRRRRGGBBB', 'TBGRRRRGGBBH'],
   },
   motorcycle: {
+    height: 1.4,
     ...PROCESSION_GEOMETRY.vehicles.motorcycle,
     speed: 1.1,
     paints: [P.graphite, P.red, P.blue, P.silver, P.graphite],
@@ -168,6 +172,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBDDBH'],
   },
   tricycle: {
+    height: 1.7,
     length: 2.6,
     width: 1.6,
     speed: 0.8,
@@ -177,6 +182,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBBDBBH', 'RRRRRG.', 'RRRRRG.'],
   },
   jeepney: {
+    height: 2.4,
     length: 7,
     width: 2,
     speed: 0.9,
@@ -186,6 +192,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TAAAAAAAAAGBBH', 'DRRRRRRRRRGBBB', 'TAAAAAAAAAGBBH'],
   },
   bus: {
+    height: 3.2,
     length: 11,
     width: 2.5,
     speed: 0.85,
@@ -195,6 +202,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBBBBBBBBBBBBBBBGH', 'BRRDDRRRRRRDDRRRGB', 'TBBBBBBBBBBBBBBBGH'],
   },
   truck: {
+    height: 3,
     ...PROCESSION_GEOMETRY.vehicles.truck,
     speed: 0.85,
     paints: [P.blue, P.red, P.white, P.green, P.yellow],
@@ -203,6 +211,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TDDDDDDDDDDBBBGH', 'DDDDDDDDDDDBBRGB', 'TDDDDDDDDDDBBBGH'],
   },
   bicycle: {
+    height: 1.5,
     length: 1.8,
     width: 0.6,
     speed: 0.7,
@@ -214,6 +223,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TDBDDBH'],
   },
   rowboat: {
+    height: 0.6,
     length: 3.5,
     width: 1.3,
     speed: 0.7,
@@ -223,6 +233,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBB.', 'BBBDBBB', '.BBBBB.'],
   },
   motorboat: {
+    height: 1.5,
     length: 5,
     width: 2,
     speed: 1.6,
@@ -232,6 +243,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['BBBRRGBB.', 'BBBRRGBBH', 'BBBRRGBB.'],
   },
   banca: {
+    height: 1.8,
     length: 7,
     width: 3.2,
     speed: 1.2,
@@ -241,6 +253,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['..RRRRRRRR..', '...B....B...', 'BAABRRRRBAAH', '...B....B...', '..RRRRRRRR..'],
   },
   locomotive: {
+    height: 3.8,
     length: 14,
     width: 2.8,
     speed: 1,
@@ -251,6 +264,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TDBBBBBBBBBBGGBH', 'DDRRDDRRDDRRRGBB', 'DDRRDDRRDDRRRGBB', 'TDBBBBBBBBBBGGBH'],
   },
   coach: {
+    height: 3.6,
     length: 18,
     width: 2.8,
     speed: 1,
@@ -260,6 +274,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['BBGGBGGBGGBGGBGGBB', 'DRRRRRRRRRRRRRRRRD', 'DRRRRRRRRRRRRRRRRD', 'BBGGBGGBGGBGGBGGBB'],
   },
   pagoda: {
+    height: 5,
     length: 14,
     width: 7,
     speed: 1,
@@ -277,6 +292,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     ],
   },
   voyador: {
+    height: 0.7,
     length: 12,
     width: 1.6,
     speed: 1,
@@ -287,6 +303,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBBBBBBBBBBB.', 'RRRRRRRRRRRRRRRH', '.BBBBBBBBBBBBBB.'],
   },
   baroto: {
+    height: 0.6,
     length: 4.5,
     width: 0.9,
     speed: 1,
@@ -297,6 +314,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['RBBBDBBR'],
   },
   sailboat: {
+    height: 4,
     length: 5,
     width: 2,
     speed: 1,
@@ -306,6 +324,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBBB.', 'BBAAAABB', '.BBBBBB.'],
   },
   cart: {
+    height: 1.9,
     length: 1.8,
     width: 1,
     speed: 0,
@@ -316,6 +335,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DARARAD', 'DRARARH', 'DARARAD'],
   },
   carabao: {
+    height: 1.4,
     length: 2.6,
     width: 1.3,
     speed: 0,
@@ -327,6 +347,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   },
   // Append crafts: the simulation's earlier craft ordinals remain stable.
   ambulance: {
+    height: 2.3,
     length: 5.4,
     width: 2,
     speed: 1,
@@ -335,6 +356,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TAARRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAARRRLGGBAH'],
   },
   police: {
+    height: 1.5,
     length: 4.6,
     width: 1.8,
     speed: 1,
@@ -343,6 +365,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TAGRRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAGRRRLGGBAH'],
   },
   firetruck: {
+    height: 3.1,
     length: 9.5,
     width: 2.5,
     speed: 0.85,
@@ -351,6 +374,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBBDRRLLGBBH', 'BBBDRRLLGBBB', 'BBBDRRLLGBBB', 'TBBDRRLLGBBH'],
   },
   'box-cart': {
+    height: 1.3,
     length: 1.2,
     width: 0.9,
     speed: 0,
@@ -359,6 +383,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DARRAD', 'BRHRRB', 'DARRAD'],
   },
   'fry-cart': {
+    height: 1.4,
     length: 1.3,
     width: 0.9,
     speed: 0,
@@ -367,6 +392,7 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DBBBBD', 'BGGGAB', 'DBBBBD'],
   },
   'flatbed-cart': {
+    height: 1,
     length: 1.5,
     width: 1,
     speed: 0,

@@ -43,21 +43,55 @@ const texelAt = (out: Uint8Array, at: number) =>
 
 const CORE_STRIDE = 3;
 const SOFT_STRIDE = 4;
+/** A shadow caster: center, a meter forward, a meter right, half length, half width, height. */
+export const SHADOW_STRIDE = 9;
 
 /** Sextants waiting for their agents to be admitted; one is reused for every frame. */
 export class PartsQueue {
   private core = new Uint32Array(CORE_STRIDE * 256);
   private soft = new Uint32Array(SOFT_STRIDE * 256);
+  shadows = new Float64Array(SHADOW_STRIDE * 64);
   coreCount = 0;
   softCount = 0;
+  shadowCount = 0;
 
   reset() {
-    this.coreCount = this.softCount = 0;
+    this.coreCount = this.softCount = this.shadowCount = 0;
   }
   /** Forget everything queued since these counts: the agent wasn't admitted. */
-  rollback(core: number, soft: number) {
+  rollback(core: number, soft: number, shadows: number) {
     this.coreCount = core;
     this.softCount = soft;
+    this.shadowCount = shadows;
+  }
+  /** Something standing, whose shadow falls once the agent that owns it is admitted. */
+  addShadow(
+    cx: number,
+    cy: number,
+    ax: number,
+    ay: number,
+    sx: number,
+    sy: number,
+    halfLength: number,
+    halfWidth: number,
+    height: number,
+  ) {
+    if ((this.shadowCount + 1) * SHADOW_STRIDE > this.shadows.length) {
+      const grown = new Float64Array(this.shadows.length * 2);
+      grown.set(this.shadows);
+      this.shadows = grown;
+    }
+    const slot = this.shadowCount++ * SHADOW_STRIDE;
+    const { shadows } = this;
+    shadows[slot] = cx;
+    shadows[slot + 1] = cy;
+    shadows[slot + 2] = ax;
+    shadows[slot + 3] = ay;
+    shadows[slot + 4] = sx;
+    shadows[slot + 5] = sy;
+    shadows[slot + 6] = halfLength;
+    shadows[slot + 7] = halfWidth;
+    shadows[slot + 8] = height;
   }
   /** A cell the agent holds: its sextants apply while the cell still shows the queued texel. */
   addCore(at: number, parts: number) {

@@ -53,6 +53,19 @@ export const FIGURE_SIZE_M: Readonly<Record<PersonFigure, number>> = {
   'chest-tray': 0.9,
 };
 
+/** How tall each figure stands, m, for its shadow on the ground. */
+export const FIGURE_HEIGHT_M: Readonly<Record<PersonFigure, number>> = {
+  adult: 1.6,
+  seated: 1,
+  child: 1.15,
+  umbrella: 2,
+  rower: 0.9,
+  'pole-buckets': 1.6,
+  basket: 1.6,
+  'head-tray': 1.8,
+  'chest-tray': 1.6,
+};
+
 /** A one-cell figure's width, as a share of the cell's (`figureFit`). */
 export const FIGURE_SCALES = [0.6, 0.8, 1] as const;
 export type FigureScale = 0 | 1 | 2;

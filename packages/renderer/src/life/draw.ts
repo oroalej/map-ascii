@@ -16,6 +16,7 @@ import {
   BIRD_SHADOW,
   CellBit,
   EVENT_PERSON_BITS,
+  GROUND_SHADOW,
   LIFE_SHADOW,
   lifeClassFor,
   isWalker,
@@ -24,8 +25,10 @@ import {
 } from './config';
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
 import { CAT_LENGTH_M, catGlyph, catInk } from './cats';
+import { castGroundShadows } from './ground-shadows';
 import { headingOf, type Heading } from './masters';
 import {
+  FIGURE_HEIGHT_M,
   FIGURE_SIZE_M,
   figureFit,
   figureGlyph,
@@ -475,7 +478,8 @@ export function packLife(
         detailedStamp = false;
         detailedPeopleStamp = false;
         const coreMark = partsQueue.coreCount,
-          softMark = partsQueue.softCount;
+          softMark = partsQueue.softCount,
+          shadowMark = partsQueue.shadowCount;
         const n = drawAgent(out, grid, agent, theme, glyphIndex, glyphs);
         const collision = journal?.denied ?? false;
         let cellDenied = false;
@@ -501,7 +505,7 @@ export function packLife(
         if (grid.denials) grid.denials[index] = (collision ? 1 : 0) | (cellDenied ? 2 : 0);
         if (!journal) drawn += n;
         else if (journal.denied) {
-          partsQueue.rollback(coreMark, softMark);
+          partsQueue.rollback(coreMark, softMark, shadowMark);
           if (journal.memberCount !== undefined)
             journal.members = capturedMembers(journal.memberCount);
           const eligible =
@@ -679,6 +683,16 @@ export function packLife(
     journal = undefined;
     drawingOwner = 0;
     partsQueue.seal(out, drawingOwners, grid.cols, metadata.parts);
+    if (bodySun && metadata.parts)
+      castGroundShadows(
+        out,
+        metadata.parts,
+        grid,
+        partsQueue.shadows,
+        partsQueue.shadowCount,
+        bodySun,
+        glyphs.sextants,
+      );
     drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
@@ -1404,6 +1418,23 @@ function drawPeople(
     }
     return any;
   };
+  /** A large figure's shadow; people aboard a boat and crowds have none. */
+  const castFigure = (look: PersonLook, cx: number, cy: number) => {
+    if (!layerSextants || !bodySun || agent.aboard || !agent.ahead) return;
+    if (cellsPerMeter < GROUND_SHADOW.figureCellsPerMeter) return;
+    const half = (FIGURE_SIZE_M[look.figure] * GROUND_SHADOW.figureFootprint) / 2;
+    partsQueue.addShadow(
+      cx,
+      cy,
+      along[0],
+      along[1],
+      right[0],
+      right[1],
+      half,
+      half,
+      FIGURE_HEIGHT_M[look.figure],
+    );
+  };
   const drawFit = (look: PersonLook, fit: ReturnType<typeof figureFit>, cx: number, cy: number) => {
     if (fit === 'stamp')
       return stampFigure(
@@ -1483,7 +1514,10 @@ function drawPeople(
       } else {
         any = drawFit(look, fit, cx, cy);
       }
-      if (any) drawn++;
+      if (any) {
+        drawn++;
+        castFigure(look, cx, cy);
+      }
     });
     return drawn;
   }
@@ -1535,6 +1569,7 @@ function drawPeople(
     let any: boolean;
     if (fit === 'big') {
       any = putBig(look, c, r);
+      if (any) castFigure(look, c + 1, r + 1);
     } else {
       const glyph = figureGlyph(
         look.figure,
@@ -2022,7 +2057,15 @@ function stamp(
       out[at + 3] = (out[at + 3]! & ~3) | beacon.colors[beacon.half];
     }
   }
-  if (sextants) partsQueue.settleCore(out, coreMark);
+  if (sextants) {
+    partsQueue.settleCore(out, coreMark);
+    if (
+      any &&
+      bodySun &&
+      Math.hypot(ax, (ay * grid.cellHeight) / grid.cellWidth) >= GROUND_SHADOW.vehicleCellsPerMeter
+    )
+      partsQueue.addShadow(cx, cy, ax, ay, sx, sy, hl, trueHw, spec.height);
+  }
   return any;
 }
 
