@@ -43,7 +43,7 @@ export function setChangedUniforms(
     return;
   }
   let uploaded = uploadedUniforms.get(program);
-  if (!uploaded) uploadedUniforms.set(program, (uploaded = new Map()));
+  if (!uploaded) uploadedUniforms.set(program, (uploaded = new Map<string, unknown>()));
   const changed: Record<string, unknown> = {};
   for (const name in values) {
     const value = values[name];
