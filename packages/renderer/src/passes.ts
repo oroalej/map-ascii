@@ -105,8 +105,9 @@ import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
 import { buntingWindResponse } from './life/bunting-motion';
-import { rainGlyphs, type Theme } from './theme';
+import { rainGlyphs, sextantGlyphs, type Theme } from './theme';
 import {
+  fixtureShadowKey,
   packFixtures,
   createFixturePackingScratch,
   type FixturePackingScratch,
@@ -1018,6 +1019,8 @@ export type Weather = {
 const fixturesOf = new WeakMap<
   CellTargets,
   {
+    /** Which sun its hardware shadows were packed for (life/fixtures.ts `fixtureShadowKey`). */
+    shadowKey: string;
     packed: PackedFixtures;
     fixtures: readonly StreetFixture[];
     atlas: ThemeResources['map']['atlas'];
@@ -1068,14 +1071,18 @@ export function fixturePass(
   repack: boolean,
   motion: FixtureMotion = { time: 0, strength: 0 },
   signalOffsets?: SignalOffsets,
+  /** The sun for hardware's shadows, while it's up and quality allows them. */
+  sun?: Sun | null,
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
   let lightsChanged = false;
   const viewport = screenArea(view, placement.grid, view.cellDev);
+  const shadowKey = fixtureShadowKey(sun, view.camera.zoom);
   if (
     repack ||
     !cache ||
+    cache.shadowKey !== shadowKey ||
     cache.packed.cloth.cols !== targets.cols ||
     cache.packed.cloth.rows !== targets.rows ||
     cache.fixtures !== fixtures ||
@@ -1141,8 +1148,10 @@ export function fixturePass(
       utilityScratch,
       fixtureScratch,
       signalOffsets,
+      shadowKey && sun ? { sun, sextants: sextantGlyphs } : undefined,
     );
     cache = {
+      shadowKey,
       packed,
       fixtures,
       atlas: resources.map.atlas,

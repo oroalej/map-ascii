@@ -31,6 +31,7 @@ import {
   type LightGrid,
 } from './lights';
 import { pedestrianState, signalState, type SignalOffsets } from './signals';
+import type { Sun } from './sun';
 import {
   packSeasonalFixtures,
   isSeasonalFixture,
@@ -120,7 +121,36 @@ export const FixturePart = {
   flagMast: 14,
   flagPlinth: 15,
   flagFoot: 16,
+  /** Darkens the ground instead of drawing ink (`packFixtureShadows`). */
+  shadow: 49,
 } as const;
+
+/**
+ * Upright hardware's shadow on the ground: from `minZoom`, a thin line from its foot, away from the
+ * sun, its height (m) over the tangent of the sun's altitude, at most `reach` m. Drawn in empty
+ * cells only, so nothing hides behind it.
+ */
+export const FIXTURE_SHADOW = {
+  minZoom: 19,
+  reach: 9,
+  height: {
+    streetlight: 7,
+    lantern: 3.5,
+    signal: 5,
+    'pedestrian-signal': 2.8,
+    flagpole: 11,
+    'utility-pole': 9,
+  },
+} as const;
+
+/** What a fixture's shadow needs: the sun, and each sextant mask's glyph (theme.ts). */
+export type FixtureShadows = { sun: Sun; sextants: readonly string[] };
+
+/** Which sun shadows were packed for, in about 2° steps, or '' for none: a change means repacking. */
+export const fixtureShadowKey = (sun: Sun | null | undefined, zoom: number) =>
+  sun && sun.altitude > 0 && zoom >= FIXTURE_SHADOW.minZoom
+    ? `${Math.round(sun.azimuth / 2)}/${Math.round(sun.altitude / 2)}`
+    : '';
 const signalColor = { red: 0, amber: 1, green: 2 } as const;
 
 /** Compact screen-space rays; cars retain their separate metric headlight settings. */
@@ -544,6 +574,7 @@ export function packFixtures(
   utilityScratch?: UtilityPackingScratch,
   scratch?: FixturePackingScratch,
   offsets?: SignalOffsets,
+  shadows?: FixtureShadows,
 ): PackedFixtures {
   out.fill(0);
   const size = grid.cols * grid.rows;
@@ -976,7 +1007,92 @@ export function packFixtures(
     for (let cell = 0; cell < admission.length; cell++)
       if (admission[cell] === -3 || admission[cell] === -5) owners[cell] = -3;
   }
+  if (shadows) packFixtureShadows(out, grid, fixtures, zoom, shadows, glyphIndex);
   return packed;
+}
+
+/** Where a fixture's foot is, and how tall it stands, if it casts a shadow. */
+function fixtureFoot(fixture: StreetFixture): { foot: Point; height: number } | undefined {
+  const { height } = FIXTURE_SHADOW;
+  switch (fixture.kind) {
+    case 'streetlight':
+      return {
+        foot: fixture.base,
+        height: fixture.style === 'lantern' ? height.lantern : height.streetlight,
+      };
+    case 'signal':
+    case 'pedestrian-signal':
+    case 'flagpole':
+      return { foot: fixture.base, height: height[fixture.kind] };
+    case 'utility-pole':
+      return { foot: fixture.pole.at as Point, height: height['utility-pole'] };
+    default:
+      return undefined;
+  }
+}
+
+/** Sixths already shaded while packing, by cell, so crossing shadows join up. */
+const shadowMasks = new Map<number, number>();
+const METERS_PER_DEGREE = 111_320;
+
+function packFixtureShadows(
+  out: Uint8Array,
+  grid: FixtureGrid,
+  fixtures: readonly StreetFixture[],
+  zoom: number,
+  { sun, sextants }: FixtureShadows,
+  glyphIndex: (glyph: string) => number,
+) {
+  if (sun.altitude <= 0 || zoom < FIXTURE_SHADOW.minZoom) return;
+  shadowMasks.clear();
+  const tan = Math.tan((Math.max(sun.altitude, 1) * Math.PI) / 180);
+  const az = (sun.azimuth * Math.PI) / 180;
+  const east = -Math.sin(az);
+  const north = -Math.cos(az);
+  for (const fixture of fixtures) {
+    const standing = fixtureFoot(fixture);
+    if (!standing) continue;
+    const [lng, lat] = standing.foot;
+    const meters = Math.min(FIXTURE_SHADOW.reach, standing.height / tan);
+    const [x0, y0] = grid.toCell(lng, lat);
+    const [x1, y1] = grid.toCell(
+      lng + (east * meters) / (METERS_PER_DEGREE * Math.cos((lat * Math.PI) / 180)),
+      lat + (north * meters) / METERS_PER_DEGREE,
+    );
+    // Off the grid altogether: nothing to do, whichever way it points.
+    if (
+      Math.max(x0, x1) < 0 ||
+      Math.max(y0, y1) < 0 ||
+      Math.min(x0, x1) >= grid.cols ||
+      Math.min(y0, y1) >= grid.rows
+    )
+      continue;
+    // Sixths are half a cell wide and a third tall; a step of a sixth never leaves a gap.
+    const steps = Math.ceil(Math.max(Math.abs(x1 - x0) * 2, Math.abs(y1 - y0) * 3));
+    if (steps < 1 || steps > 512) continue;
+    for (let i = 1; i <= steps; i++) {
+      const x = x0 + ((x1 - x0) * i) / steps;
+      const y = y0 + ((y1 - y0) * i) / steps;
+      const c = Math.floor(x);
+      const r = Math.floor(y);
+      if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) continue;
+      const cell = r * grid.cols + c;
+      const bit = Math.min(2, Math.floor((y - r) * 3)) * 2 + (x - c >= 0.5 ? 1 : 0);
+      const known = shadowMasks.get(cell);
+      // Another fixture's ink keeps its cell.
+      if (known === undefined && out[cell * 4 + 3] !== 0) continue;
+      shadowMasks.set(cell, (known ?? 0) | (1 << bit));
+    }
+  }
+  for (const [cell, mask] of shadowMasks) {
+    const code = glyphIndex(sextants[mask]!);
+    if (code <= 0 || code > MAX_GLYPHS) continue;
+    const at = cell * 4;
+    [out[at], out[at + 1]] = packGlyph(code, FixturePart.shadow);
+    out[at + 2] = 0;
+    out[at + 3] = 255;
+  }
+  shadowMasks.clear();
 }
 
 export type SignalLightGrid = Pick<FixtureGrid, 'cols' | 'rows' | 'cellWidth' | 'cellHeight'> & {

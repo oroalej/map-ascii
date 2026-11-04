@@ -520,11 +520,37 @@ ${seasonal ? buntingMotionGlsl : ''}
 ${seasonal ? festivePulseGlsl : ''}
 ${seasonal ? carnivalMotionGlsl : ''}
 
+// Ground shadows fall on open ground and water, never over a roof or foliage. Same sampled
+// surface as an agent standing here (lifeAllowed).
+bool shadowFalls(int cls, ivec2 subAt) {
+  if (cls == u_vehicleOccluders.x) return false;
+  int surface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+  if (surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z) return false;
+  int bits = u_cellBits[surface];
+  if ((bits & ${CellBit.person | CellBit.vehicle | CellBit.boat | CellBit.train}) != 0) return true;
+  return (bits & ${CellBit.grounds}) != 0 && texelFetch(u_subAttr, subAt, 0).r == 0.0;
+}
+
+float groundShadow() {
+  return 1.0 - ${float(GROUND_SHADOW.dark)} * directSun();
+}
+
+// The sub-cell sample this pixel is reading (main), for what a shadow falls on.
+ivec2 pixelSub;
+
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
 vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
   if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
+  if (part == ${FixturePart.shadow}) {
+    // Hardware's shadow (life/fixtures.ts): it darkens what's there, and draws no ink.
+    int shadowCode = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
+    ivec2 shadowAt = ivec2(shadowCode % u_columns, shadowCode / u_columns) * ivec2(u_cell);
+    int shadowClass = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    bool shaded = texelFetch(u_atlas, shadowAt + inCell, 0).r > 0.0 && shadowFalls(shadowClass, pixelSub);
+    return (shaded ? under * groundShadow() : under) + halo;
+  }
   ${
     seasonal
       ? /* glsl */ `
@@ -694,21 +720,6 @@ bool lifeAllowed(vec4 life, int cls, ivec2 cell, ivec2 subAt) {
   return lifeAllowedAt(life, cls, surface, height, height);
 }
 
-// Ground shadows fall on open ground and water, never over a roof or foliage. Same sampled
-// surface as an agent standing here (lifeAllowed).
-bool shadowFalls(int cls, ivec2 subAt) {
-  if (cls == u_vehicleOccluders.x) return false;
-  int surface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
-  if (surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z) return false;
-  int bits = u_cellBits[surface];
-  if ((bits & ${CellBit.person | CellBit.vehicle | CellBit.boat | CellBit.train}) != 0) return true;
-  return (bits & ${CellBit.grounds}) != 0 && texelFetch(u_subAttr, subAt, 0).r == 0.0;
-}
-
-float groundShadow() {
-  return 1.0 - ${float(GROUND_SHADOW.dark)} * directSun();
-}
-
 vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   if (!u_focus) return vec3(0.0);
   float halo = 0.0;
@@ -752,6 +763,7 @@ void main() {
   ivec2 inCell = ivec2(grid - vec2(cell) * u_cell);
   ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
   ivec2 subAt = cell * sub + clamp(ivec2(vec2(inCell) / u_cell * vec2(sub)), ivec2(0), sub - 1);
+  pixelSub = subAt;
 
   // Labels sit on top, on their own coarser grid (density.ts); their cells show the
   // background, which gives them a halo.
