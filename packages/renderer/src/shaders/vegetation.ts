@@ -11,7 +11,8 @@ import {
   CROP_STAGE,
   CropGlyph,
   CROWN,
-  CrownGlyph,
+  CROWN_LEVEL,
+  CROWN_MASS,
   FLUTTER,
   GrassGlyph,
   GRASS,
@@ -194,13 +195,28 @@ bool flutters(uint h, float gust, float time) {
   return ((int(h >> 2u) + flips) & 1) == 1;
 }
 
-// A crown's glyph: the rim, an interior, or a dense core; fluttering in a gust (glyphs/select.ts).
-int foliageVariant(ivec2 c, float time, float gust, bool rim) {
+// A crown cell's density from its place on its mass and its tier (glyphs/select.ts crownLevel).
+int crownLevel(vec2 local, int tier, vec2 sun, uint h, bool rim) {
+  float score = ${float(CROWN_LEVEL.top)} * max(0.0, 1.0 - dot(local, local))
+    + ${float(CROWN_LEVEL.sun)} * dot(local, sun)
+    + ${float(CROWN_LEVEL.tier)} * float(tier)
+    + (float((h >> 16u) & 255u) / 256.0 - 0.5) * ${float(CROWN_LEVEL.jitter)};
+  int level = ${CROWN_LEVEL.steps.map((step) => `(score >= ${float(step)} ? 1 : 0)`).join(' + ')};
+  if (rim) level = min(level, ${CROWN_LEVEL.rimCap});
+  return tier == 0 ? min(level, ${CROWN_LEVEL.baseCap}) : level;
+}
+
+// A crown's glyph: its density, one level sparser as it flutters in a gust (glyphs/select.ts).
+int foliageVariant(ivec2 c, float time, float gust, bool rim, vec2 local, int tier, vec2 sun) {
   uint h = cellHash(c);
-  if (gust >= ${float(TREE_WIND.step)}) return flutters(h, gust, time) ? 0 : 1;
-  if (rim) return ${CrownGlyph.rim};
-  return valueNoise(c, ${CROWN.core.scale}, ${CROWN.core.seed}) > ${float(CROWN.core.above)}
-    && h % ${CROWN.core.skip}u != 0u ? ${CrownGlyph.core} : ${CrownGlyph.interior};
+  int level = crownLevel(local, tier, sun, h, rim);
+  return gust >= ${float(TREE_WIND.step)} && flutters(h, gust, time) ? max(0, level - 1) : level;
+}
+
+// How tall a crown cell casts (glyphs/select.ts crownCastHeight); layer is its attribute alpha.
+float crownCastHeight(float height, float layer) {
+  int tier = int(layer * 255.0 + 0.5) & 3;
+  return height - min(float(${CROWN_MASS.top} - tier), height * 0.25);
 }
 
 // Whether the crown of feature id is yellowing.

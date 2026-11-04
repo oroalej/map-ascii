@@ -395,7 +395,9 @@ float castsAt(ivec2 q) {
   q = clamp(q, ivec2(0), textureSize(u_class, 0) - 1);
   int k = u_kind[classAt(q)];
   bool standing = ${STANDING_KINDS.map((kind) => `k == ${kind}`).join(' || ')};
-  return standing ? texelFetch(u_attr, q, 0).r * 255.0 : 0.0;
+  if (!standing) return 0.0;
+  vec4 attr = texelFetch(u_attr, q, 0);
+  return k == ${kindCodes.foliage} ? crownCastHeight(attr.r * 255.0, attr.a) : attr.r * 255.0;
 }
 
 // How much of the cell is in shadow, 0–1 (glyphs/select.ts shadowAmount): three rays toward the
@@ -665,7 +667,7 @@ void main() {
     gust = combineWind(gust, u_windDir, vec2(w - u_origin), dir);
     bool rim = classAt(p + ivec2(1, 0)) != cls || classAt(p + ivec2(-1, 0)) != cls
       || classAt(p + ivec2(0, 1)) != cls || classAt(p + ivec2(0, -1)) != cls;
-    v = min(foliageVariant(w, u_time, gust, rim), u_count[cls] - 1);
+    v = min(foliageVariant(w, u_time, gust, rim, attr.gb * 2.0 - 1.0, int(attr.a * 255.0 + 0.5) & 3, sunDir()), u_count[cls] - 1);
     g_tone = crownIsDry(unpackId(id)) ? ${Tone.dry} : ${Tone.none};
   }
   vec2 glyph = texelFetch(u_table, ivec2(v, cls), 0).rg;

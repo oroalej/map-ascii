@@ -562,8 +562,10 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
         orderIndependent,
         ...saved,
         falseCurbGlyph: selectedBytes[(7 * cols + 2) * 4],
-        crownEastGlyph: selectedBytes[(2 * cols + 2) * 4]! + ((selectedBytes[(2 * cols + 2) * 4 + 1]! >> 6) << 8),
-        crownWestGlyph: selectedBytes[(4 * cols + 4) * 4]! + ((selectedBytes[(4 * cols + 4) * 4 + 1]! >> 6) << 8),
+        crownEastGlyph:
+          selectedBytes[(2 * cols + 2) * 4]! + ((selectedBytes[(2 * cols + 2) * 4 + 1]! >> 6) << 8),
+        crownWestGlyph:
+          selectedBytes[(4 * cols + 4) * 4]! + ((selectedBytes[(4 * cols + 4) * 4 + 1]! >> 6) << 8),
         lowerRoofEdgeClass: selectedBytes[(1 * cols + 8) * 4 + 1]! & 63,
         roadJoinGlyph,
         revealedRoad,
@@ -679,7 +681,8 @@ test('tree canopy overlap hides non-bird Life and compares roof heights', async 
     expect(p[1]).toBeLessThan(10);
   }
   for (const p of [result.edgeCovered, result.coveredCar]) {
-    expect(p[1]).toBeGreaterThan(100);
+    // The crown's green, however dim its edge's ink, and none of the car's red.
+    expect(p[1]).toBeGreaterThan(60);
     expect(p[0]).toBeLessThan(10);
   }
   expect(result.falseCurbGlyph).toBe(0);

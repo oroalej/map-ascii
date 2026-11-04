@@ -110,7 +110,7 @@ function sample(style: ClassStyle): string {
     case 'crop':
       return style.glyphs.slice(0, 2).join(''); // at rest
     case 'foliage':
-      return style.glyphs.slice(0, 2).join(''); // at rest
+      return style.glyphs.slice(2).join(''); // the leaves on a mass, not its sparse rim
     case 'single':
     case 'variant':
       return style.glyphs

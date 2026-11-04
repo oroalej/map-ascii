@@ -11,6 +11,8 @@ import {
   classifyRings,
   createIdRegistry,
   CROWN_SIDES,
+  CROWN_MASS_SIDES,
+  crownMasses,
   crownRing,
   hashString,
   ringTriangles,
@@ -1271,17 +1273,33 @@ describe('buildTileGeometry', () => {
       // Crowns are kept apart from the ground: the crown pass redraws them as they sway.
       expect(fills.positions).toHaveLength(0);
       const crown = vertices(crowns);
-      expect(crown).toHaveLength(CROWN_SIDES + 1);
       expect(crown.every((v) => v.cls === classId('tree_crown'))).toBe(true);
-      const radii = crown.slice(1).map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
+      // The base comes first: the crown's silhouette, around the trunk.
+      const radii = crown
+        .slice(1, CROWN_SIDES + 1)
+        .map((v) => Math.hypot(v.x! - 2000, v.y! - 2000));
       const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
       expect(mean / units(4)).toBeGreaterThan(0.96);
       expect(mean / units(4)).toBeLessThan(1.04);
-      expect(crowns.indices).toHaveLength(CROWN_SIDES * 3);
-      expect(Array.from(crowns.surface.slice(0, 2))).toEqual([0, 0]);
-      expect(crowns.surface).toHaveLength(crown.length * 2);
-      for (let i = 2; i < crowns.surface.length; i += 2)
-        expect(Math.hypot(crowns.surface[i]!, crowns.surface[i + 1]!)).toBeCloseTo(1);
+      expect(crowns.surfaceSize).toBe(4);
+      expect(crowns.surface).toHaveLength(crown.length * 4);
+      // Each fan's surface is its own: 0 at its center, 1 around its rim.
+      let centers = 0;
+      for (let i = 0; i < crowns.surface.length; i += 4) {
+        const r = Math.hypot(crowns.surface[i]!, crowns.surface[i + 1]!);
+        if (r === 0) centers++;
+        else expect(r).toBeCloseTo(1);
+      }
+      expect(centers).toBeGreaterThanOrEqual(6);
+      expect(Array.from(crowns.surface.slice(0, 3))).toEqual([0, 0, 0]);
+      // Top tier first: all of a crown has one depth, so the first drawn keeps a cell.
+      const tierOf = (index: number) => crowns.surface[index * 4 + 2]!;
+      const drawn = Array.from(crowns.indices, tierOf);
+      expect(drawn).toEqual([...drawn].sort((a, b) => b - a));
+      expect(drawn.at(-1)).toBe(0);
+      expect(drawn[0]).toBe(3);
+      // The height byte stays the tree's on every mass: it decides what the crown covers.
+      expect(crown.every((v) => v.height === 10)).toBe(true);
       // Each vertex carries its reach from the trunk, how far it swings.
       Array.from(crowns.ridge).forEach((reach, i) => {
         expect(reach).toBeCloseTo(Math.hypot(crown[i]!.x! - 2000, crown[i]!.y! - 2000), -0.5);
@@ -1344,8 +1362,14 @@ describe('buildTileGeometry', () => {
         createIdRegistry(),
         tile,
       );
-      // At 0, 8, 16, 24, 32, and 40 m.
-      expect(vertices(crowns)).toHaveLength(6 * (CROWN_SIDES + 1));
+      // At 0, 8, 16, 24, 32, and 40 m: six bases, each centered on its own trunk.
+      const bases = Array.from({ length: crowns.surface.length / 4 }, (_, i) => i).filter(
+        (i) =>
+          crowns.surface[i * 4 + 2] === 0 &&
+          crowns.surface[i * 4] === 0 &&
+          crowns.surface[i * 4 + 1] === 0,
+      );
+      expect(bases).toHaveLength(6);
       expect(life.areas!.filter((a) => a.kind === 'parking-exclusion')).toHaveLength(6);
     });
 
@@ -1367,6 +1391,128 @@ describe('buildTileGeometry', () => {
       expect(ringTriangles(ring)).toHaveLength((CROWN_SIDES - 2) * 3);
     });
 
+    describe('leaf masses', () => {
+      const trunk = { x: 500, y: 500 };
+      const seeds = Array.from({ length: 200 }, (_, i) => Math.imul(i + 1, 0x9e3779b9) >>> 0);
+      const massesOf = (seed: number, variant = 3) =>
+        crownMasses(trunk, 100, crownRing(trunk, 100, seed), seed, variant);
+      const reachOf = (ring: readonly { x: number; y: number }[], angle: number) => {
+        // Where a ray from the trunk leaves the closed ring.
+        let best = 0;
+        for (let i = 0; i + 1 < ring.length; i++) {
+          const a = { x: ring[i]!.x - trunk.x, y: ring[i]!.y - trunk.y };
+          const b = { x: ring[i + 1]!.x - trunk.x, y: ring[i + 1]!.y - trunk.y };
+          const dx = Math.cos(angle);
+          const dy = Math.sin(angle);
+          const ex = b.x - a.x;
+          const ey = b.y - a.y;
+          const denom = dx * ey - dy * ex;
+          if (denom === 0) continue;
+          const t = (a.x * ey - a.y * ex) / denom;
+          const u = (a.x * dy - a.y * dx) / denom;
+          if (t > 0 && u >= 0 && u <= 1) best = Math.max(best, t);
+        }
+        return best;
+      };
+
+      it('stack 5 to 9 banks on three tiers, a different layout for each tree', () => {
+        const layouts = new Set<string>();
+        const counts = new Set<number>();
+        for (const seed of seeds) {
+          const masses = massesOf(seed);
+          counts.add(masses.length);
+          expect(masses.length).toBeGreaterThanOrEqual(5);
+          expect(masses.length).toBeLessThanOrEqual(9);
+          expect(new Set(masses.map((m) => m.tier))).toEqual(new Set([1, 2, 3]));
+          for (const { ring } of masses) expect(ring).toHaveLength(CROWN_MASS_SIDES);
+          layouts.add(masses.map((m) => m.center.x.toFixed(1)).join());
+        }
+        expect(counts.size).toBe(5);
+        expect(layouts.size).toBe(seeds.length);
+        expect(massesOf(seeds[0]!)).toEqual(massesOf(seeds[0]!));
+      });
+
+      it('stagger the top of the crown off its trunk, with the outer banks farther out', () => {
+        const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+        const reach = (tier: number) =>
+          mean(
+            seeds.flatMap((seed) =>
+              massesOf(seed)
+                .filter((m) => m.tier === tier)
+                .map((m) => Math.hypot(m.center.x - trunk.x, m.center.y - trunk.y)),
+            ),
+          );
+        expect(reach(1)).toBeGreaterThan(reach(2));
+        expect(reach(2)).toBeGreaterThan(reach(3));
+        expect(reach(3)).toBeGreaterThan(0);
+      });
+
+      it('stay inside the silhouette, so they never change the crown’s shape', () => {
+        for (const variant of [1, 3])
+          for (const seed of seeds) {
+            const base = crownRing(trunk, 100, seed);
+            for (const { center, ring } of massesOf(seed, variant))
+              for (const q of [center, ...ring]) {
+                const r = Math.hypot(q.x - trunk.x, q.y - trunk.y);
+                const angle = Math.atan2(q.y - trunk.y, q.x - trunk.x);
+                expect(r).toBeLessThanOrEqual(reachOf(base, angle) + 1e-6);
+              }
+          }
+      });
+
+      it('cover most of the crown, leaving the base to the crevices between them', () => {
+        const insidePolygon = (ring: readonly { x: number; y: number }[], x: number, y: number) => {
+          let inside = false;
+          for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+            const a = ring[i]!;
+            const b = ring[j]!;
+            if (a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x)
+              inside = !inside;
+          }
+          return inside;
+        };
+        for (const seed of seeds.slice(0, 60)) {
+          const base = crownRing(trunk, 100, seed).slice(0, -1);
+          const masses = massesOf(seed);
+          let crown = 0;
+          let covered = 0;
+          for (let x = 380; x <= 620; x += 6)
+            for (let y = 380; y <= 620; y += 6) {
+              if (!insidePolygon(base, x, y)) continue;
+              crown++;
+              if (masses.some((m) => insidePolygon(m.ring, x, y))) covered++;
+            }
+          expect(covered / crown).toBeGreaterThan(0.5);
+          expect(covered / crown).toBeLessThan(0.97);
+        }
+      });
+
+      it('give a palm radial fronds around a small crownshaft', () => {
+        for (const seed of seeds) {
+          const masses = massesOf(seed, 1);
+          const fronds = masses.filter((m) => m.tier < 3);
+          expect(fronds.length).toBeGreaterThanOrEqual(9);
+          expect(fronds.length).toBeLessThanOrEqual(13);
+          expect(masses.filter((m) => m.tier === 3)).toHaveLength(1);
+          for (const frond of fronds) {
+            expect(frond.ring).toHaveLength(6);
+            // Long and narrow, pointing out from the trunk.
+            const near = frond.ring[0]!;
+            const tip = frond.ring[3]!;
+            const length = Math.hypot(tip.x - near.x, tip.y - near.y);
+            const width = Math.hypot(
+              frond.ring[1]!.x - frond.ring[5]!.x,
+              frond.ring[1]!.y - frond.ring[5]!.y,
+            );
+            expect(length).toBeGreaterThan(width);
+            expect(Math.hypot(near.x - trunk.x, near.y - trunk.y)).toBeLessThan(
+              Math.hypot(tip.x - trunk.x, tip.y - trunk.y),
+            );
+          }
+        }
+      });
+    });
+
     it('seeds a crown by its tree, so the same tree keeps its shape across tiles', () => {
       const a = vertices(build(tree()).crowns);
       const b = vertices(build(tree({ id: 'osm:node/41' })).crowns);
@@ -1386,11 +1532,18 @@ describe('buildTileGeometry', () => {
       const { crowns } = buildTileGeometry({ landuse: layer([row]) }, createIdRegistry(), tile);
       const v = vertices(crowns);
       const size = CROWN_SIDES + 1;
-      // Each crown's shape relative to its own center (its trees are 8 m apart along x).
-      const shape = (i: number) =>
-        v.slice(i * size, (i + 1) * size).map((p) => [p.x! - v[i * size]!.x!, p.y!]);
-      expect(v.length).toBeGreaterThanOrEqual(2 * size);
-      expect(shape(1)).not.toEqual(shape(0));
+      // Each base's shape relative to its own center (its trees are 8 m apart along x).
+      const starts = v.flatMap((_, i) =>
+        crowns.surface[i * 4 + 2] === 0 &&
+        crowns.surface[i * 4] === 0 &&
+        crowns.surface[i * 4 + 1] === 0
+          ? [i]
+          : [],
+      );
+      const shape = (start: number) =>
+        v.slice(start, start + size).map((p) => [p.x! - v[start]!.x!, p.y!]);
+      expect(starts.length).toBeGreaterThanOrEqual(2);
+      expect(shape(starts[1]!)).not.toEqual(shape(starts[0]!));
     });
 
     it('walks a line in equal steps, around its bends', () => {

@@ -878,14 +878,26 @@ void main() {
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 color = awning > 0 ? daylit(u_awningPaints[min(awning - 1, 7)]) : toned(daylit(cropPigment(cls, tone)), tone, night);
   if (cls == u_crownClass) {
-    vec2 local = (edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0)).gb * 2.0 - 1.0;
+    // Each mass is its own rounded bank, dark at the rim it overlaps (glyphs/select.ts crownLight).
+    vec4 surface = edge ? texelFetch(u_subAttr, subAt, 0) : texelFetch(u_attr, cell, 0);
+    vec2 local = surface.gb * 2.0 - 1.0;
+    int layer = int(surface.a * 255.0 + 0.5);
     vec3 normal = normalize(vec3(local * ${float(CROWN_LIGHT.tilt)},
       sqrt(max(${float(CROWN_LIGHT.minZ)}, 1.0 - dot(local, local)))));
     float light = clamp(
       ${float(CROWN_LIGHT.base)} + ${float(CROWN_LIGHT.gain)} * dot(normal, normalize(u_crownSun)),
       ${float(CROWN_LIGHT.min)}, ${float(CROWN_LIGHT.max)});
-    float variation = 0.94 + 0.12 * float(cellHash((u_origin + cell) / 3) >> 8u) / 16777216.0;
-    color *= light * variation;
+    light *= 1.0 - ${float(CROWN_LIGHT.rim)} * smoothstep(${float(CROWN_LIGHT.rimFrom)}, 1.0, length(local));
+    light *= ${CROWN_LIGHT.tiers
+      .slice(0, -1)
+      .map((value, tier) => `(layer & 3) == ${tier} ? ${float(value)} : `)
+      .join('')}${float(CROWN_LIGHT.tiers.at(-1)!)};
+    light *= ${CROWN_LIGHT.tints
+      .slice(0, -1)
+      .map((value, tint) => `(layer >> 2) == ${tint} ? ${float(value)} : `)
+      .join('')}${float(CROWN_LIGHT.tints.at(-1)!)};
+    light = min(light, ${float(CROWN_LIGHT.max)});
+    color *= light;
     back *= light;
   }
   if (cls == u_pulse.x || cls == u_pulse.y) color *= 0.7 + 0.3 * sin(u_time * 3.0);

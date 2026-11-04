@@ -6,6 +6,8 @@ import { classId } from '../classes';
 import {
   cellLight,
   contactShade,
+  CROWN_MASS,
+  crownCastHeight,
   kindCodes,
   pixelLight,
   pixelStands,
@@ -20,6 +22,29 @@ import {
   TONE_SHIFT,
   WIND_SHIFT,
 } from './select';
+
+describe('crown cast height', () => {
+  it('steps down from the mapped height at the top to the base', () => {
+    expect(crownCastHeight(14, CROWN_MASS.top)).toBe(14);
+    expect(crownCastHeight(14, 2)).toBe(13);
+    expect(crownCastHeight(14, 1)).toBe(12);
+    expect(crownCastHeight(14, 0)).toBe(11);
+  });
+
+  it('keeps a short tree standing', () => {
+    expect(crownCastHeight(2, 0)).toBe(1.5);
+    expect(crownCastHeight(1, 0)).toBeGreaterThan(0);
+  });
+
+  it('lets a taller mass shade a lower one, but not one of its own height', () => {
+    const lower = crownCastHeight(14, 1);
+    const upper = crownCastHeight(14, CROWN_MASS.top);
+    const sunTan = 1;
+    const at = (height: number) => () => height;
+    expect(shadowAmount(lower, at(upper), sunTan, 0.25)).toBeGreaterThan(0);
+    expect(shadowAmount(upper, at(upper), sunTan, 0.25)).toBe(0);
+  });
+});
 
 describe('shadows', () => {
   const tan = (degrees: number) => Math.tan((degrees * Math.PI) / 180);
