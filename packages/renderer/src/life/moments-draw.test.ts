@@ -5,7 +5,7 @@ import { MINI_DIAGONALS } from './vehicles';
 import { mapGlyphs, sextantGlyphs, themes } from '../theme';
 import { CellBit } from './config';
 import { packLife, type LifeGrid } from './draw';
-import {
+import { PASSING_GLYPHS,
   CANDLE_BIT,
   figureOf,
   PAINT_NONE,
@@ -264,7 +264,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       PROCESSION_GLYPHS.length +
       FOLKLORE_GLYPHS.length +
       3 +
-      MINI_DIAGONALS.length,
+      MINI_DIAGONALS.length +
+      PASSING_GLYPHS.length,
   );
   expect(mapGlyphs(themes.light)).toHaveLength(
     385 +
@@ -276,7 +277,8 @@ it('packs attentive and gesturing adults and children at one-cell, big and stamp
       PROCESSION_GLYPHS.length +
       FOLKLORE_GLYPHS.length +
       3 +
-      MINI_DIAGONALS.length,
+      MINI_DIAGONALS.length +
+      PASSING_GLYPHS.length,
   );
   for (const theme of Object.values(themes)) {
     const glyphs = mapGlyphs(theme);

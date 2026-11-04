@@ -33,7 +33,10 @@ import {
   figureFit,
   figureGlyph,
   figureInk,
+  FLAP_PASSING,
+  hasPassingPose,
   PAINT_NONE,
+  passingGlyph,
   PersonPart,
   personByte,
   type PersonLook,
@@ -1496,20 +1499,29 @@ function drawPeople(
   /** A 2×2 figure with its top left cell at (`c`, `r`). */
   const putBig = (look: PersonLook, c: number, r: number) => {
     const swap = look.figure === 'rower' && turned ? 1 : 0;
-    const frame = ((look.flap === 1 ? 1 : 0) ^ swap) as 0 | 1;
+    const frame = (((look.flap & 1) as 0 | 1) ^ swap) as 0 | 1;
+    // Low quality keeps its two steps (quality.ts `lifeDetail`).
+    const passing =
+      layerSextants &&
+      look.flap & FLAP_PASSING &&
+      look.figure === 'adult' &&
+      !look.pose &&
+      !look.canopy;
     const pull = (stroke ^ swap) as 0 | 1;
     let any = false;
     for (const slice of [0, 1, 2, 3] as const) {
-      const glyph = figureGlyph(
-        look.figure,
-        across,
-        frame,
-        { slice },
-        pull,
-        headingOf(fx, fy),
-        look.pose,
-        stageOf(look),
-      );
+      const glyph = passing
+        ? passingGlyph(across, slice)
+        : figureGlyph(
+            look.figure,
+            across,
+            frame,
+            { slice },
+            pull,
+            headingOf(fx, fy),
+            look.pose,
+            stageOf(look),
+          );
       if (put(c + (slice & 1), r + (slice >> 1), glyph, byteOf(look))) any = true;
     }
     return any;
@@ -1549,7 +1561,7 @@ function drawPeople(
     const glyph = figureGlyph(
       look.figure,
       across,
-      look.flap === 1 ? 1 : 0,
+      (look.flap & 1) as 0 | 1,
       { scale: fit },
       0,
       headingOf(fx, fy),
@@ -1670,7 +1682,7 @@ function drawPeople(
       const glyph = figureGlyph(
         look.figure,
         across,
-        look.flap === 1 ? 1 : 0,
+        (look.flap & 1) as 0 | 1,
         { scale: fit === 'stamp' ? 2 : fit },
         0,
         headingOf(fx, fy),
@@ -1710,7 +1722,13 @@ function stampFigure(
   texel: (tone: boolean) => [number, number, number],
   options?: StampOptions,
 ): boolean {
-  const frame = look.flap === 1 ? 1 : 0;
+  const frame = (look.flap & 1) as 0 | 1;
+  const passing =
+    !!layerSextants &&
+    (look.flap & FLAP_PASSING) !== 0 &&
+    hasPassingPose(look.figure) &&
+    !look.pose &&
+    !look.canopy;
   // A canopy's thin ribs show in a cell where they are a third of its ink.
   const toneShare = look.figure === 'umbrella' ? 1 / 3 : 1 / 2;
   return stampMaster(
@@ -1720,7 +1738,7 @@ function stampFigure(
     along,
     right,
     options?.size ?? FIGURE_SIZE_M[look.figure],
-    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose),
+    (u, v, detail) => figureInk(look.figure, frame, u, v, detail, stroke, look.pose, passing),
     toneShare,
     glyphIndex,
     texel,

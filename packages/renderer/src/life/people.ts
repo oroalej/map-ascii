@@ -20,9 +20,22 @@ export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated' |
 export type PersonPose = 'attentive' | 'gesture';
 
 /**
+ * A walker's `flap` after `walked` m at `stride` m a step (`step` starts them on either foot): bit 0
+ * is which foot leads, flipping every step; `FLAP_PASSING` is set through the second half of each
+ * step, when the arms pass the body. So a walker goes 0, 2, 1, 3, while anything drawing only two
+ * steps reads bit 0 and flips at the same distances it always did.
+ */
+export const FLAP_PASSING = 2;
+export function walkFlap(walked: number, stride: number, step = 0): number {
+  const steps = walked / stride;
+  const whole = Math.floor(steps);
+  return ((whole + step) & 1) | (steps - whole >= 0.5 ? FLAP_PASSING : 0);
+}
+
+/**
  * One person as drawn (life/draw.ts `drawPeople`): their figure and its paint (`PAINT_NONE` for
  * none), their slot in a group (`lateral` to the right of the first, `back` behind it), and
- * which step of their stride they are on.
+ * which step of their stride they are on (`walkFlap`).
  */
 export type PersonLook = {
   figure: PersonFigure;
@@ -210,6 +223,79 @@ const ADULT: Readonly<Record<number, readonly string[]>> = {
   10: ADULT_10,
   20: ADULT_20,
 };
+
+/** Between steps, the arms pass the body: a walker's other two poses, the same mirrored or turned. */
+// prettier-ignore
+const PASSING_ADULT: Readonly<Record<number, readonly string[]>> = {
+  5: [
+    '.....',
+    '##o##',
+    '#oho#',
+    '##o##',
+    '.....',
+  ],
+  10: [
+    '..........',
+    '..........',
+    '....oo....',
+    '###ohho###',
+    '###hhhh###',
+    '###hhhh###',
+    '###ohho###',
+    '....oo....',
+    '..........',
+    '..........',
+  ],
+  20: [
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '.........oo.........',
+    '........oooo........',
+    '#######oooooo#######',
+    '######oohhhhoo######',
+    '######ohhhhhho######',
+    '######hhhhhhhh######',
+    '######hhhhhhhh######',
+    '######ohhhhhho######',
+    '######oohhhhoo######',
+    '#######oooooo#######',
+    '........oooo........',
+    '.........oo.........',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+  ],
+};
+// prettier-ignore
+const PASSING_CHILD: Readonly<Record<number, readonly string[]>> = {
+  5: [
+    '.....',
+    '.....',
+    '#oho#',
+    '.....',
+    '.....',
+  ],
+  10: [
+    '..........',
+    '..........',
+    '....oo....',
+    '.##ohho##.',
+    '.##hhhh##.',
+    '.##hhhh##.',
+    '.##ohho##.',
+    '....oo....',
+    '..........',
+    '..........',
+  ],
+};
+export const PASSING_MASTERS = { adult: PASSING_ADULT, child: PASSING_CHILD } as const;
+
+/** Only walkers without a pose or a load have passing poses. */
+export const hasPassingPose = (figure: PersonFigure): figure is keyof typeof PASSING_MASTERS =>
+  figure === 'adult' || figure === 'child';
 
 /** A child: slighter shoulders, a larger head for them. */
 // prettier-ignore
@@ -417,6 +503,8 @@ export type FigureGlyph = {
   figure: PersonFigure;
   across: boolean;
   frame: 0 | 1;
+  /** A 2×2 walker between steps (`PASSING_MASTERS`). */
+  passing?: boolean;
   scale?: FigureScale;
   slice?: 0 | 1 | 2 | 3;
   /** A paddler: at the reach (0, the blade forward) or the pull (1, the master turned end to end). */
@@ -489,6 +577,18 @@ for (const stage of [0, 1] as const) {
     glyphTable.push({ figure: 'umbrella', across: false, frame: 0, stage, slice });
 }
 
+/**
+ * A 2×2 adult between steps: appended after every other Private Use glyph (after the small
+ * vehicles' diagonals, life/vehicles.ts), so nothing else moves. Turned across the screen or not;
+ * a passing pose has no foot to lead.
+ */
+export const PASSING_GLYPHS: readonly string[] = Array.from({ length: 8 }, (_, i) =>
+  String.fromCharCode(0xe432 + i),
+);
+/** The cell `slice` of a 2×2 adult between steps. */
+export const passingGlyph = (across: boolean, slice: 0 | 1 | 2 | 3) =>
+  PASSING_GLYPHS[(across ? 4 : 0) + slice]!;
+
 const keyOf = ({
   figure,
   across,
@@ -509,6 +609,15 @@ const keyOf = ({
 };
 const byKey = new Map(glyphTable.map((g, i) => [keyOf(g), String.fromCharCode(FIRST_CODE + i)]));
 const byGlyph = new Map(glyphTable.map((g, i) => [String.fromCharCode(FIRST_CODE + i), g]));
+for (const across of [false, true])
+  for (const slice of [0, 1, 2, 3] as const)
+    byGlyph.set(passingGlyph(across, slice), {
+      figure: 'adult',
+      across,
+      frame: 0,
+      slice,
+      passing: true,
+    });
 
 /**
  * The glyph for a figure: in one cell at a scale (a whole cell by default), or one cell of a 2×2
@@ -531,9 +640,12 @@ export function figureGlyph(
 /** Which figure a glyph draws, if it is one. */
 export const figureOf = (glyph: string): FigureGlyph | undefined => byGlyph.get(glyph);
 
-/** Every glyph people draw with, for the map atlas (theme.ts `mapGlyphs`). */
+/**
+ * Every glyph people draw with, for the map atlas (theme.ts `mapGlyphs`), but `PASSING_GLYPHS`,
+ * which it appends after all of these.
+ */
 export function personGlyphs(): string[] {
-  return [...byGlyph.keys()];
+  return [...byGlyph.keys()].filter((glyph) => !(PASSING_GLYPHS as readonly string[]).includes(glyph));
 }
 
 /**
@@ -550,7 +662,7 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
   const posed = poseMasters(g.figure, g.pose);
   if (posed) return turnedPixels(posed, box, g.heading ?? (g.across ? 1 : 0));
   if (g.figure === 'seated') return turnedPixels(SEATED, box, g.heading ?? (g.across ? 1 : 0));
-  const masters = FIGURE_MASTERS[g.figure];
+  const masters = g.passing ? PASSING_ADULT : FIGURE_MASTERS[g.figure];
   const sizes = MASTER_SIZES[g.figure];
   const size = sizes.find((s) => s >= box) ?? sizes[sizes.length - 1]!;
   const master = masters[size]!;
@@ -568,7 +680,7 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
  * the step `frame` (a paddler: their side, and their `stroke`): '#' paint, 'o' tone, '.' empty,
  * for a figure stamped at its real size and sampled `detail` times across. From the largest
  * master no finer than that (the smallest, if all are), so thin lines like a canopy's ribs stay
- * as wide as a sample.
+ * as wide as a sample. `passing` is a walker between steps (`PASSING_MASTERS`).
  */
 export function figureInk(
   figure: PersonFigure,
@@ -578,10 +690,11 @@ export function figureInk(
   detail: number,
   stroke: 0 | 1 = 0,
   pose?: PersonPose,
+  passing = false,
 ): string {
   const posed = poseMasters(figure, pose);
   if (posed) return inkAt(posed, u, v, detail);
-  const masters = FIGURE_MASTERS[figure];
+  const masters = passing && hasPassingPose(figure) ? PASSING_MASTERS[figure] : FIGURE_MASTERS[figure];
   const sizes = MASTER_SIZES[figure];
   let size = sizes[0]!;
   for (const s of sizes) if (s <= detail) size = s;

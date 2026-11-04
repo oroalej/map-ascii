@@ -9,6 +9,10 @@ import { buildLifeGlyphs, packLife, type LifeGrid } from './draw';
 import { packAgents, unpackAgents } from './agent-frame';
 import { createLifeParts, PartsFlag, sextantOf } from './parts-layer';
 import {
+  FLAP_PASSING,
+  passingGlyph,
+  PASSING_GLYPHS,
+  walkFlap,
   FIGURE_HAIR,
   FIGURE_MASTERS,
   figureGlyph,
@@ -304,5 +308,87 @@ describe('the atlas and the shader', () => {
     expect(shader).toContain(`wheel = painted && (value & 7) == ${WHEEL_PART}`);
     expect(shader).toContain('vec3 hairColor(int index)');
     expect(VehiclePart.mini).toBe(WHEEL_PART);
+  });
+});
+
+describe('walk cycle', () => {
+  const stride = 0.7;
+  const glyphsWithWalk = [...glyphs, ...PASSING_GLYPHS];
+  const walkIndex = (g: string) => {
+    const known = glyphsWithWalk.indexOf(g);
+    if (known >= 0) return known;
+    glyphsWithWalk.push(g);
+    return glyphsWithWalk.length - 1;
+  };
+
+  it('goes through four phases, flipping feet where it always did', () => {
+    const phases: number[] = [];
+    for (let walked = 0; walked < stride * 4; walked += stride / 2)
+      phases.push(walkFlap(walked + 0.001, stride));
+    expect(phases.slice(0, 4)).toEqual([0, 2, 1, 3]);
+    expect(phases.slice(4)).toEqual([0, 2, 1, 3]);
+    for (let walked = 0; walked < 10; walked += 0.013) {
+      const before = Math.floor(walked / stride) & 1;
+      expect(walkFlap(walked, stride) & 1).toBe(before);
+      const started = (Math.floor(walked / stride) + 1) & 1;
+      expect(walkFlap(walked, stride, 1) & 1).toBe(started);
+    }
+  });
+
+  const walker = (scale: number, flap: number): VisibleAgent =>
+    ({
+      kind: 'person',
+      lng: 60.5,
+      lat: 40.5,
+      paint: Paint.red,
+      flap: 0,
+      ahead: [60.5 + scale, 40.5],
+      people: [{ figure: 'adult', paint: Paint.red, lateral: 0, back: 0, flap }],
+    }) as VisibleAgent;
+  const pack = (agent: VisibleAgent, withLayer = true) => {
+    const out = new Uint8Array(COLS * ROWS * 4);
+    const parts = withLayer ? createLifeParts(COLS * ROWS, ROWS) : undefined;
+    packLife(out, grid(), [agent], themes.dark, walkIndex, null, buildLifeGlyphs(walkIndex), {
+      parts,
+    });
+    return out;
+  };
+
+  it('keeps the one-cell figures on their two steps', () => {
+    const scale = 1.5;
+    for (const frame of [0, 1])
+      expect([...pack(walker(scale, frame | FLAP_PASSING))]).toEqual([...pack(walker(scale, frame))]);
+  });
+
+  it('draws passing poses at 2×2 and stamped, only with the layer', () => {
+    const big = 3.5;
+    expect([...pack(walker(big, FLAP_PASSING))]).not.toEqual([...pack(walker(big, 0))]);
+    const cellGlyph = (out: Uint8Array) => {
+      const found = new Set<string>();
+      for (let i = 0; i < COLS * ROWS; i++)
+        if (out[i * 4 + 2])
+          found.add(glyphsWithWalk[unpackGlyph(out[i * 4]!, out[i * 4 + 1]!).glyph]!);
+      return found;
+    };
+    const glyphSet = cellGlyph(pack(walker(big, FLAP_PASSING)));
+    expect(glyphSet.has(passingGlyph(true, 0))).toBe(true);
+    // Low keeps two steps.
+    expect([...pack(walker(big, FLAP_PASSING), false)]).toEqual([...pack(walker(big, 0), false)]);
+    const stamped = 7;
+    expect([...pack(walker(stamped, FLAP_PASSING))]).not.toEqual([...pack(walker(stamped, 0))]);
+  });
+
+  it('keeps posed figures still', () => {
+    const posed = walker(3.5, FLAP_PASSING);
+    posed.people![0] = { ...posed.people![0]!, pose: 'attentive' };
+    const still = walker(3.5, 0);
+    still.people![0] = { ...still.people![0]!, pose: 'attentive' };
+    expect([...pack(posed)]).toEqual([...pack(still)]);
+  });
+
+  it('has passing masters at every size of a walker, without a stray arm', () => {
+    expect(figureInk('adult', 0, 0.5, 0.5, 10, 0, undefined, true)).toBe('h');
+    expect(figureInk('adult', 0, 0.85, 0.05, 10, 0, undefined, true)).toBe('.');
+    expect(figureInk('adult', 0, 0.85, 0.05, 10, 0, undefined, false)).toBe('o');
   });
 });

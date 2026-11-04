@@ -25,6 +25,7 @@ import { dogGlyphs } from '../life/dogs';
 import { catGlyphs } from '../life/cats';
 import { PUFF_GLYPHS } from '../life/puff-style';
 import {
+  PASSING_GLYPHS,
   FIGURE_HAIR,
   FIGURE_TONE,
   figureGlyph,
@@ -323,6 +324,7 @@ describe('glyph set', () => {
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
         ...MINI_DIAGONALS,
+        ...PASSING_GLYPHS,
       ]);
       for (const glyph of peddlerGlyphs) {
         expect(draw(glyph).drawn).toBe(true);
@@ -346,6 +348,7 @@ describe('glyph set', () => {
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
         ...MINI_DIAGONALS,
+        ...PASSING_GLYPHS,
       ]);
       expect(glyphs.slice(408, 409 + PEDESTRIAN_GLYPHS.length)).toEqual([
         ...CANDLE_GLYPHS,
@@ -378,6 +381,7 @@ describe('glyph set', () => {
         ...rainGlyphs,
         ...vehicleGlyphs(),
         ...personGlyphs(),
+        ...PASSING_GLYPHS,
         ...birdGlyphs(),
         ...dogGlyphs(),
         ...catGlyphs(),
@@ -394,7 +398,8 @@ describe('glyph set', () => {
           -PROCESSION_GLYPHS.length -
             FOLKLORE_GLYPHS.length -
             peddlerGlyphs.length -
-            MINI_DIAGONALS.length,
+            MINI_DIAGONALS.length -
+            PASSING_GLYPHS.length,
         ),
       ).toEqual([
         ...PROCESSION_GLYPHS.slice(0, 4),
@@ -402,6 +407,7 @@ describe('glyph set', () => {
         ...PROCESSION_GLYPHS.slice(4),
         ...peddlerGlyphs,
         ...MINI_DIAGONALS,
+        ...PASSING_GLYPHS,
       ]);
       for (const glyph of [...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS]) {
         const rendered = draw(glyph);
@@ -434,6 +440,14 @@ describe('glyph set', () => {
       };
       expect(corner(MINI_DIAGONALS[0], true)).toBeGreaterThan(corner(MINI_DIAGONALS[0], false));
       expect(corner(MINI_DIAGONALS[1], false)).toBeGreaterThan(corner(MINI_DIAGONALS[1], true));
+    }
+  });
+
+  it('appends passing poses after the small vehicles, leaving the atlas before them unchanged', () => {
+    for (const theme of Object.values(themes)) {
+      const glyphs = mapGlyphs(theme);
+      expect(glyphs.slice(444, 452)).toEqual([...PASSING_GLYPHS]);
+      for (const glyph of PASSING_GLYPHS) expect(draw(glyph).drawn).toBe(true);
     }
   });
 

@@ -240,7 +240,7 @@ import { JunctionTraffic } from './junction-traffic';
 import { JunctionCrossings } from './junction-crossings';
 import { trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
-import { SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
+import { walkFlap, SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
   pickVehicle,
   resolveTraffic,
@@ -13586,7 +13586,6 @@ export class LifeWorld {
             this.actorSources.set(agent, effects.sourceId);
           push(m, agent);
         } else if (m.group) {
-          const stride = Math.floor((m.walked ?? 0) / PEOPLE.stride);
           const clock = inspection?.clock(m, this.clock) ?? this.clock;
           // Steering and turning change the drawn facing, while every member
           // retains the centre accepted in the physical formation's frame.
@@ -13617,7 +13616,7 @@ export class LifeWorld {
                 flap:
                   m.pause > 0 || (m.crossingWait?.waiting && !m.crossingWait.waiting.releasing)
                     ? 0
-                    : (stride + w.step) & 1,
+                    : walkFlap(m.walked ?? 0, PEOPLE.stride, w.step),
                 pose: life.momentHost.pose(m, member),
               },
               w,
@@ -13720,7 +13719,7 @@ export class LifeWorld {
               lateral: 0,
               back: 0,
               // Standing still (or sitting), feet together.
-              flap: still ? 0 : (Math.floor(g.walked / PEOPLE.stride) + w.step) & 1,
+              flap: still ? 0 : walkFlap(g.walked, PEOPLE.stride, w.step),
               pose: life.momentHost.pose(g) ?? (still && g.momentFacing ? 'attentive' : undefined),
             },
             w,

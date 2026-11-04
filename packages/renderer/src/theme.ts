@@ -5,7 +5,7 @@ import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
-import { figureOf, personGlyphs } from './life/people';
+import { PASSING_GLYPHS, figureOf, personGlyphs } from './life/people';
 import { PUFF_GLYPHS } from './life/puff-style';
 import { PAINT_COUNT, MINI_DIAGONALS, PEDDLER_GLYPHS, vehicleGlyphs } from './life/vehicles';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
@@ -601,6 +601,7 @@ export function mapGlyphs(theme: Theme): string[] {
     ...PROCESSION_GLYPHS.slice(4),
     ...PEDDLER_GLYPHS,
     ...MINI_DIAGONALS,
+    ...PASSING_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];
