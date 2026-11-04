@@ -81,6 +81,12 @@ export function fireworksPass(
   daylight: number,
   sites: FireworkSiteSampler = NO_FIREWORK_SITES,
   requests?: readonly FireworkRequest[],
+  /** Draw the sparks here as well, for their halo (bloom.ts). */
+  bloom?: {
+    framebuffer: WebGLFramebuffer;
+    viewport: [number, number, number, number];
+    rows: number;
+  },
 ) {
   if (!config?.variants.length || reduced) {
     if (programs.fireworks) clearRequestedFireworks(programs.fireworks.display);
@@ -143,6 +149,19 @@ export function fireworksPass(
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count * FIREWORKS.smoke);
   gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, FIREWORKS.shells * FIREWORKS.smoke * 16);
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count * FIREWORKS.stars * FIREWORKS.tails);
+  if (bloom) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, bloom.framebuffer);
+    gl.viewport(...bloom.viewport);
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    // The fragment finds its label from gl_FragCoord, here in the target's cells.
+    const { w, h } = view.cellDev;
+    twgl.setUniforms(resources.program, {
+      u_labelCell: [view.labelDev.w / w, view.labelDev.h / h],
+      u_labelShift: [(labelGrid.shiftX - grid.shiftX) / w, (labelGrid.shiftY - grid.shiftY) / h],
+      u_height: bloom.rows,
+    });
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, count * FIREWORKS.stars * FIREWORKS.tails);
+  }
   gl.bindVertexArray(null);
   gl.disable(gl.BLEND);
 }

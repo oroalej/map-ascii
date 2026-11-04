@@ -10,6 +10,13 @@ import type { LoadedTile } from './tile-cache';
 import { cellPass, glyphPass, streetTextPass } from './passes';
 import { fireworksPass } from './fireworks-pass';
 import { createMorphSnapshot, morphPass, releaseMorph } from './morph';
+import {
+  bloomCompositePass,
+  bloomExtractPass,
+  bloomStrength,
+  createBloomTarget,
+  releaseBloom,
+} from './bloom';
 import * as Hosts from './life/host';
 
 const fixture = vi.hoisted(() => ({
@@ -23,9 +30,19 @@ const fixture = vi.hoisted(() => ({
   /** Whether the morph program has linked, and what the pass answers. */
   morphProgram: undefined as object | undefined,
   morphRunning: true,
+  bloomStrength: 0,
   createMapGlyphs: vi.fn(() => ({ cellDev: { w: 10, h: 18 }, atlas: { index: () => 0 } })),
 }));
 vi.mock('./optional-programs', () => ({ optionalProgram: () => fixture.morphProgram }));
+vi.mock('./bloom', () => ({
+  bloomStrength: vi.fn(() => fixture.bloomStrength),
+  bloomPrograms: () => fixture.morphProgram && { extract: {}, blur: {}, add: {} },
+  createBloomTarget: vi.fn(() => ({ cols: 0, rows: 0, lit: { framebuffer: 'lit' }, blurred: {} })),
+  releaseBloom: vi.fn(),
+  bloomExtractPass: vi.fn(),
+  bloomCompositePass: vi.fn(),
+  sparkViewport: () => [0, 0, 1, 1],
+}));
 vi.mock('./morph', () => ({
   morphFragment: '',
   createMorphSnapshot: vi.fn(() => ({ framebuffer: 'snapshot fbo', blankOverlay: 'blank' })),
@@ -162,6 +179,7 @@ beforeEach(() => {
   fixture.bootStages = [];
   fixture.morphProgram = undefined;
   fixture.morphRunning = true;
+  fixture.bloomStrength = 0;
   time = 0;
   turns.clear();
   vi.spyOn(performance, 'now').mockImplementation(() => time);
@@ -276,6 +294,77 @@ it('draws boot frames while the full shaders compile, and marks each readiness o
   expect(ready).toHaveBeenCalledOnce();
   expect(detail).toHaveBeenCalledExactlyOnceWith({ firstDetailFrame: 500 });
   expect(atlas.getStats()).toMatchObject({ readyMs: 300, detailReadyMs: 500 });
+});
+describe('the halo', () => {
+  const start = (options: { quality?: 'low'; theme?: 'light' } = {}) => {
+    atlas.destroy();
+    vi.clearAllMocks();
+    fixture.morphProgram = { program: {} };
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/fixture.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lng: 0, lat: 0, zoom: 18 },
+      year: 2026,
+      life: { enabled: false },
+      ...options,
+    });
+    fixture.view = tile();
+    fixture.arrive();
+  };
+
+  it('draws the lights, lets fireworks add their sparks, then adds it to the canvas', () => {
+    fixture.bloomStrength = 0.8;
+    start();
+    draw(100);
+    expect(createBloomTarget).toHaveBeenCalledOnce();
+    const extract = vi.mocked(bloomExtractPass).mock.invocationCallOrder[0]!;
+    const fireworks = vi.mocked(fireworksPass).mock.invocationCallOrder[0]!;
+    const composite = vi.mocked(bloomCompositePass).mock.invocationCallOrder[0]!;
+    const text = vi.mocked(streetTextPass).mock.invocationCallOrder[0]!;
+    expect(extract).toBeLessThan(fireworks);
+    expect(fireworks).toBeLessThan(composite);
+    expect(composite).toBeLessThan(text);
+    expect(vi.mocked(fireworksPass).mock.calls[0]![14]).toEqual({
+      framebuffer: 'lit',
+      viewport: [0, 0, 1, 1],
+      rows: 0,
+    });
+    expect(vi.mocked(bloomCompositePass).mock.calls[0]![6]).toBe(0.8);
+  });
+
+  it('allocates nothing by day, and releases its target when day comes', () => {
+    start();
+    draw(100);
+    expect(createBloomTarget).not.toHaveBeenCalled();
+    expect(bloomExtractPass).not.toHaveBeenCalled();
+    expect(vi.mocked(fireworksPass).mock.calls[0]![14]).toBeUndefined();
+    fixture.bloomStrength = 0.8;
+    atlas.setCamera({ zoom: 18.1 });
+    draw(200);
+    expect(createBloomTarget).toHaveBeenCalledOnce();
+    fixture.bloomStrength = 0;
+    atlas.setCamera({ zoom: 18.2 });
+    draw(300);
+    expect(releaseBloom).toHaveBeenCalledOnce();
+  });
+
+  it('stays off on the lower tiers and the light theme', () => {
+    fixture.bloomStrength = 0.8;
+    for (const options of [{ quality: 'low' as const }, { theme: 'light' as const }]) {
+      start(options);
+      draw(100);
+      expect(bloomStrength).not.toHaveBeenCalled();
+      expect(createBloomTarget).not.toHaveBeenCalled();
+    }
+  });
+
+  it('waits for the full shaders', () => {
+    fixture.bloomStrength = 0.8;
+    fixture.bootStages = ['boot'];
+    start();
+    draw(100);
+    expect(bloomExtractPass).not.toHaveBeenCalled();
+  });
 });
 describe('the dissolve', () => {
   const start = (zoom: number, options: { reducedMotion?: boolean; quality?: 'low' } = {}) => {

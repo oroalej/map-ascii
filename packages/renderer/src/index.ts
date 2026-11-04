@@ -69,6 +69,16 @@ import {
   type ShaderTiming,
   type ThemeResources,
 } from './gpu-context';
+import {
+  bloomCompositePass,
+  bloomExtractPass,
+  bloomPrograms,
+  bloomStrength,
+  createBloomTarget,
+  releaseBloom,
+  sparkViewport,
+  type BloomTarget,
+} from './bloom';
 import { startFlight, stepFlight, type Flight } from './flight';
 import {
   createMorphSnapshot,
@@ -723,6 +733,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   );
   let lastGlyphPass: GlyphPassInput | undefined;
   let morph: MorphSnapshot | undefined;
+  let bloomTarget: BloomTarget | undefined;
   let dpr = 0;
   /** The map cell size step (density.ts `cellStep`), set by `resize`. */
   let step: number | undefined;
@@ -2137,6 +2148,35 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       return;
     }
   };
+  const endBloom = () => {
+    if (bloomTarget && !gl.isContextLost()) releaseBloom(gl, bloomTarget);
+    bloomTarget = undefined;
+  };
+  /** The lights drawn into their halo's target, when there is a halo to draw this frame. */
+  const bloomFrame = (
+    v: View,
+    frameTargets: NonNullable<typeof targets>,
+    rain: number,
+    lighting: FrameLighting,
+    time: number,
+  ) => {
+    const strength =
+      knobs.bloom && theme === themes.dark
+        ? bloomStrength(daylight, lampShow(), rain, !!season?.fireworks)
+        : 0;
+    if (strength <= 0 || !programs) {
+      endBloom();
+      return undefined;
+    }
+    const linked = bloomPrograms(gl, programs);
+    if (!linked) return undefined;
+    if (bloomTarget?.cols !== frameTargets.cols || bloomTarget.rows !== frameTargets.rows) {
+      endBloom();
+      bloomTarget = createBloomTarget(gl, frameTargets.cols, frameTargets.rows);
+    }
+    bloomExtractPass(gl, programs, linked, bloomTarget, frameTargets.lightTex, lighting, time);
+    return { programs: linked, target: bloomTarget, strength };
+  };
   const drawGlyphPass = (input: GlyphPassInput, snapshot?: Parameters<typeof glyphPass>[22]) =>
     glyphPass(
       gl,
@@ -2442,6 +2482,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         }
         // The boot shaders stand in for everything that needs a full program.
         if (!programs.boot) {
+          const glow = bloomFrame(v, targets, weather.rain, lighting, time);
           fireworksPass(
             gl,
             programs,
@@ -2457,8 +2498,15 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             daylight,
             fireworkSites,
             requestedFireworks,
+            glow && {
+              framebuffer: glow.target.lit.framebuffer,
+              viewport: sparkViewport(glow.target, v, grid),
+              rows: glow.target.rows,
+            },
           );
           requestedFireworks = undefined;
+          if (glow)
+            bloomCompositePass(gl, programs, glow.programs, glow.target, v, grid, glow.strength);
           folklorePass(
             gl,
             programs,
@@ -2578,8 +2626,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     readyMs = null;
     detailReadyMs = null;
     drawableBuffers = false;
-    // Its handles went with the context.
+    // Their handles went with the context.
     morph = undefined;
+    bloomTarget = undefined;
     lastGlyphPass = undefined;
     cancelHostTurn();
     if (!host.started) host.clearTiles();
@@ -2981,6 +3030,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     },
     destroy() {
       endMorph();
+      endBloom();
       crowdPool?.destroy();
       names.clear();
       clearLifePointer();
