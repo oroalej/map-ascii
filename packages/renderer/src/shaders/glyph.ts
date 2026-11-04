@@ -30,9 +30,10 @@ import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BEACON_BIT, BEACON_COLORS } from '../life/emergency';
 import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
-import { PartsFlag } from '../life/parts-layer';
+import { PartsFlag, SHADE_NIBBLE } from '../life/parts-layer';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
+  BODY_LIGHT,
   CROWN_LIGHT,
   CROP_STAGE,
   EDGE_INK,
@@ -372,16 +373,22 @@ vec3 beaconColor(int code) {
     : vec3(${BEACON_COLORS[2].map(float).join(', ')});
 }
 
-vec3 vehicleColor(int byte, bool brake, float night) {
+// How much direct sun reaches the ground: none at night, nor under cloud, nor in rain.
+float directSun() {
+  return u_daylight * clamp((cloudShade - 1.0) / ${float(SKY.shadow)} + 1.0, 0.0, 1.0) * (1.0 - u_rain);
+}
+
+vec3 vehicleColor(int byte, bool brake, float light, float night) {
   int index = byte & 15;
   int part = (byte >> 4) & 7;
   // How much its lamps shine: at night, unless it is parked.
   float lit = (byte & 128) != 0 ? 0.0 : lamps();
   vec3 paint = u_paints[min(index, ${PAINT_COUNT - 1})];
-  if (part == ${VehiclePart.roof}) paint *= 0.8;
+  if (part == ${VehiclePart.roof}) paint *= 0.8 * light;
   else if (part == ${VehiclePart.glass}) paint = mix(paint, vec3(0.14, 0.2, 0.28), 0.75);
   else if (part == ${VehiclePart.trim}) paint = mix(paint, vec3(0.12), 0.7);
-  else if (part == ${VehiclePart.accent}) paint = u_paints[(index + 7) % ${PAINT_COUNT}];
+  else if (part == ${VehiclePart.accent}) paint = u_paints[(index + 7) % ${PAINT_COUNT}] * light;
+  else if (part == ${VehiclePart.body}) paint *= light;
   // Streetlights and their own lamps keep moving vehicles from sinking into the night.
   vec3 color = mix(daylit(paint), paint * 0.7, lit * 0.5);
   if (part == ${VehiclePart.headlight}) {
@@ -844,6 +851,7 @@ void main() {
     // The sextant under this pixel names its own part (life/parts-layer.ts).
     int colorByte = lifeByte;
     bool brake = (lifeByte & ${BRAKE_LAMP}) != 0;
+    float bodyLight = 1.0;
     if (painted && u_hasLifeParts) {
       vec4 parts = texelFetch(u_lifeParts, cell, 0);
       int partFlags = int(parts.a * 255.0 + 0.5);
@@ -853,10 +861,11 @@ void main() {
         int value = (int(parts[sextant >> 1] * 255.0 + 0.5) >> ((sextant & 1) * 4)) & 15;
         colorByte = (lifeByte & 143) | ((value & 7) << 4);
         brake = (partFlags & ${PartsFlag.brake}) != 0;
+        bodyLight = mix(1.0, (value & ${SHADE_NIBBLE}) != 0 ? ${float(BODY_LIGHT.shaded)} : ${float(BODY_LIGHT.lit)}, directSun());
       }
     }
     vec3 color = painted
-      ? vehicleColor(colorByte, brake, night)
+      ? vehicleColor(colorByte, brake, bodyLight, night)
       : person ? personColor(lifeByte, coverage)
       : bird ? birdColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
     if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)

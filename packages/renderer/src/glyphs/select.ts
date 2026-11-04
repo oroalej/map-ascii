@@ -1220,6 +1220,14 @@ export const CROWN_LIGHT = {
   tints: [0.92, 1, 1.06],
 } as const;
 
+/**
+ * Sunlight on a vehicle's body, roof and accent: a sixth away from the sun takes `shaded`, the rest
+ * `lit`, each eased out with the daylight. The shaded side starts `edgeLow` past the middle (in
+ * half-footprints, along the sun's direction) with the sun on the horizon, and only `edgeHigh` past
+ * it, just the far rim, overhead.
+ */
+export const BODY_LIGHT = { lit: 1.08, shaded: 0.7, edgeLow: 0.05, edgeHigh: 0.8 } as const;
+
 /** `CROWN_LIGHT` at mass-local (`x`, `y`) in -1–1, toward `sun`: the glyph shader's lighting. */
 export function crownLight(
   x: number,

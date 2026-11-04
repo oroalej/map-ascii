@@ -7,7 +7,7 @@ import { THRONG_HEADINGS, type ThrongInkScale, type ThrongPayload } from './thro
 import { classId } from '../classes';
 import { PackingOutcome } from './diagnostics';
 import { LIFE_FOCUS_BIT, lifeFocusOf, type LifeFocus } from '../focus';
-import { MAX_GLYPHS, packGlyph } from '../glyphs/select';
+import { BODY_LIGHT, MAX_GLYPHS, packGlyph } from '../glyphs/select';
 import { drawProcedural, sextantSplits } from '../glyphs/atlas';
 import { sextantGlyphs, type Theme } from '../theme';
 import { birdByte, birdFit, birdGlyph, birdInk, BirdPose, BIRD_SPECIES } from './birds';
@@ -45,6 +45,7 @@ import {
   PartsFlag,
   PartsQueue,
   partsTexel,
+  SHADE_NIBBLE,
   withSextant,
   type LifePartsTarget,
 } from './parts-layer';
@@ -285,6 +286,10 @@ let clockCells: number[] | undefined;
 const partsQueue = new PartsQueue();
 /** While packing with a part layer outside crowds, the sextant glyphs to draw vehicles with. */
 let layerSextants: Uint16Array | undefined;
+/** The sun on vehicles' bodies, while it is up. */
+let bodySun: Sun | undefined;
+const litPart = (part: number) =>
+  part === VehiclePart.body || part === VehiclePart.roof || part === VehiclePart.accent;
 
 export type LifePackMetadata = {
   /** Observe only the new rejection tier; never used to select a placement. */
@@ -430,6 +435,7 @@ export function packLife(
   drawingSpeakers?.points.clear();
   partsQueue.reset();
   layerSextants = metadata.parts && glyphs.sextants;
+  bodySun = sun && sun.altitude > 0 ? sun : undefined;
   try {
     if (sun && sun.altitude > 0) drawShadows(out, grid, agents, sun, theme, glyphIndex);
     if (groundCells.length < cells) groundCells = new Uint8Array(cells);
@@ -685,6 +691,7 @@ export function packLife(
     drawingMember = 0;
     drawingMini = false;
     layerSextants = undefined;
+    bodySun = undefined;
   }
 }
 
@@ -1873,6 +1880,22 @@ function stamp(
   const trueHw = spec.width / 2;
   const coreMark = partsQueue.coreCount;
   const flags = PartsFlag.valid | (brake ? PartsFlag.brake : 0);
+  // The sun's direction in the vehicle's own frame, on screen, where a meter is square.
+  let sunForward = 0;
+  let sunRight = 0;
+  let shadeEdge = -Infinity;
+  if (sextants && bodySun) {
+    const az = (bodySun.azimuth * Math.PI) / 180;
+    const toSunX = Math.sin(az);
+    const toSunY = -Math.cos(az);
+    const { cellWidth: w, cellHeight: h } = grid;
+    const alongPx = Math.hypot(ax * w, ay * h) || 1;
+    const acrossPx = Math.hypot(sx * w, sy * h) || 1;
+    sunForward = (toSunX * ax * w + toSunY * ay * h) / alongPx;
+    sunRight = (toSunX * sx * w + toSunY * sy * h) / acrossPx;
+    const height = Math.sin((bodySun.altitude * Math.PI) / 180);
+    shadeEdge = -(BODY_LIGHT.edgeLow + (BODY_LIGHT.edgeHigh - BODY_LIGHT.edgeLow) * height);
+  }
   const barCells: { at: number; forward: number; right: number }[] | undefined = beacon
     ? []
     : undefined;
@@ -1921,7 +1944,10 @@ function stamp(
           );
           if (shown === null) continue;
           mask |= 1 << bit;
-          rgb = withSextant(rgb, bit, shown);
+          const shaded =
+            litPart(shown) &&
+            (sampleForward / hl) * sunForward + (sampleRight / trueHw) * sunRight < shadeEdge;
+          rgb = withSextant(rgb, bit, shaded ? shown | SHADE_NIBBLE : shown);
         }
         // A thin vehicle's own cell can miss every sixth: it still shows, without a gap.
         if (part !== null && mask === 0) {

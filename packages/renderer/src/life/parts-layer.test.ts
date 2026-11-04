@@ -16,6 +16,7 @@ import {
   type LifePartsTarget,
 } from './parts-layer';
 import type { VisibleAgent } from './simulate';
+import type { Sun } from './sun';
 import { TURN_SIGNAL_BIT } from './turn-signals';
 import { Paint, PART_GLYPHS, VehiclePart, VEHICLES, type CraftType } from './vehicles';
 
@@ -58,7 +59,12 @@ const grid = (extra: Partial<LifeGrid> = {}): LifeGrid => ({
   ...extra,
 });
 
-function pack(agents: VisibleAgent[], parts?: LifePartsTarget, extra: Partial<LifeGrid> = {}) {
+function pack(
+  agents: VisibleAgent[],
+  parts?: LifePartsTarget,
+  extra: Partial<LifeGrid> = {},
+  sun: Sun | null = null,
+) {
   const out = new Uint8Array(COLS * ROWS * 4);
   const owners = new Uint32Array(COLS * ROWS);
   const outcomes = new Uint8Array(agents.length);
@@ -69,7 +75,7 @@ function pack(agents: VisibleAgent[], parts?: LifePartsTarget, extra: Partial<Li
     agents,
     themes.dark,
     glyphIndex,
-    null,
+    sun,
     lifeGlyphs,
     { owners, parts },
   );
@@ -289,5 +295,84 @@ describe('stamping with the part layer', () => {
           expect(sextantOf(rgb, s) & 7).toBeLessThanOrEqual(VehiclePart.mini);
       }
     }
+  });
+});
+
+describe('sunlit bodies', () => {
+  /** How many shaded sixths each end of a vehicle crossing the screen has. */
+  const shadedEnds = (heading: number, azimuth: number, altitude = 25) => {
+    const parts = layer();
+    const { out } = pack([vehicleAt('bus', 30, 20.5, heading, 2.8)], parts, {}, {
+      azimuth,
+      altitude,
+    });
+    const ends = { low: 0, high: 0, left: 0, right: 0 };
+    for (const cell of cellsOf(out)) {
+      const rgb =
+        parts.texels[cell * 4]! |
+        (parts.texels[cell * 4 + 1]! << 8) |
+        (parts.texels[cell * 4 + 2]! << 16);
+      let count = 0;
+      for (let s = 0; s < 6; s++) if (sextantOf(rgb, s) & SHADE_NIBBLE) count++;
+      const col = cell % COLS,
+        row = Math.floor(cell / COLS);
+      if (col < 30) ends.left += count;
+      else ends.right += count;
+      if (row < 20) ends.low += count;
+      else ends.high += count;
+    }
+    return ends;
+  };
+
+  it('shades the side away from the sun, whichever way the vehicle heads', () => {
+    // The sun in the east shades the west (left) end, for either heading.
+    for (const heading of [0, Math.PI]) {
+      const east = shadedEnds(heading, 90);
+      expect(east.left).toBeGreaterThan(east.right);
+      const west = shadedEnds(heading, 270);
+      expect(west.right).toBeGreaterThan(west.left);
+    }
+    // The sun in the north shades the south (lower on screen) side.
+    const north = shadedEnds(0, 0);
+    expect(north.high).toBeGreaterThan(north.low);
+    const south = shadedEnds(0, 180);
+    expect(south.low).toBeGreaterThan(south.high);
+  });
+
+  it('leaves less in shade with the sun overhead, and none at night', () => {
+    const count = ({ left, right }: { left: number; right: number }) => left + right;
+    expect(count(shadedEnds(0, 90, 80))).toBeLessThan(count(shadedEnds(0, 90, 15)));
+    expect(count(shadedEnds(0, 90, -5))).toBe(0);
+  });
+
+  it('never shades lamps or glass', () => {
+    const parts = layer();
+    const { out } = pack([vehicleAt('car', 30, 20.5, 0, 5.5)], parts, {}, {
+      azimuth: 270,
+      altitude: 10,
+    });
+    let lit = 0;
+    for (const cell of cellsOf(out)) {
+      const rgb =
+        parts.texels[cell * 4]! |
+        (parts.texels[cell * 4 + 1]! << 8) |
+        (parts.texels[cell * 4 + 2]! << 16);
+      for (let s = 0; s < 6; s++) {
+        const value = sextantOf(rgb, s);
+        const part = value & 7;
+        if (part === VehiclePart.glass || part === VehiclePart.taillight || part === VehiclePart.headlight) {
+          expect(value & SHADE_NIBBLE).toBe(0);
+          lit++;
+        }
+      }
+    }
+    expect(lit).toBeGreaterThan(0);
+  });
+
+  it('changes nothing without the layer', () => {
+    const agent = vehicleAt('car', 30, 20.5, 0, 2.8);
+    const plain = pack([agent]);
+    const sunny = pack([agent], undefined, {}, { azimuth: 90, altitude: 40 });
+    expect([...sunny.out]).toEqual([...plain.out]);
   });
 });
