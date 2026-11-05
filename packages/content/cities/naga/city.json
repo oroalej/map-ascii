@@ -456,9 +456,25 @@
       }
     },
     "parking": {
-      "lot": [[6, 0.1], [9, 0.8], [18, 0.9], [21, 0.25], [23, 0.05]],
-      "centre": [[6, 0.2], [10, 0.9], [18, 0.9], [21, 0.3]],
-      "home": [[6.5, 1], [9, 0.45], [16, 0.45], [19, 1]],
+      "lot": [
+        [6, 0.1],
+        [9, 0.8],
+        [18, 0.9],
+        [21, 0.25],
+        [23, 0.05]
+      ],
+      "centre": [
+        [6, 0.2],
+        [10, 0.9],
+        [18, 0.9],
+        [21, 0.3]
+      ],
+      "home": [
+        [6.5, 1],
+        [9, 0.45],
+        [16, 0.45],
+        [19, 1]
+      ],
       "source": "Illustrative: the project's impression of when Naga's lots and curbs fill (no hourly parking counts found, 2026-11-05). Curves are a share of the simulated parked cars, not observed occupancy."
     },
     "flyways": [
