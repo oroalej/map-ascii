@@ -91,8 +91,15 @@ describe('commerce admission', () => {
         empty = setup(false, seed);
       expect(empty.life.movers).toEqual(base.life.movers);
       expect(empty.life.stalls).toEqual(base.life.stalls);
-      expect(extra.life.movers.slice(0, base.life.movers.length)).toEqual(base.life.movers);
-      expect(extra.life.stalls.slice(0, base.life.stalls.length)).toEqual(base.life.stalls);
+      // Shops decide who belongs to a centre (mover-share.ts); nothing else about them changes.
+      const settled = <T extends { district?: unknown }>(owners: readonly T[]) =>
+        owners.map((owner) => ({ ...owner, district: undefined }));
+      expect(settled(extra.life.movers.slice(0, base.life.movers.length))).toEqual(
+        settled(base.life.movers),
+      );
+      expect(settled(extra.life.stalls.slice(0, base.life.stalls.length))).toEqual(
+        settled(base.life.stalls),
+      );
       expect(extra.life.movers.length).toBeGreaterThan(base.life.movers.length);
       expect(extra.life.stalls.length).toBeGreaterThan(base.life.stalls.length);
       expect(extra.life.movers.length).toBeLessThanOrEqual(MAX_TILE_AGENTS);

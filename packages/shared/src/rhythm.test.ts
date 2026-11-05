@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { curveAt, DEFAULT_RHYTHM, placeShare, rhythmFor, shopHours, shopOpen } from './rhythm';
+import {
+  curveAt,
+  DEFAULT_RHYTHM,
+  districtFactor,
+  hasDistricts,
+  placeShare,
+  rhythmFor,
+  shopHours,
+  shopOpen,
+} from './rhythm';
 import { CityLife } from './schemas';
 
 describe('curveAt', () => {
@@ -147,5 +156,79 @@ describe('shopHours', () => {
     expect(shopOpen(h, 23 * 60)).toBe(true);
     expect(shopOpen(h, 60)).toBe(true);
     expect(shopOpen(h, 12 * 60)).toBe(false);
+  });
+});
+
+describe('rhythm by weekday and district', () => {
+  const sunday = [
+    [0, 0.2],
+    [9, 0.4],
+  ] as const;
+  const everyday = [
+    [0, 0.2],
+    [9, 1],
+  ] as const;
+  const life = {
+    rhythm: { person: everyday, home: everyday },
+    rhythm_days: [{ weekdays: [0], rhythm: { person: sunday } }],
+  };
+
+  it("reads a day's own curve, then the everyday one, then the default", () => {
+    expect(rhythmFor(life, 'person', 0)).toBe(sunday);
+    expect(rhythmFor(life, 'person', 1)).toBe(everyday);
+    expect(rhythmFor(life, 'person')).toBe(everyday);
+    expect(rhythmFor(life, 'vehicle', 0)).toBe(DEFAULT_RHYTHM.vehicle);
+  });
+
+  it("has benches follow the day's curve", () => {
+    const at = (weekday: number) => placeShare('bench', { minutes: 540, weekday }, life);
+    expect(at(0)).toBeCloseTo(0.8 * 0.4);
+    expect(at(1)).toBeCloseTo(0.8);
+  });
+
+  it('reads a factor of 1 for a district without a curve', () => {
+    const clock = { minutes: 540, weekday: 1 };
+    expect(districtFactor(life, 'home', clock)).toBeCloseTo(1);
+    expect(districtFactor(life, 'centre', clock)).toBe(1);
+    expect(districtFactor(undefined, 'home', clock)).toBe(1);
+  });
+
+  it('knows whether a city tells districts apart', () => {
+    expect(hasDistricts(undefined)).toBe(false);
+    expect(hasDistricts({ rhythm: { person: everyday } })).toBe(false);
+    expect(hasDistricts({ rhythm: { home: everyday } })).toBe(true);
+    expect(hasDistricts({ rhythm_days: [{ weekdays: [0], rhythm: { centre: sunday } }] })).toBe(
+      true,
+    );
+  });
+
+  const parse = (rhythm_days: unknown, rhythm: unknown = { person: [[0, 0.5]] }) =>
+    CityLife.safeParse({ rhythm, rhythm_days, source: 'test' }).success;
+
+  it('accepts days that meet the everyday curve at midnight', () => {
+    expect(
+      parse([
+        {
+          weekdays: [0, 6],
+          rhythm: {
+            person: [
+              [0, 0.5],
+              [9, 1],
+            ],
+          },
+        },
+      ]),
+    ).toBe(true);
+  });
+
+  it('rejects a jump at midnight, against the default too', () => {
+    expect(parse([{ weekdays: [0], rhythm: { person: [[0, 0.9]] } }])).toBe(false);
+    expect(parse([{ weekdays: [0], rhythm: { vehicle: [[0, 0.9]] } }])).toBe(false);
+    expect(parse([{ weekdays: [0], rhythm: { centre: [[0, 0.5]] } }])).toBe(false);
+  });
+
+  it('rejects a weekday given two rhythms', () => {
+    const day = { weekdays: [0], rhythm: { person: [[0, 0.5]] } };
+    expect(parse([day, day])).toBe(false);
   });
 });
