@@ -248,7 +248,7 @@ import {
 } from './junctions';
 import { JunctionTraffic } from './junction-traffic';
 import { JunctionCrossings } from './junction-crossings';
-import { trainLimits, type TrainLimit } from './train-motion';
+import { crossingStates, trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { walkFlap, SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
@@ -5687,6 +5687,7 @@ export class TileLife {
   private roadProtectedRoom(m: Mover, table: JunctionTable): number {
     let room = this.lineLength(m.line) / this.perMeter - this.travelled(m);
     room = Math.min(room, this.signals.protectedRoom(m) / this.perMeter);
+    room = Math.min(room, this.railCrossings.protectedRoom(m) / this.perMeter);
     for (const r of table.holds(m)) {
       if (r.inside) return 0;
       if (r.movement.ahead >= -JUNCTION.insideToleranceM * this.perMeter)
@@ -6844,6 +6845,7 @@ export class TileLife {
     this.captureEffects(clock, dt, env, shows, near, pass);
     this.prepareRecovery();
     const trains = pass?.trains ?? trainLimits([this], dt);
+    if (!pass?.trains && this.railCrossings.crossings.length) crossingStates([this]);
     const limit = { target: 0, cap: Infinity };
     let recoveredLines = pass?.recoveredLines;
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
@@ -7015,6 +7017,8 @@ export class TileLife {
             clearing,
             env?.diagnostics,
           );
+          if (this.railCrossings.vehicleLimit(m, dt, limit, env?.diagnostics))
+            intentionalHold = true;
 
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
@@ -12763,6 +12767,11 @@ export class LifeWorld {
     const trains = trainLimits(
       [...this.tiles.values()],
       clamped,
+      this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
+      env.inspecting,
+    );
+    crossingStates(
+      [...this.tiles.values()],
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
       env.inspecting,
     );
