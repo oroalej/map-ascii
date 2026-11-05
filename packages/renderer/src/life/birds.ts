@@ -10,7 +10,7 @@
  */
 import { doubled, Heading, inkAt, turnedPixels } from './masters';
 
-export type BirdSpecies = 'maya' | 'swallow' | 'pigeon' | 'egret' | 'bat';
+export type BirdSpecies = 'maya' | 'swallow' | 'pigeon' | 'egret' | 'bat' | 'duck';
 /** In theme.ts `birdPaints` order; a bird texel holds its index. */
 export const BIRD_SPECIES_ORDER: readonly BirdSpecies[] = [
   'maya',
@@ -18,6 +18,9 @@ export const BIRD_SPECIES_ORDER: readonly BirdSpecies[] = [
   'pigeon',
   'egret',
   'bat',
+  // Herded on harvested paddies (life/field-life.ts): no habitat of its own, so appending it
+  // leaves `pickSpecies`' draws as they were.
+  'duck',
 ];
 
 /** What a roost is: open water, a field (grass or farmland), a park, or trees. */
@@ -138,6 +141,19 @@ export const BIRD_SPECIES: Readonly<Record<BirdSpecies, BirdSpec>> = {
     wary: 0,
     habitats: { water: 2, field: 0.5, park: 1, trees: 3 },
     nocturnal: true,
+  },
+  duck: {
+    wingspan: 0.8,
+    flockSize: [12, 30],
+    speed: 6,
+    orbit: [5, 20],
+    spread: [2, 8],
+    flap: 3,
+    perch: 0,
+    // Herded by life/field-life.ts, not the flocks' foraging.
+    ground: 0,
+    wary: 0,
+    habitats: { water: 0, field: 0, park: 0, trees: 0 },
   },
 };
 
@@ -376,6 +392,45 @@ const MASTERS_10: Readonly<Record<BirdSpecies, readonly (readonly string[])[]>> 
   ],
   // Scalloped wings (the fingers between), a small head, no tail. Seen only in flight: sitting
   // (by day) they are out of sight, so it is the raised pose.
+  // A long neck and a green head, a broad body, a short tail.
+  duck: [
+    [
+      '....oo....',
+      '....oo....',
+      '....##....',
+      '#.######.#',
+      '##########',
+      '##########',
+      '..######..',
+      '....##....',
+      '..........',
+      '..........',
+    ],
+    [
+      '....oo....',
+      '....oo....',
+      '....##....',
+      '...####...',
+      '..######..',
+      '.#.####.#.',
+      '#..####..#',
+      '....##....',
+      '..........',
+      '..........',
+    ],
+    [
+      '..........',
+      '....oo....',
+      '....oo....',
+      '....##....',
+      '...####...',
+      '..######..',
+      '..######..',
+      '...####...',
+      '....##....',
+      '..........',
+    ],
+  ],
   bat: [
     [
       '..........',

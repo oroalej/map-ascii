@@ -429,13 +429,14 @@ export const themes: Record<ThemeName, Theme> = {
       0xeeeeea, 0xb4bac4, 0x6c7380, 0xe8483c, 0xa8303a, 0x3f7ee8, 0x7cc4ef, 0xf2c62e,
       0x3fb56a, 0xf08a2c, 0xa66ee0, 0xd8dde6, 0xe9dcb8, 0x2fb5a8, 0xf07aa8,
     ],
-    // maya, swallow, pigeon, egret, bat (a dim violet gray, so it shows on the night map)
+    // maya, swallow, pigeon, egret, bat (a dim violet gray, so it shows on the night map), duck
     birdPaints: [
       [0xb58a5c, 0x4a3426],
       [0x5a7cc8, 0xe0874a],
       [0x9aa3b4, 0x5e6a80],
       [0xf4f6f2, 0xf2c62e],
       [0x9a8fb8, 0x544a6c],
+      [0xc9b48e, 0x3f7a55],
     ],
   }),
   light: makeTheme(0xf4f1e8, {
@@ -490,6 +491,7 @@ export const themes: Record<ThemeName, Theme> = {
       [0x5c6476, 0x2e343e],
       [0xa8a396, 0xc89a00],
       [0x3b3348, 0x1e1a26],
+      [0x7d6642, 0x24583a],
     ],
   }),
 };

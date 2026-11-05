@@ -1420,7 +1420,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             camera.zoom,
             activity,
             [camera.lng, camera.lat],
-            { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+            {
+              rain: currentRain(),
+              sunAltitude: sun?.altitude ?? 0,
+              // Real seconds, so a fixed hour still shows them at work.
+              ...(activity.harvest && {
+                field: {
+                  time: now().getTime() / 1000,
+                  wind: stillWind(prevailingWind(life.wind, options.climate, cityMonth)).dir,
+                },
+              }),
+            },
             viewBounds(),
             knobs.crowd,
             knobs.maxAgents,

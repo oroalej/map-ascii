@@ -1042,7 +1042,9 @@ function drawPuffs(
   stampedVehicles: Uint8Array,
 ) {
   for (let i = 0; i + PUFF_STRIDE <= puffs.length; i += PUFF_STRIDE) {
-    if (!stampedVehicles[puffs[i]!]) continue;
+    // An owner of -1 is smoke, drawn at any zoom rather than following a stamped vehicle.
+    const owner = puffs[i]!;
+    if (owner !== -1 && !stampedVehicles[owner]) continue;
     const [x, y] = grid.toCell(puffs[i + 1]!, puffs[i + 2]!);
     const col = Math.floor(x),
       row = Math.floor(y);

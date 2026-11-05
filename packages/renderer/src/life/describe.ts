@@ -47,6 +47,7 @@ const birds: Record<BirdSpecies, string> = {
   swallow: 'Swallow',
   pigeon: 'Pigeon',
   egret: 'Egret',
+  duck: 'Duck',
   bat: 'Bat',
 };
 const kinds: Record<AgentKind, string> = {
@@ -61,6 +62,7 @@ const kinds: Record<AgentKind, string> = {
 
 /** A decorative agent's public name; ropes and poles are not independent subjects. */
 export function describeAgent(agent: VisibleAgent): string | null {
+  if (agent.fieldLabel) return agent.fieldLabel;
   if (agent.line || agent.prop) return null;
   if (agent.peddler) return `${agent.peddler.label} (simulated)`;
   let name = kinds[agent.kind];

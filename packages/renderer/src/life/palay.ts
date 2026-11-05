@@ -74,7 +74,7 @@ const between = (points: readonly TilePoint[], from: number, to: number): TilePo
 };
 
 /** Even-odd over every ring, so a field's holes stay out. */
-const insideRings = (rings: readonly (readonly TilePoint[])[], p: TilePoint) => {
+export const insideRings = (rings: readonly (readonly TilePoint[])[], p: TilePoint) => {
   let inside = false;
   for (const ring of rings)
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {

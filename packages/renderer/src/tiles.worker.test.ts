@@ -100,6 +100,7 @@ it('extracts drawable sites only when active, while finishing queued supplementa
       16,
       active,
       false,
+      false,
     );
   }
   send({ type: 'residential', key: 'residential/12/1/2', z: 12, x: 1, y: 2 });
@@ -121,7 +122,7 @@ it.each([false, true])(
     vi.stubGlobal('self', scope);
     await import('./tiles.worker');
     const send = (data: WorkerRequest) => scope.onmessage!({ data } as MessageEvent<WorkerRequest>);
-    send({ type: 'init', url: '/test.pmtiles', folklore });
+    send({ type: 'init', url: '/test.pmtiles', folklore, harvest: !folklore });
     await vi.waitFor(() => expect(scope.postMessage).toHaveBeenCalledTimes(1));
     send({ type: 'tile', key: '16/1/2', z: 16, x: 1, y: 2 });
     await vi.waitFor(() => expect(fixtures.geometry).toHaveBeenCalledOnce());
@@ -132,6 +133,7 @@ it.each([false, true])(
       16,
       false,
       folklore,
+      !folklore,
     );
   },
 );
