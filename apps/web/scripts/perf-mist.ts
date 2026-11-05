@@ -37,7 +37,8 @@ type CaptureWindow = Window & { mistCapture: Capture };
 function installCapture() {
   // Pin only Date. Leave native performance, RAF and timers available for GPU sampling.
   const NativeDate = Date,
-    fixed = NativeDate.parse('2026-07-10T04:00:00Z');
+    // 05:40 in the city, so the page draws with the shader that has mist, on and off alike.
+    fixed = NativeDate.parse('2026-07-09T21:40:00Z');
   globalThis.Date = new Proxy(NativeDate, {
     construct: (target, args) => Reflect.construct(target, args.length ? args : [fixed]) as Date,
     apply: () => new NativeDate(fixed).toString(),

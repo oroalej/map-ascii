@@ -568,6 +568,26 @@ describe('glyph program variants', () => {
     expect(after.glyphVariants?.size).toBe(1);
     expect(glyphProgram(context, after, false, false)).toBe(after.glyph);
   });
+  it('compiles palay and mist only on demand, as their own variant', () => {
+    const programs = fullPrograms(context);
+    expect(vi.mocked(createProgram).mock.calls[0]![2]).not.toContain('mistOver');
+    const plain = glyphProgram(context, programs, false, false);
+    expect(plain).toBe(programs.glyph);
+    const field = glyphProgram(context, programs, false, false, false, true, true);
+    expect(field).not.toBe(plain);
+    expect(vi.mocked(createProgram).mock.calls.at(-1)![2]).toContain('mistOver(');
+    expect(glyphProgram(context, programs, false, false, false, true, true)).toBe(field);
+    expect(glyphProgram(context, programs, false, false)).toBe(plain);
+  });
+
+  it('warms the palay and mist variants only when asked', () => {
+    const programs = fullPrograms(context);
+    prewarmGlyphPrograms(context, programs, () => true, true, false, false, false, undefined, true);
+    vi.advanceTimersByTime(1000);
+    expect([32, 33, 34, 35].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    deletePrograms(context, programs);
+  });
+
   it('compiles seasonal code only on demand and keeps ordinary warmup independent', () => {
     const programs = fullPrograms(context);
     const base = vi.mocked(createProgram).mock.calls[0]![2];

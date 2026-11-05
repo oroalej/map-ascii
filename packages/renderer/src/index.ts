@@ -15,6 +15,7 @@ import {
   dialogueChoices,
   CROP_STAGES,
   cropDate,
+  PALAY_ZOOM,
   cropStageAt,
   harvestAt,
   type HarvestNow,
@@ -2197,6 +2198,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
       !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
       () => drawnFrames,
+      // Ready before the first strip is packed, and through the hours before dawn's mist.
+      (life.enabled && (activity.harvest?.drying ?? 0) > 0 && camera.zoom >= PALAY_ZOOM.min) ||
+        (!!options.climate?.mist && cityMinutes >= 3 * 60 && cityMinutes < 7 * 60),
     );
   };
   let glyphPrebuild = false;

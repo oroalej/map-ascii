@@ -14290,6 +14290,7 @@ export class LifeWorld {
     const { harvest } = levels;
     const field = weather.field;
     if (!harvest || !field || bandVisibility(LIFE_ZOOM.person, zoom) < 1) return admitted;
+    if (!harvest.spread && harvest.ducks <= 0 && !harvest.burning) return admitted;
     const frame = fieldLife({
       tiles: [...this.tiles.values()].map((life) => ({ tile: life.tile, geo: life.geo })),
       harvest,

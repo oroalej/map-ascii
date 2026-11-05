@@ -1038,6 +1038,8 @@ const fixturesOf = new WeakMap<
     utilityScratch: UtilityPackingScratch;
     fixtureScratch: FixturePackingScratch;
     seasonal: boolean;
+    /** Palay was packed, so the shader needs it. */
+    palay: boolean;
     viewport: ReturnType<typeof screenArea>;
     /** Per cell, what a fixture written there reports when visible (`FixtureSight` bits). */
     sight: Uint8Array;
@@ -1186,6 +1188,7 @@ export function fixturePass(
       utilityScratch,
       fixtureScratch,
       seasonal: (packed.seasonalCells ?? 0) > 0,
+      palay: (packed.palayCells ?? 0) > 0,
       viewport,
       sight,
     };
@@ -1306,6 +1309,8 @@ export function glyphPass(
     focused,
     hasEffectClocks,
     fixturesOf.get(targets)?.seasonal === true,
+    true,
+    fixturesOf.get(targets)?.palay === true || (weather.mist ?? 0) > 0,
   );
   gl.bindFramebuffer(gl.FRAMEBUFFER, snapshot?.framebuffer ?? null);
   gl.viewport(0, 0, view.width, view.height);

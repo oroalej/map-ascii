@@ -398,6 +398,7 @@ type FlagCloth = {
 export type PackedFixtures = {
   /** Successful seasonal writes, including offscreen texture margins. */
   seasonalCells?: number;
+  palayCells?: number;
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
@@ -1126,6 +1127,7 @@ function packPalay(
         const code = glyphIndex(glyph);
         if (code <= 0 || code > MAX_GLYPHS) continue;
         const part = covered ? FixturePart.palayCover : FixturePart.palay;
+        packed.palayCells = (packed.palayCells ?? 0) + 1;
         [out[at], out[at + 1]] = packGlyph(code, part);
         out[at + 2] = seed & 255;
         out[at + 3] = alpha;

@@ -70,7 +70,17 @@ export type FieldInput = {
 export type FieldFrame = { agents: VisibleAgent[]; puffs: number[] };
 
 type Field = { rings: TilePoint[][]; box: readonly number[]; hectares: number };
-type Site = { x: number; y: number; seed: number; rank: number };
+type Duck = { way: number; turn: number; phase: number; radius: number };
+type Site = {
+  x: number;
+  y: number;
+  seed: number;
+  rank: number;
+  lng: number;
+  lat: number;
+  /** A flock's hashes, worked out once: a duck's place is all that changes with time. */
+  ducks: Duck[] | undefined;
+};
 type Sites = { fields: Field[]; flocks: Site[]; pile: Site | undefined };
 
 const ringArea = (ring: readonly TilePoint[]) => {
@@ -126,7 +136,8 @@ function sitesOf({ tile, geo }: FieldTile): Sites {
           y: (row + 0.25 + sample(seed, 0, 3) * 0.5) * cell,
         };
         if (!inFields(qualifying, p)) continue;
-        const site = { ...p, seed, rank };
+        const [lng, lat] = tileToLngLat(tile, p);
+        const site: Site = { ...p, seed, rank, lng, lat, ducks: undefined };
         flocks.push(site);
         // One pile a tile: the lowest rank under the stricter share.
         if (rank < FIELD_LIFE.pileShare && (!pile || rank < pile.rank)) pile = site;
@@ -202,10 +213,13 @@ function nearestSites(
   const [cx, cy] = input.center;
   return input.tiles
     .flatMap((entry) =>
-      pick(sitesOf(entry)).map((site) => {
-        const [lng, lat] = tileToLngLat(entry.tile, site);
-        return { entry, site, lng, lat, d: (lng - cx) ** 2 + (lat - cy) ** 2 };
-      }),
+      pick(sitesOf(entry)).map((site) => ({
+        entry,
+        site,
+        lng: site.lng,
+        lat: site.lat,
+        d: (site.lng - cx) ** 2 + (site.lat - cy) ** 2,
+      })),
     )
     .sort((a, b) => a.d - b.d || a.site.seed - b.site.seed);
 }
@@ -214,34 +228,58 @@ function nearestSites(
 function tileAt(
   from: FieldTile,
   p: TilePoint,
-  tiles: ReadonlyMap<string, FieldTile>,
+  tiles: () => ReadonlyMap<string, FieldTile>,
 ): { entry: FieldTile; p: TilePoint } | undefined {
   const dx = Math.floor(p.x / TILE_EXTENT),
     dy = Math.floor(p.y / TILE_EXTENT);
   if (dx === 0 && dy === 0) return { entry: from, p };
-  const entry = tiles.get(`${from.tile.z}/${from.tile.x + dx}/${from.tile.y + dy}`);
+  const entry = tiles().get(`${from.tile.z}/${from.tile.x + dx}/${from.tile.y + dy}`);
   return entry && { entry, p: { x: p.x - dx * TILE_EXTENT, y: p.y - dy * TILE_EXTENT } };
+}
+
+function flockOf(seed: number, perMeter: number): Duck[] {
+  const [small, large] = FIELD_LIFE.flockSize;
+  const [slow, fast] = FIELD_LIFE.flockTurn;
+  const size = small + Math.floor((large - small + 1) * sample(seed, 0, 5));
+  return Array.from({ length: size }, (_, i) => {
+    const way = sample(seed, i, 6) < 0.5 ? -1 : 1;
+    return {
+      way,
+      turn: way * (slow + (fast - slow) * sample(seed, i, 7)),
+      phase: 2 * Math.PI * sample(seed, i, 8),
+      radius: FIELD_LIFE.flockRadius * Math.sqrt(sample(seed, i, 9)) * perMeter,
+    };
+  });
 }
 
 /** Flocks on the harvested paddies by day, each duck kept to the field by the tile it stands in. */
 function ducks(input: FieldInput, out: VisibleAgent[]) {
   const { harvest, time, birds, bounds, crowd } = input;
   if (harvest.ducks <= 0 || birds <= 0) return;
-  const byKey = new Map(input.tiles.map((t) => [`${t.tile.z}/${t.tile.x}/${t.tile.y}`, t]));
+  // Only a duck over a tile's edge asks.
+  let known: Map<string, FieldTile> | undefined;
+  const byKey = () =>
+    (known ??= new Map(input.tiles.map((t) => [`${t.tile.z}/${t.tile.x}/${t.tile.y}`, t])));
+  // A flock's reach in degrees, generously: 1° is at least 90 km along either axis here.
+  const reach = FIELD_LIFE.flockRadius / 90_000;
   let drawn = 0;
   for (const { entry, site } of nearestSites(input, (sites) => sites.flocks)) {
     if (drawn >= FIELD_LIFE.maxDucks) return;
     // They come out and go home a flock at a time, as the day's birds do.
     if (sample(site.seed, 0, 4) >= birds * harvest.ducks * crowd) continue;
-    const [small, large] = FIELD_LIFE.flockSize;
-    const size = small + Math.floor((large - small + 1) * sample(site.seed, 0, 5));
+    if (
+      bounds &&
+      (site.lng < bounds[0] - reach ||
+        site.lng > bounds[2] + reach ||
+        site.lat < bounds[1] - reach ||
+        site.lat > bounds[3] + reach)
+    )
+      continue;
     const perMeter = 1 / metersPerUnit(entry.tile);
-    for (let i = 0; i < size && drawn < FIELD_LIFE.maxDucks; i++) {
-      const [slow, fast] = FIELD_LIFE.flockTurn;
-      const way = sample(site.seed, i, 6) < 0.5 ? -1 : 1;
-      const turn = way * (slow + (fast - slow) * sample(site.seed, i, 7));
-      const angle = 2 * Math.PI * sample(site.seed, i, 8) + time * turn;
-      const radius = FIELD_LIFE.flockRadius * Math.sqrt(sample(site.seed, i, 9)) * perMeter;
+    const flock = (site.ducks ??= flockOf(site.seed, perMeter));
+    for (let i = 0; i < flock.length && drawn < FIELD_LIFE.maxDucks; i++) {
+      const { way, turn, phase, radius } = flock[i]!;
+      const angle = phase + time * turn;
       const world = { x: site.x + Math.cos(angle) * radius, y: site.y + Math.sin(angle) * radius };
       const here = tileAt(entry, world, byKey);
       if (!here || !inFields(sitesOf(here.entry).fields, here.p)) continue;

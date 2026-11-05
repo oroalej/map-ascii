@@ -170,7 +170,14 @@ float switchedOn(int g) {
  * a fainter wash than open ground.
  */
 /** Compile inactive features away instead of branching through them at every pixel. */
-export function glyphFragmentFor({ focus = true, effectClocks = true, seasonal = true } = {}) {
+export function glyphFragmentFor({
+  focus = true,
+  effectClocks = true,
+  seasonal = true,
+  field = true,
+} = {}) {
+  // Software renderers run both sides of a branch, so what isn't on screen stays out of the source.
+  const misted = (color: string) => (field ? `mistOver(${color}, cell, grid, cls)` : color);
   return /* glsl */ `#version 300 es
 precision highp float;
 precision highp int;
@@ -244,11 +251,15 @@ uniform float u_rain;
 uniform float u_rainSlant;
 uniform int u_rainGlyph;
 uniform vec3 u_rainColor;
-uniform float u_mist;
+${
+  field
+    ? `uniform float u_mist;
 uniform vec2 u_mistOffset;
 uniform bool u_mistDetail;
 uniform vec3 u_mistCool;
-uniform vec3 u_mistWarm;
+uniform vec3 u_mistWarm;`
+    : ''
+}
 uniform bool u_waterDetail;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
@@ -478,12 +489,14 @@ vec3 rainOver(vec3 color, ivec2 cell, ivec2 inCell) {
   return mix(color, drop, min(1.0, ink * ${float(RAIN.ink)} * u_rain * (1.0 + rainLight)));
 }
 
-bool mistLies(int cls) {
+${
+  field
+    ? `bool mistLies(int cls) {
   return cls == u_farmlandClass || cls == ${classId('water_river')} || cls == ${classId('water_area')} || cls == ${classId('water_stream')};
 }
 
 // Dawn mist (life/sky.ts): over paddies and water, softened onto the ground around them. Never
-// on a roof or a crown, and every other hour of the day pays only the first line.
+// on a roof or a crown.
 vec3 mistOver(vec3 color, ivec2 cell, vec2 grid, int cls) {
   if (u_mist <= 0.0) return color;
   if (u_focus || cls == u_crownClass || (u_cellBits[cls] & ${CellBit.window}) != 0) return color;
@@ -508,6 +521,8 @@ vec3 mistOver(vec3 color, ivec2 cell, vec2 grid, int cls) {
   }
   float amount = u_mist * weight * smoothstep(0.25, 0.75, patches);
   return mix(color, mix(u_mistCool, u_mistWarm, u_daylight), ${float(MIST.alpha)} * amount);
+}`
+    : ''
 }
 
 bool fixtureSurface(int cls, ivec2 cell) {
@@ -719,20 +734,28 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   `
       : ''
   }
-  if (part == ${FixturePart.palay} || part == ${FixturePart.palayCover}) {
+  ${
+    field
+      ? `if (part == ${FixturePart.palay} || part == ${FixturePart.palayCover}) {
     // Golden grain, or the blue tarp over its heap, with a wash so it reads from far out.
     vec3 paint = part == ${FixturePart.palay} ? vec3(${PALAY_PAINT.map(float).join(', ')}) : vec3(${PALAY_COVER_PAINT.map(float).join(', ')});
     color = lampLit(daylit(paint * (0.82 + 0.18 * float(info) / 255.0)), rainLight);
     under = mix(under, color * 0.55, fixture.a);
+  }`
+      : ''
   }
   if (u_focus && !(part >= ${FixturePart.red} && part <= ${FixturePart.green}) && part != ${FixturePart.signal}) color *= ${float(FOCUS_DIM)};
   return mix(under, color, ink * fixture.a) + halo;
 }
 
-// Palay is ground: under an agent, not over it as other hardware is.
+${
+  field
+    ? `// Palay is ground: under an agent, not over it as other hardware is.
 bool groundFixture(vec4 fixture) {
   int part = int(fixture.g * 255.0 + 0.5) & 63;
   return fixture.a != 0.0 && (part == ${FixturePart.palay} || part == ${FixturePart.palayCover});
+}`
+    : ''
 }
 
 int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
@@ -1001,17 +1024,18 @@ void main() {
       if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     }
     if (lifeClass == u_vehicle && (lifeFlags & ${BEACON_BIT}) != 0) color = beaconColor(lifeByte & 3);
-    if (groundFixture(fixture)) {
-      vec3 ground = fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo);
-      o_color = vec4(mistOver(rainOver(mix(ground, color, coverage), cell, inCell), cell, grid, cls), 1.0);
-      return;
+    ${
+      field
+        ? `bool ground = groundFixture(fixture);
+    vec3 drawn = fixtureOver(ground ? back : mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo);
+    o_color = vec4(${misted('rainOver(ground ? mix(drawn, color, coverage) : drawn, cell, inCell)')}, 1.0);`
+        : `o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);`
     }
-    o_color = vec4(mistOver(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(mistOver(rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
+    o_color = vec4(${misted('rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell)')}, 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
@@ -1099,7 +1123,7 @@ void main() {
     color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
     if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
-  o_color = vec4(mistOver(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
+  o_color = vec4(${misted('rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell)')}, 1.0);
 }
 `;
 }

@@ -1286,6 +1286,7 @@ describe('live motion preference', () => {
       true,
       false,
       expect.any(Function),
+      false,
     ]);
     draw(200);
     expect(compile).toHaveBeenCalledTimes(1);
@@ -1400,6 +1401,7 @@ describe('live motion preference', () => {
       false,
       false,
       expect.any(Function),
+      false,
     );
     expect(lightPass).not.toHaveBeenCalled();
     expect(effectClockPass).toHaveBeenLastCalledWith(gl, expect.anything());
