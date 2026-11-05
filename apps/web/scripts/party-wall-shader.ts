@@ -1,5 +1,10 @@
 import type { Page } from '@playwright/test';
-import { classId, Flags, roofClasses, type RenderClass } from '../../../packages/renderer/src/classes';
+import {
+  classId,
+  Flags,
+  roofClasses,
+  type RenderClass,
+} from '../../../packages/renderer/src/classes';
 import {
   buildGlyphTables,
   seeThrough,
