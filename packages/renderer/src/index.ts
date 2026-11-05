@@ -17,6 +17,7 @@ import {
   cropDate,
   PALAY_ZOOM,
   cropStageAt,
+  dismissalNow,
   harvestAt,
   type HarvestNow,
   epochDay,
@@ -1437,11 +1438,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               rain: currentRain(),
               sunAltitude: sun?.altitude ?? 0,
               // Real seconds, so a fixed hour still shows them at work.
-              ...((activity.harvest || options.cityLife?.flyways) && {
+              ...((activity.harvest || options.cityLife?.flyways || dismissal !== null) && {
                 field: {
                   time: now().getTime() / 1000,
                   wind: stillWind(prevailingWind(life.wind, options.climate, cityMonth)).dir,
                   minutes: cityMinutes,
+                  ...(dismissal !== null && { dismissal }),
                 },
               }),
             },
@@ -1607,6 +1609,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let shopsKey = '';
   /** The city's local time, minutes past midnight (`updateSun`), for shops' hours. */
   let cityMinutes = 12 * 60;
+  let dismissal: number | null = null;
   /**
    * The lamps lit now (street and flood lamps, and the open shops) and which shops are open, as
    * a key; worked out again only when the lamps or the city's minute change.
@@ -2031,6 +2034,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     };
     emojiSunAltitude = position.altitude;
     cityMinutes = local.minutes;
+    dismissal = dismissalNow(local, options.cityLife);
     cityMonth = cityTime(now(), zone).month;
     const nextActivity = activityLevels(
       next,

@@ -2073,6 +2073,8 @@ export const CityLife = z
       })
       .optional(),
     flyways: z.array(Flyway).max(8).optional(),
+    /** Students walking home from schools on school days (`schedules.school`). */
+    dismissal: z.strictObject({ source: z.string().min(1) }).optional(),
     source: z.string().min(1),
   })
   .superRefine((life, ctx) => {

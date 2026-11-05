@@ -156,6 +156,8 @@ export type CityLifeConfig = {
   parking?: ParkingConfig;
   /** Roosts and the lines birds fly to them; without it, birds stay around their own flocks. */
   flyways?: FlywayConfig[];
+  /** Presence turns on students walking home from schools; its `source` covers the scene. */
+  dismissal?: { source: string };
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };
@@ -365,6 +367,34 @@ export const minutesOf = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number) as [number, number];
   return h * 60 + m;
 };
+
+/** School letting out, in minutes around `schedules.school.out`. */
+export const DISMISSAL = {
+  /** The first tricycles come this long before classes end. */
+  tricycleLead: 10,
+  /** The last students leave this long after, and the last tricycles have gone by this. */
+  release: 45,
+  tricyclesLeave: 35,
+  /** The longest walk there is, so the last of the stream can finish it. */
+  lastWalk: 7,
+} as const;
+
+/**
+ * Minutes after classes end on a school day (negative while tricycles gather), or null outside
+ * the scene, so a pack without `life.dismissal` or a quiet hour costs nothing further.
+ */
+export function dismissalNow(
+  clock: Pick<LifeClock, 'minutes' | 'weekday'>,
+  life: Pick<CityLifeConfig, 'schedules' | 'dismissal'> | undefined,
+): number | null {
+  if (!life?.dismissal) return null;
+  const school = life.schedules?.school ?? DEFAULT_SCHOOL;
+  if (!school.weekdays.includes(clock.weekday)) return null;
+  const after = clock.minutes - minutesOf(school.out);
+  return after >= -DISMISSAL.tricycleLead && after < DISMISSAL.release + DISMISSAL.lastWalk
+    ? after
+    : null;
+}
 
 /**
  * How far into a window around `center` (minutes past midnight) `minutes` is: 1 from `before`

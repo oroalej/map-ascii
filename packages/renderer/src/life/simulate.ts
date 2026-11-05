@@ -229,6 +229,7 @@ import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import type { LifeClass } from '../classes';
+import { dismissalLife } from './dismissal';
 import { fieldLife, workAnimal } from './field-life';
 import { flywayBirds } from './flyways';
 import { placeSeed } from './lights';
@@ -9314,6 +9315,8 @@ export type LifeWeather = {
     wind: readonly [number, number];
     /** Local minutes past midnight, for those that keep to the clock. */
     minutes?: number;
+    /** Minutes since classes ended, while school is letting out (rhythm.ts `dismissalNow`). */
+    dismissal?: number;
   };
 };
 
@@ -14318,6 +14321,7 @@ export class LifeWorld {
         crowd,
         maxAgents,
       );
+      this.withDismissal(result, zoom, weather, center, bounds, crowd, maxAgents);
       this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
@@ -14366,10 +14370,45 @@ export class LifeWorld {
       crowd,
       maxAgents,
     );
+    this.withDismissal(result, zoom, weather, center, bounds, crowd, maxAgents);
     this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     tapOwners?.finish(admitted);
+    return admitted;
+  }
+
+  /** Students walking home and the tricycles waiting for them, while school lets out. */
+  private withDismissal(
+    admitted: VisibleAgent[],
+    zoom: number,
+    weather: LifeWeather,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    crowd: number,
+    maxAgents: number,
+  ) {
+    const field = weather.field;
+    if (field?.dismissal === undefined || bandVisibility(LIFE_ZOOM.person, zoom) < 1)
+      return admitted;
+    const frame = dismissalLife({
+      tiles: [...this.tiles.values()].map((life) => ({ tile: life.tile, geo: life.geo })),
+      after: field.dismissal,
+      time: field.time,
+      center,
+      bounds,
+      crowd,
+      ...(this.mixedZoom && {
+        owns: ({ geo }, p) => {
+          for (const life of this.tiles.values()) if (life.geo === geo) return this.owns(life, p);
+          return false;
+        },
+      }),
+    });
+    for (const agent of frame) {
+      if (admitted.length >= maxAgents) break;
+      admitted.push(agent);
+    }
     return admitted;
   }
 
