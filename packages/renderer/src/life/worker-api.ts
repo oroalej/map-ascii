@@ -8,6 +8,7 @@ import type {
   ProcessionRoute,
   ShopSchedule,
   TrafficMix,
+  FlywayConfig,
   PeddlerConfig,
 } from '@atlas/shared';
 import type { DialogueChoice, GreetingPeriods } from '@atlas/shared';

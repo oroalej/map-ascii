@@ -107,7 +107,7 @@ describe('a line agent’s layer', () => {
   const grid: LifeGrid = {
     cols: 20,
     rows: 20,
-    toCell: (lng, lat) => [lng, lat],
+    toCell: (lng: number, lat: number) => [lng, lat],
     water: () => false,
   } as unknown as LifeGrid;
   const pack = (line: VisibleAgent['line']) => {
