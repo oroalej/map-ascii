@@ -36,7 +36,7 @@ export type ContinuitySample = {
 export const PackingOutcome = { outside: 0, drawn: 1, collision: 2, cellGuard: 3 } as const;
 export type MotionKind = 'vehicle' | 'person';
 export type LifeHold =
-  'inspection' | 'pause' | 'moment' | 'signal' | 'service' | 'visit' | 'terminal';
+  'inspection' | 'pause' | 'moment' | 'signal' | 'rail' | 'service' | 'visit' | 'terminal';
 export type LifeRejection = 'occupancy' | 'building' | 'water' | 'road';
 export type MotionReport = {
   eligibleFrames: number;
@@ -302,6 +302,7 @@ export class LifeDiagnostics {
         const stopped = (owner as Partial<Mover>).v;
         if (
           hold === 'signal' ||
+          hold === 'rail' ||
           hold === 'service' ||
           hold === 'inspection' ||
           (hold === 'terminal' && stopped !== undefined && Math.abs(stopped) < 1e-8)

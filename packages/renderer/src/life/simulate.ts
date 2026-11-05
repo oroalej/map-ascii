@@ -233,6 +233,7 @@ import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
+import { RailCrossings } from './rail-crossings';
 import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
@@ -1191,6 +1192,8 @@ export class TileLife {
     { line: number; from: number; dir: 1 | -1; d: number; shift: number; blocked?: number }
   >();
   signals!: SignalControl;
+  /** Where roads meet running track here (life/rail-crossings.ts). */
+  railCrossings!: RailCrossings;
   crossingWaits!: CrossingWaits;
   private crossingClock = 0;
   private crossingMinimum = 0;
@@ -1737,6 +1740,8 @@ export class TileLife {
       );
     this.signals = new SignalControl(tile, geo, this.perMeter, this.along, true);
     yield* this.signals.prepare(tile, geo);
+    this.railCrossings = new RailCrossings(geo, this.perMeter, this.along, true);
+    yield* this.railCrossings.prepare();
     this.crossingWaits = new CrossingWaits(
       geo,
       this.perMeter,
