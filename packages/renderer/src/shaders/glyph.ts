@@ -20,18 +20,27 @@
  */
 import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
-import { BIRD_SHADOW, CellBit, EVENT_PERSON_BITS, LIFE_SHADOW } from '../life/config';
+import {
+  BIRD_SHADOW,
+  CellBit,
+  EVENT_PERSON_BITS,
+  GROUND_SHADOW,
+  LIFE_GROUND_SHADOW,
+  LIFE_SHADOW,
+} from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
-import { CANDLE_BIT, PersonPart } from '../life/people';
+import { CANDLE_BIT, FIGURE_HAIR_SPLIT, HAIR_COLORS, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
 import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
-import { PAINT_COUNT, VehiclePart } from '../life/vehicles';
+import { PAINT_COUNT, VehiclePart, WHEEL_PART } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BEACON_BIT, BEACON_COLORS } from '../life/emergency';
 import { BRAKE_COLOR, BRAKE_LAMP, BRAKE_GLOW } from '../life/lamps';
+import { PartsFlag, SHADE_NIBBLE } from '../life/parts-layer';
 import { PUFF_COLOR, PUFF_AGE_MASK, PUFF_KIND_BIT } from '../life/puff-style';
 import {
+  BODY_LIGHT,
   CROWN_LIGHT,
   CROP_STAGE,
   EDGE_INK,
@@ -208,6 +217,9 @@ uniform uvec2 u_focusClasses;
 uniform sampler2D u_life;
 uniform highp usampler2D u_crowdMask;
 uniform bool u_hasCrowdMask;
+uniform sampler2D u_lifeParts;
+uniform bool u_hasLifeParts;
+uniform ivec3 u_sextantSplit;
 uniform sampler2D u_effectClocks;
 ${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectClocks = false;'}
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
@@ -368,29 +380,44 @@ vec3 beaconColor(int code) {
     : vec3(${BEACON_COLORS[2].map(float).join(', ')});
 }
 
-vec3 vehicleColor(int byte, float night) {
+// How much direct sun reaches the ground: none at night, nor under cloud, nor in rain.
+float directSun() {
+  return u_daylight * clamp((cloudShade - 1.0) / ${float(SKY.shadow)} + 1.0, 0.0, 1.0) * (1.0 - u_rain);
+}
+
+vec3 vehicleColor(int byte, bool brake, float light, float night) {
   int index = byte & 15;
   int part = (byte >> 4) & 7;
   // How much its lamps shine: at night, unless it is parked.
   float lit = (byte & 128) != 0 ? 0.0 : lamps();
   vec3 paint = u_paints[min(index, ${PAINT_COUNT - 1})];
-  if (part == ${VehiclePart.roof}) paint *= 0.8;
+  if (part == ${VehiclePart.roof}) paint *= 0.8 * light;
   else if (part == ${VehiclePart.glass}) paint = mix(paint, vec3(0.14, 0.2, 0.28), 0.75);
   else if (part == ${VehiclePart.trim}) paint = mix(paint, vec3(0.12), 0.7);
-  else if (part == ${VehiclePart.accent}) paint = u_paints[(index + 7) % ${PAINT_COUNT}];
+  else if (part == ${VehiclePart.accent}) paint = u_paints[(index + 7) % ${PAINT_COUNT}] * light;
+  else if (part == ${VehiclePart.body}) paint *= light;
   // Streetlights and their own lamps keep moving vehicles from sinking into the night.
   vec3 color = mix(daylit(paint), paint * 0.7, lit * 0.5);
   if (part == ${VehiclePart.headlight}) {
     return mix(daylit(mix(paint, vec3(1.0, 0.97, 0.86), 0.6)), vec3(1.0, 0.93, 0.7), lit);
   }
   if (part == ${VehiclePart.taillight}) {
-    if ((index & ${BRAKE_LAMP}) != 0 && (byte & 128) == 0)
+    if (brake && (byte & 128) == 0)
       return mix(daylit(vec3(${BRAKE_COLOR.day.map(float).join(', ')})),
         vec3(${BRAKE_COLOR.night.map(float).join(', ')}) * ${float(BRAKE_COLOR.glow)}, lit);
     return mix(daylit(vec3(0.78, 0.14, 0.1)), vec3(1.0, 0.22, 0.14), lit);
   }
   if (part == ${VehiclePart.mini}) return mix(color, vec3(1.0, 0.95, 0.8), lit * 0.7);
   return color;
+}
+
+// A person's hair: their paint picks it from a small palette of real colors, so it stays theirs.
+vec3 hairColor(int index) {
+  int k = index % ${HAIR_COLORS.length};
+  ${HAIR_COLORS.slice(0, -1)
+    .map((c, i) => `if (k == ${i}) return vec3(${c.map(float).join(', ')});`)
+    .join('\n  ')}
+  return vec3(${HAIR_COLORS.at(-1)!.map(float).join(', ')});
 }
 
 // A person's color (life/people.ts): full ink is their paint (a shirt, an umbrella's canopy); the
@@ -406,8 +433,10 @@ vec3 personColor(int byte, float coverage) {
   }
   if (part == ${PersonPart.skin}) return daylit(u_colors[u_person]);
   if (part == ${PersonPart.rib}) return daylit(paint * 0.6);
+  if (part == ${PersonPart.hair}) return daylit(hairColor(index));
   bool tone = coverage < 0.7;
   if (part == ${PersonPart.canopy}) return daylit(tone ? paint * 0.6 : paint);
+  if (coverage < ${float(FIGURE_HAIR_SPLIT)}) return daylit(hairColor(index));
   return daylit(tone ? u_colors[u_person] : paint);
 }
 
@@ -488,11 +517,37 @@ ${seasonal ? buntingMotionGlsl : ''}
 ${seasonal ? festivePulseGlsl : ''}
 ${seasonal ? carnivalMotionGlsl : ''}
 
+// Ground shadows fall on open ground and water, never over a roof or foliage. Same sampled
+// surface as an agent standing here (lifeAllowed).
+bool shadowFalls(int cls, ivec2 subAt) {
+  if (cls == u_vehicleOccluders.x) return false;
+  int surface = int(texelFetch(u_subClass, subAt, 0).r * 255.0 + 0.5);
+  if (surface == u_vehicleOccluders.y || surface == u_vehicleOccluders.z) return false;
+  int bits = u_cellBits[surface];
+  if ((bits & ${CellBit.person | CellBit.vehicle | CellBit.boat | CellBit.train}) != 0) return true;
+  return (bits & ${CellBit.grounds}) != 0 && texelFetch(u_subAttr, subAt, 0).r == 0.0;
+}
+
+float groundShadow() {
+  return 1.0 - ${float(GROUND_SHADOW.dark)} * directSun();
+}
+
+// The sub-cell sample this pixel is reading (main), for what a shadow falls on.
+ivec2 pixelSub;
+
 // Fixtures compose over agents and map ink, leaving the underlying glyph visible around them.
 vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowed, vec3 halo) {
   if (fixture.a == 0.0) return under + halo;
   int packed = int(fixture.g * 255.0 + 0.5);
   int part = packed & 63;
+  if (part == ${FixturePart.shadow}) {
+    // Hardware's shadow (life/fixtures.ts): it darkens what's there, and draws no ink.
+    int shadowCode = int(fixture.r * 255.0 + 0.5) + 256 * (packed >> 6);
+    ivec2 shadowAt = ivec2(shadowCode % u_columns, shadowCode / u_columns) * ivec2(u_cell);
+    int shadowClass = int(texelFetch(u_glyphs, cell, 0).g * 255.0 + 0.5) & 63;
+    bool shaded = texelFetch(u_atlas, shadowAt + inCell, 0).r > 0.0 && shadowFalls(shadowClass, pixelSub);
+    return (shaded ? under * groundShadow() : under) + halo;
+  }
   ${
     seasonal
       ? /* glsl */ `
@@ -705,6 +760,7 @@ void main() {
   ivec2 inCell = ivec2(grid - vec2(cell) * u_cell);
   ivec2 sub = ivec2(${SUB.cols}, ${SUB.rows});
   ivec2 subAt = cell * sub + clamp(ivec2(vec2(inCell) / u_cell * vec2(sub)), ivec2(0), sub - 1);
+  pixelSub = subAt;
 
   // Labels sit on top, on their own coarser grid (density.ts); their cells show the
   // background, which gives them a halo.
@@ -815,9 +871,21 @@ void main() {
   vec4 life = texelFetch(u_life, cell, 0);
   int lifeFlags = int(life.b * 255.0 + 0.5);
   int lifeBit = lifeFlags & ${LIFE_AGENT_MASK};
-  // A flying bird's shadow on the ground (life/draw.ts drawShadows).
-  if (lifeBit == 0 && int(life.a * 255.0 + 0.5) == ${LIFE_SHADOW}) {
-    back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
+  // A flying bird's shadow, or a ground shadow, as much of the cell as its sextants cover (a
+  // bird's shadow in one cell has no glyph, and covers it whole). Ground shadows reach the map's
+  // ink too, or the dark theme's faint fills wouldn't show them (life/ground-shadows.ts).
+  int shadowByte = lifeBit == 0 ? int(life.a * 255.0 + 0.5) : 0;
+  if (shadowByte == ${LIFE_SHADOW} || shadowByte == ${LIFE_GROUND_SHADOW}) {
+    int shadowGlyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
+    ivec2 shadowSlot = ivec2(shadowGlyph % u_columns, shadowGlyph / u_columns) * ivec2(u_cell);
+    if (shadowGlyph == 0 || texelFetch(u_atlas, shadowSlot + inCell, 0).r > 0.0) {
+      if (shadowByte == ${LIFE_SHADOW}) back *= ${(1 - BIRD_SHADOW.dark).toFixed(3)};
+      else if (shadowFalls(cls, subAt)) {
+        float darkened = groundShadow();
+        back *= darkened;
+        shade *= darkened;
+      }
+    }
   }
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   bool crowdCell=false,crowdInk=false;
@@ -837,10 +905,33 @@ void main() {
     bool person = lifeClass == u_person;
     bool puff = person && ((lifeByte >> 4) & 7) == ${PersonPart.puff};
     bool bird = lifeClass == u_bird;
-    vec3 color = painted
-      ? vehicleColor(lifeByte, night)
-      : person ? personColor(lifeByte, coverage)
-      : bird ? birdColor(lifeByte, coverage) : daylit(u_colors[lifeClass]);
+    // The sextant under this pixel names its own part (life/parts-layer.ts).
+    int colorByte = lifeByte;
+    bool brake = (lifeByte & ${BRAKE_LAMP}) != 0;
+    float bodyLight = 1.0;
+    bool wheel = false;
+    if (u_hasLifeParts) {
+      vec4 parts = texelFetch(u_lifeParts, cell, 0);
+      int partFlags = int(parts.a * 255.0 + 0.5);
+      if ((partFlags & ${PartsFlag.shadowUnder}) != 0 && shadowFalls(cls, subAt)) back *= groundShadow();
+      if ((partFlags & ${PartsFlag.valid}) != 0) {
+        int sextant = (inCell.y < u_sextantSplit.y ? 0 : inCell.y < u_sextantSplit.z ? 2 : 4) +
+          (inCell.x < u_sextantSplit.x ? 0 : 1);
+        int value = (int(parts[sextant >> 1] * 255.0 + 0.5) >> ((sextant & 1) * 4)) & 15;
+        if (bird) {
+          colorByte = (lifeByte & ~${BIRD_ACCENT_BIT}) | ((value & 1) != 0 ? ${BIRD_ACCENT_BIT} : 0);
+        } else {
+          colorByte = (lifeByte & 143) | ((value & 7) << 4);
+          wheel = painted && (value & 7) == ${WHEEL_PART};
+          brake = (partFlags & ${PartsFlag.brake}) != 0;
+          bodyLight = mix(1.0, (value & ${SHADE_NIBBLE}) != 0 ? ${float(BODY_LIGHT.shaded)} : ${float(BODY_LIGHT.lit)}, directSun());
+        }
+      }
+    }
+    vec3 color = wheel ? daylit(vec3(0.09, 0.09, 0.1))
+      : painted ? vehicleColor(colorByte, brake, bodyLight, night)
+      : person ? personColor(colorByte, coverage)
+      : bird ? birdColor(colorByte, coverage) : daylit(u_colors[lifeClass]);
     if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0)
       color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     // A figure's two inks are both solid (glyphs/atlas.ts drawFigure), and a bird's.

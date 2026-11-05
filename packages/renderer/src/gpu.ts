@@ -181,6 +181,12 @@ export type CellTargets = {
   crowdMaskRows: number;
   crowdMaskActive?: boolean;
   crowdMaskBand?: readonly [number, number];
+  /** Lazy RGBA8 part layer (life/parts-layer.ts): 1×1 until its first upload. */
+  lifePartsTex: WebGLTexture;
+  lifePartsCols: number;
+  lifePartsRows: number;
+  lifePartsActive?: boolean;
+  lifePartsBand?: readonly [number, number];
   /** Lazy RG32F per-item candle clock tokens; never a render attachment. */
   effectClockTex?: WebGLTexture;
   /** RGBA8 streetlights (passes.ts `lightPass`): pool of light, lamp state and seed, lamp head. */
@@ -303,6 +309,7 @@ export function createCellTargets(
     new Uint32Array(4),
     gl.UNSIGNED_INT,
   );
+  const lifePartsTex = createTexture(gl, gl.RGBA8, gl.RGBA, 1, 1);
   const lightTex = createTexture(gl, gl.RGBA8, gl.RGBA, cols, rows);
   // Filtered, so the pools fade smoothly across cells (the glyph pass reads the rest unfiltered).
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -337,6 +344,10 @@ export function createCellTargets(
     crowdMaskCols: 1,
     crowdMaskRows: 1,
     crowdMaskActive: false,
+    lifePartsTex,
+    lifePartsCols: 1,
+    lifePartsRows: 1,
+    lifePartsActive: false,
     lightTex,
     fixtureTex,
     signalLightTex,
@@ -352,6 +363,7 @@ export function createCellTargets(
 export function deleteCellTargets(gl: GL, t: CellTargets) {
   if (t.effectClockTex) gl.deleteTexture(t.effectClockTex);
   gl.deleteTexture(t.crowdMaskTex);
+  gl.deleteTexture(t.lifePartsTex);
   for (const tex of [
     t.classTex,
     t.attrTex,
@@ -396,6 +408,41 @@ export function uploadLife(gl: GL, t: CellTargets, texels: Uint8Array) {
   gl.bindTexture(gl.TEXTURE_2D, t.lifeTex);
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, t.cols, t.rows, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+}
+
+/** The rows of the part layer that changed; without texels, the layer is off this frame. */
+export function uploadLifeParts(
+  gl: GL,
+  t: CellTargets,
+  texels?: Uint8Array,
+  band: readonly [number, number] = [0, t.rows],
+) {
+  t.lifePartsActive = !!texels;
+  if (!texels) return;
+  gl.bindTexture(gl.TEXTURE_2D, t.lifePartsTex);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  if (t.lifePartsCols !== t.cols || t.lifePartsRows !== t.rows) {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, t.cols, t.rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+    t.lifePartsCols = t.cols;
+    t.lifePartsRows = t.rows;
+  } else {
+    // Off frames leave the old sextants on the GPU; this frame's band clears those rows too.
+    const first = Math.min(band[0], t.lifePartsBand?.[0] ?? band[0]);
+    const end = Math.max(band[1], t.lifePartsBand?.[1] ?? band[1]);
+    if (end > first)
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        first,
+        t.cols,
+        end - first,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        texels.subarray(first * t.cols * 4, end * t.cols * 4),
+      );
+  }
+  t.lifePartsBand = band;
 }
 
 /** Eight words per cell encode conservative 16×16 permitted crowd coverage. */

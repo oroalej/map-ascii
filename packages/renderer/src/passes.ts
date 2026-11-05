@@ -56,6 +56,7 @@ import {
   drawGround,
   uploadLife,
   uploadCrowdMask,
+  uploadLifeParts,
   uploadEffectClocks,
   uploadFixtures,
   uploadSignalLights,
@@ -87,6 +88,8 @@ import {
   type UtilityPackingScratch,
 } from './life/utilities';
 import { packLife, type LifeGrid } from './life/draw';
+import { createLifeParts, type LifePartsTarget } from './life/parts-layer';
+import { sextantSplits } from './glyphs/atlas';
 import { EffectClocks, ORDINARY_CLOCK, heldClock } from './life/effect-clocks';
 import type { FrameProfiler } from './profile';
 import {
@@ -102,8 +105,9 @@ import type { VisibleAgent } from './life/simulate';
 import type { Sun } from './life/sun';
 import { rainGlyphIndex, type WindNow } from './life/wind';
 import { buntingWindResponse } from './life/bunting-motion';
-import { rainGlyphs, type Theme } from './theme';
+import { rainGlyphs, sextantGlyphs, type Theme } from './theme';
 import {
+  fixtureShadowKey,
   packFixtures,
   createFixturePackingScratch,
   type FixturePackingScratch,
@@ -697,6 +701,8 @@ type Texels = {
   crowdMask?: Uint32Array;
   crowdCells?: number[];
   crowdPending?: boolean;
+  /** The part layer's CPU copy, from the first frame that draws with it. */
+  lifeParts?: LifePartsTarget;
   owners: Uint32Array;
   revision: number;
   light: Uint8Array;
@@ -754,6 +760,12 @@ export function labelCovers(targets: CellTargets, col: number, row: number): boo
   );
 }
 
+/** Where a cell's sextants divide, device px (glyphs/atlas.ts): the column, then two rows. */
+export function sextantSplit({ w, h }: { w: number; h: number }): [number, number, number] {
+  const { xs, ys } = sextantSplits(w, h);
+  return [xs[1], ys[1], ys[2]];
+}
+
 /**
  * Put the agents on the cell grid (life/draw.ts), with the flying birds' shadows while the `sun`
  * is up, and upload them to the life texture. Returns how many landed on the grid.
@@ -784,6 +796,8 @@ export function lifePass(
     /** Absolute cells crowds may use (`grid.ts` `coreCells`), when the grid has a pan margin. */
     bounds?: { left: number; top: number; right: number; bottom: number };
   },
+  /** Color agents sextant by sextant (quality.ts `lifeDetail`). */
+  detail = false,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -813,6 +827,7 @@ export function lifePass(
         bounds?.top,
         bounds?.right,
         bounds?.bottom,
+        detail,
       ]
     : undefined;
   if (
@@ -847,6 +862,8 @@ export function lifePass(
 
   if (buffers.stampedVehicles.length < agents.length)
     buffers.stampedVehicles = new Uint8Array(agents.length);
+  if (detail) buffers.lifeParts ??= createLifeParts(cols * rows, rows);
+  const lifeParts = detail ? buffers.lifeParts : undefined;
   const packStart = profiler?.time();
   buffers.candles = buffers.clockCandidates = !!crowdPayload?.cells.some((c) => c.agent.candle);
   for (const agent of agents) {
@@ -886,6 +903,7 @@ export function lifePass(
       throng: crowdPayload,
       throngMask: buffers.crowdMask,
       throngCells: buffers.crowdCells,
+      parts: lifeParts,
     },
     puffs,
   );
@@ -918,6 +936,7 @@ export function lifePass(
   }
   uploadCrowdMask(gl, targets, crowdEnd ? buffers.crowdMask : undefined, [crowdFirst, crowdEnd]);
   uploadLife(gl, targets, lifeTexels);
+  uploadLifeParts(gl, targets, lifeParts?.texels, lifeParts && [lifeParts.first, lifeParts.end]);
   if (heldFrame) buffers.held = { frame: heldFrame, inputs: inputs!, drawn };
   if (uploadStart !== undefined) profiler!.add('upload', profiler!.time() - uploadStart);
   return drawn;
@@ -1000,6 +1019,8 @@ export type Weather = {
 const fixturesOf = new WeakMap<
   CellTargets,
   {
+    /** Which sun its hardware shadows were packed for (life/fixtures.ts `fixtureShadowKey`). */
+    shadowKey: string;
     packed: PackedFixtures;
     fixtures: readonly StreetFixture[];
     atlas: ThemeResources['map']['atlas'];
@@ -1050,14 +1071,18 @@ export function fixturePass(
   repack: boolean,
   motion: FixtureMotion = { time: 0, strength: 0 },
   signalOffsets?: SignalOffsets,
+  /** The sun for hardware's shadows, while it's up and quality allows them. */
+  sun?: Sun | null,
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
   let lightsChanged = false;
   const viewport = screenArea(view, placement.grid, view.cellDev);
+  const shadowKey = fixtureShadowKey(sun, view.camera.zoom);
   if (
     repack ||
     !cache ||
+    cache.shadowKey !== shadowKey ||
     cache.packed.cloth.cols !== targets.cols ||
     cache.packed.cloth.rows !== targets.rows ||
     cache.fixtures !== fixtures ||
@@ -1123,8 +1148,10 @@ export function fixturePass(
       utilityScratch,
       fixtureScratch,
       signalOffsets,
+      shadowKey && sun ? { sun, sextants: sextantGlyphs } : undefined,
     );
     cache = {
+      shadowKey,
       packed,
       fixtures,
       atlas: resources.map.atlas,
@@ -1308,6 +1335,9 @@ export function glyphPass(
     u_life: targets.lifeTex,
     u_crowdMask: targets.crowdMaskTex,
     u_hasCrowdMask: !!targets.crowdMaskActive,
+    u_lifeParts: targets.lifePartsTex,
+    u_hasLifeParts: !!targets.lifePartsActive,
+    u_sextantSplit: sextantSplit(cellDev),
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,

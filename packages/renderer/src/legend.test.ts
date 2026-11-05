@@ -392,7 +392,7 @@ describe('legendEntries life', () => {
       const people = entries.find((e) => e.label === 'People (simulated)')!;
       expect(people.icons).toHaveLength(2);
       const [figure, umbrella] = people.icons!;
-      expect(figure!.pixels).toBe(FIGURE_MASTERS.adult[10]);
+      expect(figure!.pixels.join('')).toBe(FIGURE_MASTERS.adult[10]!.join('').replace(/h/g, 'o'));
       expect(umbrella!.pixels).toBe(FIGURE_MASTERS.umbrella[10]);
       // The figure's skin is the theme's person color; the umbrella's ribs are darker than it.
       expect(figure!.tone).toBe(people.color);
@@ -413,8 +413,12 @@ describe('legendEntries life', () => {
     expect(vendors.label).toBe('Street vendors (simulated)');
     expect(vendors.classes).toEqual([]);
     expect(vendors.icons).toHaveLength(3);
-    expect(vendors.icons![1]!.pixels).toBe(FIGURE_MASTERS.adult[10]);
-    expect(vendors.icons![2]!.pixels).toBe(FIGURE_MASTERS['pole-buckets'][10]);
+    expect(vendors.icons![1]!.pixels.join('')).toBe(
+      FIGURE_MASTERS.adult[10]!.join('').replace(/h/g, 'o'),
+    );
+    expect(vendors.icons![2]!.pixels.join('')).toBe(
+      FIGURE_MASTERS['pole-buckets'][10]!.join('').replace(/h/g, 'o'),
+    );
     expect(entries.filter((entry) => entry.id === 'life:vendors')).toHaveLength(1);
     for (const icon of vendors.icons!) {
       expect(new Set(icon.pixels.map((row) => row.length)).size).toBe(1);

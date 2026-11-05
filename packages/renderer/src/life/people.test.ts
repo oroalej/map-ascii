@@ -64,7 +64,7 @@ describe('people', () => {
     for (const [figure, masters] of Object.entries(FIGURE_MASTERS)) {
       for (const [size, rows] of Object.entries(masters)) {
         expect(rows, `${figure} ${size}`).toHaveLength(Number(size));
-        for (const row of rows) expect(row).toMatch(new RegExp(`^[#o.]{${size}}$`));
+        for (const row of rows) expect(row).toMatch(new RegExp(`^[#oh.]{${size}}$`));
         // Carried goods, paddlers and seated figures have directional masters.
         if (!['adult', 'child', 'umbrella'].includes(figure)) continue;
         const turned = [...rows].reverse().map((row) => [...row].reverse().join(''));

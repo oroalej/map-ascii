@@ -1504,6 +1504,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             bounds: coreCells(grid, cellDev(), view()),
           }
         : undefined,
+      knobs.lifeDetail,
     );
     lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;
@@ -1812,6 +1813,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       cellsDrawn,
       { time, strength: wind.strength },
       lifeView()?.signalOffsets,
+      knobs.shadows ? sun : null,
     );
     const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
     if (key !== fixturesKey) {

@@ -13,6 +13,7 @@ import {
   type VehicleType,
 } from '@atlas/shared';
 import { LifeLine } from './geometry';
+import { FINE_PLANS } from './vehicle-plans';
 
 /**
  * A vehicle cell's part, which the glyph shader colors from the vehicle's paint
@@ -29,6 +30,11 @@ export const VehiclePart = {
   accent: 6,
   mini: 7,
 } as const;
+/**
+ * Dark rubber, in a close-up plan only: inside the part layer (life/parts-layer.ts) the slot `mini`
+ * has in a life texel is free, since a one-glyph vehicle never has sextants.
+ */
+export const WHEEL_PART = VehiclePart.mini;
 export type VehiclePart = (typeof VehiclePart)[keyof typeof VehiclePart];
 
 /** The glyph each part is drawn with. The color does most of the work. */
@@ -53,6 +59,7 @@ const planLetters: Readonly<Record<string, VehiclePart>> = {
   D: VehiclePart.trim,
   A: VehiclePart.accent,
   L: VehiclePart.trim,
+  W: WHEEL_PART,
 };
 
 /**
@@ -88,18 +95,41 @@ export type VehicleSpec = {
   maxSpeed?: number;
   /** Rides by the road's right edge instead of in a lane (config.ts `laneOffset`). */
   curb?: boolean;
+  /** Meters tall, for its shadow on the ground. */
+  height: number;
   /** Paints it may have, each equally likely. */
   paints: readonly number[];
-  /** One glyph when small: across the screen, then up or down. */
-  mini: readonly [string, string];
+  /** One glyph when small: across the screen, up or down, then rising and falling if it has them. */
+  mini: readonly [string, string] | readonly [string, string, string, string];
   /**
    * Seen from above, front to the right: one string per row across the vehicle, its left side
    * first. Letters are parts (`planLetters`).
    */
   plan: readonly string[];
+  /** Close-up plans (life/vehicle-plans.ts), about twice as fine; individuals vary between them. */
+  fine?: readonly (readonly string[])[];
 };
 
 const P = Paint;
+
+/**
+ * A long vehicle in one glyph on a diagonal road, rising and falling on screen (glyphs/atlas.ts).
+ * Private Use code points after folklore's; `BAR` is the whole set, in `miniSector`'s order.
+ */
+export const MINI_DIAGONALS = ['\uE430', '\uE431'] as const;
+const BAR = ['▬', '▮', ...MINI_DIAGONALS] as const;
+
+/**
+ * Which of a four-glyph `mini` faces a heading of (`x`, `y`) device px, `y` down the screen:
+ * across (0), up or down (1), rising (2) or falling (3), each within 22.5° of its own axis.
+ */
+export function miniSector(x: number, y: number): 0 | 1 | 2 | 3 {
+  const ax = Math.abs(x);
+  const ay = Math.abs(y);
+  if (ay <= ax * Math.SQRT2 - ax) return 0;
+  if (ax <= ay * Math.SQRT2 - ay) return 1;
+  return x * y < 0 ? 2 : 3;
+}
 
 /** Boat paints never use these: they vanish on water. */
 export const BOAT_PAINTS_AVOID: readonly number[] = [P.blue, P.sky, P.teal, P.green];
@@ -152,14 +182,18 @@ export type ProcessionCraft = 'pagoda' | 'voyador' | 'baroto' | 'sailboat';
 
 export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   car: {
+    fine: FINE_PLANS.car,
+    height: 1.5,
     ...PROCESSION_GEOMETRY.vehicles.car,
     speed: 1,
     paints: [P.white, P.white, P.silver, P.graphite, P.red, P.blue, P.maroon, P.cream],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Trunk, rear window, roof, windshield, hood.
     plan: ['TBGRRRRGGBBH', 'BBGRRRRGGBBB', 'BBGRRRRGGBBB', 'TBGRRRRGGBBH'],
   },
   motorcycle: {
+    fine: FINE_PLANS.motorcycle,
+    height: 1.4,
     ...PROCESSION_GEOMETRY.vehicles.motorcycle,
     speed: 1.1,
     paints: [P.graphite, P.red, P.blue, P.silver, P.graphite],
@@ -168,6 +202,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBDDBH'],
   },
   tricycle: {
+    fine: FINE_PLANS.tricycle,
+    height: 1.7,
     length: 2.6,
     width: 1.6,
     speed: 0.8,
@@ -177,32 +213,40 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TBBDBBH', 'RRRRRG.', 'RRRRRG.'],
   },
   jeepney: {
+    fine: FINE_PLANS.jeepney,
+    height: 2.4,
     length: 7,
     width: 2,
     speed: 0.9,
     paints: [P.chrome, P.chrome, P.white, P.blue, P.red, P.yellow, P.green, P.purple, P.pink],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A long roof striped down its sides, the open door at the back, a short hood.
     plan: ['TAAAAAAAAAGBBH', 'DRRRRRRRRRGBBB', 'TAAAAAAAAAGBBH'],
   },
   bus: {
+    fine: FINE_PLANS.bus,
+    height: 3.2,
     length: 11,
     width: 2.5,
     speed: 0.85,
     paints: [P.white, P.blue, P.yellow, P.green, P.red],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Air conditioners on the roof.
     plan: ['TBBBBBBBBBBBBBBBGH', 'BRRDDRRRRRRDDRRRGB', 'TBBBBBBBBBBBBBBBGH'],
   },
   truck: {
+    fine: FINE_PLANS.truck,
+    height: 3,
     ...PROCESSION_GEOMETRY.vehicles.truck,
     speed: 0.85,
     paints: [P.blue, P.red, P.white, P.green, P.yellow],
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A cargo bed behind the cab.
     plan: ['TDDDDDDDDDDBBBGH', 'DDDDDDDDDDDBBRGB', 'TDDDDDDDDDDBBBGH'],
   },
   bicycle: {
+    fine: FINE_PLANS.bicycle,
+    height: 1.5,
     length: 1.8,
     width: 0.6,
     speed: 0.7,
@@ -214,6 +258,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['TDBDDBH'],
   },
   rowboat: {
+    fine: FINE_PLANS.rowboat,
+    height: 0.6,
     length: 3.5,
     width: 1.3,
     speed: 0.7,
@@ -223,6 +269,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBB.', 'BBBDBBB', '.BBBBB.'],
   },
   motorboat: {
+    fine: FINE_PLANS.motorboat,
+    height: 1.5,
     length: 5,
     width: 2,
     speed: 1.6,
@@ -232,6 +280,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['BBBRRGBB.', 'BBBRRGBBH', 'BBBRRGBB.'],
   },
   banca: {
+    fine: FINE_PLANS.banca,
+    height: 1.8,
     length: 7,
     width: 3.2,
     speed: 1.2,
@@ -241,25 +291,31 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['..RRRRRRRR..', '...B....B...', 'BAABRRRRBAAH', '...B....B...', '..RRRRRRRR..'],
   },
   locomotive: {
+    fine: FINE_PLANS.locomotive,
+    height: 3.8,
     length: 14,
     width: 2.8,
     speed: 1,
     paints: TRAIN_PAINTS,
-    mini: ['▬', '▮'],
+    mini: BAR,
     // A long hood behind the cab: roof vents down the middle, the cab's windows and lamps at
     // the front.
     plan: ['TDBBBBBBBBBBGGBH', 'DDRRDDRRDDRRRGBB', 'DDRRDDRRDDRRRGBB', 'TDBBBBBBBBBBGGBH'],
   },
   coach: {
+    fine: FINE_PLANS.coach,
+    height: 3.6,
     length: 18,
     width: 2.8,
     speed: 1,
     paints: TRAIN_PAINTS,
-    mini: ['▬', '▮'],
+    mini: BAR,
     // Windows down both sides of a long roof, the couplings at the ends.
     plan: ['BBGGBGGBGGBGGBGGBB', 'DRRRRRRRRRRRRRRRRD', 'DRRRRRRRRRRRRRRRRD', 'BBGGBGGBGGBGGBGGBB'],
   },
   pagoda: {
+    fine: FINE_PLANS.pagoda,
+    height: 5,
     length: 14,
     width: 7,
     speed: 1,
@@ -277,6 +333,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     ],
   },
   voyador: {
+    fine: FINE_PLANS.voyador,
+    height: 0.7,
     length: 12,
     width: 1.6,
     speed: 1,
@@ -287,6 +345,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBBBBBBBBBBB.', 'RRRRRRRRRRRRRRRH', '.BBBBBBBBBBBBBB.'],
   },
   baroto: {
+    fine: FINE_PLANS.baroto,
+    height: 0.6,
     length: 4.5,
     width: 0.9,
     speed: 1,
@@ -297,6 +357,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['RBBBDBBR'],
   },
   sailboat: {
+    fine: FINE_PLANS.sailboat,
+    height: 4,
     length: 5,
     width: 2,
     speed: 1,
@@ -306,6 +368,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['.BBBBBB.', 'BBAAAABB', '.BBBBBB.'],
   },
   cart: {
+    fine: FINE_PLANS.cart,
+    height: 1.9,
     length: 1.8,
     width: 1,
     speed: 0,
@@ -316,6 +380,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DARARAD', 'DRARARH', 'DARARAD'],
   },
   carabao: {
+    fine: FINE_PLANS.carabao,
+    height: 1.4,
     length: 2.6,
     width: 1.3,
     speed: 0,
@@ -327,30 +393,38 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
   },
   // Append crafts: the simulation's earlier craft ordinals remain stable.
   ambulance: {
+    fine: FINE_PLANS.ambulance,
+    height: 2.3,
     length: 5.4,
     width: 2,
     speed: 1,
     paints: [P.chrome],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TAARRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAARRRLGGBAH'],
   },
   police: {
+    fine: FINE_PLANS.police,
+    height: 1.5,
     length: 4.6,
     width: 1.8,
     speed: 1,
     paints: [P.blue],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TAGRRRLGGBBH', 'BBARRRLGGBBB', 'BBARRRLGGBBB', 'TAGRRRLGGBAH'],
   },
   firetruck: {
+    fine: FINE_PLANS.firetruck,
+    height: 3.1,
     length: 9.5,
     width: 2.5,
     speed: 0.85,
     paints: [P.red],
-    mini: ['▬', '▮'],
+    mini: BAR,
     plan: ['TBBDRRLLGBBH', 'BBBDRRLLGBBB', 'BBBDRRLLGBBB', 'TBBDRRLLGBBH'],
   },
   'box-cart': {
+    fine: FINE_PLANS['box-cart'],
+    height: 1.3,
     length: 1.2,
     width: 0.9,
     speed: 0,
@@ -359,6 +433,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DARRAD', 'BRHRRB', 'DARRAD'],
   },
   'fry-cart': {
+    fine: FINE_PLANS['fry-cart'],
+    height: 1.4,
     length: 1.3,
     width: 0.9,
     speed: 0,
@@ -367,6 +443,8 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     plan: ['DBBBBD', 'BGGGAB', 'DBBBBD'],
   },
   'flatbed-cart': {
+    fine: FINE_PLANS['flatbed-cart'],
+    height: 1,
     length: 1.5,
     width: 1,
     speed: 0,
@@ -393,15 +471,45 @@ export function vehicleGlyphs(): string[] {
 }
 
 /** The part at (`u` along from the back, `v` across from the left), both 0–1, or null. */
-export function planPart(spec: VehicleSpec, u: number, v: number): VehiclePart | null {
-  const { plan } = spec;
+export const planPart = (spec: VehicleSpec, u: number, v: number): VehiclePart | null =>
+  planPartIn(spec.plan, u, v);
+
+export function planPartIn(plan: readonly string[], u: number, v: number): VehiclePart | null {
   const row = plan[Math.min(plan.length - 1, Math.max(0, Math.floor(v * plan.length)))]!;
   const letter = row[Math.min(row.length - 1, Math.max(0, Math.floor(u * row.length)))]!;
   return planLetters[letter] ?? null;
 }
 
+/** A close-up plan takes over once each of its letters covers this many sextants, the fewer way. */
+export const FINE_PLAN_SEXTANTS = 0.9;
+
+/**
+ * The close-up plan a craft shows when a meter along it covers `sextantsAlong` sextants and a meter
+ * across `sextantsAcross`, or none while it wouldn't be resolved. `look` picks between its plans.
+ */
+export function fineplanFor(
+  spec: VehicleSpec,
+  look: number,
+  sextantsAlong: number,
+  sextantsAcross: number,
+): readonly string[] | undefined {
+  const { fine } = spec;
+  if (!fine) return undefined;
+  const plan = fine[look % fine.length]!;
+  return (sextantsAlong * spec.length) / plan[0]!.length >= FINE_PLAN_SEXTANTS &&
+    (sextantsAcross * spec.width) / plan.length >= FINE_PLAN_SEXTANTS
+    ? plan
+    : undefined;
+}
+
 /** Once a vehicle is this many cells long on screen, it is drawn from its plan. */
 export const STAMP_MIN_CELLS = 2;
+/**
+ * From this many cells long until `STAMP_MIN_CELLS`, a one-glyph vehicle already shows its true
+ * outline in sextants, so its size changes smoothly. It still counts as one glyph for everything
+ * else: its cell, its lamps and whatever anchors to it.
+ */
+export const SILHOUETTE_MIN_CELLS = 1.25;
 
 /** What a traffic mix is set for: road classes, rivers, and parked vehicles. */
 export type MixKey = TrafficRoad | 'river' | 'canal' | 'parked';

@@ -613,6 +613,23 @@ export const BIRD_SHADOW = { altitude: 8, reach: 40, dark: 0.3 } as const;
 export const LIFE_SHADOW = 1;
 
 /**
+ * A vehicle's or a large figure's shadow on the ground (life/ground-shadows.ts): it reaches its
+ * height over the tangent of the sun's altitude away from the sun, at most `reach` m, and darkens
+ * the ground by `dark`. Vehicles cast one from `vehicleCellsPerMeter`, people from
+ * `figureCellsPerMeter`, whose shadow takes up `figureFootprint` of their width.
+ */
+export const GROUND_SHADOW = {
+  reach: 4,
+  dark: 0.34,
+  vehicleCellsPerMeter: 1.2,
+  figureCellsPerMeter: 2.4,
+  figureFootprint: 0.6,
+} as const;
+
+/** A life texel with no agent whose last byte is this marks a ground shadow, sextant by sextant. */
+export const LIFE_GROUND_SHADOW = 2;
+
+/**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):
  * fewer people and cars at night, and birds roost after dusk. Each agent has a fixed rank in
  * 0–1 and shows while its rank is below this.

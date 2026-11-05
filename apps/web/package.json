@@ -33,6 +33,7 @@
     "@playwright/test": "^1.63",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "serve": "^14.2.6"
+    "serve": "^14.2.6",
+    "typescript": "~6.0.3"
   }
 }

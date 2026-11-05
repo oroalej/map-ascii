@@ -6,9 +6,9 @@
  * its real size (`FIGURE_SIZE_M`, `figureFit`), in proportion to the cars around it: part of a
  * cell, a whole one, 2×2 cells, and closest up stamped over as many cells as it covers
  * (life/draw.ts), but never smaller than `MIN_FIGURE_PX` on screen.
- * Each figure glyph has two inks: full for its paint (a shirt, a canopy),
- * and `FIGURE_TONE` for its skin (the theme's person color) or a canopy's ribs, which the glyph
- * shader tells apart (shaders/glyph.ts `personColor`).
+ * Each figure glyph has up to three inks: full for its paint (a shirt, a canopy), `FIGURE_TONE` for
+ * its skin (the theme's person color) or a canopy's ribs, and `FIGURE_HAIR` for its hair, which the
+ * glyph shader tells apart (shaders/glyph.ts `personColor`).
  */
 import { doubled, inkAt, turnedPixels, type Heading } from './masters';
 import { Paint } from './vehicles';
@@ -20,9 +20,22 @@ export type PersonFigure = 'adult' | 'child' | 'umbrella' | 'rower' | 'seated' |
 export type PersonPose = 'attentive' | 'gesture';
 
 /**
+ * A walker's `flap` after `walked` m at `stride` m a step (`step` starts them on either foot): bit 0
+ * is which foot leads, flipping every step; `FLAP_PASSING` is set through the second half of each
+ * step, when the arms pass the body. So a walker goes 0, 2, 1, 3, while anything drawing only two
+ * steps reads bit 0 and flips at the same distances it always did.
+ */
+export const FLAP_PASSING = 2;
+export function walkFlap(walked: number, stride: number, step = 0): number {
+  const steps = walked / stride;
+  const whole = Math.floor(steps);
+  return ((whole + step) & 1) | (steps - whole >= 0.5 ? FLAP_PASSING : 0);
+}
+
+/**
  * One person as drawn (life/draw.ts `drawPeople`): their figure and its paint (`PAINT_NONE` for
  * none), their slot in a group (`lateral` to the right of the first, `back` behind it), and
- * which step of their stride they are on.
+ * which step of their stride they are on (`walkFlap`).
  */
 export type PersonLook = {
   figure: PersonFigure;
@@ -53,6 +66,19 @@ export const FIGURE_SIZE_M: Readonly<Record<PersonFigure, number>> = {
   'chest-tray': 0.9,
 };
 
+/** How tall each figure stands, m, for its shadow on the ground. */
+export const FIGURE_HEIGHT_M: Readonly<Record<PersonFigure, number>> = {
+  adult: 1.6,
+  seated: 1,
+  child: 1.15,
+  umbrella: 2,
+  rower: 0.9,
+  'pole-buckets': 1.6,
+  basket: 1.6,
+  'head-tray': 1.8,
+  'chest-tray': 1.6,
+};
+
 /** A one-cell figure's width, as a share of the cell's (`figureFit`). */
 export const FIGURE_SCALES = [0.6, 0.8, 1] as const;
 export type FigureScale = 0 | 1 | 2;
@@ -79,11 +105,24 @@ export function figureFit(
  * How the shader colors a person texel. A figure glyph's tone ink is skin, or a canopy's ribs;
  * a stamped figure's cells (all full ink) say which they show.
  */
-export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3, puff: 4 } as const;
+export const PersonPart = { figure: 0, canopy: 1, skin: 2, rib: 3, puff: 4, hair: 5 } as const;
 export type PersonPart = (typeof PersonPart)[keyof typeof PersonPart];
 
 /** Coverage of the tone ink (0–255); the shader splits full ink from tone at 0.7. */
 export const FIGURE_TONE = 110;
+/** Coverage of the hair ink (0–255); the shader splits it from tone at `FIGURE_HAIR_SPLIT`. */
+export const FIGURE_HAIR = 56;
+export const FIGURE_HAIR_SPLIT = 0.33;
+/**
+ * Hair colors, RGB 0–1: black and very dark brown mostly, some going grey, a little lifted so a
+ * head doesn't vanish into the dark theme. A person's paint picks one, so it stays theirs.
+ */
+export const HAIR_COLORS = [
+  [0.17, 0.15, 0.15],
+  [0.17, 0.15, 0.15],
+  [0.27, 0.18, 0.12],
+  [0.45, 0.44, 0.43],
+] as const;
 /** No paint: the figure takes the theme's person color. */
 export const PAINT_NONE = 15;
 /** Holding a candle (lit at dusk and night). */
@@ -127,9 +166,9 @@ export const UMBRELLA_PAINTS: readonly number[] = [
 ];
 
 /*
- * Figures seen from above, heading up, left hand forward: `#` paint, `o` tone, `.` empty. Solid,
- * so a person has the weight of the cars beside them: the shoulders across the whole width, the
- * head in their middle, and the arms swinging forward and back. Each is the same turned half
+ * Figures seen from above, heading up, left hand forward: `#` paint, `o` tone, `h` hair, `.` empty.
+ * Solid, so a person has the weight of the cars beside them: the shoulders across the whole width,
+ * the head in their middle, its crown of hair ringed by skin, and the arms swinging forward and back. Each is the same turned half
  * round, so heading down draws the same; the other step is its mirror, and heading across the
  * screen, it turned a quarter. Drawn from the smallest master at least as big as the glyph
  * (`figurePixels`).
@@ -139,13 +178,37 @@ const ADULT_10 = [
   '..........',
   'oo........',
   '##..oo....',
-  '###oooo###',
-  '###oooo###',
-  '###oooo###',
-  '###oooo###',
+  '###ohho###',
+  '###hhhh###',
+  '###hhhh###',
+  '###ohho###',
   '....oo..##',
   '........oo',
   '..........',
+];
+
+// prettier-ignore
+const ADULT_20 = [
+  '....................',
+  '....................',
+  '.ooo................',
+  'oooo................',
+  '####.....oo.........',
+  '#####...oooo........',
+  '#######oooooo#######',
+  '######oohhhhoo######',
+  '######ohhhhhho######',
+  '######hhhhhhhh######',
+  '######hhhhhhhh######',
+  '######ohhhhhho######',
+  '######oohhhhoo######',
+  '#######oooooo#######',
+  '........oooo...#####',
+  '.........oo.....####',
+  '................oooo',
+  '................ooo.',
+  '....................',
+  '....................',
 ];
 
 // prettier-ignore
@@ -153,13 +216,86 @@ const ADULT: Readonly<Record<number, readonly string[]>> = {
   5: [
     'o....',
     '##o##',
-    '#ooo#',
+    '#oho#',
     '##o##',
     '....o',
   ],
   10: ADULT_10,
-  20: doubled(ADULT_10),
+  20: ADULT_20,
 };
+
+/** Between steps, the arms pass the body: a walker's other two poses, the same mirrored or turned. */
+// prettier-ignore
+const PASSING_ADULT: Readonly<Record<number, readonly string[]>> = {
+  5: [
+    '.....',
+    '##o##',
+    '#oho#',
+    '##o##',
+    '.....',
+  ],
+  10: [
+    '..........',
+    '..........',
+    '....oo....',
+    '###ohho###',
+    '###hhhh###',
+    '###hhhh###',
+    '###ohho###',
+    '....oo....',
+    '..........',
+    '..........',
+  ],
+  20: [
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+    '.........oo.........',
+    '........oooo........',
+    '#######oooooo#######',
+    '######oohhhhoo######',
+    '######ohhhhhho######',
+    '######hhhhhhhh######',
+    '######hhhhhhhh######',
+    '######ohhhhhho######',
+    '######oohhhhoo######',
+    '#######oooooo#######',
+    '........oooo........',
+    '.........oo.........',
+    '....................',
+    '....................',
+    '....................',
+    '....................',
+  ],
+};
+// prettier-ignore
+const PASSING_CHILD: Readonly<Record<number, readonly string[]>> = {
+  5: [
+    '.....',
+    '.....',
+    '#oho#',
+    '.....',
+    '.....',
+  ],
+  10: [
+    '..........',
+    '..........',
+    '....oo....',
+    '.##ohho##.',
+    '.##hhhh##.',
+    '.##hhhh##.',
+    '.##ohho##.',
+    '....oo....',
+    '..........',
+    '..........',
+  ],
+};
+export const PASSING_MASTERS = { adult: PASSING_ADULT, child: PASSING_CHILD } as const;
+
+/** Only walkers without a pose or a load have passing poses. */
+export const hasPassingPose = (figure: PersonFigure): figure is keyof typeof PASSING_MASTERS =>
+  figure === 'adult' || figure === 'child';
 
 /** A child: slighter shoulders, a larger head for them. */
 // prettier-ignore
@@ -167,7 +303,7 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
   5: [
     '.....',
     '.o...',
-    '#ooo#',
+    '#oho#',
     '...o.',
     '.....',
   ],
@@ -175,10 +311,10 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
     '..........',
     '.oo.......',
     '.##.oo....',
-    '.##oooo##.',
-    '.##oooo##.',
-    '.##oooo##.',
-    '.##oooo##.',
+    '.##ohho##.',
+    '.##hhhh##.',
+    '.##hhhh##.',
+    '.##ohho##.',
     '....oo.##.',
     '.......oo.',
     '..........',
@@ -188,23 +324,23 @@ const CHILD: Readonly<Record<number, readonly string[]>> = {
 /** Stationary shoulders and an off-center head make all four headings readable from above. */
 // prettier-ignore
 const ATTENTIVE_ADULT_10 = [
-  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
-  '..##oo##..', '.########.', '.########.', '..######..', '..........',
+  '..........', '..........', '....oo....', '...ohho...', '...hhhh...',
+  '..##hh##..', '.########.', '.########.', '..######..', '..........',
 ];
 // prettier-ignore
 const GESTURE_ADULT_10 = [
-  '.oo.......', '.##.......', '.##.oo....', '.##oooo...', '.##oooo...',
-  '.###oo##..', '.########.', '..#######.', '..######..', '..........',
+  '.oo.......', '.##.......', '.##.oo....', '.##ohho...', '.##hhhh...',
+  '.###hh##..', '.########.', '..#######.', '..######..', '..........',
 ];
 // prettier-ignore
 const ATTENTIVE_CHILD_10 = [
-  '..........', '..........', '....oo....', '...oooo...', '...oooo...',
-  '...#oo#...', '..######..', '..######..', '...####...', '..........',
+  '..........', '..........', '....oo....', '...ohho...', '...hhhh...',
+  '...#hh#...', '..######..', '..######..', '...####...', '..........',
 ];
 // prettier-ignore
 const GESTURE_CHILD_10 = [
-  '..oo......', '..##......', '..##oo....', '..#oooo...', '..#oooo...',
-  '..##oo#...', '..######..', '...#####..', '...####...', '..........',
+  '..oo......', '..##......', '..##oo....', '..#ohho...', '..#hhhh...',
+  '..##hh#...', '..######..', '...#####..', '...####...', '..........',
 ];
 const stationaryMasters = (small: readonly string[], medium: readonly string[]) => ({
   5: small,
@@ -213,12 +349,12 @@ const stationaryMasters = (small: readonly string[], medium: readonly string[]) 
 });
 export const POSE_MASTERS = {
   adult: {
-    attentive: stationaryMasters(['.....', '..o..', '.#o#.', '.###.', '.###.'], ATTENTIVE_ADULT_10),
-    gesture: stationaryMasters(['o....', '#.o..', '##o#.', '.###.', '.###.'], GESTURE_ADULT_10),
+    attentive: stationaryMasters(['.....', '..o..', '.#h#.', '.###.', '.###.'], ATTENTIVE_ADULT_10),
+    gesture: stationaryMasters(['o....', '#.o..', '##h#.', '.###.', '.###.'], GESTURE_ADULT_10),
   },
   child: {
-    attentive: stationaryMasters(['.....', '..o..', '..o..', '.###.', '..#..'], ATTENTIVE_CHILD_10),
-    gesture: stationaryMasters(['.o...', '.#o..', '.#o..', '.###.', '..#..'], GESTURE_CHILD_10),
+    attentive: stationaryMasters(['.....', '..o..', '..h..', '.###.', '..#..'], ATTENTIVE_CHILD_10),
+    gesture: stationaryMasters(['.o...', '.#o..', '.#h..', '.###.', '..#..'], GESTURE_CHILD_10),
   },
 } as const;
 
@@ -271,9 +407,9 @@ const ROWER_10 = [
   'oo........',
   '..o.......',
   '...o......',
-  '....o#ooo#',
-  '....##ooo#',
-  '.....#ooo#',
+  '....o#ohh#',
+  '....##hhh#',
+  '.....#ohh#',
   '..........',
   '..........',
   '..........',
@@ -284,7 +420,7 @@ const ROWER: Readonly<Record<number, readonly string[]>> = {
   5: [
     'o....',
     '.o...',
-    '..#o#',
+    '..#h#',
     '.....',
     '.....',
   ],
@@ -300,15 +436,15 @@ const SEATED_10 = [
   '..##..##..',
   '..######..',
   '..######..',
-  '..#oooo#..',
-  '..#oooo#..',
-  '...oooo...',
+  '..#ohho#..',
+  '..#hhhh#..',
+  '...hhhh...',
   '..........',
   '..........',
 ];
 // prettier-ignore
 const SEATED: Readonly<Record<number, readonly string[]>> = {
-  5: ['.o.o.', '.###.', '.#o#.', '..o..', '.....'],
+  5: ['.o.o.', '.###.', '.#h#.', '..o..', '.....'],
   10: SEATED_10,
   20: doubled(SEATED_10),
 };
@@ -316,10 +452,10 @@ const SEATED: Readonly<Record<number, readonly string[]>> = {
 // Carrier props are stamped masters only: coarse views retain the existing adult glyphs.
 // prettier-ignore
 const CARRIERS: Record<CarrierFigure, readonly string[]> = {
-  'pole-buckets': ['..........', '..........', '.ooo..ooo.', '.o#o..o#o.', '.ooo##ooo.', '....oo....', '...####...', '...####...', '....##....', '..........'],
-  basket: ['..........', '..........', '....oo....', '...####...', '..######..', '...###ooo.', '...###o#o.', '....##ooo.', '....##....', '..........'],
+  'pole-buckets': ['..........', '..........', '.ooo..ooo.', '.o#o..o#o.', '.ooo##ooo.', '....hh....', '...####...', '...####...', '....##....', '..........'],
+  basket: ['..........', '..........', '....hh....', '...####...', '..######..', '...###ooo.', '...###o#o.', '....##ooo.', '....##....', '..........'],
   'head-tray': ['..........', '..oooooo..', '.oo####oo.', '.o######o.', '.oo####oo.', '..oooooo..', '..######..', '...####...', '....##....', '..........'],
-  'chest-tray': ['..........', '..........', '....oo....', '...####...', '..######..', '...oooo...', '...o##o...', '...oooo...', '....##....', '..........'],
+  'chest-tray': ['..........', '..........', '....hh....', '...####...', '..######..', '...oooo...', '...o##o...', '...oooo...', '....##....', '..........'],
 };
 const carrierMasters = (figure: CarrierFigure) => ({
   10: CARRIERS[figure],
@@ -367,6 +503,8 @@ export type FigureGlyph = {
   figure: PersonFigure;
   across: boolean;
   frame: 0 | 1;
+  /** A 2×2 walker between steps (`PASSING_MASTERS`). */
+  passing?: boolean;
   scale?: FigureScale;
   slice?: 0 | 1 | 2 | 3;
   /** A paddler: at the reach (0, the blade forward) or the pull (1, the master turned end to end). */
@@ -439,6 +577,18 @@ for (const stage of [0, 1] as const) {
     glyphTable.push({ figure: 'umbrella', across: false, frame: 0, stage, slice });
 }
 
+/**
+ * A 2×2 adult between steps: appended after every other Private Use glyph (after the small
+ * vehicles' diagonals, life/vehicles.ts), so nothing else moves. Turned across the screen or not;
+ * a passing pose has no foot to lead.
+ */
+export const PASSING_GLYPHS: readonly string[] = Array.from({ length: 8 }, (_, i) =>
+  String.fromCharCode(0xe432 + i),
+);
+/** The cell `slice` of a 2×2 adult between steps. */
+export const passingGlyph = (across: boolean, slice: 0 | 1 | 2 | 3) =>
+  PASSING_GLYPHS[(across ? 4 : 0) + slice]!;
+
 const keyOf = ({
   figure,
   across,
@@ -459,6 +609,15 @@ const keyOf = ({
 };
 const byKey = new Map(glyphTable.map((g, i) => [keyOf(g), String.fromCharCode(FIRST_CODE + i)]));
 const byGlyph = new Map(glyphTable.map((g, i) => [String.fromCharCode(FIRST_CODE + i), g]));
+for (const across of [false, true])
+  for (const slice of [0, 1, 2, 3] as const)
+    byGlyph.set(passingGlyph(across, slice), {
+      figure: 'adult',
+      across,
+      frame: 0,
+      slice,
+      passing: true,
+    });
 
 /**
  * The glyph for a figure: in one cell at a scale (a whole cell by default), or one cell of a 2×2
@@ -481,13 +640,16 @@ export function figureGlyph(
 /** Which figure a glyph draws, if it is one. */
 export const figureOf = (glyph: string): FigureGlyph | undefined => byGlyph.get(glyph);
 
-/** Every glyph people draw with, for the map atlas (theme.ts `mapGlyphs`). */
+/**
+ * Every glyph people draw with, for the map atlas (theme.ts `mapGlyphs`), but `PASSING_GLYPHS`,
+ * which it appends after all of these.
+ */
 export function personGlyphs(): string[] {
-  return [...byGlyph.keys()];
+  return [...byGlyph.keys()].filter((glyph) => !PASSING_GLYPHS.includes(glyph));
 }
 
 /**
- * A figure's pixels in a `box` × `box` square: '#' paint, 'o' tone, '.' empty. The smallest
+ * A figure's pixels in a `box` × `box` square: '#' paint, 'o' tone, 'h' hair, '.' empty. The smallest
  * master at least `box` wide is sampled down to it (the largest, if none is), then turned and
  * mirrored for its heading and step.
  * Staged canopies instead generate their pixels directly at the requested box size.
@@ -500,7 +662,7 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
   const posed = poseMasters(g.figure, g.pose);
   if (posed) return turnedPixels(posed, box, g.heading ?? (g.across ? 1 : 0));
   if (g.figure === 'seated') return turnedPixels(SEATED, box, g.heading ?? (g.across ? 1 : 0));
-  const masters = FIGURE_MASTERS[g.figure];
+  const masters = g.passing ? PASSING_ADULT : FIGURE_MASTERS[g.figure];
   const sizes = MASTER_SIZES[g.figure];
   const size = sizes.find((s) => s >= box) ?? sizes[sizes.length - 1]!;
   const master = masters[size]!;
@@ -518,7 +680,7 @@ export function figurePixels(g: FigureGlyph, box: number): (x: number, y: number
  * the step `frame` (a paddler: their side, and their `stroke`): '#' paint, 'o' tone, '.' empty,
  * for a figure stamped at its real size and sampled `detail` times across. From the largest
  * master no finer than that (the smallest, if all are), so thin lines like a canopy's ribs stay
- * as wide as a sample.
+ * as wide as a sample. `passing` is a walker between steps (`PASSING_MASTERS`).
  */
 export function figureInk(
   figure: PersonFigure,
@@ -528,10 +690,12 @@ export function figureInk(
   detail: number,
   stroke: 0 | 1 = 0,
   pose?: PersonPose,
+  passing = false,
 ): string {
   const posed = poseMasters(figure, pose);
   if (posed) return inkAt(posed, u, v, detail);
-  const masters = FIGURE_MASTERS[figure];
+  const masters =
+    passing && hasPassingPose(figure) ? PASSING_MASTERS[figure] : FIGURE_MASTERS[figure];
   const sizes = MASTER_SIZES[figure];
   let size = sizes[0]!;
   for (const s of sizes) if (s <= detail) size = s;

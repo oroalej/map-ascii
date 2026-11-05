@@ -5,9 +5,9 @@ import type { RenderClass } from './classes';
 import { BIRD_SPECIES_ORDER, birdGlyphs } from './life/birds';
 import { dogGlyphs } from './life/dogs';
 import { catGlyphs } from './life/cats';
-import { figureOf, personGlyphs } from './life/people';
+import { PASSING_GLYPHS, figureOf, personGlyphs } from './life/people';
 import { PUFF_GLYPHS } from './life/puff-style';
-import { PAINT_COUNT, PEDDLER_GLYPHS, vehicleGlyphs } from './life/vehicles';
+import { PAINT_COUNT, MINI_DIAGONALS, PEDDLER_GLYPHS, vehicleGlyphs } from './life/vehicles';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from './life/seasonal-glyphs';
 
 export type ThemeName = 'dark' | 'light';
@@ -571,7 +571,9 @@ export function mapGlyphs(theme: Theme): string[] {
     ...singleWall,
     ...doubleWall,
     ...sextantGlyphs,
-    ...vehicleGlyphs().filter((glyph) => !(PEDDLER_GLYPHS as readonly string[]).includes(glyph)),
+    ...vehicleGlyphs().filter(
+      (glyph) => !([...PEDDLER_GLYPHS, ...MINI_DIAGONALS] as readonly string[]).includes(glyph),
+    ),
     ...personGlyphs().filter((glyph) => {
       const figure = figureOf(glyph)!;
       return !figure.pose && figure.stage === undefined;
@@ -598,6 +600,8 @@ export function mapGlyphs(theme: Theme): string[] {
     ...FOLKLORE_GLYPHS,
     ...PROCESSION_GLYPHS.slice(4),
     ...PEDDLER_GLYPHS,
+    ...MINI_DIAGONALS,
+    ...PASSING_GLYPHS,
   ];
   for (const g of extras) set.add(g);
   return [...set];
