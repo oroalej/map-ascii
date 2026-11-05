@@ -71,7 +71,8 @@ const figure = (over: Partial<FolklorePacket['sprites'][number]> = {}) => ({
 });
 const under = (code: number) => Math.floor(code / 64) - 1;
 it('draws only the ghosts while the sheet is on its way', async () => {
-  const gl = new Proxy({} as Record<string, unknown>, {
+  const draw = vi.fn();
+  const gl = new Proxy({ drawArraysInstanced: draw }, {
     get: (target, key) => (target[key as string] ??= vi.fn(() => ({}))),
   }) as unknown as GL;
   const p = {} as Programs;
@@ -82,7 +83,7 @@ it('draws only the ghosts while the sheet is on its way', async () => {
   const grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
   const both = folkloreLayout({ ...packet, sprites: [packet.sprites[0]!, figure()] }, view);
   folklorePass(gl, p, {} as CellTargets, theme, view, grid, both);
-  expect(vi.mocked(gl.drawArraysInstanced)).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
+  expect(draw).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
   await vi.waitFor(() => expect(p.folklore!.sheet).toBeDefined());
 });
 it('picks the frame for each moment of the manananggal, with its entrails under the wings', () => {
