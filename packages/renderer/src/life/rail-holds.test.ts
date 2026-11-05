@@ -292,6 +292,104 @@ describe('holding traffic at a closed crossing', () => {
     expect(m.y).toBeGreaterThan(ROAD_Y + 6 * pm);
   });
 
+  describe('a junction just before the rail', () => {
+    const JUNCTION_Y = ROAD_Y - 3 * pm;
+    /** Lines: 0 rail, 1 the road in from the north, 2 on over the rail, 3 a side street joining. */
+    const geometry = () => {
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: -200, y: ROAD_Y },
+          { x: CROSS_X, y: ROAD_Y },
+          { x: 4300, y: ROAD_Y },
+        ],
+        LifeLine.rail,
+      );
+      b.line(
+        [
+          { x: CROSS_X, y: 0 },
+          { x: CROSS_X, y: JUNCTION_Y },
+        ],
+        LifeLine.roadMajor,
+        12,
+      );
+      b.line(
+        [
+          { x: CROSS_X, y: JUNCTION_Y },
+          { x: CROSS_X, y: ROAD_Y },
+          { x: CROSS_X, y: 4095 },
+        ],
+        LifeLine.roadMajor,
+        12,
+      );
+      // One-way into the junction, so the only way out is over the rail.
+      b.line(
+        [
+          { x: 0, y: JUNCTION_Y },
+          { x: CROSS_X, y: JUNCTION_Y },
+        ],
+        LifeLine.roadMajor,
+        12,
+        undefined,
+        1,
+      );
+      return b.finish();
+    };
+    const approaching = (y: number): Mover => ({
+      ...car(y),
+      line: 1,
+      from: 3,
+      d: y,
+    });
+
+    it('waits short of the junction, since its stop past it is out of reach', () => {
+      const { world, life } = setup(geometry());
+      expect(life.junctionIndex.junctions.length).toBeGreaterThan(0);
+      const m = approaching(JUNCTION_Y - 25 * pm);
+      place(life, train(CROSS_X - 20 * pm, 1, 5), m);
+      let closedFor = 0;
+      run(world, 8, () => {
+        if (!life.railCrossings.crossings[0]!.closed) return;
+        closedFor++;
+        expect(m.line).toBe(1);
+        expect(m.y).toBeLessThan(JUNCTION_Y);
+      });
+      expect(closedFor).toBeGreaterThan(50);
+    });
+
+    it('goes on through with the crossing open', () => {
+      const { world, life } = setup(geometry());
+      const m = approaching(JUNCTION_Y - 30 * pm);
+      place(life, m);
+      run(world, 10);
+      expect(m.y).toBeGreaterThan(ROAD_Y);
+    });
+
+    it('asks nothing of an exit whose stop has room, or of the far direction', () => {
+      const { life } = setup(geometry());
+      const crossing = life.railCrossings.crossings[0]!;
+      crossing.closed = crossing.firm = true;
+      const m = approaching(JUNCTION_Y - 30 * pm);
+      const exit = { line: 2, along: 0, out: 1 as const, hx: 0, hy: 1 };
+      expect(life.railCrossings.entryBlocked(m, exit, 4 * pm, 0)).toBe(true);
+      expect(life.railCrossings.entryBlocked(m, { ...exit, out: -1 }, 4 * pm, 0)).toBe(false);
+      expect(life.railCrossings.entryBlocked(m, { ...exit, line: 3 }, 4 * pm, 0)).toBe(false);
+      crossing.closed = crossing.firm = false;
+      expect(life.railCrossings.entryBlocked(m, exit, 4 * pm, 0)).toBe(false);
+    });
+
+    it('lets a closure that is new pass one that cannot stop before the junction', () => {
+      const { life } = setup(geometry());
+      const crossing = life.railCrossings.crossings[0]!;
+      crossing.closed = true;
+      crossing.firm = false;
+      const m = approaching(JUNCTION_Y - 2 * pm);
+      const exit = { line: 2, along: 0, out: 1 as const, hx: 0, hy: 1 };
+      expect(life.railCrossings.entryBlocked(m, exit, 4 * pm, 2 * pm)).toBe(false);
+      expect(life.railCrossings.entryBlocked(m, exit, 4 * pm, 40 * pm)).toBe(true);
+    });
+  });
+
   it('lets a vehicle already past the stop keep going', () => {
     const { world, life } = setup();
     const m = car(ROAD_Y - 3 * pm);

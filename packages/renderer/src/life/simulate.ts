@@ -5316,6 +5316,12 @@ export class TileLife {
     this.junctionRoom = availableRoom ?? this.junctionTraffic.room(m, movement, this);
     return (
       this.junctionRoom >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
+      !this.railCrossings.entryBlocked(
+        m,
+        movement.exit,
+        movement.junction.radius,
+        Math.max(0, movement.ahead),
+      ) &&
       (this.signals.allows(
         m,
         movement.entry?.x ?? movement.junction.x,

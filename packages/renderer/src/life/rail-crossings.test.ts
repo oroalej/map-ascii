@@ -65,6 +65,30 @@ describe('finding level crossings', () => {
     expect(crossings[0]!.stops).toHaveLength(2);
   });
 
+  it('finds a track whose vertex lies on the road, with no road vertex there', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 2000, y: 0 },
+        { x: 2000, y: 2000 },
+        { x: 2000, y: 4095 },
+      ],
+      LifeLine.rail,
+    );
+    b.line(
+      [
+        { x: 0, y: 2000 },
+        { x: 4095, y: 2000 },
+      ],
+      LifeLine.roadMid,
+      8,
+    );
+    const crossings = crossingsOf(b.finish());
+    expect(crossings).toHaveLength(1);
+    expect(crossings[0]).toMatchObject({ x: 2000, y: 2000 });
+    expect(crossings[0]!.stops).toHaveLength(2);
+  });
+
   it('finds a road that properly crosses between vertices', () => {
     const b = new LifeBuilder();
     rail(b);

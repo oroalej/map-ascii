@@ -7,6 +7,7 @@ import { TILE_EXTENT as EXTENT, type TileAddress, type ZoomBand } from '@atlas/s
 import { tileToLngLat } from '../raster/geometry';
 import { CellBit, lifeClassFor } from './config';
 import { LifeLine, type LifeGeometry } from './geometry';
+import type { Arm } from './junctions';
 import { kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
 import { Paint, VEHICLES } from './vehicles';
@@ -80,6 +81,20 @@ const ROAD_KINDS: ReadonlySet<number> = new Set([
 ]);
 
 type Hit = { x: number; y: number; line: number; at: number };
+
+/** The share along segment `a`–`b` nearest to `p`. */
+function nearestShare(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): number {
+  const sx = bx - ax,
+    sy = by - ay;
+  return Math.max(0, Math.min(1, ((px - ax) * sx + (py - ay) * sy) / (sx * sx + sy * sy || 1)));
+}
 
 /** Where road `a`–`b` properly crosses rail `c`–`d`: its share along the road, if it does. */
 function properCrossing(
@@ -162,29 +177,35 @@ export class RailCrossings {
           const hasNext = v + 1 < starts[road + 1]!;
           for (let w = starts[rail]!; w + 1 < starts[rail + 1]!; w++) {
             const cx = coords[w * 2]!,
-              cy = coords[w * 2 + 1]!;
-            // Simplified tiles can drop the shared vertex from the track, so measure to its segment.
-            const sx = coords[w * 2 + 2]! - cx,
-              sy = coords[w * 2 + 3]! - cy;
-            const u = Math.max(
-              0,
-              Math.min(1, ((x - cx) * sx + (y - cy) * sy) / (sx * sx + sy * sy || 1)),
-            );
-            const qx = cx + sx * u,
-              qy = cy + sy * u;
+              cy = coords[w * 2 + 1]!,
+              ex = coords[w * 2 + 2]!,
+              ey = coords[w * 2 + 3]!;
+            // Simplified tiles can drop the shared vertex from either line, so measure to segments.
+            const u = nearestShare(x, y, cx, cy, ex, ey);
+            const qx = cx + (ex - cx) * u,
+              qy = cy + (ey - cy) * u;
             if (Math.hypot(x - qx, y - qy) <= reach)
               hits.push({ x: qx, y: qy, line: road, at: this.along[v]! });
             if (!hasNext) continue;
             const nx = coords[v * 2 + 2]!,
               ny = coords[v * 2 + 3]!;
-            const t = properCrossing(x, y, nx, ny, cx, cy, coords[w * 2 + 2]!, coords[w * 2 + 3]!);
+            const length = Math.hypot(nx - x, ny - y);
+            const t = properCrossing(x, y, nx, ny, cx, cy, ex, ey);
             if (t !== undefined)
               hits.push({
                 x: x + (nx - x) * t,
                 y: y + (ny - y) * t,
                 line: road,
-                at: this.along[v]! + Math.hypot(nx - x, ny - y) * t,
+                at: this.along[v]! + length * t,
               });
+            for (const [rx, ry] of [
+              [cx, cy],
+              [ex, ey],
+            ] as const) {
+              const share = nearestShare(rx, ry, x, y, nx, ny);
+              if (Math.hypot(rx - (x + (nx - x) * share), ry - (y + (ny - y) * share)) <= reach)
+                hits.push({ x: rx, y: ry, line: road, at: this.along[v]! + length * share });
+            }
           }
         }
       }
@@ -304,6 +325,26 @@ export class RailCrossings {
       const past = m.dir * (this.along[other.from]! + other.dir * other.d - stop.along);
       const tail = past - ((other.vehicle ? VEHICLES[other.vehicle].length : 4) / 2) * perMeter;
       if (past > 0 && tail < needed * perMeter) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Whether `m` must wait short of a junction, because a closed crossing just beyond this exit leaves
+   * it nowhere to stop once it has turned in. Like an amber light, a closure that is new lets go one
+   * that can't stop before the junction.
+   */
+  entryBlocked(m: Mover, exit: Arm, radius: number, ahead: number): boolean {
+    const stops = this.stops.get(exit.line);
+    if (!stops) return false;
+    const own = (m.vehicle ? VEHICLES[m.vehicle].length : 4) * this.perMeter;
+    for (const stop of stops) {
+      if (stop.dir !== exit.out || !stop.crossing.closed) continue;
+      const room = exit.out * (stop.along - exit.along);
+      if (room < 0 || room >= radius + own) continue;
+      if (stop.crossing.firm) return true;
+      const v = m.v ?? m.speed;
+      if ((v * v) / (2 * kinematicsOf(m.vehicle).brake * this.perMeter) <= ahead) return true;
     }
     return false;
   }
