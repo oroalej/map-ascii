@@ -26,7 +26,17 @@ export type RhythmKind = (typeof RHYTHM_KINDS)[number];
  */
 export type RhythmCurve = readonly (readonly [hour: number, share: number])[];
 
-export type Rhythm = Partial<Record<RhythmKind, RhythmCurve>>;
+/**
+ * The kinds of area people belong to: a commercial `centre` or a residential `home` street. A
+ * district's curve is a factor (0–1) on the share of people out, not a share of its own.
+ */
+export const RHYTHM_DISTRICTS = ['centre', 'home'] as const;
+export type RhythmDistrict = (typeof RHYTHM_DISTRICTS)[number];
+
+export type Rhythm = Partial<Record<RhythmKind | RhythmDistrict, RhythmCurve>>;
+
+/** Curves for some days of the week (0 = Sunday), replacing `life.rhythm`'s on those days. */
+export type RhythmDay = { weekdays: number[]; rhythm: Rhythm };
 
 /** Places where people gather (SPEC.md §4 "Places"), from the map's features. */
 export const PLACE_KINDS = [
@@ -113,6 +123,8 @@ export type CityLifeConfig = {
   sites?: LifeSiteConfig[];
   /** Curves that replace the defaults, per kind. */
   rhythm?: Rhythm;
+  /** Curves that replace `rhythm` on some days of the week; each must agree with it at midnight. */
+  rhythm_days?: RhythmDay[];
   /** When places fill up (the pack's own; its `source` covers them). */
   schedules?: LifeSchedules;
   /** Where the rhythm comes from (content rule: claims carry a source). */
@@ -191,11 +203,43 @@ export function curveAt(curve: RhythmCurve, minutes: number): number {
   return s0 + ((s1 - s0) * (hour - h0)) / (h1 - h0 || 1);
 }
 
-/** A city's curve for `kind`, or the default. */
+type RhythmLife = Pick<CityLifeConfig, 'rhythm' | 'rhythm_days'>;
+
+/** A city's curve for `key` on `weekday`: that day's, else its everyday one. */
+const cityCurve = (
+  life: RhythmLife | undefined,
+  key: RhythmKind | RhythmDistrict,
+  weekday: number | undefined,
+): RhythmCurve | undefined =>
+  (weekday === undefined
+    ? undefined
+    : life?.rhythm_days?.find((day) => day.weekdays.includes(weekday))?.rhythm[key]) ??
+  life?.rhythm?.[key];
+
+/** A city's curve for `kind` (on `weekday`, when given), or the default. */
 export const rhythmFor = (
-  life: Pick<CityLifeConfig, 'rhythm'> | undefined,
+  life: RhythmLife | undefined,
   kind: RhythmKind,
-): RhythmCurve => life?.rhythm?.[kind] ?? DEFAULT_RHYTHM[kind];
+  weekday?: number,
+): RhythmCurve => cityCurve(life, kind, weekday) ?? DEFAULT_RHYTHM[kind];
+
+/** Whether a city's rhythm tells its districts apart at all. */
+export const hasDistricts = (life: RhythmLife | undefined) =>
+  RHYTHM_DISTRICTS.some(
+    (district) =>
+      life?.rhythm?.[district] !== undefined ||
+      life?.rhythm_days?.some((day) => day.rhythm[district] !== undefined),
+  );
+
+/** The factor (0–1) on the people out in `district` at `clock`; 1 without a curve for it. */
+export const districtFactor = (
+  life: RhythmLife | undefined,
+  district: RhythmDistrict,
+  clock: { minutes: number; weekday: number },
+): number => {
+  const curve = cityCurve(life, district, clock.weekday);
+  return curve ? curveAt(curve, clock.minutes) : 1;
+};
 
 /** School hours when a city gives none: weekdays, 07:00 to 16:00. An impression. */
 export const DEFAULT_SCHOOL: SchoolSchedule = {
@@ -319,7 +363,7 @@ export type LifeClock = { minutes: number; weekday: number };
 export function placeShare(
   kind: PlaceKind,
   clock: LifeClock,
-  life: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined,
+  life: Pick<CityLifeConfig, 'rhythm' | 'rhythm_days' | 'schedules'> | undefined,
 ): number {
   const { minutes, weekday } = clock;
   switch (kind) {
@@ -352,6 +396,6 @@ export function placeShare(
     case 'bench':
     case 'fountain':
     case 'monument':
-      return 0.8 * curveAt(rhythmFor(life, 'person'), minutes);
+      return 0.8 * curveAt(rhythmFor(life, 'person', weekday), minutes);
   }
 }

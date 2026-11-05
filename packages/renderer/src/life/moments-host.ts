@@ -1,4 +1,5 @@
 import { gathererShare } from './gatherer-share';
+import { peopleShare } from './mover-share';
 /** Admission adapter: the social controller never writes route cursors or meeting paths. */
 import { inTile, PLACE_CODES, PLACE_STRIDE, SITE_STRIDE, LifeLine } from './geometry';
 import {
@@ -223,7 +224,7 @@ export class MomentHost {
           this.scenes.busy(owner) ||
           tile.scenes.visits.has(owner) ||
           tile.scenes.cursorHolding(owner) ||
-          (env?.levels && owner.rank >= env.levels.person)
+          (env?.levels && owner.rank >= peopleShare(owner, env.levels))
         )
           return false;
       } else if (

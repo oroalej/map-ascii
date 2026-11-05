@@ -29,6 +29,7 @@ import type { RuntimeFolklore } from './folklore-config';
 import { FOLKLORE } from './folklore-config';
 import { seasonalCrowds } from './seasonal-crowds';
 import { gathererShare } from './gatherer-share';
+import { inCentre, moverShare, peopleShare, type Belonging } from './mover-share';
 import {
   birdFlightMargin,
   stepBirdFlight,
@@ -318,9 +319,9 @@ const compareJunctionRequests = (a: JunctionRequest, b: JunctionRequest) =>
   (a.movement.boxAhead ?? a.movement.ahead) - (b.movement.boxAhead ?? b.movement.ahead);
 const EMOJI_MOVER_KINDS: ReadonlySet<AgentKind> = new Set(['person', 'vehicle', 'dog', 'cat']);
 const moverAttendance = (m: Mover, levels: Activity | undefined, crowd: number) =>
-  !!m.train || !levels || m.rank < levels[m.kind] * crowd;
+  !!m.train || !levels || m.rank < moverShare(m, levels) * crowd;
 const vendorAttendance = (s: Stall, levels: Activity | undefined, crowd: number) =>
-  s.open !== false && (!levels || s.rank < levels.person * crowd);
+  s.open !== false && (!levels || s.rank < peopleShare(s, levels) * crowd);
 let terminalLookaheadM: number | undefined;
 function terminalReach(velocity: number, length: number, brake: number) {
   return stoppingReach(velocity, brake, frontClearance(length), TERMINAL.pad);
@@ -579,6 +580,8 @@ export type Mover = {
   rush?: number;
   /** Shows while this is below the kind's activity (config.ts `activity`). */
   rank: number;
+  /** People: whose hours they keep (life/mover-share.ts). */
+  district?: Belonging;
   /** Position and heading (a unit vector), in tile units. */
   x: number;
   y: number;
@@ -683,6 +686,8 @@ export type Stall = {
   shirt: number;
   side: 1 | -1;
   rank: number;
+  /** Whose hours its vendor keeps (life/mover-share.ts); seasonal stalls keep the city's. */
+  district?: Belonging;
 };
 
 /**
@@ -1057,7 +1062,7 @@ export class TileLife {
             (!pass?.owns || pass.owns(m)) &&
             (!shows || shows(m.kind)) &&
             (!near || m.train || near(m.x, m.y)) &&
-            (!env?.levels || m.train || m.rank < env.levels[m.kind]) &&
+            (!env?.levels || m.train || m.rank < moverShare(m, env.levels)) &&
             (!visits || !this.scenes.visits.has(m)),
         );
       if (returned && this.scenes.usedReturnStep(m)) eligible[i] = 0;
@@ -1303,6 +1308,7 @@ export class TileLife {
           paint: paints[Math.floor(rng() * paints.length)]!,
           shirt: SHIRT_PAINTS[Math.floor(rng() * SHIRT_PAINTS.length)]!,
           rank: rng(),
+          district: 'city',
         };
         if (inTile(stall) && !this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1))
           result.push(stall);
@@ -1988,6 +1994,7 @@ export class TileLife {
         mover.line = position.line;
         mover.from = dir === 1 ? this.first(position.line) : this.last(position.line);
         this.advance(mover, position.distance, false);
+        if (rule.kind === 'person') this.placeInDistrict(mover);
         if (rule.kind === 'vehicle' && !this.junctionIndex.canSpawnVehicle(mover)) continue;
         // A train pulls in until the track behind it holds all its cars.
         if (train) {
@@ -3386,6 +3393,7 @@ export class TileLife {
                 step: rng() < 0.5 ? 0 : 1,
               },
             ];
+            this.placeInDistrict(m);
             if (!this.strandedWalk(m.line) && guard(m)) this.movers.push(m);
           } else {
             let market = false;
@@ -3407,6 +3415,7 @@ export class TileLife {
               side,
               rank: rng(),
             };
+            this.placeInDistrict(stall);
             if (!this.vendorRestrictedLineIds.has(this.geo.lineIds?.[line] ?? -1) && guard(stall)) {
               this.stalls.push(stall);
               this.scenes.addStall(stall);
@@ -3416,6 +3425,11 @@ export class TileLife {
       }
     }
     this.commerceAdmitted = true;
+  }
+
+  /** Marks someone starting among enough shops as belonging to a centre. */
+  private placeInDistrict(owner: { x: number; y: number; district?: Belonging }) {
+    if (inCentre(owner.x, owner.y, this.geo.commerce, this.perMeter)) owner.district = 'centre';
   }
 
   private *spawnCats(): Generator<void, void, void> {
@@ -3625,8 +3639,10 @@ export class TileLife {
           !this.vendorRestrictedLineIds.has(geo.lineIds?.[line] ?? -1) &&
           this.roadTerrain.access.allows(bodies, false) &&
           !grounds.hits(bodies)
-        )
+        ) {
+          this.placeInDistrict(stall);
           this.stalls.push(stall);
+        }
       }
     }
   }
@@ -6361,7 +6377,7 @@ export class TileLife {
     const active = (m: Mover) =>
       (!shows || shows(m.kind)) &&
       (!near || near(m.x, m.y)) &&
-      (!env?.levels || m.rank < env.levels[m.kind]) &&
+      (!env?.levels || m.rank < moverShare(m, env.levels)) &&
       !this.scenes.hidden(m);
     this.prepareTraffic(active);
     table.begin(new Set([this]));
@@ -7925,12 +7941,12 @@ export class TileLife {
       if (
         m.kind === 'person' &&
         !this.scenes.hidden(m) &&
-        (!env?.levels || m.rank < env.levels.person)
+        (!env?.levels || m.rank < peopleShare(m, env.levels))
       )
         add(m);
     for (const g of this.gatherers) if (g.rank < gathererShare(g, env?.levels)) add(g);
     for (const s of this.stalls)
-      if (s.open !== false && (!env?.levels || s.rank < env.levels.person)) add(s);
+      if (s.open !== false && (!env?.levels || s.rank < peopleShare(s, env.levels))) add(s);
     return pedestrianView(occupied, 0);
   }
 
@@ -8636,7 +8652,7 @@ export class TileLife {
       (x - flock.x) ** 2 + (y - flock.y) ** 2 < r * r;
     for (const m of this.movers) {
       if (this.ownership && !this.ownership(m)) continue;
-      if (levels && m.rank >= levels[m.kind]) continue;
+      if (levels && m.rank >= moverShare(m, levels)) continue;
       if (this.momentHost.moments.busy(m)) continue;
       if (m.pause > 0 && m.kind !== 'train') continue;
       if (within(m.x, m.y, m.kind === 'dog' ? 2 * reach : reach)) return true;
@@ -11488,7 +11504,7 @@ export class LifeWorld {
         if (blocker && 'kind' in blocker) {
           const m = blocker as Mover;
           if (bandVisibility(LIFE_ZOOM[m.kind], diagnostics.zoom) < 1) tags.push('hiddenAtZoom');
-          if (this.lastLevels && m.rank >= this.lastLevels[m.kind] * diagnostics.crowd)
+          if (this.lastLevels && m.rank >= moverShare(m, this.lastLevels) * diagnostics.crowd)
             tags.push('hiddenByCrowd');
           if (
             'kind' in owner &&
@@ -11504,7 +11520,7 @@ export class LifeWorld {
             'place' in ground
               ? this.lastLevels.places[ground.place]
               : 'shirt' in ground
-                ? this.lastLevels.person
+                ? peopleShare(ground, this.lastLevels)
                 : undefined;
           if (level !== undefined && ground.rank >= level * diagnostics.crowd)
             tags.push('hiddenByCrowd');
@@ -11550,7 +11566,7 @@ export class LifeWorld {
           (allBodies ||
             ((!shows || shows('person')) &&
               s.open !== false &&
-              (!this.lastLevels || s.rank < this.lastLevels.person)));
+              (!this.lastLevels || s.rank < peopleShare(s, this.lastLevels))));
         const admitting = inAdmission(s);
         if ((!moving && !admitting) || !this.owns(life, s)) continue;
         const out = bodies(life, s, buffer(s).live);
@@ -11580,14 +11596,14 @@ export class LifeWorld {
           (m.kind === 'vehicle' || isWalker(m.kind)) &&
           ((inView(m) &&
             (allBodies || !shows || shows(m.kind)) &&
-            (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])) ||
+            (allBodies || !this.lastLevels || m.rank < moverShare(m, this.lastLevels))) ||
             inAdmission(m))
         ) {
           const out = bodies(life, m, buffer(m).live);
           if (
             inView(m) &&
             (allBodies || !shows || shows(m.kind)) &&
-            (allBodies || !this.lastLevels || m.rank < this.lastLevels[m.kind])
+            (allBodies || !this.lastLevels || m.rank < moverShare(m, this.lastLevels))
           )
             occupied.set(m, out);
           if (inAdmission(m)) admission.set(m, out);
@@ -12617,7 +12633,7 @@ export class LifeWorld {
         this.owns(tile, m) &&
         (!shows || shows(m.kind)) &&
         near(m.x, m.y) &&
-        (!env.levels || m.rank < env.levels[m.kind]) &&
+        (!env.levels || m.rank < moverShare(m, env.levels)) &&
         !tile.scenes.hidden(m);
       eligibility.set(tile, active);
       tile.prepareRecovery(active, env.inspecting);

@@ -250,7 +250,7 @@ export type LifeGeometry = {
   /** Only ground installations enter simulation; overhead seasonal ornaments remain render-only. */
   seasonalTrees?: readonly SeasonalDisplayRecord[];
   seasonalRides?: readonly SeasonalCarnivalRecord[];
-  /** Buffered mapped commerce centers, used only by separate additive spawn streams. */
+  /** Buffered mapped commerce centers: additive spawn streams, and who belongs to a centre. */
   commerce?: Float32Array;
   /** Buffered signal centers, radius in meters, two bearings, mapped flag. */
   signals?: Float32Array;

@@ -6,6 +6,8 @@ import {
   LAMP_PLACEMENT,
   ROOF_BUILDING_CLASSES,
   curveAt,
+  districtFactor,
+  hasDistricts,
   SHOP_POINT_RADIUS_M,
   PLACE_KINDS,
   VEHICLE_TYPES,
@@ -13,6 +15,7 @@ import {
   rhythmFor,
   type CityLifeConfig,
   type PlaceKind,
+  type RhythmDistrict,
   type RuntimeSeasonConfig,
   type ZoomBand,
   type CropNow,
@@ -714,6 +717,8 @@ export const nightActivity = (daylight: number) =>
 export type Activity = Readonly<Record<AgentKind, number>> & {
   /** Night creatures (bats, life/birds.ts `nocturnal`): `nightActivity`. */
   night: number;
+  /** People by district, when the city's rhythm tells them apart (life/mover-share.ts). */
+  districts?: Readonly<Record<RhythmDistrict, number>>;
   places: Readonly<Record<PlaceKind, number>>;
   season?: { visitors: number; congregations: number };
 };
@@ -747,28 +752,38 @@ export function activityLevels(
   clock?: {
     minutes: number;
     weekday: number;
-    life?: Pick<CityLifeConfig, 'rhythm' | 'schedules'> | undefined;
+    life?: Pick<CityLifeConfig, 'rhythm' | 'rhythm_days' | 'schedules'> | undefined;
     crop?: CropNow | undefined;
   },
   season?: Pick<RuntimeSeasonConfig, 'visitors' | 'congregations'>,
 ): Activity {
   const byRhythm = (kind: 'vehicle' | 'person' | 'boat' | 'train') =>
-    clock ? curveAt(rhythmFor(clock.life, kind), clock.minutes) : activity(kind, daylight);
+    clock
+      ? curveAt(rhythmFor(clock.life, kind, clock.weekday), clock.minutes)
+      : activity(kind, daylight);
   const places = {} as Record<PlaceKind, number>;
   for (const kind of PLACE_KINDS) {
     places[kind] = clock ? placeShare(kind, clock, clock.life) : activity('person', daylight);
   }
   if (clock?.crop) places.farm *= cropWork(clock.crop.stage, clock.crop.progress);
+  const person = byRhythm('person');
   return {
     vehicle: byRhythm('vehicle'),
-    person: byRhythm('person'),
+    person,
     boat: byRhythm('boat'),
     train: byRhythm('train'),
     bird: activity('bird', daylight),
-    dog: Math.max(byRhythm('person'), activity('dog', 0)),
+    dog: Math.max(person, activity('dog', 0)),
     cat: activity('cat', daylight),
     night: nightActivity(daylight),
     places,
+    ...(clock &&
+      hasDistricts(clock.life) && {
+        districts: {
+          centre: person * districtFactor(clock.life, 'centre', clock),
+          home: person * districtFactor(clock.life, 'home', clock),
+        },
+      }),
     ...((season?.visitors || season?.congregations) && {
       season: {
         visitors: season.visitors && clock ? curveAt(season.visitors.hours, clock.minutes) : 0,
@@ -785,11 +800,19 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
   return (
     kinds.some((k) => Math.abs(a[k] - b[k]) > epsilon) ||
     Math.abs(a.night - b.night) > epsilon ||
+    Math.abs((a.districts?.centre ?? 0) - (b.districts?.centre ?? 0)) > epsilon ||
+    Math.abs((a.districts?.home ?? 0) - (b.districts?.home ?? 0)) > epsilon ||
     PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon) ||
     Math.abs((a.season?.visitors ?? 0) - (b.season?.visitors ?? 0)) > epsilon ||
     Math.abs((a.season?.congregations ?? 0) - (b.season?.congregations ?? 0)) > epsilon
   );
 }
+
+/**
+ * Who belongs to a commercial centre: someone who starts with at least `minShops` mapped shops
+ * within `radiusM` (life/mover-share.ts). On the first city's OSM shops, about one road in seven.
+ */
+export const DISTRICT = { radiusM: 200, minShops: 5 } as const;
 
 /** Illustrative long pauses beside memorials and outside churches, in seconds. */
 export const SEASON_CROWD = {
