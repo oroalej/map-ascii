@@ -459,6 +459,51 @@
         "close": "18:00"
       }
     },
+    "parking": {
+      "lot": [
+        [6, 0.1],
+        [9, 0.8],
+        [18, 0.9],
+        [21, 0.25],
+        [23, 0.05]
+      ],
+      "centre": [
+        [6, 0.2],
+        [10, 0.9],
+        [18, 0.9],
+        [21, 0.3]
+      ],
+      "home": [
+        [6.5, 1],
+        [9, 0.45],
+        [16, 0.45],
+        [19, 1]
+      ],
+      "source": "Illustrative: the project's impression of when Naga's lots and curbs fill (no hourly parking counts found, 2026-11-05). Curves are a share of the simulated parked cars, not observed occupancy."
+    },
+    "flyways": [
+      {
+        "species": "egret",
+        "roost": [123.187, 13.627],
+        "bearings": [35, 70, 105, 140],
+        "distance_m": 5000,
+        "dusk": ["17:10", "18:10"],
+        "dawn": ["05:30", "06:30"],
+        "source": "Illustrative: no documented roost found in Naga (searched 2026-11-05). The site is a cluster of OSM-mapped trees by the Naga River, the bearings point at mapped farmland, and the windows sit around Naga's sunset and sunrise. Egrets flying to communal roost trees at dusk and leaving at dawn is general behaviour (Tarburton 1988, Notornis 35); DENR Bicol's Asian Waterbird Census records egrets in the region."
+      },
+      {
+        "species": "bat",
+        "roost": [123.237, 13.649],
+        "bearings": [225, 250, 275],
+        "distance_m": 6000,
+        "dusk": ["17:50", "18:50"],
+        "dawn": ["04:20", "05:20"],
+        "source": "Illustrative: no documented bat roost found near Naga (searched 2026-11-05). The site is a dense stand of OSM-mapped trees by a stream east of the city, with bearings toward the city, and the windows follow the general pattern of bats leaving at dusk and returning before dawn."
+      }
+    ],
+    "dismissal": {
+      "source": "Illustrative: students leave from the pack's schedules.school hours, and walk the road shoulders because most mapped schools have a road but no mapped path. DepEd sets no single dismissal time (each school's approved class program governs), and no Naga school-exit source was found (searched 2026-11-05); the city's Oplan Disiplina names school zones and tricycles as traffic concerns but gives no hours."
+    },
     "windows": {
       "home": [
         [3.5, 0.01],

@@ -143,6 +143,12 @@ Optional `life.peddlers` contains at most eight unique sourced goods IDs, each w
 
 Optional `life.emergency` supplies per-kind `max` (0–3) and `[min,max]` simulated-second intervals. Ambulance/fire include `dwell_s`; police include `call_every_s` and `call_s`. At least one kind and a `source` are required. `exclude` lists station OSM identities to omit. These are illustrative settings, without dispatch or construction-history claims. Step 08 validates the generated `CityEmergency` payload and its graph/target references; the browser uses the corresponding plain codec guard.
 
+Optional `life.parking` holds daily curves `lot`, `centre` and `home` (each a share of the parked cars already placed, in the rhythm curve's format) and a required `source`. Without it, every parked car stays.
+
+Optional `life.flyways` lists at most eight roosts: `species` (`egret` or `bat`), `roost` as `[lng, lat]`, one to eight `bearings` in degrees, `distance_m` (500–30,000), `dusk` and `dawn` windows as `[from, to]` local times, and a required `source`. Write an unsourced site or hour as illustrative in `source`.
+
+Optional `life.dismissal` holds a required `source`, and its presence turns on students leaving on `life.schedules.school` days. It has no other settings. All three cost nothing when absent and need no tile rebuild. Level crossings need no key: they follow mapped rail in every city.
+
 Optional `life.folklore` enables illustrative nighttime ghosts and a seasonal manananggal. `hours.from` and `hours.to` are city-local integer minutes (0–1439), must differ, and may wrap midnight. `ghosts.sites` is a nonempty, unique selection of `cemetery`, `worship`, and `hospital`; `per_cemetery` and `undas_per_cemetery` are ascending integer `[min,max]` counts (1–16). `site_share` and `manananggal.night_chance` are probabilities (0–1). `range_m` is an ascending positive `[min,max]` range in metres, at most 200. `undas_season` must name a season in the same pack's `life.seasons`; `manananggal.window` uses the annual season-window schema. Nonempty `sources` are required and describe folklore and illustrative settings, without claims about individual sites. Field/roof sidecars come from existing mapped geometry at runtime; this block requires no new tile archive or geographic edits.
 
 ```ts
@@ -232,6 +238,9 @@ City {                           // cities/<slug>/city.json
       worship: [number, number][]; hospital: [number, number][]; station: [number, number][];
       source: string;
     };
+    parking?: { lot: [number, number][]; centre: [number, number][]; home: [number, number][]; source: string };
+    flyways?: { species: "egret" | "bat"; roost: [number, number]; bearings: number[]; distance_m: number; dusk: [string, string]; dawn: [string, string]; source: string }[];
+    dismissal?: { source: string };
     source: string;
   };
 }

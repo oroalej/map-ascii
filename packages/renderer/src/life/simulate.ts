@@ -13,7 +13,13 @@ import {
   type EmergencyRequest,
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
-import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
+import {
+  isEmergencyData,
+  type EmergencyConfig,
+  type EmergencyData,
+  type FlywayConfig,
+  type ParkingSlot,
+} from '@atlas/shared';
 import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
 import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
 import {
@@ -223,11 +229,16 @@ import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
+import type { LifeClass } from '../classes';
+import { dismissalLife } from './dismissal';
 import { fieldLife, workAnimal } from './field-life';
+import { flywayBirds } from './flyways';
+import { placeSeed } from './lights';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
+import { crossingBarriers, RAIL_CROSSING, RailCrossings } from './rail-crossings';
 import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
@@ -242,7 +253,7 @@ import {
 } from './junctions';
 import { JunctionTraffic } from './junction-traffic';
 import { JunctionCrossings } from './junction-crossings';
-import { trainLimits, type TrainLimit } from './train-motion';
+import { crossingStates, trainLimits, type TrainLimit } from './train-motion';
 import { Paint } from './vehicles';
 import { walkFlap, SHIRT_PAINTS, UMBRELLA_PAINTS, type PersonLook } from './people';
 import {
@@ -259,7 +270,14 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
-import { PuffStore, PuffSelector, EMPTY_PUFFS, PUFF, PUFF_STRIDE } from './exhaust';
+import {
+  PuffStore,
+  PuffSelector,
+  EMPTY_PUFFS,
+  PUFF,
+  PUFF_STRIDE,
+  sample as hashSample,
+} from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
 import {
   collectSeasonAnchors,
@@ -416,6 +434,9 @@ export type StepPass = {
   recoveredNow?: ReadonlySet<Mover>;
   recovered?: (m: Mover) => void;
 };
+
+/** Hash tag of a parked car's share (exhaust.ts `sample`); position-only, so no stream moves. */
+const PARKING_SHARE_TAG = 0x70a2c;
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -820,6 +841,9 @@ export type Parked = {
   hy: number;
   vehicle: CraftType;
   paint: number;
+  /** Whose hours it keeps, and its stable place in that slot's share (`classifyParked`). */
+  slot?: ParkingSlot;
+  share?: number;
 };
 
 export type Bird = {
@@ -1173,6 +1197,8 @@ export class TileLife {
     { line: number; from: number; dir: 1 | -1; d: number; shift: number; blocked?: number }
   >();
   signals!: SignalControl;
+  /** Where roads meet running track here (life/rail-crossings.ts). */
+  railCrossings!: RailCrossings;
   crossingWaits!: CrossingWaits;
   private crossingClock = 0;
   private crossingMinimum = 0;
@@ -1719,6 +1745,8 @@ export class TileLife {
       );
     this.signals = new SignalControl(tile, geo, this.perMeter, this.along, true);
     yield* this.signals.prepare(tile, geo);
+    this.railCrossings = new RailCrossings(geo, this.perMeter, this.along, true);
+    yield* this.railCrossings.prepare();
     this.crossingWaits = new CrossingWaits(
       geo,
       this.perMeter,
@@ -4066,6 +4094,39 @@ export class TileLife {
     }
     this.parked.length = kept;
     for (const line of this.parkingLines) if (!eligible(line)) this.parkingLines.delete(line);
+    yield* this.classifyParked(curbSources);
+  }
+
+  /**
+   * Whose hours each parked car keeps: a lot's, or by its line's place among the shops. No random
+   * stream moves; a car's share comes from where it stands in the world.
+   */
+  private *classifyParked(curbSources: ReadonlyMap<Parked, number>): Generator<void, void, void> {
+    const { geo, perMeter, tile } = this;
+    const metersPerTile = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
+    const centres = new Map<number, boolean>();
+    for (const car of this.parked) {
+      yield;
+      const line = curbSources.get(car);
+      if (line === undefined) car.slot = 'lot';
+      else {
+        let centre = centres.get(line);
+        if (centre === undefined) {
+          const middle = this.pointAt(line, this.along[this.last(line)]! / 2);
+          centre = inCentre(middle.x, middle.y, geo.commerce, perMeter);
+          centres.set(line, centre);
+        }
+        car.slot = centre ? 'centre' : 'home';
+      }
+      car.share = hashSample(
+        placeSeed(
+          (tile.x * EXTENT + car.x) * metersPerTile,
+          (tile.y * EXTENT + car.y) * metersPerTile,
+        ),
+        0,
+        PARKING_SHARE_TAG,
+      );
+    }
   }
 
   /** Shared vertices, T-junctions and crossings; two continuation arms are just a bend. */
@@ -5256,6 +5317,12 @@ export class TileLife {
     this.junctionRoom = availableRoom ?? this.junctionTraffic.room(m, movement, this);
     return (
       this.junctionRoom >= VEHICLES[m.vehicle!].length + JUNCTION.gap &&
+      !this.railCrossings.entryBlocked(
+        m,
+        movement.exit,
+        movement.junction.radius,
+        Math.max(0, movement.ahead),
+      ) &&
       (this.signals.allows(
         m,
         movement.entry?.x ?? movement.junction.x,
@@ -5631,6 +5698,7 @@ export class TileLife {
   private roadProtectedRoom(m: Mover, table: JunctionTable): number {
     let room = this.lineLength(m.line) / this.perMeter - this.travelled(m);
     room = Math.min(room, this.signals.protectedRoom(m) / this.perMeter);
+    room = Math.min(room, this.railCrossings.protectedRoom(m) / this.perMeter);
     for (const r of table.holds(m)) {
       if (r.inside) return 0;
       if (r.movement.ahead >= -JUNCTION.insideToleranceM * this.perMeter)
@@ -6788,6 +6856,7 @@ export class TileLife {
     this.captureEffects(clock, dt, env, shows, near, pass);
     this.prepareRecovery();
     const trains = pass?.trains ?? trainLimits([this], dt);
+    if (!pass?.trains && this.railCrossings.crossings.length) crossingStates([this]);
     const limit = { target: 0, cap: Infinity };
     let recoveredLines = pass?.recoveredLines;
     // Walkers get a chance to clear a crossing; waiting traffic wins ties among cars.
@@ -6959,6 +7028,8 @@ export class TileLife {
             clearing,
             env?.diagnostics,
           );
+          if (this.railCrossings.vehicleLimit(m, dt, limit, env?.diagnostics, this.movers))
+            intentionalHold = true;
 
           speeds[i] = limit.target;
           this.caps[i] = limit.cap;
@@ -9247,8 +9318,15 @@ type LifeDonor = {
 export type LifeWeather = {
   rain: number;
   sunAltitude: number;
-  /** Shared time and the wind's way for the harvest's stateless actors (life/field-life.ts). */
-  field?: { time: number; wind: readonly [number, number] };
+  /** Shared time and the wind's way for stateless actors (life/field-life.ts, life/flyways.ts). */
+  field?: {
+    time: number;
+    wind: readonly [number, number];
+    /** Local minutes past midnight, for those that keep to the clock. */
+    minutes?: number;
+    /** Minutes since classes ended, while school is letting out (rhythm.ts `dismissalNow`). */
+    dismissal?: number;
+  };
 };
 
 /** Every tile's agents: kept in step with the tiles on screen. */
@@ -9257,6 +9335,10 @@ export type LifeLineShape = {
   points: readonly [number, number][];
   paints: readonly number[];
   tip?: { glyph: string; paint: number };
+  /** Which class and allowed bit its cells take; a boat's when absent, so it stays on water. */
+  layer?: { cls: LifeClass; bit: number };
+  /** Draw it even when it falls within a single cell, as a crossing's barrier on a narrow road. */
+  short?: boolean;
 };
 
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
@@ -9682,6 +9764,10 @@ export class LifeWorld {
         });
     }
     return bodies;
+  }
+  private flyways: readonly FlywayConfig[] = [];
+  setFlyways(config: readonly FlywayConfig[] | undefined) {
+    this.flyways = config ?? [];
   }
   setPeddlers(config: readonly PeddlerConfig[] | undefined) {
     this.peddlerOrdinarySnapshot = undefined;
@@ -12712,6 +12798,11 @@ export class LifeWorld {
       this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
       env.inspecting,
     );
+    crossingStates(
+      [...this.tiles.values()],
+      this.mixedZoom ? (life, m) => this.owns(life, m) : undefined,
+      env.inspecting,
+    );
     const seamLimits = new Map<Mover, SeamLimit>();
     const intents: {
       source: TileLife;
@@ -14037,6 +14128,7 @@ export class LifeWorld {
         }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
+          if (levels.parking && p.slot && p.share! >= levels.parking[p.slot]) continue;
           if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);
@@ -14226,7 +14318,14 @@ export class LifeWorld {
     };
     if (out.length + eventCount <= maxAgents) {
       const result = this.withFieldLife(
-        withPeddlers(this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds)),
+        this.withBarriers(
+          withPeddlers(
+            this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+          ),
+          zoom,
+          bounds,
+          maxAgents,
+        ),
         levels,
         zoom,
         weather,
@@ -14235,6 +14334,8 @@ export class LifeWorld {
         crowd,
         maxAgents,
       );
+      this.withDismissal(result, zoom, weather, center, bounds, crowd, maxAgents);
+      this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       tapOwners?.finish(admitted);
@@ -14268,7 +14369,12 @@ export class LifeWorld {
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
     const result = this.withFieldLife(
-      withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds)),
+      this.withBarriers(
+        withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds)),
+        zoom,
+        bounds,
+        maxAgents,
+      ),
       levels,
       zoom,
       weather,
@@ -14277,9 +14383,101 @@ export class LifeWorld {
       crowd,
       maxAgents,
     );
+    this.withDismissal(result, zoom, weather, center, bounds, crowd, maxAgents);
+    this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     tapOwners?.finish(admitted);
+    return admitted;
+  }
+
+  /** Students walking home and the tricycles waiting for them, while school lets out. */
+  private withDismissal(
+    admitted: VisibleAgent[],
+    zoom: number,
+    weather: LifeWeather,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    crowd: number,
+    maxAgents: number,
+  ) {
+    const field = weather.field;
+    if (field?.dismissal === undefined || bandVisibility(LIFE_ZOOM.person, zoom) < 1)
+      return admitted;
+    const frame = dismissalLife({
+      tiles: [...this.tiles.values()].map((life) => ({ tile: life.tile, geo: life.geo })),
+      after: field.dismissal,
+      time: field.time,
+      center,
+      bounds,
+      crowd,
+      ...(this.mixedZoom && {
+        owns: ({ geo }, p) => {
+          for (const life of this.tiles.values()) if (life.geo === geo) return this.owns(life, p);
+          return false;
+        },
+      }),
+    });
+    for (const agent of frame) {
+      if (admitted.length >= maxAgents) break;
+      admitted.push(agent);
+    }
+    return admitted;
+  }
+
+  /** Birds commuting to and from their roosts, seen from the same zoom as other birds. */
+  private withFlyways(
+    admitted: VisibleAgent[],
+    zoom: number,
+    weather: LifeWeather,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    crowd: number,
+    maxAgents: number,
+  ) {
+    const field = weather.field;
+    if (
+      !this.flyways.length ||
+      field?.minutes === undefined ||
+      weather.rain >= BIRD_WEATHER.shelter ||
+      bandVisibility(LIFE_ZOOM.bird, zoom) < 1
+    )
+      return admitted;
+    for (const bird of flywayBirds({
+      flyways: this.flyways,
+      minutes: field.minutes,
+      time: field.time,
+      center,
+      bounds,
+      crowd,
+    })) {
+      if (admitted.length >= maxAgents) break;
+      admitted.push(bird);
+    }
+    return admitted;
+  }
+
+  /** The barriers at closed crossings: after the movers they hold, within the cap. */
+  private withBarriers(
+    admitted: VisibleAgent[],
+    zoom: number,
+    bounds: LngLatBounds | undefined,
+    maxAgents: number,
+  ) {
+    if (bandVisibility(RAIL_CROSSING.barrierZoom, zoom) < 1) return admitted;
+    for (const life of this.tiles.values()) {
+      if (!life.railCrossings.crossings.length) continue;
+      const inView = viewIn(life.tile, bounds, 0);
+      crossingBarriers(
+        life.railCrossings.crossings,
+        life.tile,
+        life.perMeter,
+        this.clock,
+        (p) => inView(p.x, p.y) && this.owns(life, p),
+        admitted,
+        maxAgents,
+      );
+    }
     return admitted;
   }
 

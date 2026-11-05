@@ -2237,7 +2237,7 @@ function drawLine(
   for (let i = 1; i < points.length; i++) {
     total += Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![1] - points[i - 1]![1]);
   }
-  if (total < 1) return false;
+  if (total < 1 && !line.short) return false;
   // The cells it passes through, one per step along each stretch's longer axis.
   const path: [number, number][] = [];
   for (let i = 1; i < points.length; i++) {
@@ -2254,8 +2254,11 @@ function drawLine(
     }
   }
   // A cell long, yet within one cell: no step to turn its glyph by.
-  if (path.length < 2) return false;
-  const cls = classId(lifeClassFor.boat);
+  if (path.length < 2 && !line.short) return false;
+  const cls = classId(line.layer?.cls ?? lifeClassFor.boat);
+  const bit = line.layer?.bit ?? CellBit.boat;
+  const [fx, fy] = points[0]!;
+  const [tx, ty] = points[points.length - 1]!;
   const seen = new Set<number>();
   const marks: { at: number; glyph: number }[] = [];
   path.forEach(([c, r], k) => {
@@ -2264,7 +2267,12 @@ function drawLine(
     if (seen.has(at)) return;
     seen.add(at);
     // The step on to the next cell (from the one before, at the end); rows count down.
-    const [nc, nr] = path[k + 1] ?? [2 * c - path[k - 1]![0], 2 * r - path[k - 1]![1]];
+    // On a line of one cell, the step is the way the whole line runs.
+    const [nc, nr] =
+      path[k + 1] ??
+      (path[k - 1]
+        ? [2 * c - path[k - 1]![0], 2 * r - path[k - 1]![1]]
+        : [c + Math.sign(Math.round(tx - fx)), r + Math.sign(Math.round(ty - fy))]);
     const [dc, dr] = [nc - c, nr - r];
     marks.push({ at, glyph: glyphIndex(stepGlyph(dc, dr)) });
   });
@@ -2278,7 +2286,7 @@ function drawLine(
       at,
       index,
       cls,
-      CellBit.boat,
+      bit,
       vehicleByte(tip?.paint ?? line.paints[k % line.paints.length]!, VehiclePart.body),
     );
   });

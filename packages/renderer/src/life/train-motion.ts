@@ -1,9 +1,10 @@
 import { EXTENT } from '../raster/geometry';
 import { TRAIN, TRAIN_FOLLOW, kinematicsOf } from './config';
-import { frameBetween } from './frames';
+import { frameBetween, metricFrame } from './frames';
 import { approach, type MotionLimit } from './motion';
 import { cutTrail, trainLength, type Mover, type TileLife } from './simulate';
 import type { Pose } from './curves';
+import { RAIL_CROSSING } from './rail-crossings';
 
 export type TrainLimit = MotionLimit & { station: number };
 type Sample = Pose & { distance: number; life: TileLife };
@@ -183,4 +184,96 @@ export function trainLimits(
     }
   }
   return limits;
+}
+
+/** The nearest `points` (x, y pairs) comes to `x`, `y`. */
+function polylineDistance(points: readonly number[], x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const ax = points[i]!,
+      ay = points[i + 1]!,
+      dx = points[i + 2]! - ax,
+      dy = points[i + 3]! - ay;
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy || 1)));
+    best = Math.min(best, Math.hypot(x - ax - t * dx, y - ay - t * dy));
+  }
+  return best;
+}
+
+/** How far along a train's path (`lookahead`) it runs over `x`, `y`; Infinity if it doesn't. */
+function pathDistance(points: readonly Sample[], x: number, y: number, reach: number): number {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!,
+      b = points[i]!;
+    const dx = b.x - a.x,
+      dy = b.y - a.y;
+    const t = Math.max(
+      0,
+      Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / (dx * dx + dy * dy || 1)),
+    );
+    if (Math.hypot(x - a.x - t * dx, y - a.y - t * dy) <= reach)
+      return a.distance + t * (b.distance - a.distance);
+  }
+  return Infinity;
+}
+
+/**
+ * Pure prepass, like `trainLimits`: open or close every crossing for this frame, from where the
+ * trains are now and nothing remembered, so a crossing with no train near it is always open. Trains
+ * in neighbouring tiles count; a tile without crossings pays for nothing.
+ */
+export function crossingStates(
+  lives: readonly TileLife[],
+  owns?: (life: TileLife, p: { x: number; y: number }) => boolean,
+  inspecting?: object,
+): void {
+  const guarded = lives.filter((life) => life.railCrossings.crossings.length);
+  if (!guarded.length) return;
+  for (const life of guarded)
+    for (const crossing of life.railCrossings.crossings) crossing.closed = crossing.firm = false;
+  const ordered = owns ? [...lives].sort((a, b) => b.tile.z - a.tile.z) : lives;
+  for (const life of lives) {
+    for (const m of life.movers) {
+      // A train at its copy's edge waits there hidden; its other copy is the real one.
+      if (!m.train || m.train.edge || (owns && !owns(life, m))) continue;
+      const pm = life.perMeter;
+      const standing = inspecting === m || m.pause > 0 || m.train.reverse;
+      const speed = standing ? 0 : (m.v ?? m.speed) / pm;
+      const length = trainLength(m.train.cars);
+      const warn = RAIL_CROSSING.warnSeconds * speed;
+      const reach = Math.max(warn, length) + RAIL_CROSSING.bodyReach;
+      let body: number[] | undefined;
+      let path: Sample[] | undefined;
+      for (const guardedLife of guarded) {
+        const f = metricFrame(life, guardedLife);
+        const headX = f.x + (m.x / pm) * f.scale,
+          headY = f.y + (m.y / pm) * f.scale;
+        const back = metricFrame(guardedLife, life);
+        for (const crossing of guardedLife.railCrossings.crossings) {
+          if (crossing.firm) continue;
+          const cx = crossing.x / guardedLife.perMeter,
+            cy = crossing.y / guardedLife.perMeter;
+          const dx = cx - headX,
+            dy = cy - headY;
+          if (Math.abs(dx) > reach || Math.abs(dy) > reach) continue;
+          // The crossing, in meters of the train's own frame.
+          const x = back.x + cx * back.scale,
+            y = back.y + cy * back.scale;
+          body ??= cutTrail([m.x, m.y, ...m.train.trail], length * pm).map((v) => v / pm);
+          if (polylineDistance(body, x, y) <= RAIL_CROSSING.bodyReach) {
+            crossing.closed = crossing.firm = true;
+            continue;
+          }
+          if (speed <= 0 || dx * dx + dy * dy > warn * warn) continue;
+          if (dx * m.hx + dy * m.hy <= 0) continue;
+          path ??= lookahead(life, m, ordered, owns).points;
+          const seconds =
+            pathDistance(path, x * pm, y * pm, RAIL_CROSSING.pathReach * pm) / pm / speed;
+          if (seconds > RAIL_CROSSING.warnSeconds) continue;
+          crossing.closed = true;
+          if (seconds <= RAIL_CROSSING.firmSeconds) crossing.firm = true;
+        }
+      }
+    }
+  }
 }

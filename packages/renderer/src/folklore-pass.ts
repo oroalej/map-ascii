@@ -1,11 +1,12 @@
 import * as twgl from 'twgl.js';
 import { project } from './camera';
 import { metersPerCssPx, type Grid, type View } from './grid';
-import { createProgram, type GL, type CellTargets } from './gpu';
+import { createProgram, createTexture, type GL, type CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from './life/folklore';
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
+import { SpriteFrame } from './life/manananggal-frames';
 import { folkloreVertex, folkloreFragment } from './shaders/folklore';
 import { focusPulse, normalizeFocus } from './focus';
 
@@ -15,8 +16,44 @@ export type FolkloreQuad = {
   y: number;
   w: number;
   h: number;
+  /** A ghost's atlas glyph; else its sprite frame, plus 64 times one more than a frame under it. */
   glyph: number;
+  /** How far to turn the figure from head-up, radians clockwise. */
+  turn: number;
 };
+/**
+ * The figure's quad: this many metres, but never under a size in CSS px, so it stays findable. That
+ * floor grows with zoom up to the px its frames are painted at, so wide views don't show it towering
+ * over the city.
+ */
+const FIGURE = { far: { zoom: 15, px: 24 }, near: { zoom: 17.5, px: 48 }, meters: 5 } as const;
+const figureFloor = (zoom: number) => {
+  const { far, near } = FIGURE;
+  const t = Math.max(0, Math.min(1, (zoom - far.zoom) / (near.zoom - far.zoom)));
+  return far.px + (near.px - far.px) * t;
+};
+const under = (frame: number, trail: number) =>
+  frame + 64 * (SpriteFrame.trail + Math.min(SpriteFrame.trails - 1, trail) + 1);
+/** Which frames show this moment of the manananggal: wings beating, folding in, or on a roof. */
+export function manananggalFrames(sprite: FolkloreSprite): number {
+  const fold = sprite.fold ?? 0,
+    wave = sprite.wave ?? 0;
+  if (fold >= 1)
+    return (
+      SpriteFrame.perch + Math.min(SpriteFrame.perches - 1, Math.floor(wave * SpriteFrame.perches))
+    );
+  const trail = Math.floor(wave * SpriteFrame.trails);
+  return fold > 0
+    ? under(
+        SpriteFrame.fold + Math.min(SpriteFrame.folds - 1, Math.floor(fold * SpriteFrame.folds)),
+        trail,
+      )
+    : under(
+        SpriteFrame.flap +
+          Math.min(SpriteFrame.flaps - 1, Math.floor(sprite.phase * SpriteFrame.flaps)),
+        trail,
+      );
+}
 /** Device-pixel bounds include the same minimum halo used by drawing and hover. */
 export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad[] {
   const [cx, cy] = project(view.camera.lng, view.camera.lat, view.camera.zoom),
@@ -29,14 +66,10 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
     const ghost = sprite.kind === 'ghost',
       lower = sprite.kind === 'lower-half';
     const w = Math.max(
-      view.dpr * (ghost ? 14 : lower ? 9 : 24),
-      scale * (ghost ? 1.6 : lower ? 0.7 : 4),
+      view.dpr * (ghost ? 14 : figureFloor(view.camera.zoom)),
+      scale * (ghost ? 1.6 : FIGURE.meters),
     );
-    const h = Math.max(
-      view.dpr * (ghost ? 20 : lower ? 14 : 18),
-      scale * (ghost ? 2.4 : lower ? 1.4 : 3),
-    );
-    const heading = ((Math.round(sprite.heading / (Math.PI / 2)) % 4) + 4) % 4;
+    const h = ghost ? Math.max(view.dpr * 20, scale * 2.4) : w;
     const glyph = ghost
       ? sprite.pose === 'wisp'
         ? 2 + Math.min(3, Math.floor(sprite.wisp * 4))
@@ -44,13 +77,13 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
           ? 1
           : 0
       : lower
-        ? 15
-        : sprite.pose === 'perched'
-          ? 14
-          : 6 + heading * 2 + (sprite.phase > 0 ? 1 : 0);
+        ? SpriteFrame.lower
+        : manananggalFrames(sprite);
+    // Its head is at the top of the frame, and a heading of 0 is east.
+    const turn = sprite.kind === 'manananggal' ? sprite.heading + Math.PI / 2 : 0;
     return x + w / 2 < 0 || y + h / 2 < 0 || x - w / 2 > view.width || y - h / 2 > view.height
       ? []
-      : [{ sprite, x, y, w, h, glyph }];
+      : [{ sprite, x, y, w, h, glyph, turn }];
   });
 }
 export function folkloreHit(
@@ -103,6 +136,10 @@ export type FolkloreResources = {
   vao: WebGLVertexArrayObject | null;
   buffer: WebGLBuffer | null;
   data: Float32Array;
+  /** Painted and uploaded the first time the manananggal shows, which most visits it never does. */
+  sprites?: WebGLTexture;
+  sheet?: { width: number; height: number; data: Uint8Array };
+  sheetRequested?: boolean;
 };
 function createFolklore(gl: GL, programs: Programs): FolkloreResources {
   const pending = programs.glyphWarmup?.pending;
@@ -129,6 +166,7 @@ export function deleteFolklore(gl: GL, r: FolkloreResources) {
   gl.deleteProgram(r.program.program);
   gl.deleteVertexArray(r.vao);
   gl.deleteBuffer(r.buffer);
+  if (r.sprites) gl.deleteTexture(r.sprites);
 }
 export function folklorePass(
   gl: GL,
@@ -144,20 +182,40 @@ export function folklorePass(
 ) {
   if (!quads.length) return;
   const r = (programs.folklore ??= createFolklore(gl, programs));
-  if (r.data.length < quads.length * 8)
-    r.data = new Float32Array(2 ** Math.ceil(Math.log2(quads.length * 8)));
+  if (!r.sprites && quads.some((q) => q.sprite.kind !== 'ghost')) {
+    if (r.sheet) {
+      const { width, height, data } = r.sheet;
+      r.sprites = createTexture(gl, gl.RGBA8, gl.RGBA, width, height, data);
+      r.sheet = undefined;
+    } else if (!r.sheetRequested) {
+      r.sheetRequested = true;
+      // Without the painter the figure just stays unseen; ghosts don't depend on it.
+      void import('./life/manananggal-sprite').then(
+        ({ bakeSpriteSheet }) => {
+          r.sheet = bakeSpriteSheet();
+        },
+        () => undefined,
+      );
+    }
+  }
+  // Until its sheet arrives there is nothing to draw the figure from.
+  const shown = r.sprites ? quads : quads.filter((q) => q.sprite.kind === 'ghost');
+  if (!shown.length) return;
+  if (r.data.length < shown.length * 8)
+    r.data = new Float32Array(2 ** Math.ceil(Math.log2(shown.length * 8)));
   const data = r.data;
-  for (let i = 0; i < quads.length; i++) {
-    const q = quads[i]!,
+  for (let i = 0; i < shown.length; i++) {
+    const q = shown[i]!,
       offset = i * 8;
     data[offset] = q.x;
     data[offset + 1] = q.y;
     data[offset + 2] = q.w;
     data[offset + 3] = q.h;
-    data[offset + 4] = theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!);
+    const ghost = q.sprite.kind === 'ghost';
+    data[offset + 4] = ghost ? theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!) : q.glyph;
     data[offset + 5] = q.sprite.alpha;
-    data[offset + 6] = q.sprite.kind === 'ghost' ? 0 : 1;
-    data[offset + 7] = 0;
+    data[offset + 6] = ghost ? 0 : q.sprite.kind === 'lower-half' ? 2 : 1;
+    data[offset + 7] = q.turn;
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
@@ -166,6 +224,7 @@ export function folklorePass(
   twgl.setUniforms(r.program, {
     u_size: [view.width, view.height],
     u_atlas: theme.map.atlasTex,
+    u_sprites: r.sprites ?? theme.map.atlasTex,
     u_columns: theme.map.atlas.columns,
     u_cell: [view.cellDev.w, view.cellDev.h],
     u_overlay: targets.overlayTex,
@@ -185,7 +244,7 @@ export function folklorePass(
   gl.bindVertexArray(r.vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, r.buffer);
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, quads.length);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, shown.length);
   gl.bindVertexArray(null);
   gl.disable(gl.BLEND);
 }

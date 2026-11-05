@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { FolkloreObserver } from './folklore';
 import { FolkloreGeometry, distance } from './folklore-geometry';
-import { manananggalPose, manananggalTiming } from './manananggal';
+import { manananggalPose, manananggalTiming, wingBeat } from './manananggal';
 import { calendar, folkloreConfig, folkloreTile, folkloreCenter } from './testing/folklore';
 import { parent, right, continuityMover } from './testing/continuity';
 import { frameBetween } from './frames';
@@ -64,6 +64,14 @@ it('flies, approaches a solid roof continuously, lands and returns by the civil 
   expect(distance(at(timing.flight - 0.001).at, at(timing.flight).at)).toBeLessThan(0.01);
   expect(at(timing.flight + 1).at).toEqual(roof.at);
   expect(at(timing.flight + 1).pose).toBe('perched');
+  // The wings draw in over the touchdown and open again on leaving, with no jump.
+  expect(at(timing.flight - 2).fold).toBe(0);
+  expect(at(timing.flight - 0.6).fold).toBeGreaterThan(0);
+  expect(at(timing.flight - 0.6).fold).toBeLessThan(1);
+  expect(at(timing.flight + 1).fold).toBe(1);
+  expect(at(timing.flight + timing.landing + 0.001).fold).toBeCloseTo(1, 3);
+  expect(at(timing.flight + timing.landing + 1).fold).toBe(0);
+  expect(at(20, 10).fold).toBe(0);
   const depart = timing.flight + timing.landing;
   for (const elapsed of [
     FOLKLORE.departure / 2,
@@ -239,4 +247,32 @@ it('selects independently of tile enumeration and releases each required anchor 
   }
   const invalid = { ...t, geo: { ...t.geo, fields: undefined } };
   expect(sample([invalid]).sprites).toEqual([]);
+});
+
+it('turns smoothly through a whole cycle, keeping its heading on the roof', () => {
+  const t = folkloreTile(),
+    g = new FolkloreGeometry([t], t),
+    c = g.candidates[0]!,
+    roof = g.roofs[1]!,
+    night = calendar(11).epochDay;
+  const timing = manananggalTiming(c, night);
+  const at = (elapsed: number) => manananggalPose(c, roof, night, elapsed, 360);
+  const gap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  for (let t = 0.2; t < timing.span * 2; t += 0.1)
+    expect(gap(at(t).heading, at(t + 0.1).heading)).toBeLessThan(0.5);
+  const down = at(timing.flight + 1).heading;
+  expect(at(timing.flight + timing.landing - 1).heading).toBeCloseTo(down, 8);
+  // It came in along that line.
+  const from = at(timing.flight - 6).at;
+  expect(gap(down, Math.atan2(roof.at.y - from.y, roof.at.x - from.x))).toBeLessThan(1e-6);
+});
+
+it('beats its wings in bursts and holds a glide between them', () => {
+  const beats = Array.from({ length: 640 }, (_, i) => wingBeat(i / 100));
+  expect(beats.every((b) => b >= 0 && b < 1)).toBe(true);
+  // Six wraps of the beat, then still.
+  expect(beats.slice(1).filter((b, i) => b < beats[i]!).length).toBeGreaterThanOrEqual(5);
+  expect(beats.slice(400).every((b) => b === 0)).toBe(true);
+  expect(beats.slice(0, 300).some((b) => b > 0.5)).toBe(true);
+  expect(wingBeat(6.4 + 1)).toBeCloseTo(wingBeat(1), 8);
 });

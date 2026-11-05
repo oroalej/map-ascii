@@ -24,7 +24,7 @@ it.each(['ghost', 'manananggal', 'lower-half'] as const)(
     };
     f.frame.owners = new Uint32Array(0);
     f.frame.agents = [];
-    f.frame.folklore = [{ sprite, x: 12.5, y: 12.5, w: 20, h: 20, glyph: 0 }];
+    f.frame.folklore = [{ sprite, x: 12.5, y: 12.5, w: 20, h: 20, glyph: 0, turn: 0 }];
     f.hover.pointer([10, 10]);
     f.hover.update(f.frame, 0);
     expect(f.emit).toHaveBeenLastCalledWith({

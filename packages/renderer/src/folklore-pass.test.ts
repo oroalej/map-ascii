@@ -2,16 +2,21 @@ import { expect, it, vi } from 'vitest';
 import {
   folkloreLayout,
   folkloreHit,
+  manananggalFrames,
   hauntUniforms,
   folklorePass,
   createHauntUniformScratch,
 } from './folklore-pass';
 import { deletePrograms, type Programs, type ThemeResources } from './gpu-context';
-import { createProgram, type GL, type CellTargets } from './gpu';
+import { createProgram, createTexture, type GL, type CellTargets } from './gpu';
 import { placeGrid, type View } from './grid';
 import type { FolklorePacket } from './life/folklore';
 import { normalizeFocus, focusPulse } from './focus';
-vi.mock('./gpu', () => ({ createProgram: vi.fn(() => ({ program: {}, uniformSetters: {} })) }));
+import { SpriteFrame } from './life/manananggal-frames';
+vi.mock('./gpu', () => ({
+  createProgram: vi.fn(() => ({ program: {}, uniformSetters: {} })),
+  createTexture: vi.fn(() => ({})),
+}));
 const packet: FolklorePacket = {
   sprites: [
     {
@@ -55,6 +60,89 @@ it('uses common quad bounds, gates ghosts and neighborhood creatures, and reject
     folkloreLayout({ ...packet, sprites: packet.sprites.map((s) => ({ ...s, alpha: 0 })) }, view),
   ).toEqual([]);
   expect(folkloreLayout(packet, { ...view, camera: { ...view.camera, lng: 1 } })).toEqual([]);
+});
+const figure = (over: Partial<FolklorePacket['sprites'][number]> = {}) => ({
+  ...packet.sprites[0]!,
+  id: 'creature',
+  kind: 'manananggal' as const,
+  pose: 'flying' as const,
+  alpha: 1,
+  ...over,
+});
+const under = (code: number) => Math.floor(code / 64) - 1;
+it('draws only the ghosts while the sheet is on its way', async () => {
+  const draw = vi.fn();
+  const methods = new Map<string | symbol, unknown>([['drawArraysInstanced', draw]]);
+  const gl = new Proxy(
+    {},
+    {
+      get: (_, key) => {
+        if (!methods.has(key))
+          methods.set(
+            key,
+            vi.fn(() => ({})),
+          );
+        return methods.get(key);
+      },
+    },
+  ) as unknown as GL;
+  const p = {} as Programs;
+  const theme = {
+    map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
+    uniforms: { accent: [1, 0.8, 0.3] },
+  } as unknown as ThemeResources;
+  const grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  const both = folkloreLayout({ ...packet, sprites: [packet.sprites[0]!, figure()] }, view);
+  folklorePass(gl, p, {} as CellTargets, theme, view, grid, both);
+  expect(draw).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
+  await vi.waitFor(() => expect(p.folklore!.sheet).toBeDefined());
+});
+it('picks the frame for each moment of the manananggal, with its entrails under the wings', () => {
+  const flying = manananggalFrames(figure({ phase: 0.5, wave: 0.5 }));
+  expect(flying % 64).toBe(SpriteFrame.flap + 4);
+  expect(under(flying)).toBe(SpriteFrame.trail + 2);
+  const folding = manananggalFrames(figure({ fold: 0.6, wave: 0 }));
+  expect(folding % 64).toBe(SpriteFrame.fold + 2);
+  expect(under(folding)).toBe(SpriteFrame.trail);
+  // Its last frames are the end of their sets at the very top of each range.
+  expect(manananggalFrames(figure({ phase: 0.999 })) % 64).toBe(SpriteFrame.flaps - 1);
+  expect(manananggalFrames(figure({ fold: 0.999 })) % 64).toBe(SpriteFrame.perch - 1);
+  const perched = figure({ pose: 'perched', fold: 1, phase: 0, wave: 0 });
+  expect(manananggalFrames(perched)).toBe(SpriteFrame.perch);
+  expect(manananggalFrames({ ...perched, wave: 0.99 })).toBe(SpriteFrame.perch + 3);
+});
+it('turns the manananggal to face its heading, and leaves the legs as they are', () => {
+  const turn = (heading: number) =>
+    folkloreLayout({ ...packet, sprites: [figure({ heading })] }, view)[0]!.turn;
+  // Head-up in its frame: east turns it a quarter clockwise, north not at all.
+  expect(turn(0)).toBeCloseTo(Math.PI / 2);
+  expect(turn(-Math.PI / 2)).toBeCloseTo(0);
+  expect(turn(Math.PI / 2)).toBeCloseTo(Math.PI);
+  const legs = folkloreLayout(
+    { ...packet, sprites: [figure({ kind: 'lower-half', heading: 1 })] },
+    view,
+  )[0]!;
+  expect(legs.glyph).toBe(SpriteFrame.lower);
+  expect(legs.turn).toBe(0);
+});
+it('sizes the figure smaller when zoomed out, and in metres when closest', () => {
+  const size = (zoom: number, dpr: number) =>
+    folkloreLayout(
+      { ...packet, sprites: [figure()] },
+      { ...view, dpr, camera: { ...view.camera, zoom } },
+    )[0]!;
+  expect(size(15, 1).w).toBe(24);
+  expect(size(15, 1).h).toBe(24);
+  expect(size(15, 2).w).toBe(48);
+  expect(size(16.25, 1).w).toBeCloseTo(36);
+  expect(size(17.5, 1).w).toBe(48);
+  expect(size(22, 1).w).toBeGreaterThan(48);
+  // The legs share its quad, and are painted in the middle of it, so they stay the smaller.
+  const legs = folkloreLayout(
+    { ...packet, sprites: [figure({ kind: 'lower-half' })] },
+    { ...view, camera: { ...view.camera, zoom: 15 } },
+  )[0]!;
+  expect(legs.w).toBe(24);
 });
 it('keeps uniform scratch independent and clears unused or disabled haunts', () => {
   const a = createHauntUniformScratch(),
@@ -106,7 +194,7 @@ it('keeps haunt positions and meter radii consistent across pan, zoom and DPR an
 });
 it.each(['cached', 'pending', 'demand'] as const)(
   'draws folklore with %s preparation and owns each resource once',
-  (preparation) => {
+  async (preparation) => {
     vi.mocked(createProgram).mockClear();
     const gl = Object.fromEntries(
       [
@@ -128,6 +216,7 @@ it.each(['cached', 'pending', 'demand'] as const)(
         'deleteProgram',
         'deleteVertexArray',
         'deleteBuffer',
+        'deleteTexture',
       ].map((k) => [k, vi.fn(() => ({}))]),
     ) as unknown as GL;
     const p = {
@@ -205,11 +294,33 @@ it.each(['cached', 'pending', 'demand'] as const)(
     }
     folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
     expect(r.data).toBe(data);
+    // Ghosts alone never ask for the sheet. The manananggal asks once, and waits for it unseen.
+    vi.mocked(createTexture).mockClear();
+    expect(r.sprites).toBeUndefined();
+    expect(r.sheetRequested).toBeUndefined();
+    const draws = vi.mocked(calls.drawArraysInstanced!);
+    draws.mockClear();
+    const creature = { ...packet, sprites: [figure()] };
+    const quads = folkloreLayout(creature, view);
+    folklorePass(gl, p, targets, theme, view, grid, quads);
+    expect(r.sheetRequested).toBe(true);
+    expect(draws).not.toHaveBeenCalled();
+    const mixed = folkloreLayout({ ...packet, sprites: [packet.sprites[0]!, figure()] }, view);
+    await vi.waitFor(() => expect(r.sheet).toBeDefined());
+    expect(createTexture).not.toHaveBeenCalled();
+    folklorePass(gl, p, targets, theme, view, grid, mixed);
+    folklorePass(gl, p, targets, theme, view, grid, quads);
+    expect(createTexture).toHaveBeenCalledTimes(1);
+    expect(r.sprites).toBeDefined();
+    expect(r.sheet).toBeUndefined();
+    expect(draws).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
+    expect(draws.mock.calls[0]![3]).toBe(2);
     gl.isContextLost = () => false;
     deletePrograms(gl, p);
     expect(calls.deleteProgram).toHaveBeenCalledWith(r.program.program);
     expect(calls.deleteBuffer).toHaveBeenCalledWith(r.buffer);
     expect(calls.deleteVertexArray).toHaveBeenCalledWith(r.vao);
+    expect(calls.deleteTexture).toHaveBeenCalledWith(r.sprites);
     const restored = { ...p, folklore: undefined };
     folklorePass(gl, restored, targets, theme, view, grid, folkloreLayout(packet, view));
     expect(restored.folklore).not.toBe(r);

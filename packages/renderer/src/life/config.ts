@@ -8,6 +8,7 @@ import {
   districtFactor,
   hasDistricts,
   SHOP_POINT_RADIUS_M,
+  PARKING_SLOTS,
   PLACE_KINDS,
   VEHICLE_TYPES,
   placeShare,
@@ -15,6 +16,7 @@ import {
   WINDOW_GROUPS,
   type WindowGroup,
   type CityLifeConfig,
+  type ParkingSlot,
   type PlaceKind,
   type RhythmDistrict,
   type RuntimeSeasonConfig,
@@ -775,6 +777,8 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
   season?: { visitors: number; congregations: number };
   /** The harvest scene (climate.ts `harvestAt`), when the city has one and the crop has a stage. */
   harvest?: HarvestNow;
+  /** Share of parked cars showing per slot, when the city's parking follows the day. */
+  parking?: Readonly<Record<ParkingSlot, number>>;
 };
 
 /** Share of drying slots that hold palay at the peak of the harvest (life/palay.ts). */
@@ -812,7 +816,7 @@ export function activityLevels(
   clock?: {
     minutes: number;
     weekday: number;
-    life?: Pick<CityLifeConfig, 'rhythm' | 'rhythm_days' | 'schedules'> | undefined;
+    life?: Pick<CityLifeConfig, 'rhythm' | 'rhythm_days' | 'schedules' | 'parking'> | undefined;
     crop?: CropNow | undefined;
     harvest?: HarvestNow | undefined;
   },
@@ -853,6 +857,13 @@ export function activityLevels(
       },
     }),
     ...(clock?.harvest && { harvest: clock.harvest }),
+    ...(clock?.life?.parking && {
+      parking: {
+        lot: curveAt(clock.life.parking.lot, clock.minutes),
+        centre: curveAt(clock.life.parking.centre, clock.minutes),
+        home: curveAt(clock.life.parking.home, clock.minutes),
+      },
+    }),
   };
 }
 
@@ -871,7 +882,10 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
     Math.abs((a.harvest?.tractors ?? 0) - (b.harvest?.tractors ?? 0)) > epsilon ||
     Math.abs((a.harvest?.ducks ?? 0) - (b.harvest?.ducks ?? 0)) > epsilon ||
     a.harvest?.spread !== b.harvest?.spread ||
-    a.harvest?.burning !== b.harvest?.burning
+    a.harvest?.burning !== b.harvest?.burning ||
+    PARKING_SLOTS.some(
+      (slot) => Math.abs((a.parking?.[slot] ?? 1) - (b.parking?.[slot] ?? 1)) > epsilon,
+    )
   );
 }
 

@@ -481,6 +481,95 @@ try {
       `harvest/balatas: median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
     );
   }
+  if ('movement/crossing'.startsWith(casePrefix)) {
+    // A train line through four tiles, every one with four roads crossing it, stepped and drawn.
+    const crossingTiles = Array.from({ length: 4 }, (_, i) => {
+      const at = { ...tile, x: tile.x + i };
+      const b = new LifeBuilder();
+      b.line(
+        [
+          { x: -80, y: 2048 },
+          { x: 4176, y: 2048 },
+        ],
+        LifeLine.rail,
+        0,
+        1,
+      );
+      for (let road = 0; road < 4; road++) {
+        const x = 500 + road * 1000;
+        b.line(
+          [
+            { x, y: 0 },
+            { x, y: 2048 },
+            { x, y: 4095 },
+          ],
+          road % 2 ? LifeLine.roadMinor : LifeLine.roadMajor,
+          road % 2 ? 6 : 12,
+          10 + road + i * 10,
+        );
+      }
+      return { key: `crossing${i}`, tile: at, life: b.finish() };
+    });
+    const middle = tileToLngLat(tile, { x: 2 * 4096, y: 2048 });
+    const levels = activityLevels(1);
+    const action = (module: Simulation) => () => {
+      const world = new module.LifeWorld();
+      world.sync(crossingTiles);
+      // Long enough for the first train to arrive: it then runs through for minutes.
+      for (let frame = 0; frame < 3300; frame++) world.step(1 / 30, undefined, 17);
+      return () => {
+        world.step(1 / 30, undefined, 17);
+        return world.visible(17, levels, middle);
+      };
+    };
+    const timings = compare(action(baseline), action(changed));
+    rows.push({ name: 'movement/crossing', timings });
+    console.log(
+      `movement/crossing: median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
+  if ('movement/dismissal'.startsWith(casePrefix)) {
+    // Worst case: the full on-screen cap of students out at once, around many schools.
+    const schoolTiles = Array.from({ length: 4 }, (_, i) => {
+      const at = { ...tile, x: tile.x + (i % 2), y: tile.y + (i >> 1) };
+      const b = new LifeBuilder();
+      for (let road = 0; road < 8; road++) {
+        const y = 250 + road * 500;
+        b.line(
+          [
+            { x: 0, y },
+            { x: 4095, y },
+          ],
+          LifeLine.roadMid,
+          8,
+          road + 1 + i * 10,
+        );
+        b.place({ x: 2048, y: y + 40 }, 'school', 200);
+      }
+      return { key: `schools${i}`, tile: at, life: b.finish() };
+    });
+    const middle = tileToLngLat(tile, { x: 4096, y: 4096 });
+    const levels = activityLevels(1);
+    const action = (module: Simulation) => () => {
+      const world = new module.LifeWorld();
+      world.sync(schoolTiles);
+      for (let frame = 0; frame < 40; frame++) world.step(1 / 30, undefined, 17);
+      let time = 0;
+      return () => {
+        time += 1 / 30;
+        return world.visible(17, levels, middle, {
+          rain: 0,
+          sunAltitude: 30,
+          field: { time, wind: [1, 0], minutes: 17 * 60, dismissal: 30 },
+        });
+      };
+    };
+    const timings = compare(action(baseline), action(changed));
+    rows.push({ name: 'movement/dismissal', timings });
+    console.log(
+      `movement/dismissal: median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
   for (const count of [1, 4, 16, 64]) {
     for (const view of ['desktop', 'mobile', 'over-cap'] as const) {
       if (!`visible/${view}/${count}`.startsWith(casePrefix)) continue;

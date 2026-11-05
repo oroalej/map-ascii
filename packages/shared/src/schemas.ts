@@ -20,6 +20,7 @@ import {
 } from './climate';
 import {
   DEFAULT_RHYTHM,
+  FLYWAY_SPECIES,
   FOLKLORE_SITE_KINDS,
   RHYTHM_DISTRICTS,
   RHYTHM_KINDS,
@@ -1904,6 +1905,21 @@ export const Peddler = z.strictObject({
   source: Sources,
 });
 
+const FlywayWindow = z
+  .tuple([ClockTime, ClockTime])
+  .refine(([from, to]) => from < to, { message: 'a window must end after it starts' });
+
+/** A roost and the lines birds fly to it (rhythm.ts `FlywayConfig`). */
+const Flyway = z.strictObject({
+  species: z.enum(FLYWAY_SPECIES),
+  roost: LngLat,
+  bearings: z.array(z.number().min(0).lt(360)).min(1).max(8),
+  distance_m: z.number().min(500).max(30_000),
+  dusk: FlywayWindow,
+  dawn: FlywayWindow,
+  source: z.string().min(1),
+});
+
 export const CityLife = z
   .strictObject({
     peddlers: z
@@ -2061,6 +2077,18 @@ export const CityLife = z
         source: z.string().min(1),
       })
       .optional(),
+    /** How full lots, commercial curbs and home curbs are through the day. */
+    parking: z
+      .strictObject({
+        lot: RhythmCurve,
+        centre: RhythmCurve,
+        home: RhythmCurve,
+        source: z.string().min(1),
+      })
+      .optional(),
+    flyways: z.array(Flyway).max(8).optional(),
+    /** Students walking home from schools on school days (`schedules.school`). */
+    dismissal: z.strictObject({ source: z.string().min(1) }).optional(),
     source: z.string().min(1),
   })
   .superRefine((life, ctx) => {

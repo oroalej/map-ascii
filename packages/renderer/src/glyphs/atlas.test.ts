@@ -2,7 +2,7 @@ import { PEDESTRIAN_GLYPHS } from '../life/pedestrian-glyphs';
 import { MAX_GLYPHS } from './select';
 import { describe, expect, it } from 'vitest';
 import { PROCESSION_GLYPHS } from '../life/procession-glyphs';
-import { FOLKLORE_GLYPHS } from '../life/folklore-glyphs';
+import { FOLKLORE_GLYPHS, GHOST_GLYPHS } from '../life/folklore-glyphs';
 import { ACCESS_GLYPHS, CANDLE_GLYPHS, SEASONAL_GLYPHS } from '../life/seasonal-glyphs';
 import { createHash } from 'node:crypto';
 import {
@@ -409,7 +409,7 @@ describe('glyph set', () => {
         ...MINI_DIAGONALS,
         ...PASSING_GLYPHS,
       ]);
-      for (const glyph of [...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS]) {
+      for (const glyph of [...PROCESSION_GLYPHS, ...FOLKLORE_GLYPHS.slice(0, GHOST_GLYPHS)]) {
         const rendered = draw(glyph);
         expect(rendered.drawn).toBe(true);
         expect(

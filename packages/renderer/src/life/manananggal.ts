@@ -18,6 +18,22 @@ const smooth = (t: number) => {
   const v = Math.max(0, Math.min(1, t));
   return v * v * (3 - 2 * v);
 };
+const share = (time: number, period: number) => (((time / period) % 1) + 1) % 1;
+
+/** How the wings beat: a burst of flaps, then a glide held on the sheet's first frame. */
+const BEAT = { period: 6.4, flapping: 3.6, flaps: 6 } as const;
+/** Seconds to draw the wings in before touching down, and to open them on leaving. */
+const FOLD = { in: 1.2, out: 0.8 } as const;
+/** Seconds round the entrails' sway in flight and the tongue's on a roof. */
+const SWAY = { flight: 1.1, perched: 3 } as const;
+/** It faces the way it has been going over these seconds, so it turns round corners, not at them. */
+const FACING = { window: 3.5, samples: 28 } as const;
+
+/** Where the wings are in their beat, 0..1. */
+export function wingBeat(elapsed: number) {
+  const within = share(elapsed, BEAT.period) * BEAT.period;
+  return within < BEAT.flapping ? share((within / BEAT.flapping) * BEAT.flaps, 1) : 0;
+}
 
 /** The sole sampled pose is shared by drawing, output-only dog facing and flock disturbance. */
 export function manananggalPose(
@@ -67,14 +83,46 @@ export function manananggalPose(
     at = mixPoint(at, candidate.lower, smooth(1 - remainingMinutes / FOLKLORE.returnMinutes));
     pose = 'flying';
   }
-  const future =
-    remainingMinutes <= FOLKLORE.returnMinutes ? candidate.lower : position(elapsed + 0.1);
-  const heading = distance(at, future) > 1e-9 ? Math.atan2(future.y - at.y, future.x - at.x) : 0;
+  const returning = remainingMinutes <= FOLKLORE.returnMinutes;
+  const perched = pose === 'perched';
+  const departed = age - timing.flight - timing.landing;
+  const fold = returning
+    ? 0
+    : perched
+      ? 1
+      : departed >= 0
+        ? 1 - smooth(departed / FOLD.out)
+        : smooth((age - timing.flight + FOLD.in) / FOLD.in);
+  // A soft average of recent directions, the newest counting least. Standing on a roof counts as
+  // facing the way it came in, so it holds that heading and comes round from it on leaving.
+  const facing = (time: number) => {
+    const from = position(time),
+      to = position(time + 0.1);
+    if (distance(from, to) > 1e-9) return Math.atan2(to.y - from.y, to.x - from.x);
+    const before = orbit(
+      Math.floor(time / timing.span) * timing.span + timing.flight - FOLKLORE.approach,
+    );
+    return Math.atan2(landing.at.y - before.y, landing.at.x - before.x);
+  };
+  let dx = 0,
+    dy = 0;
+  for (let i = 0; i < FACING.samples; i++) {
+    const weight = Math.sin((Math.PI * (i + 0.5)) / FACING.samples);
+    const angle = facing(Math.max(0, elapsed - (i * FACING.window) / FACING.samples));
+    dx += Math.cos(angle) * weight;
+    dy += Math.sin(angle) * weight;
+  }
+  const heading =
+    returning && distance(at, candidate.lower) > 1e-9
+      ? Math.atan2(candidate.lower.y - at.y, candidate.lower.x - at.x)
+      : Math.atan2(dy, dx);
   return {
     at,
     heading,
     pose,
-    flap: Math.sin(elapsed * Math.PI * 4),
+    flap: perched ? 0 : wingBeat(elapsed),
+    wave: share(elapsed, perched ? SWAY.perched : SWAY.flight),
+    fold,
     cycle,
     returned: remainingMinutes <= 0,
   };

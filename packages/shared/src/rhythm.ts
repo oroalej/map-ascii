@@ -105,6 +105,31 @@ export type EmergencyConfig = {
   source: string;
 };
 
+/** Which kerb or lot a parked vehicle keeps the hours of. */
+export const PARKING_SLOTS = ['lot', 'centre', 'home'] as const;
+export type ParkingSlot = (typeof PARKING_SLOTS)[number];
+
+/** How full each kind of parking is through the day, as a share of the cars already placed. */
+export type ParkingConfig = Record<ParkingSlot, RhythmCurve> & { source: string };
+
+export const FLYWAY_SPECIES = ['egret', 'bat'] as const;
+export type FlywaySpecies = (typeof FLYWAY_SPECIES)[number];
+
+/**
+ * Birds commuting between a roost and a point along each bearing, in two daily windows of local
+ * times: egrets home at dusk and out at dawn, bats out at dusk and home at dawn.
+ */
+export type FlywayConfig = {
+  species: FlywaySpecies;
+  /** [lng, lat]. */
+  roost: [number, number];
+  bearings: number[];
+  distance_m: number;
+  dusk: [string, string];
+  dawn: [string, string];
+  source: string;
+};
+
 /** Kinds of building that keep their own window hours. */
 export const WINDOW_GROUPS = [
   'home',
@@ -141,6 +166,12 @@ export type CityLifeConfig = {
   rhythm_days?: RhythmDay[];
   /** When places fill up (the pack's own; its `source` covers them). */
   schedules?: LifeSchedules;
+  /** Parking that fills and empties through the day; without it, every parked car stays. */
+  parking?: ParkingConfig;
+  /** Roosts and the lines birds fly to them; without it, birds stay around their own flocks. */
+  flyways?: FlywayConfig[];
+  /** Presence turns on students walking home from schools; its `source` covers the scene. */
+  dismissal?: { source: string };
   /** How many windows show lit through the night, per kind of building; default all the same. */
   windows?: WindowCurves;
   /** Where the rhythm comes from (content rule: claims carry a source). */
@@ -370,10 +401,38 @@ const WORSHIP_VISITORS: RhythmCurve = [
   [21, 0.03],
 ];
 
-const minutesOf = (hhmm: string) => {
+export const minutesOf = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number) as [number, number];
   return h * 60 + m;
 };
+
+/** School letting out, in minutes around `schedules.school.out`. */
+export const DISMISSAL = {
+  /** The first tricycles come this long before classes end. */
+  tricycleLead: 10,
+  /** The last students leave this long after, and the last tricycles have gone by this. */
+  release: 45,
+  tricyclesLeave: 35,
+  /** The longest walk there is, so the last of the stream can finish it. */
+  lastWalk: 7,
+} as const;
+
+/**
+ * Minutes after classes end on a school day (negative while tricycles gather), or null outside
+ * the scene, so a pack without `life.dismissal` or a quiet hour costs nothing further.
+ */
+export function dismissalNow(
+  clock: Pick<LifeClock, 'minutes' | 'weekday'>,
+  life: Pick<CityLifeConfig, 'schedules' | 'dismissal'> | undefined,
+): number | null {
+  if (!life?.dismissal) return null;
+  const school = life.schedules?.school ?? DEFAULT_SCHOOL;
+  if (!school.weekdays.includes(clock.weekday)) return null;
+  const after = clock.minutes - minutesOf(school.out);
+  return after >= -DISMISSAL.tricycleLead && after < DISMISSAL.release + DISMISSAL.lastWalk
+    ? after
+    : null;
+}
 
 /**
  * How far into a window around `center` (minutes past midnight) `minutes` is: 1 from `before`

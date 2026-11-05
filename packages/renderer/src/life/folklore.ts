@@ -26,6 +26,9 @@ export type FolkloreSprite = {
   alpha: number;
   phase: number;
   wisp: number;
+  /** The manananggal: its wings drawn in, 0..1, and how far round its sway it is, 0..1. */
+  fold?: number;
+  wave?: number;
 };
 export type HauntPoint = { id: string; lng: number; lat: number; radius: number };
 export type FolklorePacket = { sprites: readonly FolkloreSprite[]; haunts: readonly HauntPoint[] };
@@ -325,6 +328,8 @@ export class FolkloreObserver {
             alpha,
             phase: pose.flap,
             wisp: 0,
+            fold: pose.fold,
+            wave: pose.wave,
           };
           const lower = tileToLngLat(this.ref.tile, {
             x: selected.candidate.lower.x * this.ref.perMeter,
