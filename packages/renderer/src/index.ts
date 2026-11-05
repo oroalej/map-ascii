@@ -14,8 +14,10 @@ import {
   eventOccurrence,
   dialogueChoices,
   CROP_STAGES,
+  cropDate,
   cropStageAt,
   epochDay,
+  occurrence as dateOccurrence,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -302,6 +304,11 @@ export type AtlasOptions = {
    * reviewed on a machine whose warm shader cache would skip them. Default: false.
    */
   holdBootShaders?: boolean;
+  /**
+   * Show the crop stages of this `MM-DD` in the current year, for reviewing a stage out of season.
+   * Only crops read it: the sun, wind, seasons and clock stay real. Malformed values are ignored.
+   */
+  cropDate?: string | undefined;
   tilesUrl: string;
   /** Content pin, supplied only for archive bytes matching the published lock. */
   tilesVersion?: string | undefined;
@@ -1867,6 +1874,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let sun: Sun | null = null;
   // Real-city crop state is the source for later field-agent behaviour.
   let crop: CropNow | undefined;
+  const cropPreview = options.cropDate === undefined ? undefined : cropDate(options.cropDate);
   let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
   /** The event last started with `playProcession`, until stopped (its run may still be pending). */
@@ -1950,7 +1958,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const nextMoon = moonlight(moment, camera.lng, camera.lat) * (1 - SKY.moonLoss * nextCover);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
-    crop = cropStageAt(options.climate?.crops, real.year, real.day - epochDay(real.year, 1, 1));
+    const cropDay = (cropPreview && dateOccurrence(real.year, cropPreview)) ?? real.day;
+    crop = cropStageAt(options.climate?.crops, real.year, cropDay - epochDay(real.year, 1, 1));
     const stage = crop ? CROP_STAGES.indexOf(crop.stage) : -1;
     if (
       stage !== (cropPass?.stage ?? -1) ||

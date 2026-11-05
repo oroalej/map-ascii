@@ -1071,6 +1071,55 @@ describe('live motion preference', () => {
     );
   });
 
+  it('previews a crop date for crops alone and ignores a malformed one', async () => {
+    const visible = vi.spyOn(LifeWorld.prototype, 'visible');
+    const open = (cropDate: string | undefined) => {
+      atlas.destroy();
+      atlas = createAtlas(canvas, {
+        tilesUrl: '/test.pmtiles',
+        bounds: [-1, -1, 1, 1],
+        initialCamera: { lng: 0, lat: 0, zoom: 18 },
+        year: 1900,
+        timezone: 'Asia/Manila',
+        lifeWorker: false,
+        life: { time: 480 },
+        now: () => new Date('2026-06-15T04:00:00Z'),
+        cropDate,
+        climate: {
+          wind: [],
+          default: { from: 90, strength: 'breeze' },
+          source: 'Fixture',
+          crops: {
+            rice: {
+              source: 'Fixture',
+              calendar: [
+                { from: '06-01', stage: 'fallow' },
+                { from: '09-01', stage: 'harvested' },
+              ],
+            },
+          },
+        },
+      });
+    };
+    const stage = () => vi.mocked(selectPass).mock.calls.at(-1)![12]?.stage;
+    open('09-20');
+    await vi.dynamicImportSettled();
+    draw(10);
+    expect(stage()).toBe(CROP_STAGE.harvested);
+    const previewed = visible.mock.calls.at(-1)![1];
+    if (typeof previewed === 'number') throw new Error('expected resolved activity');
+    // Everything but farm attendance is the real Monday morning's.
+    const real = activityLevels(1, { minutes: 480, weekday: 1 });
+    expect(previewed.person).toBe(real.person);
+    expect(previewed.places.market).toBe(real.places.market);
+    for (const malformed of ['09-31', 'tomorrow', undefined]) {
+      open(malformed);
+      await vi.dynamicImportSettled();
+      draw(10);
+      expect(stage()).toBe(CROP_STAGE.fallow);
+    }
+  });
+
   it('sends real city dates, valid previews and same-frame sun/wind choices to the observer', async () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     const date = new Date('2026-12-24T16:30:00Z'),
