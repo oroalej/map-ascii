@@ -81,6 +81,7 @@ export function frameFromReply({ packed, ...rest }: FrameReply): FrameResult {
 }
 export type LifeInit = {
   peddlers?: readonly PeddlerConfig[];
+  flyways?: readonly FlywayConfig[];
   folklore?: RuntimeFolklore;
   emergencyConfig?: EmergencyConfig;
   emergency?: EmergencyData;
@@ -109,12 +110,14 @@ export function configureLifeWorld(
     | 'emergencyConfig'
     | 'emergency'
     | 'peddlers'
+    | 'flyways'
   >,
 ) {
   world.setProcessions(options.processions);
   world.setSeasons(options.seasons ?? []);
   world.setShopSchedule(options.shopSchedule);
   world.setPeddlers(options.peddlers);
+  world.setFlyways(options.flyways);
   world.setFolklore(options.folklore);
   world.configureEmergency(options.emergencyConfig, options.emergency);
 }

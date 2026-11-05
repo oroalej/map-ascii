@@ -17,6 +17,7 @@ import {
   isEmergencyData,
   type EmergencyConfig,
   type EmergencyData,
+  type FlywayConfig,
   type ParkingSlot,
 } from '@atlas/shared';
 import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
@@ -229,6 +230,7 @@ import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import type { LifeClass } from '../classes';
 import { fieldLife, workAnimal } from './field-life';
+import { flywayBirds } from './flyways';
 import { placeSeed } from './lights';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
@@ -9306,8 +9308,13 @@ type LifeDonor = {
 export type LifeWeather = {
   rain: number;
   sunAltitude: number;
-  /** Shared time and the wind's way for the harvest's stateless actors (life/field-life.ts). */
-  field?: { time: number; wind: readonly [number, number] };
+  /** Shared time and the wind's way for stateless actors (life/field-life.ts, life/flyways.ts). */
+  field?: {
+    time: number;
+    wind: readonly [number, number];
+    /** Local minutes past midnight, for those that keep to the clock. */
+    minutes?: number;
+  };
 };
 
 /** Every tile's agents: kept in step with the tiles on screen. */
@@ -9745,6 +9752,10 @@ export class LifeWorld {
         });
     }
     return bodies;
+  }
+  private flyways: readonly FlywayConfig[] = [];
+  setFlyways(config: readonly FlywayConfig[] | undefined) {
+    this.flyways = config ?? [];
   }
   setPeddlers(config: readonly PeddlerConfig[] | undefined) {
     this.peddlerOrdinarySnapshot = undefined;
@@ -14307,6 +14318,7 @@ export class LifeWorld {
         crowd,
         maxAgents,
       );
+      this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
       tapOwners?.finish(admitted);
@@ -14354,9 +14366,42 @@ export class LifeWorld {
       crowd,
       maxAgents,
     );
+    this.withFlyways(result, zoom, weather, center, bounds, crowd, maxAgents);
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     tapOwners?.finish(admitted);
+    return admitted;
+  }
+
+  /** Birds commuting to and from their roosts, seen from the same zoom as other birds. */
+  private withFlyways(
+    admitted: VisibleAgent[],
+    zoom: number,
+    weather: LifeWeather,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    crowd: number,
+    maxAgents: number,
+  ) {
+    const field = weather.field;
+    if (
+      !this.flyways.length ||
+      field?.minutes === undefined ||
+      weather.rain >= BIRD_WEATHER.shelter ||
+      bandVisibility(LIFE_ZOOM.bird, zoom) < 1
+    )
+      return admitted;
+    for (const bird of flywayBirds({
+      flyways: this.flyways,
+      minutes: field.minutes,
+      time: field.time,
+      center,
+      bounds,
+      crowd,
+    })) {
+      if (admitted.length >= maxAgents) break;
+      admitted.push(bird);
+    }
     return admitted;
   }
 

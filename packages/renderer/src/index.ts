@@ -1437,10 +1437,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
               rain: currentRain(),
               sunAltitude: sun?.altitude ?? 0,
               // Real seconds, so a fixed hour still shows them at work.
-              ...(activity.harvest && {
+              ...((activity.harvest || options.cityLife?.flyways) && {
                 field: {
                   time: now().getTime() / 1000,
                   wind: stillWind(prevailingWind(life.wind, options.climate, cityMonth)).dir,
+                  minutes: cityMinutes,
                 },
               }),
             },

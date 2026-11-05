@@ -110,6 +110,24 @@ export type ParkingSlot = (typeof PARKING_SLOTS)[number];
 /** How full each kind of parking is through the day, as a share of the cars already placed. */
 export type ParkingConfig = Record<ParkingSlot, RhythmCurve> & { source: string };
 
+export const FLYWAY_SPECIES = ['egret', 'bat'] as const;
+export type FlywaySpecies = (typeof FLYWAY_SPECIES)[number];
+
+/**
+ * Birds commuting between a roost and a point along each bearing, in two daily windows of local
+ * times: egrets home at dusk and out at dawn, bats out at dusk and home at dawn.
+ */
+export type FlywayConfig = {
+  species: FlywaySpecies;
+  /** [lng, lat]. */
+  roost: [number, number];
+  bearings: number[];
+  distance_m: number;
+  dusk: [string, string];
+  dawn: [string, string];
+  source: string;
+};
+
 export type CityLifeConfig = {
   peddlers?: PeddlerConfig[];
   folklore?: FolkloreConfig;
@@ -136,6 +154,8 @@ export type CityLifeConfig = {
   schedules?: LifeSchedules;
   /** Parking that fills and empties through the day; without it, every parked car stays. */
   parking?: ParkingConfig;
+  /** Roosts and the lines birds fly to them; without it, birds stay around their own flocks. */
+  flyways?: FlywayConfig[];
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };
@@ -341,7 +361,7 @@ const WORSHIP_VISITORS: RhythmCurve = [
   [21, 0.03],
 ];
 
-const minutesOf = (hhmm: string) => {
+export const minutesOf = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number) as [number, number];
   return h * 60 + m;
 };
