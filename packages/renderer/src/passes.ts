@@ -526,6 +526,8 @@ export function selectPass(
   cursor?: CursorWind,
   /** The frame's lighting (`frameLighting`), shared with the glyph pass; grass ink follows it. */
   lighting: FrameLighting = NOON,
+  /** Whether water reads its depth (quality.ts `waterDetail`). */
+  waterDepth = false,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -540,6 +542,7 @@ export function selectPass(
     u_baseId: targets.base.idTex,
     u_shadows: shadows,
     u_awnings: awnings,
+    u_waterDepth: waterDepth,
     ...cropUniforms(crop),
     u_attr: targets.attrTex,
     u_id: targets.idTex,
@@ -1026,6 +1029,8 @@ export type Weather = {
   mist?: number;
   mistOffset?: readonly [number, number];
   mistDetail?: boolean;
+  /** Water depth, sun glints and wakes (quality.ts `waterDetail`). */
+  waterFeatures?: boolean;
   /** Windows lit per group (life/config.ts `windowShareUniform`); a default share without it. */
   windowShare?: Float32Array;
 };
@@ -1361,6 +1366,9 @@ export function glyphPass(
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
+    u_waterDepth: !!weather.waterFeatures,
+    u_waterBank: themeRes.uniforms.waterBank,
+    u_waterDeep: themeRes.uniforms.waterDeep,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,

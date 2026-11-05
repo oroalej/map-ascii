@@ -53,6 +53,7 @@ import {
   Tone,
   TONE,
   TONE_SHIFT,
+  WATER_DEPTH,
   WIND_LIGHT,
   WIND_SHIFT,
 } from '../glyphs/select';
@@ -264,6 +265,9 @@ uniform vec3 u_mistWarm;`
     : ''
 }
 uniform bool u_waterDetail;
+uniform bool u_waterDepth;
+uniform vec3 u_waterBank;
+uniform vec3 u_waterDeep;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
 uniform int u_waterGlyphs[4];
@@ -314,6 +318,12 @@ vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.light}) return mix(color, vec3(cloudShade), ${float(TONE.light)} * (1.0 - night));
   if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
   return color;
+}
+
+// Water moved toward its bank or its deep by depth, none at 0.5 (glyphs/select.ts waterTone).
+vec3 waterToned(vec3 color, float depth, float amount) {
+  color = mix(color, daylit(u_waterBank), clamp(1.0 - 2.0 * depth, 0.0, 1.0) * ${float(WATER_DEPTH.bank)} * amount);
+  return mix(color, daylit(u_waterDeep), clamp(2.0 * depth - 1.0, 0.0, 1.0) * ${float(WATER_DEPTH.deep)} * amount);
 }
 
 // The share of this class's cells lit as windows at full night (life/config.ts WINDOW_GROUP_OF).
@@ -888,8 +898,11 @@ void main() {
       texelFetch(u_subAttr, subAt, 0).r > 0.0);
   }
   vec2 shadeAt = standing ? vec2(cell) + 0.5 : grid / u_cell;
-  vec2 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rg;
+  vec3 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rgb;
   float shade = standing ? shadeTexel.g : shadeTexel.r;
+  // Highlights keep their own color, as the feature's fill does below.
+  bool waterTones = u_waterDepth && state == ${CellState.none};
+  if (waterTones && (u_cellBits[bgClass] & ${CellBit.boat}) != 0) back = waterToned(back, shadeTexel.b, 1.0);
   back *= shade;
 
   // Streetlights (life/lights.ts): a pool of light on the ground around each lamp, once it has
@@ -1124,11 +1137,14 @@ void main() {
   // The feature's own fill takes its highlight too, so a selected footprint lights up whole.
   // (Its streetlight pool too, which that just replaced.)
   if (!edge && bgClass == cls) {
-    vec3 fill = fillOf(cls, color) * shade;
+    vec3 fill = fillOf(cls, color);
+    if (waterTones && water) fill = waterToned(fill, shadeTexel.b, 1.0);
+    fill *= shade;
     back = (brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow;
   }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.
+  if (waterTones && water) color = waterToned(color, shadeTexel.b, ${float(WATER_DEPTH.ink)});
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {

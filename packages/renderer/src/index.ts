@@ -2495,6 +2495,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           knobs.clouds &&
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
         windowShare,
+        waterFeatures: knobs.waterDetail,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;
@@ -2532,6 +2533,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             cropPass,
             knobs.groundWind ? cursor : undefined,
             lighting,
+            knobs.waterDetail,
           ),
         );
         timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));
