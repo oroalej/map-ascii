@@ -1842,8 +1842,19 @@
           }
         ],
         "source": "DA RFO 5, 13 April 2026: Bicol wet-season planting advanced from July to June for September harvest, and dry-season harvest underway by March 31. https://bicol.da.gov.ph/da-bicol-tiniyak-na-sapat-ang-bigas-sa-rehiyon-at-patuloy-ang-mga-interbensyon-para-sa-mga-magsasaka-ngayong-wet-cropping-season/ ; DA RFO 5 Regional Seasonal Climate Outlook September 2024-February 2025: December conducive for dry-season planting. https://bicol.da.gov.ph/wp-content/uploads/2024/09/v2RSCOA_Sept2024-to-feb2025.pdf ; PhilRice, Competitiveness of Philippine Rice in Asia: illustrative Philippine dry December-April and wet June-October cropping seasons. https://www.philrice.gov.ph/competitiveness-philippine-rice-asia/",
-        "notes": "Illustrative citywide stage dates inferred from regional planting/harvest windows; verify land preparation, transplanting dates, varieties, irrigation and actual Naga crop types with farmers. Applies to every mapped farmland area; Naga's mapped and owner-marked fields carry no crop tag and are assumed to be irrigated rice. Sentinel-derived eastern fields are draft agricultural geometry; neither imagery nor the owner statement verifies rice cultivation."
+        "notes": "Illustrative citywide stage dates inferred from regional planting/harvest windows; verify land preparation, transplanting dates, varieties, irrigation and actual Naga crop types with farmers. Applies to every mapped farmland area; Naga's mapped and owner-marked fields carry no crop tag and are assumed to be irrigated rice. Sentinel-derived eastern fields are draft agricultural geometry; neither imagery nor the owner statement verifies rice cultivation.",
+        "harvest": {
+          "dryingHours": [8, 16],
+          "burningHours": [15, 18],
+          "tractors": true,
+          "ducks": true,
+          "source": "Road drying with covering at night (Philippine Star 2010, 2013; DPWH via GMA News 2018; PalayCheck, DA/PhilRice; FAO, Natural and solar drying), hand tractors for tilling and hauling (DOST 2026; PIDS), ducks herded on newly harvested paddies (UPLB, Half a century of progress in breeding and management of ducks) and straw burning, illegal under RA 9003 Sec. 48(3) (PhilRice 2016) are documented for the Philippines, not for Naga. All hours, shares and locations here are illustrative."
+        }
       }
+    },
+    "mist": {
+      "months": [0.7, 0.7, 0.55, 0.35, 0.25, 0.35, 0.5, 0.45, 0.6, 0.6, 0.65, 0.75],
+      "source": "No monthly fog record exists for Bicol, so these densities are illustrative, scaled from 1991-2020 PAGASA humidity and minimum temperature at Daet and Legazpi. https://en.wikipedia.org/wiki/Daet ; https://en.wikipedia.org/wiki/Legazpi,_Albay"
     }
   }
 }

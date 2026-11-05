@@ -21,8 +21,80 @@ export type CropCalendar = {
   calendar: CropCalendarEntry[];
   source: string;
   notes?: string;
+  /** What the harvest looks like around the fields; absent means nothing but the fields' color. */
+  harvest?: HarvestConfig;
 };
 export type CropNow = { stage: CropStage; progress: number };
+
+/** A span of the day in hours, `[start, end)`, on the shown clock. */
+export type HourSpan = [start: number, end: number];
+
+/** The city's harvest scene (the pack's `climate.crops.rice.harvest`, SPEC.md §4). */
+export type HarvestConfig = {
+  /** When palay lies spread out to dry; outside these hours it is heaped and covered. */
+  dryingHours: HourSpan;
+  /** When field piles of straw burn; absent means the city shows no smoke. */
+  burningHours?: HourSpan;
+  tractors: boolean;
+  ducks: boolean;
+  source: string;
+};
+
+/** The harvest scene at one moment of one crop stage. */
+export type HarvestNow = {
+  /** Share of drying slots in use, 0–1. */
+  drying: number;
+  /** Whether palay is out at this hour, rather than heaped and covered. */
+  spread: boolean;
+  /** Share of working farmers on a hand tractor rather than behind a carabao, 0–1. */
+  tractors: number;
+  /** Share of flocks out on the harvested paddies, 0–1. */
+  ducks: number;
+  burning: boolean;
+};
+
+const inHours = ([start, end]: HourSpan, minutes: number) =>
+  minutes >= start * 60 && minutes < end * 60;
+
+/** Where in `[from, to]` the value `at` falls, clamped to 0–1. */
+const ramp = (at: number, from: number, to: number) =>
+  Math.min(1, Math.max(0, (at - from) / (to - from)));
+
+/** Progress of `harvested` by which drying, hauling and straw burning are over. */
+const DRYING_FADE_END = 0.6;
+/** Progress of `harvested` at which straw piled after threshing starts to burn. */
+const STRAW_BURNING_START = 0.1;
+/** Share of farmers who plow or haul with a hand tractor while the stage calls for one. */
+const HAND_TRACTOR_SHARE = 0.5;
+
+/**
+ * The harvest scene for a crop stage at `minutes` past midnight. Drying swells through the last
+ * half of `ripe` and fades over the first 60 % of `harvested`, so the window follows the calendar
+ * rather than dates of its own.
+ */
+export function harvestAt(
+  crop: CropNow | undefined,
+  harvest: HarvestConfig | undefined,
+  minutes: number,
+): HarvestNow | undefined {
+  if (!harvest || !crop) return undefined;
+  const { stage, progress } = crop;
+  const reaped = stage === 'harvested';
+  const drying =
+    stage === 'ripe' ? ramp(progress, 0.5, 1) : reaped ? 1 - ramp(progress, 0, DRYING_FADE_END) : 0;
+  const early = reaped && progress < DRYING_FADE_END;
+  return {
+    drying,
+    spread: inHours(harvest.dryingHours, minutes),
+    tractors: harvest.tractors && (stage === 'flooded' || early) ? HAND_TRACTOR_SHARE : 0,
+    ducks: harvest.ducks && reaped ? 1 : 0,
+    burning:
+      harvest.burningHours !== undefined &&
+      early &&
+      progress >= STRAW_BURNING_START &&
+      inHours(harvest.burningHours, minutes),
+  };
+}
 
 /** Parse an annual crop date without accepting rolled-over or noncanonical dates. */
 export function cropDate(from: string): { month: number; day: number } | undefined {
@@ -73,6 +145,15 @@ export type ClimateConfig = {
   /** Where the seasons come from (content rule: claims carry a source). */
   source: string;
   crops?: { rice?: CropCalendar };
+  /** Dawn mist over paddies and water; absent means none. */
+  mist?: MistConfig;
+};
+
+/** How much dawn mist a city gets through the year. */
+export type MistConfig = {
+  /** Density by month, January first: twelve values in 0–1. */
+  months: number[];
+  source: string;
 };
 
 /** The wind when a city has no climate: a breeze from the east. */
