@@ -24,12 +24,12 @@ import {
   type PartClass,
   type RenderClass,
 } from './classes';
-import { LIFE_ZOOM, lifeClassFor, type AgentKind } from './life/config';
+import { LIFE_ZOOM, lifeClassFor, PALAY_PAINT, type AgentKind } from './life/config';
 import { FIGURE_MASTERS } from './life/people';
 import { PEDESTRIAN_MASTERS } from './life/pedestrian-glyphs';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
-import { PALAY_PAINT, type FixtureVisibility } from './life/fixtures';
+import type { FixtureVisibility } from './life/fixtures';
 import type { SeasonState } from './index';
 import { fireworkShellCount } from './fireworks-layout';
 import { Paint, VEHICLES } from './life/vehicles';

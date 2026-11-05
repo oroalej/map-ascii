@@ -73,8 +73,6 @@ export type PalayFixture = {
   across: Point;
   hash: number;
 };
-export const PALAY_PAINT = [0.96, 0.76, 0.24] as const;
-export const PALAY_COVER_PAINT = [0.16, 0.38, 0.78] as const;
 /** What the harvest asks of the strips. */
 export type PalayState = { drying: number; covered: boolean; hour: number };
 export type StreetFixture = UtilityFixture | LegacyStreetFixture | PalayFixture | SeasonalFixture;

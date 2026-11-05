@@ -728,6 +728,9 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
 
 /** Share of drying slots that hold palay at the peak of the harvest (life/palay.ts). */
 export const PALAY_SHOW_SHARE = 0.35;
+/** Here rather than in fixtures.ts so the legend, which loads at startup, stays free of it. */
+export const PALAY_PAINT = [0.96, 0.76, 0.24] as const;
+export const PALAY_COVER_PAINT = [0.16, 0.38, 0.78] as const;
 
 /**
  * How much of each kind is out: by the city's daily rhythm at `clock.minutes` past local
