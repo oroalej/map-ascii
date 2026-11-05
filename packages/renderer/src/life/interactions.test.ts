@@ -1223,6 +1223,30 @@ describe('local interaction scenes', () => {
     expect(scene.curbSite(bus)).toBe(site);
     expect(scene.curbSite(other)).toBeUndefined();
   });
+  it('measures a stop past a bend from its own road segment, not a scanning vehicle', () => {
+    const b = new LifeBuilder();
+    b.line(
+      [
+        { x: 0, y: 24 },
+        { x: 100, y: 24 },
+        { x: 100, y: 200 },
+      ],
+      LifeLine.roadMinor,
+      6,
+    );
+    b.line(
+      [
+        { x: 94, y: 40 },
+        { x: 94, y: 200 },
+      ],
+      LifeLine.path,
+    );
+    b.site({ x: 94, y: 60 }, 0, 7, true);
+    const scene = new LocalScenes(b.finish(), 1, 8, []);
+    const bus = { ...person(20, 'vehicle'), y: 24, vehicle: 'bus' as const, v: 3 };
+    run(scene, [bus], 2);
+    expect(scene.sites[0]!.roadGap).toBeCloseTo(6);
+  });
   it('waits for accepted arrival speed before starting transit dwell', () => {
     const scene = setup(),
       bus = { ...person(45, 'vehicle'), line: 1, y: 24, vehicle: 'bus' as const, v: 3 };

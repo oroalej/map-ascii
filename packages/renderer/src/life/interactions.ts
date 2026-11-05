@@ -73,7 +73,7 @@ type Site = WalkPoint & {
   direction: number;
   stall?: Stall;
   clearingShower?: number;
-  /** How far the stop stands off its road's centre line, m; set when a vehicle first uses it. */
+  /** How far the stop stands off its road's centre line, m, measured from its nearest segment. */
   roadGap?: number;
 };
 export type Visit = {
@@ -378,6 +378,7 @@ export class LocalScenes {
         if (d < best) {
           best = d;
           site.road = line;
+          site.roadGap = d / this.perMeter;
           site.roadWidth = geo.widths[line] || 6;
           site.direction = dx * (site.y - y) - dy * (site.x - x) >= 0 ? 1 : -1;
           site.hx = (dx / length) * site.direction;
@@ -1709,8 +1710,6 @@ export class LocalScenes {
             ahead(site, m) < brakingRoom
           )
             continue;
-          // Measured along the road; a stop stands beside it, so the gap at closest approach is 0.
-          site.roadGap ??= Math.abs(-(site.x - m.x) * m.hy + (site.y - m.y) * m.hx) / this.perMeter;
           const from = this.fromStop(m, site);
           if (
             // Searches come round about once a second, so a vehicle can arrive a second's
