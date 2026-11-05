@@ -103,6 +103,13 @@ export type EmergencyConfig = {
   source: string;
 };
 
+/** Which kerb or lot a parked vehicle keeps the hours of. */
+export const PARKING_SLOTS = ['lot', 'centre', 'home'] as const;
+export type ParkingSlot = (typeof PARKING_SLOTS)[number];
+
+/** How full each kind of parking is through the day, as a share of the cars already placed. */
+export type ParkingConfig = Record<ParkingSlot, RhythmCurve> & { source: string };
+
 export type CityLifeConfig = {
   peddlers?: PeddlerConfig[];
   folklore?: FolkloreConfig;
@@ -127,6 +134,8 @@ export type CityLifeConfig = {
   rhythm_days?: RhythmDay[];
   /** When places fill up (the pack's own; its `source` covers them). */
   schedules?: LifeSchedules;
+  /** Parking that fills and empties through the day; without it, every parked car stays. */
+  parking?: ParkingConfig;
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };

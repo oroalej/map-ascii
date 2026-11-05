@@ -2047,6 +2047,15 @@ export const CityLife = z
         shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
       })
       .optional(),
+    /** How full lots, commercial curbs and home curbs are through the day. */
+    parking: z
+      .strictObject({
+        lot: RhythmCurve,
+        centre: RhythmCurve,
+        home: RhythmCurve,
+        source: z.string().min(1),
+      })
+      .optional(),
     source: z.string().min(1),
   })
   .superRefine((life, ctx) => {

@@ -13,7 +13,12 @@ import {
   type EmergencyRequest,
 } from './emergency-dispatch';
 import { EmergencyRouter } from './emergency-network';
-import { isEmergencyData, type EmergencyConfig, type EmergencyData } from '@atlas/shared';
+import {
+  isEmergencyData,
+  type EmergencyConfig,
+  type EmergencyData,
+  type ParkingSlot,
+} from '@atlas/shared';
 import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
 import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
 import {
@@ -223,6 +228,7 @@ import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
 import { fieldLife, workAnimal } from './field-life';
+import { placeSeed } from './lights';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
@@ -258,7 +264,14 @@ import { PROCESSION, ProcessionScene, type LngLatBounds } from './procession';
 import { hashString, random } from './random';
 import { visibleLamps, type VehicleLamps } from './lamps';
 import { VehicleEffectTracker, vehicleEffects } from './vehicle-effects';
-import { PuffStore, PuffSelector, EMPTY_PUFFS, PUFF, PUFF_STRIDE } from './exhaust';
+import {
+  PuffStore,
+  PuffSelector,
+  EMPTY_PUFFS,
+  PUFF,
+  PUFF_STRIDE,
+  sample as hashSample,
+} from './exhaust';
 import { STAMP_MIN_CELLS } from './vehicles';
 import {
   collectSeasonAnchors,
@@ -415,6 +428,9 @@ export type StepPass = {
   recoveredNow?: ReadonlySet<Mover>;
   recovered?: (m: Mover) => void;
 };
+
+/** Hash tag of a parked car's share (exhaust.ts `sample`); position-only, so no stream moves. */
+const PARKING_SHARE_TAG = 0x70a2c;
 
 /** Agents this far outside the view's bounds are still placed, m: a vehicle half in view shows. */
 const VIEW_MARGIN_M = 30;
@@ -819,6 +835,9 @@ export type Parked = {
   hy: number;
   vehicle: CraftType;
   paint: number;
+  /** Whose hours it keeps, and its stable place in that slot's share (`classifyParked`). */
+  slot?: ParkingSlot;
+  share?: number;
 };
 
 export type Bird = {
@@ -4065,6 +4084,39 @@ export class TileLife {
     }
     this.parked.length = kept;
     for (const line of this.parkingLines) if (!eligible(line)) this.parkingLines.delete(line);
+    yield* this.classifyParked(curbSources);
+  }
+
+  /**
+   * Whose hours each parked car keeps: a lot's, or by its line's place among the shops. No random
+   * stream moves; a car's share comes from where it stands in the world.
+   */
+  private *classifyParked(curbSources: ReadonlyMap<Parked, number>): Generator<void, void, void> {
+    const { geo, perMeter, tile } = this;
+    const metersPerTile = MERCATOR_METERS / (EXTENT * 2 ** tile.z);
+    const centres = new Map<number, boolean>();
+    for (const car of this.parked) {
+      yield;
+      const line = curbSources.get(car);
+      if (line === undefined) car.slot = 'lot';
+      else {
+        let centre = centres.get(line);
+        if (centre === undefined) {
+          const middle = this.pointAt(line, this.along[this.last(line)]! / 2);
+          centre = inCentre(middle.x, middle.y, geo.commerce, perMeter);
+          centres.set(line, centre);
+        }
+        car.slot = centre ? 'centre' : 'home';
+      }
+      car.share = hashSample(
+        placeSeed(
+          (tile.x * EXTENT + car.x) * metersPerTile,
+          (tile.y * EXTENT + car.y) * metersPerTile,
+        ),
+        0,
+        PARKING_SHARE_TAG,
+      );
+    }
   }
 
   /** Shared vertices, T-junctions and crossings; two continuation arms are just a bend. */
@@ -14030,6 +14082,7 @@ export class LifeWorld {
         }
       if (bandVisibility(PARKED.zoom, zoom) >= 1) {
         for (const p of life.parked) {
+          if (levels.parking && p.slot && p.share! >= levels.parking[p.slot]) continue;
           if (!this.owns(life, p)) continue;
           if (p.x < 0 || p.x >= EXTENT || p.y < 0 || p.y >= EXTENT || !inView(p.x, p.y)) continue;
           const [lng, lat] = tileToLngLat(tile, p);

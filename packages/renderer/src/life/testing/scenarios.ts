@@ -309,7 +309,8 @@ function tileState(key: string, tile: TileLife, clock = tile.elapsed) {
     flocks: tile.flocks,
     movers: tile.movers,
     gatherers: tile.gatherers,
-    parked: tile.parked,
+    // A car's hours are read only by the draw loop; pinned states predate them.
+    parked: tile.parked.map(({ slot: _slot, share: _share, ...car }) => car),
     stalls: tile.stalls,
     visits: [...tile.scenes.visits].map(([m, v]) => ({ owner: tile.movers.indexOf(m), ...v })),
     services: [...tile.scenes.services].map(([m, s]) => ({ owner: tile.movers.indexOf(m), ...s })),

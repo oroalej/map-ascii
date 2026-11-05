@@ -26,7 +26,8 @@ it.each([
       roadParkingFixture(LifeBuilder, LifeLine),
       seed,
     );
-    const records = life.parked;
+    // The hash pins placement; a car's hours (`slot`, `share`) came later and draw no random.
+    const records = life.parked.map(({ slot: _slot, share: _share, ...car }) => car);
     // Audit internal strip decisions as well as public parked records against PRE.
     const strips = [...(life as unknown as { parkingLines: ReadonlySet<number> }).parkingLines];
     const hash = createHash('sha256').update(JSON.stringify({ records, strips })).digest('hex');

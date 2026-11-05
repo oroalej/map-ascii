@@ -455,6 +455,12 @@
         "close": "20:00"
       }
     },
+    "parking": {
+      "lot": [[6, 0.1], [9, 0.8], [18, 0.9], [21, 0.25], [23, 0.05]],
+      "centre": [[6, 0.2], [10, 0.9], [18, 0.9], [21, 0.3]],
+      "home": [[6.5, 1], [9, 0.45], [16, 0.45], [19, 1]],
+      "source": "Illustrative: the project's impression of when Naga's lots and curbs fill (no hourly parking counts found, 2026-11-05). Curves are a share of the simulated parked cars, not observed occupancy."
+    },
     "source": "OpenStreetMap transit features; modes are identified by the mapped terminal names. These sites stage simulated local scenes. Traffic signal locations follow project-owner corrections (2026-10-01), including the follow-ups restoring Magsaysay Avenue's junctions on either side of the bridge: Penafrancia/M. T. Villanueva (OSM node 254709879) and Dayangdang/Balatas-Cararayan (OSM node 254713607), and Panganiban Drive at Misericordia/Lerma (OSM node 254716718). The daily rhythm is illustrative: the curves are the project's impression of Naga's weekdays, Saturdays and Sundays, not traffic counts. Mass times are the Naga Metropolitan Cathedral's as listed by Philmass (updated 2026-03-25, https://philmass.com/Asia/Philippines/Camarines-Sur/Naga-City/Roman-Catholic-Churches/St.-John-the-Evangelist-Parish-(Naga-Metropolitan-Cathedral)/mass-schedule.html), which assigns some Saturday and Sunday afternoon times by layout; every church uses them. School hours are illustrative: DepEd Order No. 12, s. 2024 lets each public school set its own schedule, and no published Naga bell schedule was found. Shop hours are illustrative, consistent with SM City Naga's listed 10:00-21:00 (https://www.smsupermalls.com/mall-directory/sm-city-naga).",
     "signals": {
       "derive": false,
