@@ -1018,6 +1018,8 @@ void main() {
   // A boat's wake, on water only (life/wakes.ts); any other cell ignores the texel.
   bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
+  // A wake texel has no class: those bits hold its foam strength.
+  float wakeFoam = wakeCell ? float(lifeClass) / 63.0 : 0.0;
   bool crowdCell=false,crowdInk=false;
   if(u_hasCrowdMask) {
     uvec4 a=texelFetch(u_crowdMask,ivec2(cell.x*2,cell.y),0),b=texelFetch(u_crowdMask,ivec2(cell.x*2+1,cell.y),0);
@@ -1100,7 +1102,9 @@ void main() {
     // Fish only in rivers and ponds; rain splashes on any water, below boats and labels.
     int effect = waterEffect(cell, cls == u_fishWater.x || cls == u_fishWater.y);
     if (effect >= 0) glyph = u_waterGlyphs[effect];
-    if (wakeCell) glyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
+    // Weak foam has no glyph of its own: it tints the water and keeps the water's glyph.
+    int wakeGlyph = wakeCell ? int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6) : 0;
+    if (wakeGlyph != 0) glyph = wakeGlyph;
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
@@ -1176,8 +1180,12 @@ void main() {
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.
   if (waterTones && water) color = waterToned(color, shadeTexel.b, ${float(WATER_DEPTH.ink)});
-  // Foam keeps its color under cloud, and dims only with the night.
-  if (wakeCell) color = mix(color, u_waterFoam * (1.0 - 0.6 * night), 0.75);
+  // Foam dims with the night here; cloud shades it below, along with the ink.
+  if (wakeCell) {
+    vec3 foam = u_waterFoam * (1.0 - 0.6 * night);
+    color = mix(color, foam, clamp(0.1 + wakeFoam * 1.6, 0.0, 1.0));
+    back = mix(back, foam * shade, wakeFoam * 0.55);
+  }
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {

@@ -699,20 +699,33 @@ export const LIFE_GROUND_SHADOW = 2;
 export const LIFE_WAKE = 3;
 
 /**
- * Boat wakes: the zoom they start at, the speeds a boat has none below and its longest at (m/s),
- * each arm's angle from straight behind (degrees), its length by craft (m), the share of that a
- * slow boat keeps, its limits in cells, and how many boats get one per frame.
+ * Boat wakes (life/wakes.ts): the zoom they start at; the speeds a boat has none below and its
+ * longest at (m/s); each arm's angle from straight behind (the Kelvin angle, degrees); the length
+ * behind the stern by craft (m) and the share of it a slow boat keeps; its limits in cells, and the
+ * length it shows all its detail from; how fast a crest widens (m per m); the weakest foam drawn;
+ * how much speckle roughens its edges; the glyph for each foam strength, strongest first (weaker
+ * only tints the water); and how many boats and cells each frame may spend on them.
  */
 export const WAKE = {
   zoom: { min: 15 },
   minSpeed: 0.3,
   fullSpeed: 2.5,
-  angle: 18,
-  length: { rowboat: 4, banca: 9, motorboat: 14 },
+  angle: 19.5,
+  length: { rowboat: 14, banca: 34, motorboat: 44 },
   baseLength: 0.4,
-  minCells: 2,
-  maxCells: 20,
+  minCells: 4,
+  maxCells: 48,
+  fineCells: 24,
+  rim: 0.06,
+  minFoam: 0.05,
+  speckle: 0.2,
+  glyphs: [
+    { from: 0.58, glyph: '≈' },
+    { from: 0.34, glyph: '~' },
+    { from: 0.22, glyph: '·' },
+  ],
   maxPerFrame: 64,
+  maxVisits: 8000,
 } as const;
 
 /** A boat's wake at `zoom`, 0–1 by its speed in m/s; none when it is slow, held, or too far out. */

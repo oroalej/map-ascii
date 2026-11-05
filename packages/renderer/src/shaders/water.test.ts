@@ -40,8 +40,10 @@ describe('wakes', () => {
     expect(source).toContain(
       `bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};`,
     );
-    expect(source).toContain('if (wakeCell) glyph = ');
-    expect(source).toContain('if (wakeCell) color = mix(color, u_waterFoam');
+    expect(source).toContain('float wakeFoam = wakeCell ? float(lifeClass) / 63.0 : 0.0;');
+    expect(source).toContain('if (wakeGlyph != 0) glyph = wakeGlyph;');
+    expect(source).toContain('vec3 foam = u_waterFoam');
+    expect(source).toContain('back = mix(back, foam * shade, wakeFoam');
   });
 });
 
