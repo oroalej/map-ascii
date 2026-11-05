@@ -1,7 +1,18 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { project } from '../camera';
 import { placeGrid } from '../grid';
-import { cloudCover, driftClouds, shadowAt, SKY, skyAnchor, skyGrid, skyNoise } from './sky';
+import {
+  cloudCover,
+  driftClouds,
+  MIST,
+  mistAmount,
+  morningMist,
+  shadowAt,
+  SKY,
+  skyAnchor,
+  skyGrid,
+  skyNoise,
+} from './sky';
 
 it('seeds cover and spatial octaves independently and deterministically', () => {
   const at = new Date('2026-07-10T04:00:00Z');
@@ -105,4 +116,66 @@ it('freezes displacement for reduced motion, clamps elapsed time and wraps both 
   expect(driftClouds(offset, wind, 10, true)).toBe(offset);
   expect(driftClouds(offset, wind, 10, false)).toEqual([0.5, 8191.5]);
   expect(driftClouds(offset, wind, -1, false)).toEqual(offset);
+});
+
+describe('dawn mist', () => {
+  it('rises before sunrise, holds, and is gone by 14 degrees', () => {
+    const at = (altitude: number) => mistAmount(altitude, 1, 1, false);
+    expect(at(-20)).toBe(0);
+    expect(at(MIST.start)).toBe(0);
+    expect(at(-4)).toBeCloseTo(0.5);
+    expect(at(0)).toBe(1);
+    expect(at(MIST.hold)).toBe(1);
+    expect(at(8)).toBeGreaterThan(0);
+    expect(at(8)).toBeLessThan(1);
+    expect(at(MIST.gone)).toBe(0);
+    expect(at(60)).toBe(0);
+  });
+
+  it('scales with the month and varies from 60 % to all of it by day', () => {
+    expect(mistAmount(0, 0.5, 1, false)).toBeCloseTo(0.5);
+    expect(mistAmount(0, 0.5, 0, false)).toBeCloseTo(0.3);
+    expect(mistAmount(0, 0, 1, false)).toBe(0);
+  });
+
+  it('lifts in a storm', () => {
+    expect(mistAmount(0, 1, 1, true)).toBe(0);
+  });
+
+  const months = Array.from({ length: 12 }, (_, i) => (i + 1) / 12);
+  const at = (minutes: number, month = 6, day = 20_000) => ({ minutes, month, day });
+
+  it('comes only in the morning, though dusk passes the same altitudes', () => {
+    expect(morningMist(months, at(330), 0, 7, false)).toBeGreaterThan(0);
+    expect(morningMist(months, at(1090), 0, 7, false)).toBe(0);
+  });
+
+  it('is absent without the pack key, and follows its month', () => {
+    expect(morningMist(undefined, at(330), 0, 7, false)).toBe(0);
+    expect(morningMist(months, at(330, 12), 0, 7, false)).toBeGreaterThan(
+      morningMist(months, at(330, 1), 0, 7, false),
+    );
+  });
+
+  it('differs from day to day by the same hash for every visitor', () => {
+    const days = Array.from({ length: 30 }, (_, i) =>
+      morningMist(months, at(330, 6, 20_000 + i), 0, 7, false),
+    );
+    expect(new Set(days).size).toBeGreaterThan(10);
+    expect(morningMist(months, at(330, 6, 20_000), 0, 7, false)).toBe(days[0]);
+    const min = 0.5 * MIST.dayBase - 1e-9;
+    for (const amount of days) {
+      expect(amount).toBeGreaterThanOrEqual(min);
+      expect(amount).toBeLessThanOrEqual(0.5);
+    }
+  });
+
+  it('drifts at a quarter of the clouds, held by reduced motion', () => {
+    const wind = { dir: [1, 0] as [number, number], strength: 1, from: 270 };
+    const clouds = driftClouds([100, 100], wind, 0.2, false);
+    const mist = driftClouds([100, 100], wind, 0.2, false, MIST.speed);
+    expect(mist[0] - 100).toBeCloseTo((clouds[0] - 100) * MIST.speed);
+    const held = [5, 5] as const;
+    expect(driftClouds(held, wind, 0.2, true, MIST.speed)).toBe(held);
+  });
 });

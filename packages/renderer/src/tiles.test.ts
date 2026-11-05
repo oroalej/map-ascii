@@ -193,6 +193,7 @@ it.each([false, true])(
         false,
         false,
         folklore,
+        !folklore,
       );
       expect(post).toHaveBeenCalledWith({
         type: 'init',
@@ -200,6 +201,7 @@ it.each([false, true])(
         fireworks: true,
         fireworksActive: false,
         ...(folklore && { folklore }),
+        ...(!folklore && { harvest: true }),
       });
       source.setFireworksActive(true);
       expect(post).toHaveBeenLastCalledWith({ type: 'fireworks', active: true });

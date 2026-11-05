@@ -87,6 +87,8 @@ export type Theme = {
    * life/birds.ts `BIRD_SPECIES_ORDER`.
    */
   birdPaints: readonly (readonly [number, number])[];
+  /** Dawn mist: before the sun is up, then as it warms (shaders/glyph.ts `mistOver`). */
+  mist: readonly [number, number];
 };
 
 /** Connectivity-mask order: 0 none, 1 N, 2 E, 3 NE, 4 S, …, 15 all; then 16 `╱`, 17 `╲`. */
@@ -244,6 +246,8 @@ type Palette = Record<
   vehiclePaints: readonly number[];
   /** In life/birds.ts `BIRD_SPECIES_ORDER`. */
   birdPaints: readonly (readonly [number, number])[];
+  /** Dawn mist: before the sun is up, then as it warms (shaders/glyph.ts `mistOver`). */
+  mist: readonly [number, number];
 };
 
 /** Glyphs and classes from SPEC.md §4; only the colors differ between themes. */
@@ -271,6 +275,7 @@ function makeTheme(background: number, c: Palette): Theme {
         ? [0x9f382d, 0x746344, 0x17695a, 0x746344, 0x315e9d, 0x746344, 0x87611d, 0x746344]
         : [0xeb8876, 0xf2deb5, 0x71b6a2, 0xf2deb5, 0x85a8e0, 0xf2deb5, 0xd8b56b, 0xf2deb5],
     birdPaints: c.birdPaints,
+    mist: c.mist,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
       water_river: {
@@ -438,6 +443,7 @@ export const themes: Record<ThemeName, Theme> = {
       [0x9a8fb8, 0x544a6c],
       [0xc9b48e, 0x3f7a55],
     ],
+    mist: [0x8fa6b8, 0xd8cdb8],
   }),
   light: makeTheme(0xf4f1e8, {
     river: 0x137f9a,
@@ -493,6 +499,7 @@ export const themes: Record<ThemeName, Theme> = {
       [0x3b3348, 0x1e1a26],
       [0x7d6642, 0x24583a],
     ],
+    mist: [0xdce7ee, 0xf7f0e2],
   }),
 };
 

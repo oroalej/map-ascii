@@ -1015,6 +1015,10 @@ export type Weather = {
   meterOrigin?: readonly [number, number];
   meterStep?: readonly [number, number];
   cloudOffset?: readonly [number, number];
+  /** Dawn mist, 0–1 (life/sky.ts `mistAmount`), zero where quality turns clouds off. */
+  mist?: number;
+  mistOffset?: readonly [number, number];
+  mistDetail?: boolean;
 };
 
 const fixturesOf = new WeakMap<
@@ -1377,6 +1381,11 @@ export function glyphPass(
     u_rainGlyph: atlas.index(rainGlyphs[weather.wind ? rainGlyphIndex(weather.wind.dir) : 0]!),
     // The label color, a little blue: pale drops on the dark theme, dark ones on the light.
     u_rainColor: themeRes.uniforms.rain,
+    u_mist: weather.mist ?? 0,
+    u_mistOffset: weather.mistOffset ?? [0, 0],
+    u_mistDetail: weather.mistDetail ?? false,
+    u_mistCool: themeRes.uniforms.mistCool,
+    u_mistWarm: themeRes.uniforms.mistWarm,
   };
   setChangedUniforms(program, glyphUniforms, programs.fullUniforms);
   gl.bindVertexArray(programs.emptyVao);

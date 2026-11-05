@@ -129,7 +129,16 @@ import {
   windowCells,
   windowMargin,
 } from './grid';
-import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
+import {
+  cloudCover,
+  driftClouds,
+  MIST,
+  morningMist,
+  SKY,
+  skyAnchor,
+  skyGrid,
+  type Meters,
+} from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { TapQueue } from './life/tap';
@@ -634,6 +643,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   const sky = skyAnchor(options.bounds);
   let cloudOffset: Meters = [0, 0];
+  let mistOffset: Meters = [0, 0];
   let lastCloudAt = performance.now();
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
@@ -1902,6 +1912,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** How much moonlight falls (life/moon.ts), 0–1. */
   let moon = 0;
   let cover = 0;
+  let mist = 0;
   let activity: Activity = activityLevels(1);
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
@@ -2036,6 +2047,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     // Shadows follow the sun while it is up.
     const nextSun = position.altitude > 0 ? position : null;
     const moved = activityChanged(nextActivity, activity);
+    const nextMist = morningMist(
+      options.climate?.mist?.months,
+      local,
+      position.altitude,
+      sky.seed,
+      storm,
+    );
+    if (Math.abs(nextMist - mist) > SKY.dirtyCover || (nextMist === 0 && mist !== 0)) {
+      mist = nextMist;
+      drawDirty = true;
+    }
     if (
       moved ||
       Math.abs(next - daylight) > 0.001 ||
@@ -2405,6 +2427,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const wind = worldWind(time);
       if (watch.watched() && !reducedMotion)
         cloudOffset = driftClouds(cloudOffset, wind, (now - lastCloudAt) / 1000, false);
+      if (watch.watched() && !reducedMotion)
+        mistOffset = driftClouds(mistOffset, wind, (now - lastCloudAt) / 1000, false, MIST.speed);
       lastCloudAt = now;
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
@@ -2452,6 +2476,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
         cloudOffset,
         ...(placement?.world ? skyGrid(sky, placement.world) : {}),
+        // Off wherever clouds are, and without the world grid its patches are anchored to.
+        mist: knobs.clouds && placement?.world ? mist : 0,
+        mistOffset,
+        mistDetail:
+          knobs.clouds &&
+          sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;

@@ -256,7 +256,7 @@ describe('palay shader', () => {
     expect(source).toContain('bool groundFixture(vec4 fixture)');
     // The agent mixes over the palay here, where other hardware composes over the agent.
     expect(source).toMatch(
-      /groundFixture\(fixture\)\) \{\s+vec3 ground = fixtureOver\(back, fixture[^\n]+\n\s+o_color = vec4\(rainOver\(mix\(ground, color, coverage\)/,
+      /groundFixture\(fixture\)\) \{\s+vec3 ground = fixtureOver\(back, fixture[^\n]+\n\s+o_color = vec4\(mistOver\(rainOver\(mix\(ground, color, coverage\)/,
     );
   });
 

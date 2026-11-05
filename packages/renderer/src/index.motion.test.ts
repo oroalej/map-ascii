@@ -74,7 +74,7 @@ import { folklorePass } from './folklore-pass';
 import { focusPulse } from './focus';
 import type { FolklorePacket } from './life/folklore';
 import { solarPosition } from './life/sun';
-import { cloudCover, driftClouds, SKY, skyAnchor } from './life/sky';
+import { cloudCover, driftClouds, MIST, SKY, skyAnchor } from './life/sky';
 import { moonlight } from './life/moon';
 import { viewportFor } from './camera';
 
@@ -420,6 +420,73 @@ describe('live motion preference', () => {
       rain: 0,
       cloudOffset: [0, 0],
     });
+  });
+
+  it('shows the shown morning its mist, drifts it slowly, and lifts it by storm, hour and quality', async () => {
+    const months = Array.from({ length: 12 }, () => 0.8);
+    const open = async (time: number, strength: 'breeze' | 'storm' = 'breeze') => {
+      atlas.destroy();
+      atlas = createAtlas(canvas, {
+        tilesUrl: '/test.pmtiles',
+        bounds: [123.1, 13.5, 123.3, 13.7],
+        initialCamera: { lat: 13.6, lng: 123.2, zoom: 18 },
+        year: 2026,
+        timezone: 'Asia/Manila',
+        lifeWorker: false,
+        life: { time, enabled: false },
+        now: () => new Date('2026-11-05T04:00:00Z'),
+        climate: {
+          wind: [],
+          default: { from: 90, strength },
+          source: 'test',
+          mist: { months, source: 'test' },
+        },
+      });
+      await vi.dynamicImportSettled();
+    };
+    const weather = () => vi.mocked(glyphPass).mock.calls.at(-1)![11]!;
+    // Life off leaves it, as weather stays.
+    await open(5 * 60 + 40);
+    draw(100);
+    expect(weather().mist).toBeGreaterThan(0.2);
+    const first = weather().mistOffset!;
+    draw(200);
+    expect(weather().mistOffset).toEqual(
+      driftClouds(first, weather().wind!, 0.1, false, MIST.speed),
+    );
+    atlas.setReducedMotion(true);
+    const held = weather().mistOffset!;
+    draw(300);
+    expect(weather().mistOffset).toEqual(held);
+    for (const time of [12 * 60, 18 * 60, 22 * 60]) {
+      await open(time);
+      draw(100);
+      expect(weather().mist).toBe(0);
+    }
+    await open(5 * 60 + 40, 'storm');
+    draw(100);
+    expect(weather().mist).toBe(0);
+    await open(5 * 60 + 40);
+    atlas.setQuality('low');
+    draw(100);
+    expect(weather().mist).toBe(0);
+  });
+
+  it('has no mist without the pack key', async () => {
+    atlas.destroy();
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [123.1, 13.5, 123.3, 13.7],
+      initialCamera: { lat: 13.6, lng: 123.2, zoom: 18 },
+      year: 2026,
+      timezone: 'Asia/Manila',
+      lifeWorker: false,
+      life: { time: 5 * 60 + 40 },
+      now: () => new Date('2026-11-05T04:00:00Z'),
+    });
+    await vi.dynamicImportSettled();
+    draw(100);
+    expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.mist).toBe(0);
   });
 
   it('advances clouds only while watched and rebases motion and context transitions', () => {

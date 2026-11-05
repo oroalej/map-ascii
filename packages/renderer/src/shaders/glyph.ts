@@ -55,7 +55,7 @@ import {
 } from '../glyphs/select';
 import { CellState } from '../picking';
 import { RAIN } from '../life/wind';
-import { SKY, skyNoiseGlsl } from '../life/sky';
+import { MIST, SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
 import { waterEffectGlsl } from '../life/water';
 import { buntingMotionGlsl } from '../life/bunting-motion';
@@ -243,6 +243,11 @@ uniform float u_rain;
 uniform float u_rainSlant;
 uniform int u_rainGlyph;
 uniform vec3 u_rainColor;
+uniform float u_mist;
+uniform vec2 u_mistOffset;
+uniform bool u_mistDetail;
+uniform vec3 u_mistCool;
+uniform vec3 u_mistWarm;
 uniform bool u_waterDetail;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
@@ -470,6 +475,38 @@ vec3 rainOver(vec3 color, ivec2 cell, ivec2 inCell) {
   float ink = texelFetch(u_atlas, slot + inCell, 0).r;
   vec3 drop = mix(u_rainColor, vec3(1.0, 0.9, 0.7), min(1.0, rainLight * 1.5));
   return mix(color, drop, min(1.0, ink * ${float(RAIN.ink)} * u_rain * (1.0 + rainLight)));
+}
+
+bool mistLies(int cls) {
+  return cls == u_farmlandClass || cls == ${classId('water_river')} || cls == ${classId('water_area')} || cls == ${classId('water_stream')};
+}
+
+// Dawn mist (life/sky.ts): over paddies and water, softened onto the ground around them. Never
+// on a roof or a crown, and every other hour of the day pays only the first line.
+vec3 mistOver(vec3 color, ivec2 cell, vec2 grid, int cls) {
+  if (u_mist <= 0.0) return color;
+  if (u_focus || cls == u_crownClass || (u_cellBits[cls] & ${CellBit.window}) != 0) return color;
+  float weight = mistLies(cls) ? 1.0 : 0.0;
+  if (weight == 0.0) {
+    ivec2 last = textureSize(u_glyphs, 0) - 1;
+    for (int i = 0; i < 4; i++) {
+      ivec2 by = i < 2 ? ivec2(i == 0 ? ${MIST.edgeCells} : -${MIST.edgeCells}, 0) : ivec2(0, i == 2 ? ${MIST.edgeCells} : -${MIST.edgeCells});
+      int near = int(texelFetch(u_glyphs, clamp(cell + by, ivec2(0), last), 0).g * 255.0 + 0.5) & 63;
+      if (mistLies(near)) {
+        weight = ${float(MIST.edgeWeight)};
+        break;
+      }
+    }
+    if (weight == 0.0) return color;
+  }
+  float patches = 0.5;
+  if (u_mistDetail) {
+    vec2 world_m = u_meterOrigin + grid / u_cell * u_meterStep - u_mistOffset;
+    patches = skyNoise(world_m, ${MIST.coarseCells}, u_cloudSeed ^ ${MIST.coarsePurpose}u) * ${float(MIST.coarseWeight)} +
+      skyNoise(world_m, ${MIST.fineCells}, u_cloudSeed ^ ${MIST.finePurpose}u) * ${float(MIST.fineWeight)};
+  }
+  float amount = u_mist * weight * smoothstep(0.25, 0.75, patches);
+  return mix(color, mix(u_mistCool, u_mistWarm, u_daylight), ${float(MIST.alpha)} * amount);
 }
 
 bool fixtureSurface(int cls, ivec2 cell) {
@@ -965,15 +1002,15 @@ void main() {
     if (lifeClass == u_vehicle && (lifeFlags & ${BEACON_BIT}) != 0) color = beaconColor(lifeByte & 3);
     if (groundFixture(fixture)) {
       vec3 ground = fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo);
-      o_color = vec4(rainOver(mix(ground, color, coverage), cell, inCell), 1.0);
+      o_color = vec4(mistOver(rainOver(mix(ground, color, coverage), cell, inCell), cell, grid, cls), 1.0);
       return;
     }
-    o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(mistOver(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
     return;
   }
 
   if (cls == 0) {
-    o_color = vec4(rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+    o_color = vec4(mistOver(rainOver(fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
     return;
   }
   int glyph = int(g.r * 255.0 + 0.5) + 256 * (int(g.g * 255.0 + 0.5) >> 6);
@@ -1061,7 +1098,7 @@ void main() {
     color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
     if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
-  o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
+  o_color = vec4(mistOver(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), cell, grid, cls), 1.0);
 }
 `;
 }
