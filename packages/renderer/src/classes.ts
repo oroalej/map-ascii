@@ -22,11 +22,37 @@ export type MarkerClass = (typeof markerClasses)[number];
 
 /**
  * Parts of a feature the renderer draws in their own class: a tree's crown (raster/geometry.ts),
- * around the `tree` point that marks its trunk. Each shows when its feature's class does.
+ * around the `tree` point that marks its trunk, and a `building` used by day (`DAYTIME_KINDS`),
+ * which differs from `building` only in its window hours. Each shows when its feature's class does.
  */
-export const partClasses = ['tree_crown'] as const;
+export const partClasses = ['tree_crown', 'building_daytime'] as const;
 export type PartClass = (typeof partClasses)[number];
-export const partOf: Readonly<Record<PartClass, AtlasClass>> = { tree_crown: 'tree' };
+export const partOf: Readonly<Record<PartClass, AtlasClass>> = {
+  tree_crown: 'tree',
+  building_daytime: 'building',
+};
+
+/** OSM kinds of a pipeline `building` that empties in the evening: their windows go dark. */
+export const DAYTIME_KINDS: ReadonlySet<unknown> = new Set([
+  'building=school',
+  'building=college',
+  'building=university',
+  'building=commercial',
+  'building=retail',
+  'building=office',
+  'building=public',
+  'building=industrial',
+]);
+
+/** Everything with roofs and windows, in render classes: the pipeline's and `building_daytime`. */
+export const roofClasses: readonly (AtlasClass | PartClass)[] = [
+  ...ROOF_BUILDING_CLASSES,
+  'building_daytime',
+];
+
+/** The class a feature's cells draw in; everything but its drawing keeps the pipeline class. */
+export const cellClassName = (className: string, kind: unknown): string =>
+  className === 'building' && DAYTIME_KINDS.has(kind) ? 'building_daytime' : className;
 
 /**
  * The life layer's simulated agents (life/simulate.ts). They are drawn over the map from their
@@ -59,15 +85,17 @@ export const renderClasses: readonly RenderClass[] = [
   // reuse their slot so every other geographic cell class retains its numeric id.
   ...ATLAS_CLASSES.map((cls) => (cls === 'building_part' ? 'marker_heritage' : cls)),
   'building_part',
-  ...partClasses,
+  ...partClasses.filter((cls) => cls !== 'building_daytime'),
   ...lifeClasses,
+  // Last, so every other class keeps the id it had.
+  'building_daytime',
 ];
 
 /**
  * Size of the per-class uniform arrays and the glyph table's class axis. The table's last five
  * rows hold sextant, roof-ridge, and wall glyphs (glyphs/select.ts).
  */
-export const MAX_CLASSES = 56;
+export const MAX_CLASSES = 57;
 if (renderClasses.length >= MAX_CLASSES - 5) throw new Error('too many render classes');
 
 const ids = new Map<string, number>(renderClasses.map((c, i) => [c, i + 1]));
@@ -122,6 +150,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
   ['admin_city', 'admin_subdivision'],
   [
     'building',
+    'building_daytime',
     'building_religious',
     'building_school',
     'building_hospital',
@@ -150,7 +179,7 @@ export const priority: readonly (readonly RenderClass[])[] = [
  * than buildings. Grounds are drawn under everything on them but terrain (`groundDepth`), so a
  * lawn, garden, or pond inside a campus shows.
  */
-export const groundClasses: readonly RenderClass[] = ROOF_BUILDING_CLASSES;
+export const groundClasses: readonly RenderClass[] = roofClasses;
 
 /** Per-class ground admission, including building ids outside 32-bit masks. */
 export function groundFlags(): Int32Array {

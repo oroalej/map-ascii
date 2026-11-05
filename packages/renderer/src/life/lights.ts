@@ -44,8 +44,8 @@ export { LAMP_STRIDE } from './geometry';
 /** Floats per floodlight in a tile's `floods`: its center x, y and radius (tile units). */
 export const FLOOD_STRIDE = 3;
 
-/** Floats per shop in a tile's `shops`: its center x, y and radius (tile units). */
-export const SHOP_STRIDE = 3;
+/** Floats per shop in a tile's `shops`: center x, y, radius (tile units), and 1 if it opens early. */
+export const SHOP_STRIDE = 4;
 
 /** A seed for a place in the world (`x`, `y`, m), the same in every tile and at every zoom. */
 export const placeSeed = (x: number, y: number): number =>

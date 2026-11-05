@@ -18,6 +18,10 @@ export function themeUniforms(theme: Theme) {
     birds: theme.birdPaints.flatMap((pair) => pair.flatMap(rgb)),
     mistCool: rgb(theme.mist[0]),
     mistWarm: rgb(theme.mist[1]),
+    waterBank: rgb(theme.waterBank),
+    waterDeep: rgb(theme.waterDeep),
+    waterGlint: rgb(theme.waterGlint),
+    waterFoam: rgb(theme.waterFoam),
   };
 }
 export type ThemeUniforms = ReturnType<typeof themeUniforms>;

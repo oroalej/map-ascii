@@ -221,6 +221,16 @@ City {                           // cities/<slug>/city.json
       worship?: { weekdays: number[]; times: string[] }[];
       school?: { weekdays: number[]; in: string; out: string };
       shops?: { open: string; close: string };
+      // A bakery's typical hours, spread per bakery like a shop's. Without it, a bakery is a shop.
+      bakery?: { open: string; close: string };
+    };
+    // Share of a building's cells lit as windows through the night, per kind of building. Without
+    // it, every building keeps 0.12. Curves are [hour, share]; `building` with a daytime `kind`, and
+    // schools, are `daytime`. Renderer-only, no tile rebuild.
+    windows?: {
+      home: [number, number][]; daytime: [number, number][]; market: [number, number][];
+      worship: [number, number][]; hospital: [number, number][]; station: [number, number][];
+      source: string;
     };
     source: string;
   };

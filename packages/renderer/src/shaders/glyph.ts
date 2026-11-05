@@ -18,6 +18,7 @@
  * ownership. Uniform names below describe these inputs; documentation stays outside the
  * GLSL string so it does not add to the shipped shader payload.
  */
+import { WINDOW_GROUPS } from '@atlas/shared';
 import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import {
@@ -27,6 +28,8 @@ import {
   GROUND_SHADOW,
   LIFE_GROUND_SHADOW,
   LIFE_SHADOW,
+  LIFE_WAKE,
+  WINDOW_GROUP_OF,
 } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
@@ -51,6 +54,8 @@ import {
   Tone,
   TONE,
   TONE_SHIFT,
+  GLINT,
+  WATER_DEPTH,
   WIND_LIGHT,
   WIND_SHIFT,
 } from '../glyphs/select';
@@ -233,6 +238,7 @@ ${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectCloc
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
+uniform float u_windowShare[${WINDOW_GROUPS.length}]; // life/config.ts windowShareUniform
 uniform ivec2 u_origin;
 uniform sampler2D u_attr;
 uniform int u_crownClass;
@@ -261,6 +267,12 @@ uniform vec3 u_mistWarm;`
     : ''
 }
 uniform bool u_waterDetail;
+uniform bool u_waterDepth;
+uniform vec3 u_waterBank;
+uniform vec3 u_waterDeep;
+uniform vec3 u_waterGlint;
+uniform vec3 u_waterFoam;
+uniform float u_sunGlint;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
 uniform int u_waterGlyphs[4];
@@ -291,11 +303,16 @@ float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
 }
 
+// Whether a farmland cell of this tone is standing water at this crop stage.
+bool paddyWater(int tone) {
+  return u_cropStage == ${CROP_STAGE.flooded}
+    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+}
+
 vec3 cropPigment(int cls, int tone) {
   vec3 color = u_colors[cls];
   if (cls != u_farmlandClass || u_cropStage < 0) return color;
-  bool water = u_cropStage == ${CROP_STAGE.flooded}
-    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+  bool water = paddyWater(tone);
   return color * (water ? u_cropWaterTint : u_cropTint);
 }
 
@@ -311,6 +328,23 @@ vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.light}) return mix(color, vec3(cloudShade), ${float(TONE.light)} * (1.0 - night));
   if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
   return color;
+}
+
+// Water moved toward its bank or its deep by depth, none at 0.5 (glyphs/select.ts waterTone).
+vec3 waterToned(vec3 color, float depth, float amount) {
+  color = mix(color, daylit(u_waterBank), clamp(1.0 - 2.0 * depth, 0.0, 1.0) * ${float(WATER_DEPTH.bank)} * amount);
+  return mix(color, daylit(u_waterDeep), clamp(2.0 * depth - 1.0, 0.0, 1.0) * ${float(WATER_DEPTH.deep)} * amount);
+}
+
+// The share of this class's cells lit as windows at full night (life/config.ts WINDOW_GROUP_OF).
+float windowShare(int cls) {
+${Object.entries(WINDOW_GROUP_OF)
+  .map(
+    ([lit, group]) =>
+      `  if (cls == ${classId(lit)}) return u_windowShare[${WINDOW_GROUPS.indexOf(group)}];`,
+  )
+  .join(' ')}
+  return 0.0;
 }
 
 vec3 fillOf(int cls, vec3 color) {
@@ -874,8 +908,11 @@ void main() {
       texelFetch(u_subAttr, subAt, 0).r > 0.0);
   }
   vec2 shadeAt = standing ? vec2(cell) + 0.5 : grid / u_cell;
-  vec2 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rg;
+  vec3 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rgb;
   float shade = standing ? shadeTexel.g : shadeTexel.r;
+  // Highlights keep their own color, as the feature's fill does below.
+  bool waterTones = u_waterDepth && state == ${CellState.none};
+  if (waterTones && (u_cellBits[bgClass] & ${CellBit.boat}) != 0) back = waterToned(back, shadeTexel.b, 1.0);
   back *= shade;
 
   // Streetlights (life/lights.ts): a pool of light on the ground around each lamp, once it has
@@ -929,8 +966,26 @@ void main() {
     uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
+  // By day the sun glitters on water in patches, on the same kind of staggered beat; a patch
+  // re-rolls every 8 s. A wash, so it also reads on paper. Still with reduced motion, like the moon.
+  float sunGlitter = 0.0;
+  bool paddy = cls == u_farmlandClass && u_cropStage >= 0 && paddyWater(tone);
+  if (u_waterDepth && u_sunGlint > 0.0 && (water || paddy)) {
+    ivec2 world = u_origin + cell;
+    ivec2 block = ivec2(floor(vec2(world) / vec2(${GLINT.block[0]}.0, ${GLINT.block[1]}.0)));
+    float blockStagger = float(cellHash(block) & 255u) / 256.0;
+    int blockBeat = u_shimmer ? int(floor(u_time * 0.125 + blockStagger)) : 0;
+    uint patchHash = cellHash(block + ivec2(blockBeat * 7919, blockBeat * 104729));
+    float inPatch = smoothstep(0.45, 0.85, float(patchHash & 255u) / 255.0) * ${float(GLINT.patchGain)};
+    float stagger = float(cellHash(world) & 255u) / 256.0;
+    int beat = u_shimmer ? int(floor(u_time * 0.5 + stagger)) : 0;
+    uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
+    float share = (water ? ${float(GLINT.water)} : ${float(GLINT.paddy)}) * u_sunGlint * directSun() * inPatch;
+    if (float(h & 1023u) / 1024.0 < share) sunGlitter = ${float(GLINT.wash)};
+  }
   // A colour wash also reads on the light theme's paper, where additive red would clip white.
   back = (brakeGlow ? mix(back, brakeColor, pool * poolGlow()) : back) + glow;
+  back = mix(back, daylit(u_waterGlint), sunGlitter);
   vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
@@ -960,7 +1015,11 @@ void main() {
       }
     }
   }
+  // A boat's wake, on water only (life/wakes.ts); any other cell ignores the texel.
+  bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
+  // A wake texel has no class: those bits hold its foam strength.
+  float wakeFoam = wakeCell ? float(lifeClass) / 63.0 : 0.0;
   bool crowdCell=false,crowdInk=false;
   if(u_hasCrowdMask) {
     uvec4 a=texelFetch(u_crowdMask,ivec2(cell.x*2,cell.y),0),b=texelFetch(u_crowdMask,ivec2(cell.x*2+1,cell.y),0);
@@ -1043,6 +1102,9 @@ void main() {
     // Fish only in rivers and ponds; rain splashes on any water, below boats and labels.
     int effect = waterEffect(cell, cls == u_fishWater.x || cls == u_fishWater.y);
     if (effect >= 0) glyph = u_waterGlyphs[effect];
+    // Weak foam has no glyph of its own: it tints the water and keeps the water's glyph.
+    int wakeGlyph = wakeCell ? int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6) : 0;
+    if (wakeGlyph != 0) glyph = wakeGlyph;
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
@@ -1087,7 +1149,7 @@ void main() {
     // More windows light up as the night deepens; each flickers a little on its own beat. The
     // world cell's hash picks them, so they stay put as the map pans.
     uint h = cellHash(u_origin + cell);
-    if (float((h >> 4u) & 255u) / 255.0 < night * 0.12) {
+    if (float((h >> 4u) & 255u) / 255.0 < night * windowShare(cls)) {
       float beat = float((h >> 12u) & 7u) + 1.0;
       float flicker = u_shimmer ? 0.88 + 0.12 * sin(u_time * beat * 0.7) : 1.0;
       color = mix(color, vec3(1.0, 0.82, 0.48) * flicker, 0.85);
@@ -1110,11 +1172,20 @@ void main() {
   // The feature's own fill takes its highlight too, so a selected footprint lights up whole.
   // (Its streetlight pool too, which that just replaced.)
   if (!edge && bgClass == cls) {
-    vec3 fill = fillOf(cls, color) * shade;
-    back = (brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow;
+    vec3 fill = fillOf(cls, color);
+    if (waterTones && water) fill = waterToned(fill, shadeTexel.b, 1.0);
+    fill *= shade;
+    back = mix((brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow, daylit(u_waterGlint), sunGlitter);
   }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.
+  if (waterTones && water) color = waterToned(color, shadeTexel.b, ${float(WATER_DEPTH.ink)});
+  // Foam dims with the night here; cloud shades it below, along with the ink.
+  if (wakeCell) {
+    vec3 foam = u_waterFoam * (1.0 - 0.6 * night);
+    color = mix(color, foam, clamp(0.1 + wakeFoam * 1.6, 0.0, 1.0));
+    back = mix(back, foam * shade, wakeFoam * 0.55);
+  }
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {

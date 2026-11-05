@@ -49,6 +49,18 @@ export const solarAltitude = (date: Date, lng: number, lat: number): number =>
 export type Sun = { azimuth: number; altitude: number };
 
 /**
+ * How strongly the sun glitters on water, 0–1, from its altitude in degrees: none below 2°, the
+ * most between 10° and 35° (a low sun mirrors toward the viewer), about a third at noon.
+ */
+export function sunGlint(altitude: number): number {
+  const smooth = (t: number) => {
+    const c = Math.min(1, Math.max(0, t));
+    return c * c * (3 - 2 * c);
+  };
+  return smooth((altitude - 2) / 8) * (1 - 0.65 * smooth((altitude - 35) / 35));
+}
+
+/**
  * How much daylight there is, 0 (night) to 1 (day), from the sun's altitude: full above 6°,
  * none below -6° (the end of civil twilight), smooth between.
  */

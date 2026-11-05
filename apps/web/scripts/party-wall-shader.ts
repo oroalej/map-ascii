@@ -1,6 +1,10 @@
 import type { Page } from '@playwright/test';
-import { ROOF_BUILDING_CLASSES } from '../../../packages/shared/src/roof-plan';
-import { classId, Flags, type RenderClass } from '../../../packages/renderer/src/classes';
+import {
+  classId,
+  Flags,
+  roofClasses,
+  type RenderClass,
+} from '../../../packages/renderer/src/classes';
 import {
   buildGlyphTables,
   seeThrough,
@@ -71,7 +75,7 @@ o_glyph=vec4(float(mask+2)/255.0,seam?1.0:0.0,0.0,1.0);}`;
           );
           return {
             id: c.id,
-            eligible: (ROOF_BUILDING_CLASSES as readonly string[]).includes(c.cls),
+            eligible: (roofClasses as readonly string[]).includes(c.cls),
             height: c.height,
             style: style === 'single' ? 1 : style === 'double' ? 2 : 0,
             landmark: c.landmark,

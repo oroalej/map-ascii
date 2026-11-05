@@ -8,6 +8,8 @@ import {
   rhythmFor,
   shopHours,
   shopOpen,
+  WINDOW_GROUPS,
+  windowShares,
 } from './rhythm';
 import { CityLife } from './schemas';
 
@@ -151,6 +153,26 @@ describe('shopHours', () => {
     expect(share(21)).toBeGreaterThan(0.5);
   });
 
+  it('opens a bakery before dawn only when the city gives its hours', () => {
+    const shops = { open: '08:00', close: '20:00' };
+    const bakery = { open: '04:00', close: '18:00' };
+    const seeds = Array.from({ length: 2000 }, (_, seed) => seed);
+    const openAt = (hour: number, hours: ReturnType<typeof shopHours>[]) =>
+      hours.filter((h) => shopOpen(h, hour * 60)).length / hours.length;
+    const life = { source: 'test', schedules: { shops, bakery } };
+    const bakeries = seeds.map((seed) => shopHours(seed, life, true));
+    expect(openAt(5.5, bakeries)).toBeGreaterThan(0.9);
+    expect(openAt(19.5, bakeries)).toBeLessThan(0.15);
+    // Other shops, and a city without bakery hours, are as before.
+    expect(seeds.map((seed) => shopHours(seed, life))).toEqual(
+      seeds.map((seed) => shopHours(seed, { schedules: { shops } })),
+    );
+    expect(seeds.map((seed) => shopHours(seed, { schedules: { shops } }, true))).toEqual(
+      seeds.map((seed) => shopHours(seed, { schedules: { shops } })),
+    );
+    expect(shopHours(7)).toEqual(shopHours(7, undefined, true));
+  });
+
   it('handles hours that run past midnight', () => {
     const h = { open: 18 * 60, close: 2 * 60, allNight: false };
     expect(shopOpen(h, 23 * 60)).toBe(true);
@@ -230,5 +252,36 @@ describe('rhythm by weekday and district', () => {
   it('rejects a weekday given two rhythms', () => {
     const day = { weekdays: [0], rhythm: { person: [[0, 0.5]] } };
     expect(parse([day, day])).toBe(false);
+  });
+});
+
+describe('windowShares', () => {
+  const windows = {
+    home: [
+      [19, 0.12],
+      [23, 0.04],
+    ],
+    daytime: [[0, 0.01]],
+    market: [[0, 0.02]],
+    worship: [[0, 0.03]],
+    hospital: [[0, 0.25]],
+    station: [[0, 0.12]],
+    source: 'test',
+  } as const;
+
+  it('gives every group the same share without a pack option', () => {
+    for (const minutes of [0, 300, 1230])
+      for (const group of WINDOW_GROUPS) expect(windowShares(minutes)[group]).toBe(0.12);
+    expect(windowShares(0, {})).toEqual(windowShares(1000));
+  });
+
+  it('follows each group through its curve, past midnight too', () => {
+    const at = (hour: number) => windowShares(hour * 60, { windows });
+    expect(at(19).home).toBeCloseTo(0.12);
+    expect(at(21).home).toBeCloseTo(0.08);
+    expect(at(23).home).toBeCloseTo(0.04);
+    expect(at(1).home).toBeCloseTo(0.04 + (0.08 * 2) / 20);
+    expect(at(1).hospital).toBe(0.25);
+    expect(at(1).daytime).toBe(0.01);
   });
 });

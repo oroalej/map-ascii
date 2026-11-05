@@ -30,6 +30,7 @@ const NUMBER_FIELDS = [
   'candleSeed',
   'inspectionId',
   'stroke',
+  'wake',
 ] as const;
 const PAIR_FIELDS = ['ahead', 'side'] as const;
 const STRING_FIELDS = ['kind', 'vehicle', 'prop', 'eventGround', 'eventRole', 'glyph'] as const;

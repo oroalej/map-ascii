@@ -69,6 +69,8 @@ export type LifeSchedules = {
   school?: SchoolSchedule;
   /** Shops' typical hours, which light them at night (`shopHours`); default `DEFAULT_SHOPS`. */
   shops?: ShopSchedule;
+  /** A bakery's typical hours; without it, a bakery keeps a shop's. */
+  bakery?: ShopSchedule;
 };
 
 /** Illustrative night folklore; schedules describe the simulation, not reported hauntings. */
@@ -103,6 +105,18 @@ export type EmergencyConfig = {
   source: string;
 };
 
+/** Kinds of building that keep their own window hours. */
+export const WINDOW_GROUPS = [
+  'home',
+  'daytime',
+  'market',
+  'worship',
+  'hospital',
+  'station',
+] as const;
+export type WindowGroup = (typeof WINDOW_GROUPS)[number];
+export type WindowCurves = Record<WindowGroup, RhythmCurve> & { source: string };
+
 export type CityLifeConfig = {
   peddlers?: PeddlerConfig[];
   folklore?: FolkloreConfig;
@@ -127,6 +141,8 @@ export type CityLifeConfig = {
   rhythm_days?: RhythmDay[];
   /** When places fill up (the pack's own; its `source` covers them). */
   schedules?: LifeSchedules;
+  /** How many windows show lit through the night, per kind of building; default all the same. */
+  windows?: WindowCurves;
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };
@@ -241,6 +257,23 @@ export const districtFactor = (
   return curve ? curveAt(curve, clock.minutes) : 1;
 };
 
+/** The share of a building's cells lit at full night when a city gives no `windows`. */
+export const DEFAULT_WINDOW_SHARE = 0.12;
+
+/** The share of windows lit at `minutes` past local midnight, per group. An impression. */
+export function windowShares(
+  minutes: number,
+  life?: Pick<CityLifeConfig, 'windows'>,
+): Record<WindowGroup, number> {
+  const curves = life?.windows;
+  return Object.fromEntries(
+    WINDOW_GROUPS.map((group) => [
+      group,
+      curves ? curveAt(curves[group], minutes) : DEFAULT_WINDOW_SHARE,
+    ]),
+  ) as Record<WindowGroup, number>;
+}
+
 /** School hours when a city gives none: weekdays, 07:00 to 16:00. An impression. */
 export const DEFAULT_SCHOOL: SchoolSchedule = {
   weekdays: [1, 2, 3, 4, 5],
@@ -270,10 +303,15 @@ function unitOf(seed: number, salt: number): number {
  * unless the city gives its own): it opens from 2 hours before the typical time to 1½ after;
  * most (70%) close within an hour of the typical time, some (20%) close early, a few (7%) stay
  * open up to 2½ hours late, and 3% are open all night. With the default, about nine in ten are
- * closed by 21:00. An impression, not data about any shop.
+ * closed by 21:00. An `early` shop, a bakery, spreads around `schedules.bakery` instead when the
+ * city gives it. An impression, not data about any shop.
  */
-export function shopHours(seed: number, life?: Pick<CityLifeConfig, 'schedules'>): ShopHours {
-  const typical = life?.schedules?.shops ?? DEFAULT_SHOPS;
+export function shopHours(
+  seed: number,
+  life?: Pick<CityLifeConfig, 'schedules'>,
+  early = false,
+): ShopHours {
+  const typical = (early && life?.schedules?.bakery) || life?.schedules?.shops || DEFAULT_SHOPS;
   const day = (m: number) => ((Math.round(m) % 1440) + 1440) % 1440;
   const which = unitOf(seed, 2);
   if (which < 0.03) return { open: 0, close: 0, allNight: true };
