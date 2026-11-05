@@ -7021,7 +7021,7 @@ export class TileLife {
             clearing,
             env?.diagnostics,
           );
-          if (this.railCrossings.vehicleLimit(m, dt, limit, env?.diagnostics))
+          if (this.railCrossings.vehicleLimit(m, dt, limit, env?.diagnostics, this.movers))
             intentionalHold = true;
 
           speeds[i] = limit.target;

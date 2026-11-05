@@ -253,6 +253,45 @@ describe('holding traffic at a closed crossing', () => {
     expect(m.y).toBeGreaterThan(ROAD_Y);
   });
 
+  it('queues a follower behind the first vehicle held', () => {
+    const { world, life } = setup();
+    const first = car(ROAD_Y - 40 * pm, 6);
+    const second = car(ROAD_Y - 60 * pm, 6);
+    place(life, train(CROSS_X - 60 * pm, 1, 5), first, second);
+    run(world, 12);
+    expect(life.railCrossings.crossings[0]!.closed).toBe(true);
+    expect(first.y).toBeLessThan(ROAD_Y - 6 * pm);
+    expect(second.y).toBeLessThan(first.y - 4 * pm);
+  });
+
+  it('waits at an open crossing while a queue past the rail leaves no room beyond it', () => {
+    const { world, life } = setup();
+    const stopped = car(ROAD_Y + 4 * pm, 0);
+    stopped.speed = 0;
+    stopped.v = 0;
+    const m = car(ROAD_Y - 40 * pm, 6);
+    place(life, stopped, m);
+    run(world, 10);
+    expect(life.railCrossings.crossings[0]!.closed).toBe(false);
+    // Held before the stop, nowhere near the rail.
+    expect(m.y + 2.2 * pm).toBeLessThanOrEqual(ROAD_Y - (RAIL_CROSSING.stopBack - 0.6) * pm);
+    // Once the way clears it goes on over the rail.
+    place(life, m);
+    run(world, 10);
+    expect(m.y).toBeGreaterThan(ROAD_Y);
+  });
+
+  it('crosses an open crossing when the traffic beyond leaves room', () => {
+    const { world, life } = setup();
+    const distant = car(ROAD_Y + 60 * pm, 0);
+    distant.speed = 0;
+    distant.v = 0;
+    const m = car(ROAD_Y - 30 * pm, 6);
+    place(life, distant, m);
+    run(world, 10);
+    expect(m.y).toBeGreaterThan(ROAD_Y + 6 * pm);
+  });
+
   it('lets a vehicle already past the stop keep going', () => {
     const { world, life } = setup();
     const m = car(ROAD_Y - 3 * pm);

@@ -30,6 +30,15 @@ export const RAIL_CROSSING = {
   bodyReach: 6,
   /** A train's path this near a crossing runs over it, m. */
   pathReach: 3,
+  /** How much harder than its usual braking a vehicle can stop, before it goes on regardless. */
+  hardBrake: 1.6,
+  /** Slack in that test, m, so a frame's lag at the end of a stop doesn't release the vehicle. */
+  hardMargin: 1,
+  /** Open or not, a vehicle this near its stop looks for room past the rail first, m. */
+  keepClearLook: 15,
+  /** Room needed past the rail beyond the vehicle's own length, m, behind one going this slowly. */
+  keepClearRoom: 3,
+  keepClearSpeed: 1,
   /** The barriers show from here, and swap colors this often, s. */
   barrierZoom: { min: 17 } as ZoomBand,
   blinkSeconds: 0.5,
@@ -235,7 +244,13 @@ export class RailCrossings {
    * Brake for a closed crossing ahead. A vehicle past its stop keeps going, and while a closure
    * is new, so does one that can't stop in time. Returns whether it stands held at a stop.
    */
-  vehicleLimit(m: Mover, dt: number, out: MotionLimit, diagnostics?: LifeDiagnostics): boolean {
+  vehicleLimit(
+    m: Mover,
+    dt: number,
+    out: MotionLimit,
+    diagnostics?: LifeDiagnostics,
+    movers?: readonly Mover[],
+  ): boolean {
     const stops = this.stops.get(m.line);
     if (!stops) return false;
     const { perMeter } = this;
@@ -243,12 +258,20 @@ export class RailCrossings {
     const progress = this.along[m.from]! + m.dir * m.d;
     const half = (m.vehicle ? VEHICLES[m.vehicle].length / 2 : 2) * perMeter;
     for (const stop of stops) {
-      if (stop.dir !== m.dir || !stop.crossing.closed) continue;
+      if (stop.dir !== m.dir) continue;
       const ahead = m.dir * (stop.along - progress) - half;
       if (ahead < -0.5 * perMeter || ahead >= RAIL_CROSSING.lookahead * perMeter) continue;
+      // Open, the only reason to wait is a queue that would leave this vehicle on the track.
+      if (!stop.crossing.closed && !(movers && this.exitBlocked(m, stop, ahead, movers))) continue;
       const brake = kinematicsOf(m.vehicle).brake * perMeter;
       const v = m.v ?? m.speed;
-      if (!stop.crossing.firm && (v * v) / (2 * brake) > ahead) continue;
+      // Braking starts on the normal curve, so only one beyond a harder stop has lost its chance.
+      if (
+        !stop.crossing.firm &&
+        (v * v) / (2 * brake * RAIL_CROSSING.hardBrake) >
+          ahead + RAIL_CROSSING.hardMargin * perMeter
+      )
+        continue;
       if (ahead <= 0.5 * perMeter) {
         held = true;
         diagnostics?.hold(m, 'rail');
@@ -257,6 +280,23 @@ export class RailCrossings {
       out.cap = Math.min(out.cap, Math.max(0, ahead) / dt);
     }
     return held;
+  }
+
+  /** Whether a slow vehicle past the rail would leave no room for `m` beyond it. */
+  private exitBlocked(m: Mover, stop: CrossingStop, ahead: number, movers: readonly Mover[]) {
+    const { perMeter } = this;
+    if (ahead >= RAIL_CROSSING.keepClearLook * perMeter) return false;
+    const own = m.vehicle ? VEHICLES[m.vehicle].length : 4;
+    const needed = RAIL_CROSSING.stopBack + own + RAIL_CROSSING.keepClearRoom;
+    const slow = RAIL_CROSSING.keepClearSpeed * perMeter;
+    for (const other of movers) {
+      if (other === m || other.line !== m.line || other.dir !== m.dir) continue;
+      if (other.kind !== 'vehicle' || (other.v ?? other.speed) >= slow) continue;
+      const past = m.dir * (this.along[other.from]! + other.dir * other.d - stop.along);
+      const tail = past - ((other.vehicle ? VEHICLES[other.vehicle].length : 4) / 2) * perMeter;
+      if (past > 0 && tail < needed * perMeter) return true;
+    }
+    return false;
   }
 
   /** Room to the next stop on `m`'s way, in tile units, closed or not. */
