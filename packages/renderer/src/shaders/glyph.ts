@@ -53,6 +53,7 @@ import {
   Tone,
   TONE,
   TONE_SHIFT,
+  GLINT,
   WATER_DEPTH,
   WIND_LIGHT,
   WIND_SHIFT,
@@ -268,6 +269,8 @@ uniform bool u_waterDetail;
 uniform bool u_waterDepth;
 uniform vec3 u_waterBank;
 uniform vec3 u_waterDeep;
+uniform vec3 u_waterGlint;
+uniform float u_sunGlint;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
 uniform int u_waterGlyphs[4];
@@ -298,11 +301,16 @@ float darkness() {
   return smoothstep(0.3, 1.0, 1.0 - u_daylight);
 }
 
+// Whether a farmland cell of this tone is standing water at this crop stage.
+bool paddyWater(int tone) {
+  return u_cropStage == ${CROP_STAGE.flooded}
+    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+}
+
 vec3 cropPigment(int cls, int tone) {
   vec3 color = u_colors[cls];
   if (cls != u_farmlandClass || u_cropStage < 0) return color;
-  bool water = u_cropStage == ${CROP_STAGE.flooded}
-    || (u_cropStage == ${CROP_STAGE.transplanted} && tone == ${Tone.light});
+  bool water = paddyWater(tone);
   return color * (water ? u_cropWaterTint : u_cropTint);
 }
 
@@ -956,8 +964,26 @@ void main() {
     uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
     if (float(h & 1023u) / 1024.0 < 0.04 * u_moon * night) glow += vec3(0.55, 0.6, 0.72) * 0.6;
   }
+  // By day the sun glitters on water in patches, on the same kind of staggered beat; a patch
+  // re-rolls every 8 s. A wash, so it also reads on paper. Still with reduced motion, like the moon.
+  float sunGlitter = 0.0;
+  bool paddy = cls == u_farmlandClass && u_cropStage >= 0 && paddyWater(tone);
+  if (u_waterDepth && u_sunGlint > 0.0 && (water || paddy)) {
+    ivec2 world = u_origin + cell;
+    ivec2 block = ivec2(floor(vec2(world) / vec2(${GLINT.block[0]}.0, ${GLINT.block[1]}.0)));
+    float blockStagger = float(cellHash(block) & 255u) / 256.0;
+    int blockBeat = u_shimmer ? int(floor(u_time * 0.125 + blockStagger)) : 0;
+    uint patchHash = cellHash(block + ivec2(blockBeat * 7919, blockBeat * 104729));
+    float inPatch = smoothstep(0.45, 0.85, float(patchHash & 255u) / 255.0) * ${float(GLINT.patchGain)};
+    float stagger = float(cellHash(world) & 255u) / 256.0;
+    int beat = u_shimmer ? int(floor(u_time * 0.5 + stagger)) : 0;
+    uint h = cellHash(world + ivec2(beat * 7919, beat * 104729));
+    float share = (water ? ${float(GLINT.water)} : ${float(GLINT.paddy)}) * u_sunGlint * directSun() * inPatch;
+    if (float(h & 1023u) / 1024.0 < share) sunGlitter = ${float(GLINT.wash)};
+  }
   // A colour wash also reads on the light theme's paper, where additive red would clip white.
   back = (brakeGlow ? mix(back, brakeColor, pool * poolGlow()) : back) + glow;
+  back = mix(back, daylit(u_waterGlint), sunGlitter);
   vec3 focusGlow = focusHalo(grid, cell, cls, subAt);
   if (u_focus) back = focusedClass(bgClass) ? mix(back, u_accent, 0.25 * focusPulse()) : back * ${float(FOCUS_DIM)};
   back += focusGlow;
@@ -1140,7 +1166,7 @@ void main() {
     vec3 fill = fillOf(cls, color);
     if (waterTones && water) fill = waterToned(fill, shadeTexel.b, 1.0);
     fill *= shade;
-    back = (brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow;
+    back = mix((brakeGlow ? mix(fill, brakeColor, pool * poolGlow()) : fill) + glow, daylit(u_waterGlint), sunGlitter);
   }
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.

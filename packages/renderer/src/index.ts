@@ -202,7 +202,7 @@ import { SpeechController, type SpeechInView } from './life/speech';
 import { EmojiController, type EmojiInView } from './life/emoji-view';
 import { CueReadback } from './life/cue-readback';
 export type { EmojiInView } from './life/emoji-view';
-import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
+import { daylight as daylightAt, solarPosition, sunGlint, type Sun } from './life/sun';
 import {
   prevailingWind,
   rainFor,
@@ -1955,6 +1955,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   let liveOccurrence: string | undefined;
   let windowShare = windowShareUniform(windowShares(0, options.cityLife));
+  let glint = 0;
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
@@ -2060,6 +2061,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     );
     if (Math.abs(nextMist - mist) > SKY.dirtyCover || (nextMist === 0 && mist !== 0)) {
       mist = nextMist;
+      drawDirty = true;
+    }
+    const nextGlint = sunGlint(position.altitude);
+    if (Math.abs(nextGlint - glint) > 0.001) {
+      glint = nextGlint;
       drawDirty = true;
     }
     const nextWindows = windowShareUniform(windowShares(local.minutes, options.cityLife));
@@ -2496,6 +2502,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
         windowShare,
         waterFeatures: knobs.waterDetail,
+        sunGlint: knobs.waterDetail ? glint : 0,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;

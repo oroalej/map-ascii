@@ -1031,6 +1031,8 @@ export type Weather = {
   mistDetail?: boolean;
   /** Water depth, sun glints and wakes (quality.ts `waterDetail`). */
   waterFeatures?: boolean;
+  /** The sun's glitter on water, 0–1 (life/sun.ts `sunGlint`); zero without `waterFeatures`. */
+  sunGlint?: number;
   /** Windows lit per group (life/config.ts `windowShareUniform`); a default share without it. */
   windowShare?: Float32Array;
 };
@@ -1369,6 +1371,7 @@ export function glyphPass(
     u_waterDepth: !!weather.waterFeatures,
     u_waterBank: themeRes.uniforms.waterBank,
     u_waterDeep: themeRes.uniforms.waterDeep,
+    u_waterGlint: themeRes.uniforms.waterGlint,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
@@ -1390,6 +1393,7 @@ export function glyphPass(
     u_signalLight: targets.signalLightTex,
     u_dpr: view.dpr,
     u_moon: moon,
+    u_sunGlint: weather.sunGlint ?? 0,
     u_crownClass: classId('tree_crown'),
     u_crownSun: sun && sun.altitude > 0 ? sunVector(sun) : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),

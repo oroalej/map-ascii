@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { daylight, solarAltitude, solarPosition } from './sun';
+import { daylight, solarAltitude, solarPosition, sunGlint } from './sun';
 
 // Naga City's Centro.
 const lng = 123.19;
@@ -59,5 +59,20 @@ describe('daylight', () => {
     expect(daylight(-6)).toBe(0);
     expect(daylight(-40)).toBe(0);
     expect(daylight(0)).toBeCloseTo(0.5);
+  });
+});
+
+describe('sunGlint', () => {
+  it('is off until the sun has cleared the horizon', () => {
+    for (const altitude of [-40, -6, 0, 2]) expect(sunGlint(altitude)).toBe(0);
+    expect(sunGlint(4)).toBeGreaterThan(0);
+    expect(sunGlint(4)).toBeLessThan(0.5);
+  });
+
+  it('peaks at a low sun and falls to about a third at noon', () => {
+    for (const altitude of [10, 20, 35]) expect(sunGlint(altitude)).toBe(1);
+    expect(sunGlint(50)).toBeLessThan(1);
+    expect(sunGlint(50)).toBeGreaterThan(0.35);
+    for (const altitude of [70, 80, 90]) expect(sunGlint(altitude)).toBeCloseTo(0.35);
   });
 });

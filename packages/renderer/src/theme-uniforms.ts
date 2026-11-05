@@ -20,6 +20,7 @@ export function themeUniforms(theme: Theme) {
     mistWarm: rgb(theme.mist[1]),
     waterBank: rgb(theme.waterBank),
     waterDeep: rgb(theme.waterDeep),
+    waterGlint: rgb(theme.waterGlint),
   };
 }
 export type ThemeUniforms = ReturnType<typeof themeUniforms>;

@@ -411,6 +411,19 @@ export const WATER_DEPTH = {
 } as const;
 
 /**
+ * The sun's glitter on water (the glyph pass, `sunGlint`): the peak share of cells it catches, on
+ * open water and on flooded paddies, how far it washes a cell toward `waterGlint`, the size of a
+ * patch in cells, and the gain that keeps the mean share at its peak despite the patches.
+ */
+export const GLINT = {
+  water: 0.06,
+  paddy: 0.03,
+  wash: 0.7,
+  block: [6, 3],
+  patchGain: 2.857,
+} as const;
+
+/**
  * How far a water cell is from its bank, what the select pass writes to `shadeTex` blue: 0 at the
  * bank and 1 in open water, from the nearest ring holding a non-water sample. `isWater` takes an
  * offset in cells.

@@ -92,6 +92,8 @@ export type Theme = {
   /** Water at its muddy edge, and in mid-river (shaders/glyph.ts `waterToned`). */
   waterBank: number;
   waterDeep: number;
+  /** The sun's glitter on water, a wash rather than added light, so it reads on paper too. */
+  waterGlint: number;
 };
 
 /** Connectivity-mask order: 0 none, 1 N, 2 E, 3 NE, 4 S, …, 15 all; then 16 `╱`, 17 `╲`. */
@@ -254,6 +256,8 @@ type Palette = Record<
   /** Water at its muddy edge, and in mid-river (shaders/glyph.ts `waterToned`). */
   waterBank: number;
   waterDeep: number;
+  /** The sun's glitter on water, a wash rather than added light, so it reads on paper too. */
+  waterGlint: number;
 };
 
 /** Glyphs and classes from SPEC.md §4; only the colors differ between themes. */
@@ -284,6 +288,7 @@ function makeTheme(background: number, c: Palette): Theme {
     mist: c.mist,
     waterBank: c.waterBank,
     waterDeep: c.waterDeep,
+    waterGlint: c.waterGlint,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
       water_river: {
@@ -455,6 +460,7 @@ export const themes: Record<ThemeName, Theme> = {
     mist: [0x8fa6b8, 0xd8cdb8],
     waterBank: 0x3a3a26,
     waterDeep: 0x05141f,
+    waterGlint: 0xfff2c8,
   }),
   light: makeTheme(0xf4f1e8, {
     river: 0x137f9a,
@@ -513,6 +519,7 @@ export const themes: Record<ThemeName, Theme> = {
     mist: [0xdce7ee, 0xf7f0e2],
     waterBank: 0xe0d6b8,
     waterDeep: 0x8fbcc9,
+    waterGlint: 0xfffdf0,
   }),
 };
 
