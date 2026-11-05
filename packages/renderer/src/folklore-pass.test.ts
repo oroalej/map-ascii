@@ -164,6 +164,7 @@ it.each(['cached', 'pending', 'demand'] as const)(
         seasonal: false,
         fireworks: false,
         folklore: true,
+        field: false,
         cancel: vi.fn(),
         pending: { key: 16, program: { ready: () => false, finish, cancel: vi.fn() } },
       };

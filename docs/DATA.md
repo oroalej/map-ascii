@@ -172,7 +172,18 @@ City {                           // cities/<slug>/city.json
     crops?: { rice?: {
       source: string; notes?: string;
       calendar: { from: string; stage: 'fallow' | 'flooded' | 'transplanted' | 'growing' | 'ripe' | 'harvested' }[];
+      // The harvest scene (SPEC.md §4 "Harvest"). Hours are [start, end) on the shown clock, 0–24.
+      // Without `burningHours` the city shows no smoke, so burning can be switched off here.
+      harvest?: {
+        dryingHours: [number, number];
+        burningHours?: [number, number];
+        tractors: boolean;
+        ducks: boolean;
+        source: string;
+      };
     } }; // canonical real MM-DD, unique starts, at least two; February 29 skipped outside leap years
+    // Dawn mist (SPEC.md §4 "Dawn mist"): twelve densities in 0–1, January first.
+    mist?: { months: number[]; source: string };
   };
   // The city's IANA time zone, e.g. "Asia/Manila": the life layer's clock, fixed times of day,
   // and seasons follow it. Without it: the sun's time at the city's longitude.

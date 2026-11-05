@@ -19,6 +19,7 @@ import {
   type RuntimeSeasonConfig,
   type ZoomBand,
   type CropNow,
+  type HarvestNow,
   type CropStage,
 } from '@atlas/shared';
 import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
@@ -721,7 +722,15 @@ export type Activity = Readonly<Record<AgentKind, number>> & {
   districts?: Readonly<Record<RhythmDistrict, number>>;
   places: Readonly<Record<PlaceKind, number>>;
   season?: { visitors: number; congregations: number };
+  /** The harvest scene (climate.ts `harvestAt`), when the city has one and the crop has a stage. */
+  harvest?: HarvestNow;
 };
+
+/** Share of drying slots that hold palay at the peak of the harvest (life/palay.ts). */
+export const PALAY_SHOW_SHARE = 0.35;
+/** Here rather than in fixtures.ts so the legend, which loads at startup, stays free of it. */
+export const PALAY_PAINT = [0.96, 0.76, 0.24] as const;
+export const PALAY_COVER_PAINT = [0.16, 0.38, 0.78] as const;
 
 /**
  * How much of each kind is out: by the city's daily rhythm at `clock.minutes` past local
@@ -754,6 +763,7 @@ export function activityLevels(
     weekday: number;
     life?: Pick<CityLifeConfig, 'rhythm' | 'rhythm_days' | 'schedules'> | undefined;
     crop?: CropNow | undefined;
+    harvest?: HarvestNow | undefined;
   },
   season?: Pick<RuntimeSeasonConfig, 'visitors' | 'congregations'>,
 ): Activity {
@@ -791,6 +801,7 @@ export function activityLevels(
           season.congregations && clock ? curveAt(season.congregations.hours, clock.minutes) : 0,
       },
     }),
+    ...(clock?.harvest && { harvest: clock.harvest }),
   };
 }
 
@@ -804,7 +815,12 @@ export function activityChanged(a: Activity, b: Activity, epsilon = 0.001): bool
     Math.abs((a.districts?.home ?? 0) - (b.districts?.home ?? 0)) > epsilon ||
     PLACE_KINDS.some((k) => Math.abs(a.places[k] - b.places[k]) > epsilon) ||
     Math.abs((a.season?.visitors ?? 0) - (b.season?.visitors ?? 0)) > epsilon ||
-    Math.abs((a.season?.congregations ?? 0) - (b.season?.congregations ?? 0)) > epsilon
+    Math.abs((a.season?.congregations ?? 0) - (b.season?.congregations ?? 0)) > epsilon ||
+    Math.abs((a.harvest?.drying ?? 0) - (b.harvest?.drying ?? 0)) > epsilon ||
+    Math.abs((a.harvest?.tractors ?? 0) - (b.harvest?.tractors ?? 0)) > epsilon ||
+    Math.abs((a.harvest?.ducks ?? 0) - (b.harvest?.ducks ?? 0)) > epsilon ||
+    a.harvest?.spread !== b.harvest?.spread ||
+    a.harvest?.burning !== b.harvest?.burning
   );
 }
 

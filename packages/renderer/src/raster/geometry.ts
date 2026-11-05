@@ -898,9 +898,12 @@ export function buildTileGeometry(
   maxZoom?: number,
   fireworks = true,
   folklore = false,
+  harvest = false,
 ): TileGeometry {
   const unitMeters = tile ? metersPerUnit(tile) : undefined;
   const folkloreSidecars = folklore && !!tile && tile.z >= LIFE_TILE_MIN_ZOOM;
+  // Palay dries beside farmland, so a harvest city needs those footprints even without folklore.
+  const harvestSidecars = harvest && !!tile && tile.z >= LIFE_TILE_MIN_ZOOM;
   const memorials = !!tile && tile.z === maxZoom;
   const drawnAt = (zoom: number) =>
     !tile || maxZoom === undefined || tile.z >= Math.min(zoom, maxZoom) - 1;
@@ -1641,7 +1644,9 @@ export function buildTileGeometry(
           }
           const outer = polygon[0]!;
           // These footprints are read-only folklore inputs, never population or obstacles.
-          if (folkloreSidecars && !isRegion && (className === 'grass' || className === 'farmland'))
+          if (!isRegion && (folkloreSidecars || harvestSidecars) && className === 'farmland')
+            life.field(featureId, className, polygon);
+          if (folkloreSidecars && !isRegion && className === 'grass')
             life.field(featureId, className, polygon);
           if (folkloreSidecars && !isRegion && className === 'building_hospital') {
             const center = ringCentroid(outer);
@@ -1788,6 +1793,7 @@ export function buildTileGeometry(
   if (tile) life.splitSignalRoads((p) => lngLatToTile(tile, ...p), hashString);
   if (unitMeters && tile && tile.z >= LIFE_TILE_MIN_ZOOM)
     life.splitRoadJunctions(1 / unitMeters, ROAD_SPLIT_CLEARANCE_M);
+  if (harvestSidecars && tile) life.placeDrying(tile);
 
   if (unitMeters && tile) {
     if (fireworks)

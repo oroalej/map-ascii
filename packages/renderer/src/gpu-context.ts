@@ -101,6 +101,7 @@ export type Programs = {
     seasonal: boolean;
     fireworks: boolean;
     folklore: boolean;
+    field: boolean;
     pending?: { key: number; program: PendingProgram };
     /** The rendered frame whose turn started the last parallel link. */
     started?: number;
@@ -142,7 +143,7 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
     select: [fullscreenVertex, selectFragment],
     glyph: [
       fullscreenVertex,
-      glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false }),
+      glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false, field: false }),
     ],
   } as const;
   const parallel = !!gl.getExtension('KHR_parallel_shader_compile');
@@ -296,12 +297,15 @@ export function glyphProgram(
   seasonal = false,
   /** False for warmup's own synchronous compile, which no frame is waiting on. */
   demand = true,
+  /** Palay or mist is on screen. */
+  field = false,
 ) {
   // Manually supplied program sets may already contain the full-feature shader.
   const variants = programs.glyphVariants;
   // No variant is compiled for the boot shaders, which have none of these features.
   if (!variants || programs.boot) return programs.glyph;
-  const key = Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2);
+  const key =
+    Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2) | (Number(field) << 5);
   if (key === 0) return programs.glyph;
   let program = variants.get(key);
   if (!program) {
@@ -314,7 +318,7 @@ export function glyphProgram(
       program = createProgram(
         gl,
         fullscreenVertex,
-        glyphFragmentFor({ focus, effectClocks, seasonal }),
+        glyphFragmentFor({ focus, effectClocks, seasonal, field }),
       );
     variants.set(key, program);
     if (demand) programs.demandWaitMs = (programs.demandWaitMs ?? 0) + performance.now() - start;
@@ -338,13 +342,21 @@ export function prewarmGlyphPrograms(
   fireworks = false,
   folklore = false,
   frame?: () => number,
+  field = false,
 ) {
   const variants = programs.glyphVariants;
   if (!variants || programs.glyphWarmupFailed) return;
-  const keys = (clocks: boolean, seasonal: boolean, fireworks: boolean, folklore: boolean) => [
+  const keys = (
+    clocks: boolean,
+    seasonal: boolean,
+    fireworks: boolean,
+    folklore: boolean,
+    field: boolean,
+  ) => [
     ...(folklore ? [16] : []),
     ...(fireworks ? [8] : []),
     ...(seasonal ? (clocks ? [4, 5, 6, 7] : [4, 5]) : []),
+    ...(field ? (clocks ? [32, 33, 34, 35] : [32, 33]) : []),
     ...(clocks ? [1, 2, 3] : [1]),
   ];
   const has = (key: number) =>
@@ -359,16 +371,17 @@ export function prewarmGlyphPrograms(
     warmup.seasonal = seasonal;
     warmup.fireworks = fireworks;
     warmup.folklore = folklore;
+    warmup.field = field;
     if (
       warmup.pending &&
-      !keys(warmup.clocks, seasonal, fireworks, folklore).includes(warmup.pending.key)
+      !keys(warmup.clocks, seasonal, fireworks, folklore, field).includes(warmup.pending.key)
     ) {
       warmup.pending.program.cancel();
       warmup.pending = undefined;
     }
     return;
   }
-  if (keys(effectClocks, seasonal, fireworks, folklore).every(has)) return;
+  if (keys(effectClocks, seasonal, fireworks, folklore, field).every(has)) return;
   let cancelled = false;
   let cancelTask: (() => void) | undefined;
   const warmup: NonNullable<Programs['glyphWarmup']> = {
@@ -376,6 +389,7 @@ export function prewarmGlyphPrograms(
     seasonal,
     fireworks,
     folklore,
+    field,
     cancel: () => {
       if (cancelled) return;
       cancelled = true;
@@ -417,9 +431,13 @@ export function prewarmGlyphPrograms(
           warmup.pending = undefined;
         }
       } else {
-        const key = keys(warmup.clocks, warmup.seasonal, warmup.fireworks, warmup.folklore).find(
-          (key) => !has(key),
-        );
+        const key = keys(
+          warmup.clocks,
+          warmup.seasonal,
+          warmup.fireworks,
+          warmup.folklore,
+          warmup.field,
+        ).find((key) => !has(key));
         if (key === undefined) {
           programs.glyphWarmup = undefined;
           return;
@@ -432,6 +450,7 @@ export function prewarmGlyphPrograms(
         const focus = (key & 1) !== 0,
           effectClocks = (key & 2) !== 0;
         const seasonal = (key & 4) !== 0;
+        const field = (key & 32) !== 0;
         if (parallel) {
           warmup.started = rendered;
           warmup.pending = {
@@ -443,14 +462,14 @@ export function prewarmGlyphPrograms(
                 ? folkloreFragment
                 : key === 8
                   ? fireworksFragment
-                  : glyphFragmentFor({ focus, effectClocks, seasonal }),
+                  : glyphFragmentFor({ focus, effectClocks, seasonal, field }),
             ),
           };
         } else if (key === 16)
           programs.folkloreProgram = createProgram(gl, folkloreVertex, folkloreFragment);
         else if (key === 8)
           programs.fireworksProgram = createProgram(gl, fireworksVertex, fireworksFragment);
-        else glyphProgram(gl, programs, focus, effectClocks, seasonal, false);
+        else glyphProgram(gl, programs, focus, effectClocks, seasonal, false, field);
       }
       queue();
     } catch {

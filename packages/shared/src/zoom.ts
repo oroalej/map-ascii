@@ -23,6 +23,10 @@ export const SEASON_ZOOM = {
   installationLights: { min: 18 },
 } as const satisfies Record<string, ZoomBand>;
 
+/** Drying palay reads from the opening zoom; raked rows show from `PALAY_ROWS_ZOOM`. */
+export const PALAY_ZOOM: ZoomBand = { min: 17 };
+export const PALAY_ROWS_ZOOM = 19;
+
 /**
  * The one table of when each class shows (SPEC.md §2 zoom levels). The pipeline derives each
  * feature's tile zoom range from it, and the renderer its crossfades.

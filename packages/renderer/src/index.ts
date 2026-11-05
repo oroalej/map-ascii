@@ -14,8 +14,13 @@ import {
   eventOccurrence,
   dialogueChoices,
   CROP_STAGES,
+  cropDate,
+  PALAY_ZOOM,
   cropStageAt,
+  harvestAt,
+  type HarvestNow,
   epochDay,
+  occurrence as dateOccurrence,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -125,7 +130,16 @@ import {
   windowCells,
   windowMargin,
 } from './grid';
-import { cloudCover, driftClouds, SKY, skyAnchor, skyGrid, type Meters } from './life/sky';
+import {
+  cloudCover,
+  driftClouds,
+  MIST,
+  morningMist,
+  SKY,
+  skyAnchor,
+  skyGrid,
+  type Meters,
+} from './life/sky';
 import { AtlasLabels, type LabelSource } from './label-controller';
 import { LifeHoverController, type LifeHover } from './life/hover';
 import { TapQueue } from './life/tap';
@@ -156,9 +170,11 @@ import {
 import { moonlight } from './life/moon';
 import { createUtilityFixtureCache } from './life/utilities';
 import {
+  palayFixtures,
   tileFixtures,
   type StreetFixture,
   type FixtureVisibility,
+  type PalayFixture,
   type LegacyStreetFixture,
 } from './life/fixtures';
 import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
@@ -302,6 +318,11 @@ export type AtlasOptions = {
    * reviewed on a machine whose warm shader cache would skip them. Default: false.
    */
   holdBootShaders?: boolean;
+  /**
+   * Show the crop stages of this `MM-DD` in the current year, for reviewing a stage out of season.
+   * Only crops read it: the sun, wind, seasons and clock stay real. Malformed values are ignored.
+   */
+  cropDate?: string | undefined;
   tilesUrl: string;
   /** Content pin, supplied only for archive bytes matching the published lock. */
   tilesVersion?: string | undefined;
@@ -371,6 +392,10 @@ export type AtlasOptions = {
 };
 
 export type { ProcessionRun } from './life/simulate';
+
+/** In a storm palay is heaped and covered, and nothing burns. */
+const stormHarvest = (harvest: HarvestNow | undefined, storm: boolean) =>
+  harvest && storm ? { ...harvest, spread: false, burning: false } : harvest;
 
 export type AtlasEventMap = {
   /** First qualifying canvas draw submission in this context generation. */
@@ -619,6 +644,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   const sky = skyAnchor(options.bounds);
   let cloudOffset: Meters = [0, 0];
+  let mistOffset: Meters = [0, 0];
   let lastCloudAt = performance.now();
   /** The city's month now (1–12), which the season's wind follows (kept by `updateSun`). */
   let cityMonth = cityTime(now(), zone).month;
@@ -925,6 +951,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
     options.cityLife?.seasons?.some((season) => !!(season.candles || season.visitors)) === true,
     !!options.cityLife?.folklore,
+    !!options.climate?.crops?.rice?.harvest,
   );
   const { source } = tileCache;
 
@@ -1406,7 +1433,17 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             camera.zoom,
             activity,
             [camera.lng, camera.lat],
-            { rain: currentRain(), sunAltitude: sun?.altitude ?? 0 },
+            {
+              rain: currentRain(),
+              sunAltitude: sun?.altitude ?? 0,
+              // Real seconds, so a fixed hour still shows them at work.
+              ...(activity.harvest && {
+                field: {
+                  time: now().getTime() / 1000,
+                  wind: stillWind(prevailingWind(life.wind, options.climate, cityMonth)).dir,
+                },
+              }),
+            },
             viewBounds(),
             knobs.crowd,
             knobs.maxAgents,
@@ -1698,6 +1735,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   let fixtures: StreetFixture[] = [];
   const fixtureTiles = new WeakMap<LoadedTile['life'], LegacyStreetFixture[]>();
+  const palayTiles = new WeakMap<LoadedTile['life'], PalayFixture[]>();
   let fixturesKey = '';
   const cachedUtilities = createUtilityFixtureCache();
   const cachedSeasonal = createSeasonalFixtureCache();
@@ -1771,6 +1809,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         fixtureTiles.set(loaded.life, found);
       }
       fixtures.push(...found);
+      if (loaded.life.drying) {
+        let strips = palayTiles.get(loaded.life);
+        if (!strips) palayTiles.set(loaded.life, (strips = palayFixtures(tile, loaded.life)));
+        fixtures.push(...strips);
+      }
       seasonalGroups.push({
         tile,
         life: loaded.life,
@@ -1800,6 +1843,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     ];
     festiveLightVersion++;
   };
+  /** What the strips show now: Life off takes the palay away, reduced motion doesn't. */
+  const palayState = () => {
+    const harvest = activity.harvest;
+    return life.enabled && harvest && harvest.drying > 0
+      ? { drying: harvest.drying, covered: !harvest.spread, hour: Math.floor(cityMinutes / 60) }
+      : undefined;
+  };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
     const visible = fixturePass(
@@ -1814,8 +1864,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       { time, strength: wind.strength },
       lifeView()?.signalOffsets,
       knobs.shadows ? sun : null,
+      palayState(),
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
+    const key = `${visible.palay ?? false} ${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);
@@ -1862,11 +1913,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   /** How much moonlight falls (life/moon.ts), 0–1. */
   let moon = 0;
   let cover = 0;
+  let mist = 0;
   let activity: Activity = activityLevels(1);
   /** The sun the map's shadows fall from (none at night). */
   let sun: Sun | null = null;
   // Real-city crop state is the source for later field-agent behaviour.
   let crop: CropNow | undefined;
+  const cropPreview = options.cropDate === undefined ? undefined : cropDate(options.cropDate);
   let cropPass: CropPass | null = null;
   let lastSun = -Infinity;
   /** The event last started with `playProcession`, until stopped (its run may still be pending). */
@@ -1943,14 +1996,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
     const next = daylightAt(position.altitude);
-    const nextCover =
-      prevailingWind(life.wind, options.climate, cityTime(now(), zone).month).strength === 'storm'
-        ? 1
-        : cloudCover(moment, sky.seed);
+    const storm =
+      prevailingWind(life.wind, options.climate, cityTime(now(), zone).month).strength === 'storm';
+    const nextCover = storm ? 1 : cloudCover(moment, sky.seed);
     const nextMoon = moonlight(moment, camera.lng, camera.lat) * (1 - SKY.moonLoss * nextCover);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
-    crop = cropStageAt(options.climate?.crops, real.year, real.day - epochDay(real.year, 1, 1));
+    const cropDay = (cropPreview && dateOccurrence(real.year, cropPreview)) ?? real.day;
+    crop = cropStageAt(options.climate?.crops, real.year, cropDay - epochDay(real.year, 1, 1));
     const stage = crop ? CROP_STAGES.indexOf(crop.stage) : -1;
     if (
       stage !== (cropPass?.stage ?? -1) ||
@@ -1985,12 +2038,27 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         weekday: local.weekday,
         life: options.cityLife,
         crop,
+        harvest: stormHarvest(
+          harvestAt(crop, options.climate?.crops?.rice?.harvest, local.minutes),
+          storm,
+        ),
       },
       season,
     );
     // Shadows follow the sun while it is up.
     const nextSun = position.altitude > 0 ? position : null;
     const moved = activityChanged(nextActivity, activity);
+    const nextMist = morningMist(
+      options.climate?.mist?.months,
+      local,
+      position.altitude,
+      sky.seed,
+      storm,
+    );
+    if (Math.abs(nextMist - mist) > SKY.dirtyCover || (nextMist === 0 && mist !== 0)) {
+      mist = nextMist;
+      drawDirty = true;
+    }
     if (
       moved ||
       Math.abs(next - daylight) > 0.001 ||
@@ -2130,6 +2198,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       !!season?.fireworks && camera.zoom >= FIREWORKS.minZoom && camera.zoom < FIREWORKS.hideZoom,
       !!options.cityLife?.folklore && lifeActive() && camera.zoom >= 15,
       () => drawnFrames,
+      // Ready before the first strip is packed, and through the hours before dawn's mist.
+      (life.enabled && (activity.harvest?.drying ?? 0) > 0 && camera.zoom >= PALAY_ZOOM.min) ||
+        (!!options.climate?.mist && cityMinutes >= 3 * 60 && cityMinutes < 7 * 60),
     );
   };
   let glyphPrebuild = false;
@@ -2360,6 +2431,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const wind = worldWind(time);
       if (watch.watched() && !reducedMotion)
         cloudOffset = driftClouds(cloudOffset, wind, (now - lastCloudAt) / 1000, false);
+      if (watch.watched() && !reducedMotion)
+        mistOffset = driftClouds(mistOffset, wind, (now - lastCloudAt) / 1000, false, MIST.speed);
       lastCloudAt = now;
       // Tree crowns go over the cells, and sway every frame while the wind blows through them.
       const swaying =
@@ -2407,6 +2480,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / SKY.fineCells / SKY.detailPixels,
         cloudOffset,
         ...(placement?.world ? skyGrid(sky, placement.world) : {}),
+        // Off wherever clouds are, and without the world grid its patches are anchored to.
+        mist: knobs.clouds && placement?.world ? mist : 0,
+        mistOffset,
+        mistDetail:
+          knobs.clouds &&
+          sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;

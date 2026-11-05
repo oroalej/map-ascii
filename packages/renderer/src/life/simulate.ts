@@ -222,6 +222,7 @@ import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
+import { fieldLife, workAnimal } from './field-life';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
@@ -9226,6 +9227,8 @@ export type VisibleAgent = {
   flap: number;
   /** Birds: their species and pose (life/birds.ts); `ahead` is where they face. */
   bird?: { species: BirdSpecies; pose: BirdPose };
+  /** A harvest actor's name (life/field-life.ts), which has no simulated owner to describe. */
+  fieldLabel?: string;
 };
 
 export type LifeTile = { key: string; tile: TileId; life: LifeGeometry };
@@ -9238,7 +9241,12 @@ type LifeDonor = {
 };
 
 /** The weather people react to: how hard it rains (0–1) and the sun's altitude (degrees). */
-export type LifeWeather = { rain: number; sunAltitude: number };
+export type LifeWeather = {
+  rain: number;
+  sunAltitude: number;
+  /** Shared time and the wind's way for the harvest's stateless actors (life/field-life.ts). */
+  field?: { time: number; wind: readonly [number, number] };
+};
 
 /** Every tile's agents: kept in step with the tiles on screen. */
 /** A line the life layer draws over the water (`VisibleAgent.line`). */
@@ -13665,7 +13673,8 @@ export class LifeWorld {
         !agent.prop &&
         (!agent.consist ||
           (agent.vehicle === 'locomotive' && cue.subject === 'driver' && cue.mood === 'honk')) &&
-        agent.vehicle !== 'carabao'
+        agent.vehicle !== 'carabao' &&
+        agent.vehicle !== 'hand-tractor'
       )
         agent.emoji = cue;
       return present(owner, agent);
@@ -13973,7 +13982,7 @@ export class LifeWorld {
           );
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
-            // The carabao a pace ahead, its farmer walking beside it.
+            // The carabao or hand tractor a pace ahead, its farmer walking beside it.
             const x = g.x + g.hx * 1.8 * perMeter;
             const y = g.y + g.hy * 1.8 * perMeter;
             const [lng, lat] = at(x, y);
@@ -13983,8 +13992,7 @@ export class LifeWorld {
               lat,
               ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
               side: at(x - g.hy * perMeter, y + g.hx * perMeter),
-              vehicle: 'carabao',
-              paint: g.carabao,
+              ...workAnimal(g.rank, g.carabao, levels.harvest?.tractors ?? 0),
               flap: 0,
               people: [{ ...look, lateral: 1 }],
             });
@@ -14210,8 +14218,15 @@ export class LifeWorld {
       return admitted;
     };
     if (out.length + eventCount <= maxAgents) {
-      const result = withPeddlers(
-        this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+      const result = this.withFieldLife(
+        withPeddlers(this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds)),
+        levels,
+        zoom,
+        weather,
+        center,
+        bounds,
+        crowd,
+        maxAgents,
       );
       const admitted = inspection?.finish(result) ?? result;
       diagnostics?.admitted(admitted);
@@ -14245,10 +14260,63 @@ export class LifeWorld {
       count += group.agents.length;
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
-    const result = withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds));
+    const result = this.withFieldLife(
+      withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds)),
+      levels,
+      zoom,
+      weather,
+      center,
+      bounds,
+      crowd,
+      maxAgents,
+    );
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     tapOwners?.finish(admitted);
+    return admitted;
+  }
+
+  /** The harvest's actors, after every other agent so they are the first to drop at the cap. */
+  private withFieldLife(
+    admitted: VisibleAgent[],
+    levels: Activity,
+    zoom: number,
+    weather: LifeWeather,
+    center: [number, number],
+    bounds: LngLatBounds | undefined,
+    crowd: number,
+    maxAgents: number,
+  ) {
+    const { harvest } = levels;
+    const field = weather.field;
+    if (!harvest || !field || bandVisibility(LIFE_ZOOM.person, zoom) < 1) return admitted;
+    if (!harvest.spread && harvest.ducks <= 0 && !harvest.burning) return admitted;
+    const frame = fieldLife({
+      tiles: [...this.tiles.values()].map((life) => ({ tile: life.tile, geo: life.geo })),
+      harvest,
+      time: field.time,
+      wind: field.wind,
+      birds: levels.bird,
+      center,
+      bounds,
+      crowd,
+      ...(this.mixedZoom && {
+        owns: ({ geo }, p) => {
+          for (const life of this.tiles.values()) if (life.geo === geo) return this.owns(life, p);
+          return false;
+        },
+      }),
+    });
+    for (const agent of frame.agents) {
+      if (admitted.length >= maxAgents) break;
+      admitted.push(agent);
+    }
+    if (frame.puffs.length) {
+      const packet = new Float64Array(this.puffPacket.length + frame.puffs.length);
+      packet.set(this.puffPacket);
+      packet.set(frame.puffs, this.puffPacket.length);
+      this.puffPacket = packet;
+    }
     return admitted;
   }
 

@@ -1375,6 +1375,24 @@ const PrevailingWindSchema = z.strictObject({
   strength: z.enum(WIND_STRENGTHS),
 });
 
+/** A span of the day in hours, starting before it ends. */
+const HourSpanSchema = z
+  .tuple([z.number().min(0).max(24), z.number().min(0).max(24)])
+  .refine(([start, end]) => start < end, { message: 'start must come before end' });
+
+const HarvestSchema = z.strictObject({
+  dryingHours: HourSpanSchema,
+  burningHours: HourSpanSchema.optional(),
+  tractors: z.boolean(),
+  ducks: z.boolean(),
+  source: z.string().min(1),
+});
+
+const MistSchema = z.strictObject({
+  months: z.array(z.number().min(0).max(1)).length(12),
+  source: z.string().min(1),
+});
+
 export const CropCalendarSchema = z
   .strictObject({
     calendar: z
@@ -1389,6 +1407,7 @@ export const CropCalendarSchema = z
       .min(2),
     source: z.string().min(1),
     notes: z.string().optional(),
+    harvest: HarvestSchema.optional(),
   })
   .superRefine(({ calendar }, ctx) => {
     const seen = new Set<string>();
@@ -1421,6 +1440,7 @@ export const Climate = z
     default: PrevailingWindSchema,
     source: z.string().min(1),
     crops: z.strictObject({ rice: CropCalendarSchema.optional() }).optional(),
+    mist: MistSchema.optional(),
   })
   .superRefine((climate, ctx) => {
     const seen = new Set<number>();

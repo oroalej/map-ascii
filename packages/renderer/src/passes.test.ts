@@ -116,6 +116,9 @@ it('sets cloud coordinates, seed and detail explicitly and resets to clear defau
     'u_meterOrigin',
     'u_meterStep',
     'u_cloudOffset',
+    'u_mist',
+    'u_mistOffset',
+    'u_mistDetail',
   ];
   const setters = Object.fromEntries(names.map((name) => [name, vi.fn()]));
   const programs = {
@@ -159,11 +162,24 @@ it('sets cloud coordinates, seed and detail explicitly and resets to clear defau
     meterOrigin: [8150, 123],
     meterStep: [1, 1.8],
     cloudOffset: [4, 5],
+    mist: 0.4,
+    mistOffset: [6, 7],
+    mistDetail: true,
   });
-  for (const [i, value] of [0.6, 0xf1234567, true, [8150, 123], [1, 1.8], [4, 5]].entries())
+  for (const [i, value] of [
+    0.6,
+    0xf1234567,
+    true,
+    [8150, 123],
+    [1, 1.8],
+    [4, 5],
+    0.4,
+    [6, 7],
+    true,
+  ].entries())
     expect(setters[names[i]!]!).toHaveBeenLastCalledWith(value);
   draw();
-  for (const [i, value] of [0, 0, false, [0, 0], [0, 0], [0, 0]].entries())
+  for (const [i, value] of [0, 0, false, [0, 0], [0, 0], [0, 0], 0, [0, 0], false].entries())
     expect(setters[names[i]!]!).toHaveBeenLastCalledWith(value);
 });
 

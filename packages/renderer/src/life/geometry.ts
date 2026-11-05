@@ -12,7 +12,8 @@ import type {
   SeasonalCarnivalRecord,
   SeasonalRecord,
 } from '@atlas/shared';
-import { parseSeasonalTileRecord } from '@atlas/shared';
+import { parseSeasonalTileRecord, type TileAddress } from '@atlas/shared';
+import { dryingStrips } from './palay';
 import type { TilePoint } from '../raster/geometry';
 import { Habitat } from './birds';
 
@@ -262,6 +263,8 @@ export type LifeGeometry = {
   controlledCrossings?: ControlledCrossingAnchor[];
   /** Stable feature identities for line copies in adjacent tiles. */
   lineIds?: Uint32Array;
+  /** Where palay can dry (life/palay.ts `DRYING_STRIDE`); only in a city with a harvest scene. */
+  drying?: Float32Array;
   /** Public street feature ids; service/compound roads are deliberately absent. */
   peddlerStreetIds?: number[];
   /** Restricted walking/street identities, also inherited by derived sidewalks. */
@@ -432,6 +435,23 @@ export class LifeBuilder {
   }
   field(id: string, kind: LifeField['kind'], rings: readonly (readonly TilePoint[])[]) {
     this.fields.add({ id, kind }, rings);
+  }
+  private drying?: Float32Array;
+  /** Call after the roads are split, and once every field is in. */
+  placeDrying(tile: TileAddress) {
+    if (!this.fields.length) return;
+    const strips = dryingStrips(
+      tile,
+      {
+        coords: this.coords,
+        starts: [...this.starts, this.coords.length / 2],
+        kinds: this.kinds,
+        widths: this.widths,
+        lineIds: this.lineIds,
+      },
+      unpackFootprints(this.fields.finish()),
+    );
+    if (strips.length) this.drying = strips;
   }
   roof(id: string, rings: readonly (readonly TilePoint[])[], anchor: TilePoint) {
     this.roofs.add({ id, anchor: { ...anchor } }, rings);
@@ -972,6 +992,7 @@ export class LifeBuilder {
       ...(this.worshipIds.length && { worshipIds: this.worshipIds }),
       ...(this.hospitals.length && { hospitals: this.hospitals }),
       ...(this.fields.length && { fields: this.fields.finish() }),
+      ...(this.drying && { drying: this.drying }),
       ...(this.roofs.length && { roofs: this.roofs.finish() }),
     };
   }
@@ -987,6 +1008,7 @@ export const lifeTransferables = (g: LifeGeometry): ArrayBuffer[] => [
         ]
       : [],
   ),
+  ...(g.drying ? [g.drying.buffer as ArrayBuffer] : []),
   ...(g.memorialSites ? [g.memorialSites.buffer as ArrayBuffer] : []),
   ...(g.graves ? [g.graves.buffer as ArrayBuffer] : []),
   ...(g.cemeteries ? [g.cemeteries.buffer as ArrayBuffer] : []),

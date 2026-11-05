@@ -21,6 +21,7 @@ export type WorkerRequest =
       fireworksActive?: boolean;
       memorials?: boolean;
       folklore?: boolean;
+      harvest?: boolean;
     }
   | { type: 'fireworks'; active: boolean }
   | { type: 'tile' | 'residential'; key: string; z: number; x: number; y: number };
@@ -297,6 +298,7 @@ export class TileSource {
     active = false,
     memorials = false,
     folklore = false,
+    harvest = false,
   ) {
     this.fireworksActive = fireworks && active;
     this.requests = new RequestQueue((tile, key, group) =>
@@ -333,6 +335,7 @@ export class TileSource {
       fireworksActive: this.fireworksActive,
       ...(memorials && { memorials }),
       ...(folklore && { folklore }),
+      ...(harvest && { harvest }),
     });
   }
 

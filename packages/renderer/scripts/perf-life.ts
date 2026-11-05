@@ -8,6 +8,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { viewportFor } from '../src/camera';
 import { placeGrid, windowCells, windowMargin } from '../src/grid';
+import { activityLevels } from '../src/life/config';
 import { LifeBuilder, LifeLine } from '../src/life/geometry';
 import type * as current from '../src/life/simulate';
 import { tileToLngLat } from '../src/raster/geometry';
@@ -333,6 +334,67 @@ try {
     rows.push({ name: 'pack/desktop', timings, counts: { agents: agents.length } });
     console.log(
       `pack/desktop: ${agents.length} agents; median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
+  if ('harvest/balatas'.startsWith(casePrefix)) {
+    // Farm tiles at the opening zoom at the peak of the harvest, every actor out at once.
+    const farmTiles = Array.from({ length: 4 }, (_, i) => {
+      const at = { ...tile, x: tile.x + (i % 2), y: tile.y + (i >> 1) };
+      const farm = new LifeBuilder();
+      farm.line(
+        [
+          { x: 0, y: 1000 },
+          { x: 4095, y: 1000 },
+        ],
+        LifeLine.roadMinor,
+        6,
+        i + 1,
+      );
+      farm.line(
+        [
+          { x: 2000, y: 0 },
+          { x: 2000, y: 4095 },
+        ],
+        LifeLine.roadMid,
+        8,
+        i + 11,
+      );
+      farm.place({ x: 1000, y: 3000 }, 'farm', 40);
+      farm.field(`farm${i}`, 'farmland', [
+        [
+          { x: -100, y: -100 },
+          { x: 4196, y: -100 },
+          { x: 4196, y: 4196 },
+          { x: -100, y: 4196 },
+          { x: -100, y: -100 },
+        ],
+      ]);
+      farm.placeDrying(at);
+      return { key: `farm${i}`, tile: at, life: farm.finish() };
+    });
+    const farmCenter = tileToLngLat(tile, { x: 4096, y: 4096 });
+    const harvestLevels = {
+      ...activityLevels(1),
+      harvest: { drying: 1, spread: true, tractors: 0.5, ducks: 1, burning: true },
+    };
+    const action = (module: Simulation) => () => {
+      const world = new module.LifeWorld();
+      world.sync(farmTiles);
+      for (let frame = 0; frame < 40; frame++) world.step(1 / 30, undefined, 17);
+      let time = 0;
+      return () => {
+        time += 1 / 30;
+        return world.visible(17, harvestLevels, farmCenter, {
+          rain: 0,
+          sunAltitude: 40,
+          field: { time, wind: [1, 0] },
+        });
+      };
+    };
+    const timings = compare(action(baseline), action(changed));
+    rows.push({ name: 'harvest/balatas', timings });
+    console.log(
+      `harvest/balatas: median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
     );
   }
   for (const count of [1, 4, 16, 64]) {
