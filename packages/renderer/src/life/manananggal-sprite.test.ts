@@ -1,14 +1,6 @@
 import { expect, it } from 'vitest';
-import {
-  bakeSpriteSheet,
-  Ink,
-  SPRITE_COLUMNS,
-  SPRITE_ROWS,
-  SPRITE_SIZE,
-  SpriteFrame,
-  spriteFrameInks,
-  wingLift,
-} from './manananggal-sprite';
+import { SPRITE_COLUMNS, SPRITE_ROWS, SPRITE_SIZE, SpriteFrame } from './manananggal-frames';
+import { bakeSpriteSheet, Ink, spriteFrameInks, wingLift } from './manananggal-sprite';
 
 const count = (frame: Uint8Array, ink: number) => frame.filter((i) => i === ink).length;
 const box = (frame: Uint8Array) => {

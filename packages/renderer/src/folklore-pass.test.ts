@@ -12,7 +12,7 @@ import { createProgram, createTexture, type GL, type CellTargets } from './gpu';
 import { placeGrid, type View } from './grid';
 import type { FolklorePacket } from './life/folklore';
 import { normalizeFocus, focusPulse } from './focus';
-import { SpriteFrame } from './life/manananggal-sprite';
+import { SpriteFrame } from './life/manananggal-frames';
 vi.mock('./gpu', () => ({
   createProgram: vi.fn(() => ({ program: {}, uniformSetters: {} })),
   createTexture: vi.fn(() => ({})),
@@ -70,6 +70,21 @@ const figure = (over: Partial<FolklorePacket['sprites'][number]> = {}) => ({
   ...over,
 });
 const under = (code: number) => Math.floor(code / 64) - 1;
+it('draws only the ghosts while the sheet is on its way', async () => {
+  const gl = new Proxy({} as Record<string, unknown>, {
+    get: (target, key) => (target[key as string] ??= vi.fn(() => ({}))),
+  }) as unknown as GL;
+  const p = {} as Programs;
+  const theme = {
+    map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
+    uniforms: { accent: [1, 0.8, 0.3] },
+  } as unknown as ThemeResources;
+  const grid = { originCol: 0, originRow: 0, shiftX: 0, shiftY: 0 };
+  const both = folkloreLayout({ ...packet, sprites: [packet.sprites[0]!, figure()] }, view);
+  folklorePass(gl, p, {} as CellTargets, theme, view, grid, both);
+  expect(vi.mocked(gl.drawArraysInstanced)).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
+  await vi.waitFor(() => expect(p.folklore!.sheet).toBeDefined());
+});
 it('picks the frame for each moment of the manananggal, with its entrails under the wings', () => {
   const flying = manananggalFrames(figure({ phase: 0.5, wave: 0.5 }));
   expect(flying % 64).toBe(SpriteFrame.flap + 4);
@@ -159,7 +174,7 @@ it('keeps haunt positions and meter radii consistent across pan, zoom and DPR an
 });
 it.each(['cached', 'pending', 'demand'] as const)(
   'draws folklore with %s preparation and owns each resource once',
-  (preparation) => {
+  async (preparation) => {
     vi.mocked(createProgram).mockClear();
     const gl = Object.fromEntries(
       [
@@ -259,14 +274,27 @@ it.each(['cached', 'pending', 'demand'] as const)(
     }
     folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(packet, view));
     expect(r.data).toBe(data);
-    // Ghosts alone never paint the sheet; the manananggal does, once.
+    // Ghosts alone never ask for the sheet. The manananggal asks once, and waits for it unseen.
     vi.mocked(createTexture).mockClear();
     expect(r.sprites).toBeUndefined();
+    expect(r.sheetRequested).toBeUndefined();
+    const draws = vi.mocked(calls.drawArraysInstanced!);
+    draws.mockClear();
     const creature = { ...packet, sprites: [figure()] };
-    folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(creature, view));
-    folklorePass(gl, p, targets, theme, view, grid, folkloreLayout(creature, view));
+    const quads = folkloreLayout(creature, view);
+    folklorePass(gl, p, targets, theme, view, grid, quads);
+    expect(r.sheetRequested).toBe(true);
+    expect(draws).not.toHaveBeenCalled();
+    const mixed = folkloreLayout({ ...packet, sprites: [packet.sprites[0]!, figure()] }, view);
+    await vi.waitFor(() => expect(r.sheet).toBeDefined());
+    expect(createTexture).not.toHaveBeenCalled();
+    folklorePass(gl, p, targets, theme, view, grid, mixed);
+    folklorePass(gl, p, targets, theme, view, grid, quads);
     expect(createTexture).toHaveBeenCalledTimes(1);
     expect(r.sprites).toBeDefined();
+    expect(r.sheet).toBeUndefined();
+    expect(draws).toHaveBeenLastCalledWith(gl.TRIANGLES, 0, 6, 1);
+    expect(draws.mock.calls[0]![3]).toBe(2);
     gl.isContextLost = () => false;
     deletePrograms(gl, p);
     expect(calls.deleteProgram).toHaveBeenCalledWith(r.program.program);

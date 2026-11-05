@@ -1,5 +1,5 @@
 import { FOCUS_DIM } from '../focus';
-import { SPRITE_COLUMNS, SPRITE_ROWS } from '../life/manananggal-sprite';
+import { SPRITE_COLUMNS, SPRITE_ROWS } from '../life/manananggal-frames';
 
 export const folkloreVertex = `#version 300 es
 precision highp float;

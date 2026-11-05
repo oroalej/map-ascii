@@ -3,31 +3,7 @@
  * upper body on bat wings, fanged, with its entrails hanging from the waist and, on a roof, its long
  * tongue let down. The legs it left behind are a single frame, since they don't move.
  */
-
-export const SPRITE_SIZE = 48;
-const COLUMNS = 6;
-
-/** Where each set of frames starts in the sheet. */
-export const SpriteFrame = {
-  /** The wings through one beat. Index 0 is the glide. */
-  flap: 0,
-  flaps: 8,
-  /** From the glide to wings drawn round it like a cloak. */
-  fold: 8,
-  folds: 4,
-  /** Hunched on a roof, tongue swaying; the last of them blinks. */
-  perch: 12,
-  perches: 4,
-  /** The entrails swaying, drawn under the flap and fold frames. */
-  trail: 16,
-  trails: 4,
-  /** The legs. */
-  lower: 20,
-  count: 21,
-} as const;
-
-export const SPRITE_COLUMNS = COLUMNS;
-export const SPRITE_ROWS = Math.ceil(SpriteFrame.count / COLUMNS);
+import { SPRITE_COLUMNS, SPRITE_ROWS, SPRITE_SIZE, SpriteFrame } from './manananggal-frames';
 
 export const Ink = {
   clear: 0,
@@ -451,13 +427,13 @@ export function spriteFrameInks(frame: number): Uint8Array {
 
 /** The whole sheet as RGBA rows from the top, for one upload the first time the figure shows. */
 export function bakeSpriteSheet() {
-  const width = COLUMNS * SPRITE_SIZE,
+  const width = SPRITE_COLUMNS * SPRITE_SIZE,
     height = SPRITE_ROWS * SPRITE_SIZE;
   const data = new Uint8Array(width * height * 4);
   for (let frame = 0; frame < SpriteFrame.count; frame++) {
     const ink = spriteFrameInks(frame);
-    const ox = (frame % COLUMNS) * SPRITE_SIZE,
-      oy = Math.floor(frame / COLUMNS) * SPRITE_SIZE;
+    const ox = (frame % SPRITE_COLUMNS) * SPRITE_SIZE,
+      oy = Math.floor(frame / SPRITE_COLUMNS) * SPRITE_SIZE;
     for (let y = 0; y < SPRITE_SIZE; y++)
       for (let x = 0; x < SPRITE_SIZE; x++) {
         const color = PALETTE[ink[y * SPRITE_SIZE + x]!]!;

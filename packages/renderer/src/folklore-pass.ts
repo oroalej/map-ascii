@@ -6,7 +6,7 @@ import type { Programs, ThemeResources } from './gpu-context';
 import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from './life/folklore';
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
-import { bakeSpriteSheet, SpriteFrame } from './life/manananggal-sprite';
+import { SpriteFrame } from './life/manananggal-frames';
 import { folkloreVertex, folkloreFragment } from './shaders/folklore';
 import { focusPulse, normalizeFocus } from './focus';
 
@@ -128,8 +128,10 @@ export type FolkloreResources = {
   vao: WebGLVertexArrayObject | null;
   buffer: WebGLBuffer | null;
   data: Float32Array;
-  /** Painted and uploaded the first time the manananggal shows. */
+  /** Painted and uploaded the first time the manananggal shows, which most visits it never does. */
   sprites?: WebGLTexture;
+  sheet?: { width: number; height: number; data: Uint8Array };
+  sheetRequested?: boolean;
 };
 function createFolklore(gl: GL, programs: Programs): FolkloreResources {
   const pending = programs.glyphWarmup?.pending;
@@ -172,15 +174,30 @@ export function folklorePass(
 ) {
   if (!quads.length) return;
   const r = (programs.folklore ??= createFolklore(gl, programs));
-  if (r.data.length < quads.length * 8)
-    r.data = new Float32Array(2 ** Math.ceil(Math.log2(quads.length * 8)));
-  const data = r.data;
   if (!r.sprites && quads.some((q) => q.sprite.kind !== 'ghost')) {
-    const sheet = bakeSpriteSheet();
-    r.sprites = createTexture(gl, gl.RGBA8, gl.RGBA, sheet.width, sheet.height, sheet.data);
+    if (r.sheet) {
+      const { width, height, data } = r.sheet;
+      r.sprites = createTexture(gl, gl.RGBA8, gl.RGBA, width, height, data);
+      r.sheet = undefined;
+    } else if (!r.sheetRequested) {
+      r.sheetRequested = true;
+      // Without the painter the figure just stays unseen; ghosts don't depend on it.
+      void import('./life/manananggal-sprite').then(
+        ({ bakeSpriteSheet }) => {
+          r.sheet = bakeSpriteSheet();
+        },
+        () => undefined,
+      );
+    }
   }
-  for (let i = 0; i < quads.length; i++) {
-    const q = quads[i]!,
+  // Until its sheet arrives there is nothing to draw the figure from.
+  const shown = r.sprites ? quads : quads.filter((q) => q.sprite.kind === 'ghost');
+  if (!shown.length) return;
+  if (r.data.length < shown.length * 8)
+    r.data = new Float32Array(2 ** Math.ceil(Math.log2(shown.length * 8)));
+  const data = r.data;
+  for (let i = 0; i < shown.length; i++) {
+    const q = shown[i]!,
       offset = i * 8;
     data[offset] = q.x;
     data[offset + 1] = q.y;
@@ -219,7 +236,7 @@ export function folklorePass(
   gl.bindVertexArray(r.vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, r.buffer);
   gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, quads.length);
+  gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, shown.length);
   gl.bindVertexArray(null);
   gl.disable(gl.BLEND);
 }
