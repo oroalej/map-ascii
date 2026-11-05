@@ -932,6 +932,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     !!season?.fireworks && camera.zoom < FIREWORKS.hideZoom,
     options.cityLife?.seasons?.some((season) => !!(season.candles || season.visitors)) === true,
     !!options.cityLife?.folklore,
+    !!options.climate?.crops?.rice?.harvest,
   );
   const { source } = tileCache;
 

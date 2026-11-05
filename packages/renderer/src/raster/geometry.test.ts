@@ -2077,3 +2077,48 @@ describe('local scene geometry', () => {
     expect(g.life.obstacleStarts).toHaveLength(4);
   });
 });
+
+it('emits field footprints and drying strips only for a harvest city or folklore', () => {
+  const layers = {
+    map: layer([
+      feature(2, { id: 'road', class: 'road_minor' }, [
+        [
+          [0, 2000],
+          [4096, 2000],
+        ],
+      ]),
+      feature(3, { id: 'field', class: 'farmland' }, [square(0, 2000, 1000)]),
+      feature(3, { id: 'lawn', class: 'grass' }, [square(3000, 200, 500)]),
+    ]),
+  };
+  const build = (folklore: boolean, harvest: boolean) =>
+    buildTileGeometry(
+      layers,
+      createIdRegistry(),
+      { z: 15, x: 27_900, y: 15_100 },
+      15,
+      false,
+      folklore,
+      harvest,
+    ).life;
+  const plain = build(false, false);
+  expect(plain.fields).toBeUndefined();
+  expect(plain.drying).toBeUndefined();
+  const folklore = build(true, false);
+  expect(
+    unpackFootprints(folklore.fields)
+      .map((f) => f.kind)
+      .sort(),
+  ).toEqual(['farmland', 'grass']);
+  expect(folklore.drying).toBeUndefined();
+  const harvest = build(false, true);
+  expect(unpackFootprints(harvest.fields).map((f) => f.kind)).toEqual(['farmland']);
+  expect(harvest.drying?.length).toBeGreaterThan(0);
+  expect(lifeTransferables(harvest)).toContain(harvest.drying!.buffer);
+  // Everything but the sidecars matches, so a city without harvest keeps its geometry.
+  expect({ ...harvest, fields: undefined, drying: undefined }).toEqual({
+    ...plain,
+    fields: undefined,
+    drying: undefined,
+  });
+});
