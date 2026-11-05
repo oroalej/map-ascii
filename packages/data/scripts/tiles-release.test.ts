@@ -105,4 +105,88 @@ describe('fetching', () => {
       /set GITHUB_TOKEN/,
     );
   });
+
+  describe('after a failure', () => {
+    const lock = lockFor({ 'naga.pmtiles': 'tiles' });
+    const wait = vi.fn((_ms: number) => Promise.resolve());
+    const status = (code: number) => new Response('nope', { status: code });
+
+    beforeEach(() => {
+      wait.mockClear();
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('retries a 504 and keeps the download that follows', async () => {
+      const fetch = vi
+        .fn<() => Promise<Response>>()
+        .mockResolvedValueOnce(status(504))
+        .mockResolvedValueOnce(new Response('tiles'));
+      await downloadFiles(lock, ['naga.pmtiles'], dir, { fetch, wait });
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(wait).toHaveBeenCalledTimes(1);
+      expect(await readFile(join(dir, 'naga.pmtiles'), 'utf8')).toBe('tiles');
+    });
+
+    it('gives up with the original error, backing off, when every attempt is a 504', async () => {
+      const fetch = vi.fn(() => Promise.resolve(status(504)));
+      await expect(downloadFiles(lock, ['naga.pmtiles'], dir, { fetch, wait })).rejects.toThrow(
+        /^naga\.pmtiles: HTTP 504$/,
+      );
+      expect(fetch).toHaveBeenCalledTimes(4);
+      const delays = wait.mock.calls.map(([ms]) => ms);
+      expect(delays).toHaveLength(3);
+      expect(delays).toEqual([...delays].sort((a, b) => a - b));
+    });
+
+    it('fails at once on a 404, keeping the hint', async () => {
+      const fetch = vi.fn(() => Promise.resolve(status(404)));
+      await expect(downloadFiles(lock, ['naga.pmtiles'], dir, { fetch, wait })).rejects.toThrow(
+        /^naga\.pmtiles: HTTP 404 \(private repository\? set GITHUB_TOKEN\)$/,
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(wait).not.toHaveBeenCalled();
+    });
+
+    it('retries a dropped connection, and one dropped while reading the body', async () => {
+      const dropped = new Response('tiles');
+      vi.spyOn(dropped, 'arrayBuffer').mockRejectedValue(new TypeError('terminated'));
+      const fetch = vi
+        .fn<() => Promise<Response>>()
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce(dropped)
+        .mockResolvedValueOnce(new Response('tiles'));
+      await downloadFiles(lock, ['naga.pmtiles'], dir, { fetch, wait });
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(await readFile(join(dir, 'naga.pmtiles'), 'utf8')).toBe('tiles');
+    });
+
+    it('does not retry a download whose hash is wrong', async () => {
+      const fetch = vi.fn(() => Promise.resolve(new Response('tampered')));
+      await expect(downloadFiles(lock, ['naga.pmtiles'], dir, { fetch, wait })).rejects.toThrow(
+        /does not match the lock/,
+      );
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries the release lookup on a 502, but not on a 404', async () => {
+      const release = () =>
+        Response.json({ assets: [{ name: 'naga.pmtiles', url: 'https://api/asset/1' }] });
+      const flaky = vi
+        .fn<() => Promise<Response>>()
+        .mockResolvedValueOnce(status(502))
+        .mockResolvedValueOnce(release())
+        .mockResolvedValueOnce(new Response('tiles'));
+      await downloadFiles(lock, ['naga.pmtiles'], dir, { fetch: flaky, token: 't0k', wait });
+      expect(flaky).toHaveBeenCalledTimes(3);
+
+      const missing = vi.fn(() => Promise.resolve(status(404)));
+      await expect(
+        downloadFiles(lock, ['naga.pmtiles'], dir, { fetch: missing, token: 't0k', wait }),
+      ).rejects.toThrow(/^release tiles-naga-20260929-1930 in owner\/name: HTTP 404$/);
+      expect(missing).toHaveBeenCalledTimes(1);
+    });
+  });
 });
