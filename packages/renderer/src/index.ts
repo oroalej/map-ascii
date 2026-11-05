@@ -160,9 +160,11 @@ import {
 import { moonlight } from './life/moon';
 import { createUtilityFixtureCache } from './life/utilities';
 import {
+  palayFixtures,
   tileFixtures,
   type StreetFixture,
   type FixtureVisibility,
+  type PalayFixture,
   type LegacyStreetFixture,
 } from './life/fixtures';
 import { createSeasonalFixtureCache, type SeasonalTile } from './life/seasonal';
@@ -1722,6 +1724,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   };
   let fixtures: StreetFixture[] = [];
   const fixtureTiles = new WeakMap<LoadedTile['life'], LegacyStreetFixture[]>();
+  const palayTiles = new WeakMap<LoadedTile['life'], PalayFixture[]>();
   let fixturesKey = '';
   const cachedUtilities = createUtilityFixtureCache();
   const cachedSeasonal = createSeasonalFixtureCache();
@@ -1795,6 +1798,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         fixtureTiles.set(loaded.life, found);
       }
       fixtures.push(...found);
+      if (loaded.life.drying) {
+        let strips = palayTiles.get(loaded.life);
+        if (!strips) palayTiles.set(loaded.life, (strips = palayFixtures(tile, loaded.life)));
+        fixtures.push(...strips);
+      }
       seasonalGroups.push({
         tile,
         life: loaded.life,

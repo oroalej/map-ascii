@@ -9,7 +9,7 @@ import { PALAY_SHOW_SHARE } from './config';
 import {
   FixturePart,
   packFixtures,
-  tileFixtures,
+  palayFixtures,
   type FixtureGrid,
   type PalayFixture,
   type PalayState,
@@ -157,14 +157,7 @@ describe('palay strips', () => {
     const tile = { z: 16, x: 55_800, y: 30_200 };
     const drying = Float32Array.from([100, 200, 400, 200, 1, 0.25, 500, 600, 500, 900, -1, 0.75]);
     expect(drying.length).toBe(2 * DRYING_STRIDE);
-    const empty = new Float32Array();
-    const geo = {
-      lamps: empty,
-      flagpoles: empty,
-      signals: empty,
-      drying,
-    } as unknown as LifeGeometry;
-    const fixtures = tileFixtures(tile, geo).filter((f) => f.kind === 'palay') as PalayFixture[];
+    const fixtures = palayFixtures(tile, { drying } as unknown as LifeGeometry);
     expect(fixtures.map((f) => f.hash)).toEqual([0.25, 0.75]);
     const a = lngLatToTile(tile, ...fixtures[0]!.from);
     expect(a.x).toBeCloseTo(100, 3);
@@ -175,9 +168,7 @@ describe('palay strips', () => {
   });
 
   it('adds nothing to a tile with no strips', () => {
-    const empty = new Float32Array();
-    const geo = { lamps: empty, flagpoles: empty, signals: empty } as unknown as LifeGeometry;
-    expect(tileFixtures({ z: 16, x: 1, y: 1 }, geo)).toEqual([]);
+    expect(palayFixtures({ z: 16, x: 1, y: 1 }, {} as unknown as LifeGeometry)).toEqual([]);
   });
 });
 

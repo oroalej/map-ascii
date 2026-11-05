@@ -222,7 +222,7 @@ import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
-import { fieldLife } from './field-life';
+import { fieldLife, workAnimal } from './field-life';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
@@ -13673,7 +13673,8 @@ export class LifeWorld {
         !agent.prop &&
         (!agent.consist ||
           (agent.vehicle === 'locomotive' && cue.subject === 'driver' && cue.mood === 'honk')) &&
-        agent.vehicle !== 'carabao'
+        agent.vehicle !== 'carabao' &&
+        agent.vehicle !== 'hand-tractor'
       )
         agent.emoji = cue;
       return present(owner, agent);
@@ -13981,7 +13982,7 @@ export class LifeWorld {
           );
           const at = (x: number, y: number) => tileToLngLat(tile, { x, y });
           if (g.carabao !== undefined) {
-            // The carabao a pace ahead, its farmer walking beside it.
+            // The carabao or hand tractor a pace ahead, its farmer walking beside it.
             const x = g.x + g.hx * 1.8 * perMeter;
             const y = g.y + g.hy * 1.8 * perMeter;
             const [lng, lat] = at(x, y);
@@ -13991,8 +13992,7 @@ export class LifeWorld {
               lat,
               ahead: at(x + g.hx * perMeter, y + g.hy * perMeter),
               side: at(x - g.hy * perMeter, y + g.hx * perMeter),
-              vehicle: 'carabao',
-              paint: g.carabao,
+              ...workAnimal(g.rank, g.carabao, levels.harvest?.tractors ?? 0),
               flap: 0,
               people: [{ ...look, lateral: 1 }],
             });

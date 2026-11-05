@@ -1111,7 +1111,7 @@ describe('live motion preference', () => {
     // Everything but farm attendance is the real Monday morning's.
     const real = activityLevels(1, { minutes: 480, weekday: 1 });
     expect(previewed.person).toBe(real.person);
-    expect(previewed.places.market).toBe(real.places.market);
+    expect(previewed.places.worship).toBe(real.places.worship);
     for (const malformed of ['09-31', 'tomorrow', undefined]) {
       open(malformed);
       await vi.dynamicImportSettled();

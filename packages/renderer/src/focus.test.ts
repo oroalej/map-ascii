@@ -48,6 +48,7 @@ it('separates vendor attendants, pets, paddlers and carabao from their drawing c
     }),
   ).toBe('vendors');
   expect(lifeFocusOf({ ...base, vehicle: 'carabao' })).toBe('traffic');
+  expect(lifeFocusOf({ ...base, vehicle: 'hand-tractor' })).toBe('traffic');
   expect(lifeFocusOf({ ...base, aboard: true })).toBe('people');
   expect(lifeFocusOf({ ...base, kind: 'dog' })).toBe('pets');
   expect(lifeFocusOf({ ...base, kind: 'cat' })).toBe('pets');

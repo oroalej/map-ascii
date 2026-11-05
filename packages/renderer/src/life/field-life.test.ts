@@ -22,7 +22,15 @@ import { LifeBuilder } from './geometry';
 import { LifeWorld, type VisibleAgent } from './simulate';
 import { packFootprints, type LifeGeometry } from './geometry';
 import { DRYING_STRIDE } from './palay';
-import { EMBER_LABEL, FIELD_LIFE, fieldLife, RAKER_LABEL, type FieldInput } from './field-life';
+import {
+  EMBER_LABEL,
+  FIELD_LIFE,
+  fieldLife,
+  RAKER_LABEL,
+  workAnimal,
+  type FieldInput,
+} from './field-life';
+import { VEHICLES } from './vehicles';
 import { PUFF_STRIDE } from './exhaust';
 import { PALAY_SHOW_SHARE } from './config';
 
@@ -369,5 +377,36 @@ describe('LifeWorld with a harvest', () => {
     w.visible(19, levels, center(tile), weather);
     expect(w.visiblePuffs.length).toBe(exhaust + FIELD_LIFE.smokeParticles * PUFF_STRIDE);
     expect(w.visiblePuffs[exhaust]).toBe(-1);
+  });
+});
+
+describe('hand tractors', () => {
+  const ranks = Array.from({ length: 400 }, (_, i) => i / 400);
+
+  it('take a stable half of the carabao owners while the stage calls for them', () => {
+    const on = ranks.filter((rank) => workAnimal(rank, 2, 0.5).vehicle === 'hand-tractor');
+    expect(on.length / ranks.length).toBeGreaterThan(0.4);
+    expect(on.length / ranks.length).toBeLessThan(0.6);
+    expect(ranks.filter((rank) => workAnimal(rank, 2, 0.5).vehicle === 'hand-tractor')).toEqual(on);
+  });
+
+  it('leave a farmer with the same carabao, in its paint, once the stage ends', () => {
+    for (const rank of ranks) {
+      expect(workAnimal(rank, 2, 0)).toEqual({ vehicle: 'carabao', paint: 2 });
+      const during = workAnimal(rank, 2, 0.5);
+      if (during.vehicle === 'hand-tractor')
+        expect(VEHICLES['hand-tractor'].paints).toContain(during.paint);
+      else expect(during.paint).toBe(2);
+    }
+  });
+
+  it('come after the earlier crafts, which keep their order, and carry a close-up plan', () => {
+    const crafts = Object.keys(VEHICLES);
+    expect(crafts.at(-1)).toBe('hand-tractor');
+    expect(crafts.indexOf('carabao')).toBeLessThan(crafts.indexOf('ambulance'));
+    expect(VEHICLES['hand-tractor'].fine?.length).toBeGreaterThan(0);
+    expect(VEHICLES['hand-tractor'].length).toBe(2.6);
+    expect(VEHICLES['hand-tractor'].width).toBe(1);
+    expect(VEHICLES.carabao.paints).toHaveLength(3);
   });
 });

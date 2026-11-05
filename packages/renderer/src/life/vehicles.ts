@@ -154,8 +154,11 @@ export const peddlerCartOffset = (craft: PeddlerCraft) => 0.7 + VEHICLES[craft].
 
 export type EmergencyCraft = 'ambulance' | 'police' | 'firetruck';
 
-/** A farm animal (life/simulate.ts `Gatherer`): a carabao, led along a field by its farmer. */
-export type AnimalCraft = 'carabao';
+/**
+ * What a farmer leads along a field (life/simulate.ts `Gatherer`): a carabao, or in some crop
+ * stages the two-wheeled hand tractor (kuliglig) that some farmers plow and haul with.
+ */
+export type AnimalCraft = 'carabao' | 'hand-tractor';
 
 /** A street vendor's cart (life/simulate.ts `Stall`), which stands where people walk. */
 export type StallCraft = 'cart';
@@ -451,6 +454,17 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
     paints: [P.cream, P.maroon],
     mini: [PEDDLER_GLYPHS[2], PEDDLER_GLYPHS[2]],
     plan: ['DBBBBD', 'BDRARB', 'DBBBBD'],
+  },
+  'hand-tractor': {
+    fine: FINE_PLANS['hand-tractor'],
+    height: 1,
+    length: 2.6,
+    width: 1,
+    speed: 0,
+    paints: [P.red, P.orange, P.blue],
+    mini: ['▪', '▪'],
+    // Handles trailing to the farmer, the engine on two wide wheels in front; no lights.
+    plan: ['D....DD.', '.DDBBBBB', 'D....DD.'],
   },
 };
 

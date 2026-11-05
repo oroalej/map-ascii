@@ -19,7 +19,7 @@ import { sample } from './exhaust';
 import { unpackFootprints, type LifeGeometry } from './geometry';
 import { DRYING_STRIDE, insideRings } from './palay';
 import type { VisibleAgent } from './simulate';
-import { Paint } from './vehicles';
+import { Paint, VEHICLES } from './vehicles';
 
 export const FIELD_LIFE = {
   /** Lattice cells across the world's width: z15 tiles / 10, about 120 m a side in the tropics. */
@@ -305,6 +305,25 @@ function smoke(input: FieldInput, out: FieldFrame) {
         fieldLabel: EMBER_LABEL,
       });
   }
+}
+
+/**
+ * What a farmer who owns a carabao leads now: while the stage calls for them, a stable share
+ * lead a hand tractor instead, then go back to the same animal. Spawning never changes, so no
+ * random stream moves.
+ */
+export function workAnimal(
+  rank: number,
+  carabao: number,
+  tractors: number,
+): { vehicle: 'carabao' | 'hand-tractor'; paint: number } {
+  const seed = Math.floor(rank * 0x100000000);
+  if (sample(seed, 0, 13) >= tractors) return { vehicle: 'carabao', paint: carabao };
+  const paints = VEHICLES['hand-tractor'].paints;
+  return {
+    vehicle: 'hand-tractor',
+    paint: paints[Math.floor(sample(seed, 0, 14) * paints.length)]!,
+  };
 }
 
 /** Everything the harvest adds to this frame. */

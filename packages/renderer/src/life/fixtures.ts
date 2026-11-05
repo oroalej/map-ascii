@@ -185,12 +185,34 @@ export const SIGNAL_LIGHT = {
   haloStrength: 0.35,
 } as const;
 
+/** Every strip of a tile, in use or not: which show is worked out at packing (`packPalay`). */
+export function palayFixtures(tile: TileId, geo: LifeGeometry): PalayFixture[] {
+  const out: PalayFixture[] = [];
+  const perMeter = 1 / metersPerUnit(tile);
+  const drying = geo.drying ?? [];
+  for (let i = 0; i < drying.length; i += DRYING_STRIDE) {
+    const x0 = drying[i]!,
+      y0 = drying[i + 1]!,
+      x1 = drying[i + 2]!,
+      y1 = drying[i + 3]!;
+    const length = Math.hypot(x1 - x0, y1 - y0) || 1;
+    out.push({
+      kind: 'palay',
+      from: tileToLngLat(tile, { x: x0, y: y0 }),
+      to: tileToLngLat(tile, { x: x1, y: y1 }),
+      across: tileToLngLat(tile, {
+        x: x0 - ((y1 - y0) / length) * perMeter,
+        y: y0 + ((x1 - x0) / length) * perMeter,
+      }),
+      hash: drying[i + 5]!,
+    });
+  }
+  return out;
+}
+
 /** Retain tile ownership and the existing curb positions, directions, and phase seeds. */
-export function tileFixtures(
-  tile: TileId,
-  geo: LifeGeometry,
-): (LegacyStreetFixture | PalayFixture)[] {
-  const out: (LegacyStreetFixture | PalayFixture)[] = [];
+export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixture[] {
+  const out: LegacyStreetFixture[] = [];
   const perMeter = 1 / metersPerUnit(tile);
   const vehicleBases: { x: number; y: number }[] | undefined = geo.controlledCrossings?.some(
     (c) => c.sides,
@@ -227,24 +249,6 @@ export function tileFixtures(
       state: geo.lamps[i + 2]! as LampState,
       seed: geo.lamps[i + 3]!,
       roadCenter: tileToLngLat(tile, { x: geo.lamps[i + 6]!, y: geo.lamps[i + 7]! }),
-    });
-  }
-  const drying = geo.drying ?? [];
-  for (let i = 0; i < drying.length; i += DRYING_STRIDE) {
-    const x0 = drying[i]!,
-      y0 = drying[i + 1]!,
-      x1 = drying[i + 2]!,
-      y1 = drying[i + 3]!;
-    const length = Math.hypot(x1 - x0, y1 - y0) || 1;
-    out.push({
-      kind: 'palay',
-      from: tileToLngLat(tile, { x: x0, y: y0 }),
-      to: tileToLngLat(tile, { x: x1, y: y1 }),
-      across: tileToLngLat(tile, {
-        x: x0 - ((y1 - y0) / length) * perMeter,
-        y: y0 + ((x1 - x0) / length) * perMeter,
-      }),
-      hash: drying[i + 5]!,
     });
   }
   const poles = geo.flagpoles ?? [];
