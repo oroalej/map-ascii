@@ -227,13 +227,14 @@ import { faceGroup, restoreMover, snapshotMover } from './mover-pose';
 import { runPace } from './running';
 import { cruise } from './driving';
 import { LifeInspection } from './inspection';
+import type { LifeClass } from '../classes';
 import { fieldLife, workAnimal } from './field-life';
 import { placeSeed } from './lights';
 import { UmbrellaMotion } from './umbrellas';
 import { MomentHost, type MomentOptions } from './moments-host';
 import { assignEventCues, eventCheers } from './event-cues';
 import { DialogueMemory } from './dialogue';
-import { RailCrossings } from './rail-crossings';
+import { crossingBarriers, RAIL_CROSSING, RailCrossings } from './rail-crossings';
 import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
@@ -9315,6 +9316,10 @@ export type LifeLineShape = {
   points: readonly [number, number][];
   paints: readonly number[];
   tip?: { glyph: string; paint: number };
+  /** Which class and allowed bit its cells take; a boat's when absent, so it stays on water. */
+  layer?: { cls: LifeClass; bit: number };
+  /** Draw it even when it falls within a single cell, as a crossing's barrier on a narrow road. */
+  short?: boolean;
 };
 
 /** The procession under way: which, how far through (0–1), and whether it is the live one. */
@@ -14286,7 +14291,14 @@ export class LifeWorld {
     };
     if (out.length + eventCount <= maxAgents) {
       const result = this.withFieldLife(
-        withPeddlers(this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds)),
+        this.withBarriers(
+          withPeddlers(
+            this.withPuffs(withBirdCues(withBalls([...staged, ...out])), center, bounds),
+          ),
+          zoom,
+          bounds,
+          maxAgents,
+        ),
         levels,
         zoom,
         weather,
@@ -14328,7 +14340,12 @@ export class LifeWorld {
     }
     for (const group of selected.sort((a, b) => a.index - b.index)) kept.push(...group.agents);
     const result = this.withFieldLife(
-      withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds)),
+      this.withBarriers(
+        withPeddlers(this.withPuffs(withBirdCues(withBalls(kept)), center, bounds)),
+        zoom,
+        bounds,
+        maxAgents,
+      ),
       levels,
       zoom,
       weather,
@@ -14340,6 +14357,30 @@ export class LifeWorld {
     const admitted = inspection?.finish(result, true) ?? result;
     diagnostics?.admitted(admitted);
     tapOwners?.finish(admitted);
+    return admitted;
+  }
+
+  /** The barriers at closed crossings: after the movers they hold, within the cap. */
+  private withBarriers(
+    admitted: VisibleAgent[],
+    zoom: number,
+    bounds: LngLatBounds | undefined,
+    maxAgents: number,
+  ) {
+    if (bandVisibility(RAIL_CROSSING.barrierZoom, zoom) < 1) return admitted;
+    for (const life of this.tiles.values()) {
+      if (!life.railCrossings.crossings.length) continue;
+      const inView = viewIn(life.tile, bounds, 0);
+      crossingBarriers(
+        life.railCrossings.crossings,
+        life.tile,
+        life.perMeter,
+        this.clock,
+        (p) => inView(p.x, p.y) && this.owns(life, p),
+        admitted,
+        maxAgents,
+      );
+    }
     return admitted;
   }
 

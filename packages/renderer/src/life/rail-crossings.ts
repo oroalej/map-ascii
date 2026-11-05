@@ -3,12 +3,14 @@
  * geometry, since crossings aren't tagged in the data. Road traffic holds at a stop on each side
  * while a train is near (`train-motion.ts` `crossingStates` says when).
  */
-import { TILE_EXTENT as EXTENT } from '@atlas/shared';
+import { TILE_EXTENT as EXTENT, type TileAddress, type ZoomBand } from '@atlas/shared';
+import { tileToLngLat } from '../raster/geometry';
+import { CellBit, lifeClassFor } from './config';
 import { LifeLine, type LifeGeometry } from './geometry';
 import { kinematicsOf } from './config';
 import { approach, type MotionLimit } from './motion';
-import { VEHICLES } from './vehicles';
-import type { Mover } from './simulate';
+import { Paint, VEHICLES } from './vehicles';
+import type { Mover, VisibleAgent } from './simulate';
 import type { LifeDiagnostics } from './diagnostics';
 
 export const RAIL_CROSSING = {
@@ -28,6 +30,12 @@ export const RAIL_CROSSING = {
   bodyReach: 6,
   /** A train's path this near a crossing runs over it, m. */
   pathReach: 3,
+  /** The barriers show from here, and swap colors this often, s. */
+  barrierZoom: { min: 17 } as ZoomBand,
+  blinkSeconds: 0.5,
+  /** How far a barrier sits on from the waiting nose toward the rail, and past the road's edge, m. */
+  barrierAhead: 1.5,
+  barrierOverhang: 0.5,
 } as const;
 
 /** One road's stop on one side of the rail, in the line's own `along` units. */
@@ -264,5 +272,50 @@ export class RailCrossings {
       if (ahead >= -0.5 * this.perMeter) room = Math.min(room, Math.max(0, ahead));
     }
     return room;
+  }
+}
+
+export const BARRIER_LABEL = 'Level crossing barrier (simulated)';
+
+/**
+ * A barrier across the road at each stop of every closed crossing this tile owns, blinking red and
+ * white. It's kind `boat` as a procession's ropes are, because a ground agent would be denied its
+ * cells by the very queue it holds.
+ */
+export function crossingBarriers(
+  crossings: readonly RailCrossing[],
+  tile: TileAddress,
+  perMeter: number,
+  clock: number,
+  shows: (p: { x: number; y: number }) => boolean,
+  out: VisibleAgent[],
+  maxAgents: number,
+) {
+  const lit = Math.floor(clock / RAIL_CROSSING.blinkSeconds) % 2 === 0;
+  const paints = lit ? [Paint.red, Paint.white] : [Paint.white, Paint.red];
+  for (const crossing of crossings) {
+    if (!crossing.closed || !crossing.owned || !shows(crossing)) continue;
+    for (const stop of crossing.stops) {
+      if (out.length >= maxAgents) return;
+      const half = (stop.width / 2 + RAIL_CROSSING.barrierOverhang) * perMeter;
+      const ahead = RAIL_CROSSING.barrierAhead * perMeter;
+      const x = stop.x + stop.hx * ahead,
+        y = stop.y + stop.hy * ahead;
+      const a = tileToLngLat(tile, { x: x - stop.hy * half, y: y + stop.hx * half });
+      const b = tileToLngLat(tile, { x: x + stop.hy * half, y: y - stop.hx * half });
+      out.push({
+        kind: 'boat',
+        lng: (a[0] + b[0]) / 2,
+        lat: (a[1] + b[1]) / 2,
+        flap: 0,
+        line: {
+          points: [a, b],
+          paints,
+          layer: { cls: lifeClassFor.vehicle, bit: CellBit.vehicle },
+          short: true,
+        },
+        fieldLabel: BARRIER_LABEL,
+      });
+    }
   }
 }
