@@ -11,7 +11,9 @@ import {
   type UtilityFixture,
   type UtilityPackingScratch,
 } from './utilities';
-import { lampSupportKey, bandVisibility } from '@atlas/shared';
+import { lampSupportKey, bandVisibility, PALAY_ROWS_ZOOM, PALAY_ZOOM } from '@atlas/shared';
+import { PALAY_SHOW_SHARE } from './config';
+import { DRYING_STRIDE, PALAY_STRIP } from './palay';
 import { MAX_GLYPHS, packGlyph, wallGlyph } from '../glyphs/select';
 import {
   EXTENT,
@@ -62,7 +64,18 @@ export type LegacyStreetFixture = FixtureBody &
       }
     | { kind: 'flagpole'; flag: 'PH' }
   );
-export type StreetFixture = UtilityFixture | LegacyStreetFixture | SeasonalFixture;
+/** A strip palay can dry on (life/palay.ts): whether it does depends on the harvest's stage. */
+export type PalayFixture = {
+  kind: 'palay';
+  from: Point;
+  to: Point;
+  /** A meter across the strip from `from`. */
+  across: Point;
+  hash: number;
+};
+/** What the harvest asks of the strips. */
+export type PalayState = { drying: number; covered: boolean; hour: number };
+export type StreetFixture = UtilityFixture | LegacyStreetFixture | PalayFixture | SeasonalFixture;
 // Fixture inputs are replaced when tiles/config change. Retain the seasonal slice so
 // whole-row priority sorting is cached across camera repacks as well.
 const seasonalInputs = new WeakMap<readonly StreetFixture[], readonly SeasonalFixture[]>();
@@ -80,6 +93,8 @@ export type FixtureVisibility = {
   pedestrianSignals?: boolean;
   utilities: boolean;
   seasonal?: SeasonalVisibility;
+  /** Set only while the harvest has palay out. */
+  palay?: boolean;
 };
 export type FixturePackingScratch = { seasonalAdmission: Int32Array; owners: Int32Array };
 export const createFixturePackingScratch = (): FixturePackingScratch => ({
@@ -123,6 +138,9 @@ export const FixturePart = {
   flagFoot: 16,
   /** Darkens the ground instead of drawing ink (`packFixtureShadows`). */
   shadow: 49,
+  /** Ground: these two yield to agents (shaders/glyph.ts). */
+  palay: 50,
+  palayCover: 51,
 } as const;
 
 /**
@@ -164,6 +182,31 @@ export const SIGNAL_LIGHT = {
   haloRadius: 6,
   haloStrength: 0.35,
 } as const;
+
+/** Every strip of a tile, in use or not: which show is worked out at packing (`packPalay`). */
+export function palayFixtures(tile: TileId, geo: LifeGeometry): PalayFixture[] {
+  const out: PalayFixture[] = [];
+  const perMeter = 1 / metersPerUnit(tile);
+  const drying = geo.drying ?? [];
+  for (let i = 0; i < drying.length; i += DRYING_STRIDE) {
+    const x0 = drying[i]!,
+      y0 = drying[i + 1]!,
+      x1 = drying[i + 2]!,
+      y1 = drying[i + 3]!;
+    const length = Math.hypot(x1 - x0, y1 - y0) || 1;
+    out.push({
+      kind: 'palay',
+      from: tileToLngLat(tile, { x: x0, y: y0 }),
+      to: tileToLngLat(tile, { x: x1, y: y1 }),
+      across: tileToLngLat(tile, {
+        x: x0 - ((y1 - y0) / length) * perMeter,
+        y: y0 + ((x1 - x0) / length) * perMeter,
+      }),
+      hash: drying[i + 5]!,
+    });
+  }
+  return out;
+}
 
 /** Retain tile ownership and the existing curb positions, directions, and phase seeds. */
 export function tileFixtures(tile: TileId, geo: LifeGeometry): LegacyStreetFixture[] {
@@ -355,6 +398,7 @@ type FlagCloth = {
 export type PackedFixtures = {
   /** Successful seasonal writes, including offscreen texture margins. */
   seasonalCells?: number;
+  palayCells?: number;
   texels: Uint8Array;
   visibility: FixtureVisibility;
   signals: SignalCells[];
@@ -518,7 +562,9 @@ function fixtureBox(fixture: StreetFixture): readonly [number, number, number, n
         ? [fixture.pole.at]
         : fixture.kind === 'utility-span'
           ? [fixture.span.from.at, fixture.span.to.at]
-          : [];
+          : fixture.kind === 'palay'
+            ? [fixture.from, fixture.to]
+            : [];
   if (!points.length) return;
   box = [
     Math.min(...points.map((p) => p[0])),
@@ -575,6 +621,7 @@ export function packFixtures(
   scratch?: FixturePackingScratch,
   offsets?: SignalOffsets,
   shadows?: FixtureShadows,
+  palay?: PalayState,
 ): PackedFixtures {
   out.fill(0);
   const size = grid.cols * grid.rows;
@@ -1007,8 +1054,87 @@ export function packFixtures(
     for (let cell = 0; cell < admission.length; cell++)
       if (admission[cell] === -3 || admission[cell] === -5) owners[cell] = -3;
   }
+  if (palay) {
+    packed.visibility.palay = false;
+    packPalay(out, grid, fixtures, zoom, glyphIndex, palay, owners, packed);
+  }
   if (shadows) packFixtureShadows(out, grid, fixtures, zoom, shadows, glyphIndex);
   return packed;
+}
+
+/** Meters of a coarse palay texture's blotches along a strip. */
+const PALAY_BLOTCH = 2.5;
+/** How much of its length a strip heaps into when covered. */
+const PALAY_HEAP = 1 / 3;
+
+/**
+ * The strips in use, after every other fixture, whose ink keeps its cell. A strip's glyphs are
+ * chosen by where they fall along it, so they hold still while the map pans.
+ */
+function packPalay(
+  out: Uint8Array,
+  grid: FixtureGrid,
+  fixtures: readonly StreetFixture[],
+  zoom: number,
+  glyphIndex: (glyph: string) => number,
+  { drying, covered, hour }: PalayState,
+  owners: Int32Array,
+  packed: PackedFixtures,
+) {
+  const opacity = bandVisibility(PALAY_ZOOM, zoom);
+  if (opacity <= 0) return;
+  const alpha = Math.round(opacity * 255);
+  const share = drying * PALAY_SHOW_SHARE;
+  const rows = zoom >= PALAY_ROWS_ZOOM;
+  for (const fixture of fixtures) {
+    if (fixture.kind !== 'palay' || fixture.hash >= share) continue;
+    let [x0, y0] = grid.toCell(...fixture.from);
+    let [x1, y1] = grid.toCell(...fixture.to);
+    const [ax, ay] = grid.toCell(...fixture.across);
+    const nx = ax - x0,
+      ny = ay - y0;
+    if (!Number.isFinite(x0 + y0 + x1 + y1 + nx + ny)) continue;
+    if (covered) {
+      const mx = (x0 + x1) / 2,
+        my = (y0 + y1) / 2;
+      x0 = mx + (x0 - mx) * PALAY_HEAP;
+      y0 = my + (y0 - my) * PALAY_HEAP;
+      x1 = mx + (x1 - mx) * PALAY_HEAP;
+      y1 = my + (y1 - my) * PALAY_HEAP;
+    }
+    // Half-cell steps never leave a gap, so a strip is at least a cell thick at any zoom.
+    const steps = Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) * 2);
+    const half = PALAY_STRIP.width / 2;
+    const wide = Math.ceil(Math.max(Math.abs(nx), Math.abs(ny)) * half * 2);
+    if (steps < 1 || steps > 4096 || wide > 512) continue;
+    const seed = Math.floor(fixture.hash * 0x100000000);
+    const span = Math.hypot(x1 - x0, y1 - y0) / Math.hypot(nx, ny);
+    const raked = rows && !covered ? (Math.imul(seed ^ hour, 0x9e3779b1) >>> 31 ? '≡' : "'") : '';
+    for (let i = 0; i <= steps; i++)
+      for (let j = -wide; j <= wide; j++) {
+        const along = i / steps;
+        const offset = wide ? (j / wide) * half : 0;
+        const c = Math.floor(x0 + (x1 - x0) * along + nx * offset);
+        const r = Math.floor(y0 + (y1 - y0) * along + ny * offset);
+        if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) continue;
+        const cell = r * grid.cols + c,
+          at = cell * 4;
+        if (out[at + 3] !== 0 || owners[cell] !== -1) continue;
+        const blotch = Math.floor((along * span) / PALAY_BLOTCH) * 3 + (j > 0 ? 1 : 0);
+        const glyph = covered
+          ? '▓'
+          : raked || (Math.imul(seed + blotch, 0x9e3779b1) >>> 31 ? '▒' : '░');
+        const code = glyphIndex(glyph);
+        if (code <= 0 || code > MAX_GLYPHS) continue;
+        const part = covered ? FixturePart.palayCover : FixturePart.palay;
+        packed.palayCells = (packed.palayCells ?? 0) + 1;
+        [out[at], out[at + 1]] = packGlyph(code, part);
+        out[at + 2] = seed & 255;
+        out[at + 3] = alpha;
+        owners[cell] = -2;
+        if (!grid.visible || grid.visible(c, r, FixtureSight.palay)) packed.visibility.palay = true;
+      }
+  }
 }
 
 /** Where a fixture's foot is, and how tall it stands, if it casts a shadow. */

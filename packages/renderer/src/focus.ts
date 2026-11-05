@@ -18,7 +18,8 @@ const groups = ['traffic', 'people', 'vendors', 'pets', 'boats', 'trains', 'bird
 export function lifeFocusOf(agent: VisibleAgent): LifeFocus {
   if (agent.line || agent.kind === 'boat') return 'boats';
   if (agent.vehicle === 'cart' || agent.peddler) return 'vendors';
-  if (agent.kind === 'vehicle' || agent.vehicle === 'carabao') return 'traffic';
+  if (agent.kind === 'vehicle' || agent.vehicle === 'carabao' || agent.vehicle === 'hand-tractor')
+    return 'traffic';
   if (agent.kind === 'cat' || agent.kind === 'dog') return 'pets';
   if (agent.kind === 'train') return 'trains';
   if (agent.kind === 'bird') return 'birds';

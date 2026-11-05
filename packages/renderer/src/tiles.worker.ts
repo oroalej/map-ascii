@@ -27,6 +27,7 @@ let fireworks = false;
 let fireworksActive = false;
 let memorials = false;
 let folklore = false;
+let harvest = false;
 const registry = createIdRegistry();
 
 async function handle(request: WorkerRequest) {
@@ -34,6 +35,7 @@ async function handle(request: WorkerRequest) {
     fireworks = request.fireworks === true;
     memorials = request.memorials === true;
     folklore = request.folklore === true;
+    harvest = request.harvest === true;
     fireworksActive = fireworks && request.fireworksActive === true;
     archive = new PMTiles(archiveSource(request.url));
     const h = await archive.getHeader();
@@ -81,6 +83,7 @@ async function handle(request: WorkerRequest) {
     maxZoom,
     fireworksActive,
     folklore,
+    harvest,
   );
   if (memorials && z === maxZoom) prepareMemorialSites({ z, x, y }, geometry.life);
   const decodeMs = performance.now() - start;

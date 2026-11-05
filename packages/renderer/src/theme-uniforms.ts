@@ -16,6 +16,8 @@ export function themeUniforms(theme: Theme) {
     fixtures: theme.fixturePaints.flatMap(rgb),
     awnings: theme.awningPaints.flatMap(rgb),
     birds: theme.birdPaints.flatMap((pair) => pair.flatMap(rgb)),
+    mistCool: rgb(theme.mist[0]),
+    mistWarm: rgb(theme.mist[1]),
   };
 }
 export type ThemeUniforms = ReturnType<typeof themeUniforms>;

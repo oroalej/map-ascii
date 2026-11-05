@@ -59,7 +59,7 @@ export const exhaustKind = (vehicle: CraftType | undefined): PuffKind | undefine
   hasTurnSignals(vehicle) ? EXHAUST_KIND[vehicle] : undefined;
 
 /** Independent integer hash: never advances any of the simulation's random streams. */
-function sample(seed: number, ordinal: number, tag: number) {
+export function sample(seed: number, ordinal: number, tag: number) {
   let x = (seed ^ Math.imul(ordinal + 1, 0x9e3779b9) ^ tag) >>> 0;
   x = Math.imul(x ^ (x >>> 16), 0x21f0aaad);
   x = Math.imul(x ^ (x >>> 15), 0x735a2d97);

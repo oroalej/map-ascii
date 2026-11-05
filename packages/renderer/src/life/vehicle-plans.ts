@@ -357,6 +357,18 @@ export const FINE_PLANS = {
       'DDWBBBBBBWDD',
     ],
   ],
+  'hand-tractor': [
+    // Long handles back to the farmer, the engine block and its hood on two wide wheels.
+    [
+      'DD..........WWWW..',
+      '.DD.........WWWW..',
+      '..DDDDDDBBBBBBBBB.',
+      '..DDDDDDBBBRRRBBB.',
+      '..DDDDDDBBBBBBBBB.',
+      '.DD.........WWWW..',
+      'DD..........WWWW..',
+    ],
+  ],
 } as const satisfies Record<string, readonly (readonly string[])[]>;
 
 /** Which of its fine plans a craft shows, from a hash of its identity, never a random draw. */

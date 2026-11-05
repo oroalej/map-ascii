@@ -29,6 +29,33 @@ export const SKY = {
   finePurpose: utilitySeed('sky:fine'),
 } as const;
 
+/** Dawn mist over paddies and water (`mistAmount`, shaders/glyph.ts `mistOver`). */
+export const MIST = {
+  /** Sun altitudes, degrees: it thickens to `full` and thins from `hold` until `gone`. */
+  start: -8,
+  full: 0,
+  hold: 3,
+  gone: 14,
+  /** How much a day can fall short of its month: `0.6 + 0.4 × hash`. */
+  dayBase: 0.6,
+  dayRange: 0.4,
+  /** The most of the ground's color it can hide. */
+  alpha: 0.35,
+  /** Of the clouds' drift speed. */
+  speed: 0.25,
+  /** Lattice cells per wrap: patches of about 160 m and 60 m. */
+  coarseCells: 51,
+  fineCells: 137,
+  coarseWeight: 0.6,
+  fineWeight: 0.4,
+  /** How strongly it reaches ground beside a paddy or a bank. */
+  edgeWeight: 0.45,
+  /** How far away that paddy or bank can be, cells. */
+  edgeCells: 3,
+  coarsePurpose: utilitySeed('mist:coarse'),
+  finePurpose: utilitySeed('mist:fine'),
+} as const;
+
 export type Meters = readonly [number, number];
 const wrap = (v: number, period: number = SKY.wrap): number => ((v % period) + period) % period;
 const ease = (v: number): number => v * v * (3 - 2 * v);
@@ -105,15 +132,47 @@ export function shadowAt(meters: Meters, cover: number, offset: Meters, seed: nu
   return smoothstep(1 - cover, 1 - cover + SKY.softness, noise);
 }
 
+/**
+ * How much dawn mist lies out at this sun altitude, on a morning of `monthDensity` (the pack's
+ * `climate.mist`, 0–1) and a `dayHash` that makes each day its own (0–1). None in a storm.
+ */
+export function mistAmount(
+  altitude: number,
+  monthDensity: number,
+  dayHash: number,
+  storm: boolean,
+): number {
+  if (storm || monthDensity <= 0) return 0;
+  const envelope =
+    altitude < MIST.hold
+      ? smoothstep(MIST.start, MIST.full, altitude)
+      : 1 - smoothstep(MIST.hold, MIST.gone, altitude);
+  return envelope * monthDensity * (MIST.dayBase + MIST.dayRange * dayHash);
+}
+
+/** The morning's mist from the pack, or none: `altitude` falls through the same band at dusk. */
+export function morningMist(
+  months: readonly number[] | undefined,
+  moment: { month: number; day: number; minutes: number },
+  altitude: number,
+  seed: number,
+  storm: boolean,
+): number {
+  if (!months || moment.minutes >= 12 * 60) return 0;
+  const dayHash = utilitySeed(`mist:${moment.day}`, seed) / 0x100000000;
+  return mistAmount(altitude, months[moment.month - 1] ?? 0, dayHash, storm);
+}
+
 /** Positive downwind displacement. Inactive intervals are rebased by the atlas. */
 export function driftClouds(
   offset: Meters,
   wind: WindNow,
   dt: number,
   reducedMotion: boolean,
+  speed = 1,
 ): Meters {
   if (reducedMotion) return offset;
-  const distance = Math.max(0, Math.min(SKY.maxDt, dt)) * wind.strength * SKY.speed;
+  const distance = Math.max(0, Math.min(SKY.maxDt, dt)) * wind.strength * SKY.speed * speed;
   return [wrap(offset[0] + wind.dir[0] * distance), wrap(offset[1] + wind.dir[1] * distance)];
 }
 

@@ -59,6 +59,7 @@ it('uses vendor, carabao, paddler and candle precedence, and omits lines', () =>
     'Street vendor (simulated)',
   );
   expect(describeAgent({ ...person, vehicle: 'carabao' })).toBe('Carabao (simulated)');
+  expect(describeAgent({ ...person, vehicle: 'hand-tractor' })).toBe('Hand tractor (simulated)');
   expect(
     describeAgent({
       ...person,
