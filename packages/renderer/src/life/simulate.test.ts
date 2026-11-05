@@ -1045,7 +1045,19 @@ describe('vehicles and boats', () => {
   });
 
   it('gives a moving boat a wake by its speed, from its own zoom, and nothing else one', () => {
-    const life = geometry([[LifeLine.river, [[0, 2048], [4095, 2048]]]], [], []);
+    const life = geometry(
+      [
+        [
+          LifeLine.river,
+          [
+            [0, 2048],
+            [4095, 2048],
+          ],
+        ],
+      ],
+      [],
+      [],
+    );
     const world = new LifeWorld({ river: { banca: 1 } });
     world.sync([{ key: '16/55192/30266', tile, life }]);
     world.step(0.1);

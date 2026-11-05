@@ -152,7 +152,9 @@ describe('drawWakes', () => {
   });
 
   it('skips boats with no wake without counting them', () => {
-    const idle = Array.from({ length: WAKE.maxPerFrame + 1 }, () => boat(1, 0, { wake: undefined }));
+    const idle = Array.from({ length: WAKE.maxPerFrame + 1 }, () =>
+      boat(1, 0, { wake: undefined }),
+    );
     const out = blank();
     drawWakes(out, grid, [...idle, boat(1, 0)], glyphIndex);
     expect(wakeTexels(out)).toBeGreaterThan(0);

@@ -106,7 +106,14 @@ export type EmergencyConfig = {
 };
 
 /** Kinds of building that keep their own window hours. */
-export const WINDOW_GROUPS = ['home', 'daytime', 'market', 'worship', 'hospital', 'station'] as const;
+export const WINDOW_GROUPS = [
+  'home',
+  'daytime',
+  'market',
+  'worship',
+  'hospital',
+  'station',
+] as const;
 export type WindowGroup = (typeof WINDOW_GROUPS)[number];
 export type WindowCurves = Record<WindowGroup, RhythmCurve> & { source: string };
 

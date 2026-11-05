@@ -274,7 +274,9 @@ if (!process.argv.includes('--interleaved') || !outputArg)
   throw new Error('Use --interleaved --output=<task scratch>/gpu.json under heavy.ts --exclusive');
 const output = resolve(outputArg.slice('--output='.length));
 const coordinate = (name: string) => {
-  const value = Number(process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3));
+  const value = Number(
+    process.argv.find((v) => v.startsWith(`--${name}=`))?.slice(name.length + 3),
+  );
   if (!Number.isFinite(value)) throw new Error(`Use --${name}=<a point on a river>`);
   return value;
 };
@@ -345,7 +347,9 @@ try {
     const waitCapture = async (ready: (capture: Capture) => boolean) => {
       const deadline = performance.now() + 30_000;
       while (performance.now() < deadline) {
-        const capture = await page.evaluate(() => (window as unknown as CaptureWindow).waterCapture);
+        const capture = await page.evaluate(
+          () => (window as unknown as CaptureWindow).waterCapture,
+        );
         if (capture && ready(capture)) return;
         await page.waitForTimeout(50);
       }

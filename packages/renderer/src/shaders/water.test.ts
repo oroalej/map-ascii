@@ -37,7 +37,9 @@ describe('sun glint', () => {
 describe('wakes', () => {
   it('draws only on water, behind the detail gate', () => {
     const source = glyphFragmentFor();
-    expect(source).toContain(`bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};`);
+    expect(source).toContain(
+      `bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};`,
+    );
     expect(source).toContain('if (wakeCell) glyph = ');
     expect(source).toContain('if (wakeCell) color = mix(color, u_waterFoam');
   });

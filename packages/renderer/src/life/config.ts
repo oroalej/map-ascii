@@ -30,6 +30,7 @@ import {
   renderClasses,
   roofClasses,
   type LifeClass,
+  type RenderClass,
 } from '../classes';
 import { LifeLine } from './geometry';
 import { VEHICLES } from './vehicles';
@@ -974,7 +975,7 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
 };
 
 /** The window hours each lit class keeps (`windowShares`). */
-export const WINDOW_GROUP_OF: Readonly<Record<(typeof roofClasses)[number], WindowGroup>> = {
+export const WINDOW_GROUP_OF: Readonly<Partial<Record<RenderClass, WindowGroup>>> = {
   building: 'home',
   building_daytime: 'daytime',
   building_school: 'daytime',

@@ -19,7 +19,7 @@
  * GLSL string so it does not add to the shipped shader payload.
  */
 import { WINDOW_GROUPS } from '@atlas/shared';
-import { classId, Flags, MAX_CLASSES, roofClasses } from '../classes';
+import { classId, Flags, MAX_CLASSES } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import {
   BIRD_SHADOW,
@@ -338,10 +338,10 @@ vec3 waterToned(vec3 color, float depth, float amount) {
 
 // The share of this class's cells lit as windows at full night (life/config.ts WINDOW_GROUP_OF).
 float windowShare(int cls) {
-${roofClasses
+${Object.entries(WINDOW_GROUP_OF)
   .map(
-    (lit) =>
-      `  if (cls == ${classId(lit)}) return u_windowShare[${WINDOW_GROUPS.indexOf(WINDOW_GROUP_OF[lit])}];`,
+    ([lit, group]) =>
+      `  if (cls == ${classId(lit)}) return u_windowShare[${WINDOW_GROUPS.indexOf(group)}];`,
   )
   .join(' ')}
   return 0.0;
