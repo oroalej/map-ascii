@@ -1,11 +1,12 @@
 import * as twgl from 'twgl.js';
 import { project } from './camera';
 import { metersPerCssPx, type Grid, type View } from './grid';
-import { createProgram, type GL, type CellTargets } from './gpu';
+import { createProgram, createTexture, type GL, type CellTargets } from './gpu';
 import type { Programs, ThemeResources } from './gpu-context';
 import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from './life/folklore';
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
+import { bakeSpriteSheet, SpriteFrame } from './life/manananggal-sprite';
 import { folkloreVertex, folkloreFragment } from './shaders/folklore';
 import { focusPulse, normalizeFocus } from './focus';
 
@@ -15,8 +16,37 @@ export type FolkloreQuad = {
   y: number;
   w: number;
   h: number;
+  /** A ghost's atlas glyph; else its sprite frame, plus 64 times one more than a frame under it. */
   glyph: number;
+  /** How far the figure leans into its flight, radians clockwise. */
+  lean: number;
 };
+/** The figure's quad, CSS px at least and metres beyond that: its frames are this many px across. */
+const FIGURE = { px: 48, meters: 5 } as const;
+/** How far the manananggal leans when flying straight across the screen, radians. */
+const LEAN = 0.32;
+const under = (frame: number, trail: number) =>
+  frame + 64 * (SpriteFrame.trail + Math.min(SpriteFrame.trails - 1, trail) + 1);
+/** Which frames show this moment of the manananggal: wings beating, folding in, or on a roof. */
+export function manananggalFrames(sprite: FolkloreSprite): number {
+  const fold = sprite.fold ?? 0,
+    wave = sprite.wave ?? 0;
+  if (fold >= 1)
+    return sprite.phase >= 1
+      ? SpriteFrame.perch + SpriteFrame.perches - 1
+      : SpriteFrame.perch + Math.floor(wave * (SpriteFrame.perches - 1));
+  const trail = Math.floor(wave * SpriteFrame.trails);
+  return fold > 0
+    ? under(
+        SpriteFrame.fold + Math.min(SpriteFrame.folds - 1, Math.floor(fold * SpriteFrame.folds)),
+        trail,
+      )
+    : under(
+        SpriteFrame.flap +
+          Math.min(SpriteFrame.flaps - 1, Math.floor(sprite.phase * SpriteFrame.flaps)),
+        trail,
+      );
+}
 /** Device-pixel bounds include the same minimum halo used by drawing and hover. */
 export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad[] {
   const [cx, cy] = project(view.camera.lng, view.camera.lat, view.camera.zoom),
@@ -28,15 +58,8 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
       y = (py - cy) * view.dpr + view.height / 2;
     const ghost = sprite.kind === 'ghost',
       lower = sprite.kind === 'lower-half';
-    const w = Math.max(
-      view.dpr * (ghost ? 14 : lower ? 9 : 24),
-      scale * (ghost ? 1.6 : lower ? 0.7 : 4),
-    );
-    const h = Math.max(
-      view.dpr * (ghost ? 20 : lower ? 14 : 18),
-      scale * (ghost ? 2.4 : lower ? 1.4 : 3),
-    );
-    const heading = ((Math.round(sprite.heading / (Math.PI / 2)) % 4) + 4) % 4;
+    const w = Math.max(view.dpr * (ghost ? 14 : FIGURE.px), scale * (ghost ? 1.6 : FIGURE.meters));
+    const h = ghost ? Math.max(view.dpr * 20, scale * 2.4) : w;
     const glyph = ghost
       ? sprite.pose === 'wisp'
         ? 2 + Math.min(3, Math.floor(sprite.wisp * 4))
@@ -44,13 +67,15 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
           ? 1
           : 0
       : lower
-        ? 15
-        : sprite.pose === 'perched'
-          ? 14
-          : 6 + heading * 2 + (sprite.phase > 0 ? 1 : 0);
+        ? SpriteFrame.lower
+        : manananggalFrames(sprite);
+    const lean =
+      sprite.kind === 'manananggal'
+        ? Math.cos(sprite.heading) * LEAN * (1 - (sprite.fold ?? 0))
+        : 0;
     return x + w / 2 < 0 || y + h / 2 < 0 || x - w / 2 > view.width || y - h / 2 > view.height
       ? []
-      : [{ sprite, x, y, w, h, glyph }];
+      : [{ sprite, x, y, w, h, glyph, lean }];
   });
 }
 export function folkloreHit(
@@ -103,6 +128,8 @@ export type FolkloreResources = {
   vao: WebGLVertexArrayObject | null;
   buffer: WebGLBuffer | null;
   data: Float32Array;
+  /** Painted and uploaded the first time the manananggal shows. */
+  sprites?: WebGLTexture;
 };
 function createFolklore(gl: GL, programs: Programs): FolkloreResources {
   const pending = programs.glyphWarmup?.pending;
@@ -129,6 +156,7 @@ export function deleteFolklore(gl: GL, r: FolkloreResources) {
   gl.deleteProgram(r.program.program);
   gl.deleteVertexArray(r.vao);
   gl.deleteBuffer(r.buffer);
+  if (r.sprites) gl.deleteTexture(r.sprites);
 }
 export function folklorePass(
   gl: GL,
@@ -147,6 +175,10 @@ export function folklorePass(
   if (r.data.length < quads.length * 8)
     r.data = new Float32Array(2 ** Math.ceil(Math.log2(quads.length * 8)));
   const data = r.data;
+  if (!r.sprites && quads.some((q) => q.sprite.kind !== 'ghost')) {
+    const sheet = bakeSpriteSheet();
+    r.sprites = createTexture(gl, gl.RGBA8, gl.RGBA, sheet.width, sheet.height, sheet.data);
+  }
   for (let i = 0; i < quads.length; i++) {
     const q = quads[i]!,
       offset = i * 8;
@@ -154,10 +186,11 @@ export function folklorePass(
     data[offset + 1] = q.y;
     data[offset + 2] = q.w;
     data[offset + 3] = q.h;
-    data[offset + 4] = theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!);
+    const ghost = q.sprite.kind === 'ghost';
+    data[offset + 4] = ghost ? theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!) : q.glyph;
     data[offset + 5] = q.sprite.alpha;
-    data[offset + 6] = q.sprite.kind === 'ghost' ? 0 : 1;
-    data[offset + 7] = 0;
+    data[offset + 6] = ghost ? 0 : q.sprite.kind === 'lower-half' ? 2 : 1;
+    data[offset + 7] = q.lean;
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);
@@ -166,6 +199,7 @@ export function folklorePass(
   twgl.setUniforms(r.program, {
     u_size: [view.width, view.height],
     u_atlas: theme.map.atlasTex,
+    u_sprites: r.sprites ?? theme.map.atlasTex,
     u_columns: theme.map.atlas.columns,
     u_cell: [view.cellDev.w, view.cellDev.h],
     u_overlay: targets.overlayTex,
