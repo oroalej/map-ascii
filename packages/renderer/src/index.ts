@@ -16,6 +16,8 @@ import {
   CROP_STAGES,
   cropDate,
   cropStageAt,
+  harvestAt,
+  type HarvestNow,
   epochDay,
   occurrence as dateOccurrence,
   type ShopHours,
@@ -378,6 +380,10 @@ export type AtlasOptions = {
 };
 
 export type { ProcessionRun } from './life/simulate';
+
+/** In a storm palay is heaped and covered, and nothing burns. */
+const stormHarvest = (harvest: HarvestNow | undefined, storm: boolean) =>
+  harvest && storm ? { ...harvest, spread: false, burning: false } : harvest;
 
 export type AtlasEventMap = {
   /** First qualifying canvas draw submission in this context generation. */
@@ -1808,6 +1814,13 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     ];
     festiveLightVersion++;
   };
+  /** What the strips show now: Life off takes the palay away, reduced motion doesn't. */
+  const palayState = () => {
+    const harvest = activity.harvest;
+    return life.enabled && harvest && harvest.drying > 0
+      ? { drying: harvest.drying, covered: !harvest.spread, hour: Math.floor(cityMinutes / 60) }
+      : undefined;
+  };
   const drawFixtures = (cellsDrawn: boolean, time: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
     const visible = fixturePass(
@@ -1822,8 +1835,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       { time, strength: wind.strength },
       lifeView()?.signalOffsets,
       knobs.shadows ? sun : null,
+      palayState(),
     );
-    const key = `${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
+    const key = `${visible.palay ?? false} ${visible.streetlights} ${visible.trafficSignals} ${visible.pedestrianSignals ?? false} ${visible.utilities} ${visible.seasonal?.lanterns ?? false} ${visible.seasonal?.bunting ?? false} ${visible.seasonal?.installations ?? false} ${visible.seasonal?.candles ?? false}`;
     if (key !== fixturesKey) {
       fixturesKey = key;
       emit('fixtureschange', visible);
@@ -1952,10 +1966,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         : atCityMinutes(now(), zone, life.time);
     const position = solarPosition(moment, camera.lng, camera.lat);
     const next = daylightAt(position.altitude);
-    const nextCover =
-      prevailingWind(life.wind, options.climate, cityTime(now(), zone).month).strength === 'storm'
-        ? 1
-        : cloudCover(moment, sky.seed);
+    const storm =
+      prevailingWind(life.wind, options.climate, cityTime(now(), zone).month).strength === 'storm';
+    const nextCover = storm ? 1 : cloudCover(moment, sky.seed);
     const nextMoon = moonlight(moment, camera.lng, camera.lat) * (1 - SKY.moonLoss * nextCover);
     const local = cityTime(moment, zone);
     const real = cityTime(now(), zone);
@@ -1995,6 +2008,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         weekday: local.weekday,
         life: options.cityLife,
         crop,
+        harvest: stormHarvest(
+          harvestAt(crop, options.climate?.crops?.rice?.harvest, local.minutes),
+          storm,
+        ),
       },
       season,
     );

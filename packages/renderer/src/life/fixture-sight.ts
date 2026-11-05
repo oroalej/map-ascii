@@ -10,4 +10,5 @@ export const FixtureSight = {
   bunting: 8,
   installations: 16,
   candles: 32,
+  palay: 64,
 } as const;

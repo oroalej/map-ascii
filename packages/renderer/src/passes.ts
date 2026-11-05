@@ -30,7 +30,7 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
-import { bandVisibility, CLASS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
+import { bandVisibility, CLASS_ZOOM, PALAY_ROWS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -120,6 +120,7 @@ import {
   type StreetFixture,
   updatePedestrianVisibility,
   type FixtureVisibility,
+  type PalayState,
   FixtureSight,
   cullFixtures,
 } from './life/fixtures';
@@ -1036,6 +1037,7 @@ const fixturesOf = new WeakMap<
     viewport: ReturnType<typeof screenArea>;
     /** Per cell, what a fixture written there reports when visible (`FixtureSight` bits). */
     sight: Uint8Array;
+    palayKey: string;
   }
 >();
 
@@ -1053,6 +1055,7 @@ function updateFixtureSight(
       bits |= sight[r * cols + c]!;
   visibility.streetlights = (bits & FixtureSight.streetlights) !== 0;
   visibility.trafficSignals = (bits & FixtureSight.trafficSignals) !== 0;
+  if ('palay' in visibility) visibility.palay = (bits & FixtureSight.palay) !== 0;
   const seasonal = visibility.seasonal;
   if (seasonal)
     for (const key of ['lanterns', 'bunting', 'installations', 'candles'] as const)
@@ -1073,16 +1076,23 @@ export function fixturePass(
   signalOffsets?: SignalOffsets,
   /** The sun for hardware's shadows, while it's up and quality allows them. */
   sun?: Sun | null,
+  /** The harvest's palay; absent with Life off or outside the drying season. */
+  palay?: PalayState,
 ): FixtureVisibility {
   let cache = fixturesOf.get(targets);
   let changed = false;
   let lightsChanged = false;
   const viewport = screenArea(view, placement.grid, view.cellDev);
   const shadowKey = fixtureShadowKey(sun, view.camera.zoom);
+  // Only a change of state packs again, not every frame; rows only turn where rows show.
+  const palayKey = palay
+    ? `${Math.round(palay.drying * 256)}/${palay.covered}/${view.camera.zoom >= PALAY_ROWS_ZOOM ? palay.hour : 0}`
+    : '';
   if (
     repack ||
     !cache ||
     cache.shadowKey !== shadowKey ||
+    cache.palayKey !== palayKey ||
     cache.packed.cloth.cols !== targets.cols ||
     cache.packed.cloth.rows !== targets.rows ||
     cache.fixtures !== fixtures ||
@@ -1149,9 +1159,11 @@ export function fixturePass(
       fixtureScratch,
       signalOffsets,
       shadowKey && sun ? { sun, sextants: sextantGlyphs } : undefined,
+      palay,
     );
     cache = {
       shadowKey,
+      palayKey,
       packed,
       fixtures,
       atlas: resources.map.atlas,

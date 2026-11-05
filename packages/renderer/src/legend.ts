@@ -29,7 +29,7 @@ import { FIGURE_MASTERS } from './life/people';
 import { PEDESTRIAN_MASTERS } from './life/pedestrian-glyphs';
 import { CAT_ICON } from './life/cats';
 import { DOG_ICON } from './life/dogs';
-import type { FixtureVisibility } from './life/fixtures';
+import { PALAY_PAINT, type FixtureVisibility } from './life/fixtures';
 import type { SeasonState } from './index';
 import { fireworkShellCount } from './fireworks-layout';
 import { Paint, VEHICLES } from './life/vehicles';
@@ -48,7 +48,7 @@ export type LegendEntryId =
   | `info:season-${'lanterns' | 'bunting' | 'stalls' | 'installations' | 'fireworks' | 'candles' | 'visitors' | 'congregations'}`
   | `class:${RenderClass}`
   | `life:${LifeFocus}`
-  | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'pedestrian-signals' | 'utilities'}`;
+  | `info:${'shops' | 'fish' | 'streetlights' | 'crosswalks' | 'sidewalks' | 'stop-lines' | 'one-way' | 'traffic-signals' | 'pedestrian-signals' | 'utilities' | 'palay'}`;
 
 export type LegendEntry = {
   /** Stable identity, independent of display wording and currently visible class membership. */
@@ -120,6 +120,8 @@ function sample(style: ClassStyle): string {
 }
 
 const css = (hex: number) => `#${hex.toString(16).padStart(6, '0')}`;
+const rgbCss = (rgb: readonly number[]) =>
+  css(rgb.reduce((hex, channel) => hex * 256 + Math.round(channel * 255), 0));
 
 /** A color darkened to `share` of itself, as the glyph shader shades a canopy's ribs. */
 const dim = (hex: number, share: number) =>
@@ -294,7 +296,7 @@ export function legendEntries(
     riceCalendar?: boolean;
     fixtures?: Pick<
       FixtureVisibility,
-      'streetlights' | 'trafficSignals' | 'pedestrianSignals' | 'seasonal'
+      'streetlights' | 'trafficSignals' | 'pedestrianSignals' | 'seasonal' | 'palay'
     > & {
       utilities?: boolean;
     };
@@ -487,6 +489,14 @@ export function legendEntries(
       label: 'Utility poles and wires (illustrative)',
       glyphs: zoom >= 19.5 ? '●╳∞' : '●─',
       color: css(theme.fixturePaints[7]!),
+    });
+  if (fixtures?.palay)
+    entries.push({
+      id: 'info:palay',
+      classes: [],
+      label: 'Drying palay (illustrative)',
+      glyphs: '▒',
+      color: rgbCss(PALAY_PAINT),
     });
   if (season?.labels.candles && fixtures?.seasonal?.candles)
     entries.push({

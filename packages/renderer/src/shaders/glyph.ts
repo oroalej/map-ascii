@@ -32,7 +32,7 @@ import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
 import { CANDLE_BIT, FIGURE_HAIR_SPLIT, HAIR_COLORS, PersonPart } from '../life/people';
 import { LampState } from '../life/lights';
-import { FixturePart, SIGNAL_LIGHT } from '../life/fixtures';
+import { FixturePart, PALAY_COVER_PAINT, PALAY_PAINT, SIGNAL_LIGHT } from '../life/fixtures';
 import { PAINT_COUNT, VehiclePart, WHEEL_PART } from '../life/vehicles';
 import { LIFE_AGENT_MASK, TURN_SIGNAL_BIT, TURN_SIGNAL_COLOR } from '../life/turn-signals';
 import { BEACON_BIT, BEACON_COLORS } from '../life/emergency';
@@ -681,8 +681,20 @@ vec3 fixtureOver(vec3 under, vec4 fixture, ivec2 inCell, ivec2 cell, bool allowe
   `
       : ''
   }
+  if (part == ${FixturePart.palay} || part == ${FixturePart.palayCover}) {
+    // Golden grain, or the blue tarp over its heap, with a wash so it reads from far out.
+    vec3 paint = part == ${FixturePart.palay} ? vec3(${PALAY_PAINT.map(float).join(', ')}) : vec3(${PALAY_COVER_PAINT.map(float).join(', ')});
+    color = lampLit(daylit(paint * (0.82 + 0.18 * float(info) / 255.0)), rainLight);
+    under = mix(under, color * 0.55, fixture.a);
+  }
   if (u_focus && !(part >= ${FixturePart.red} && part <= ${FixturePart.green}) && part != ${FixturePart.signal}) color *= ${float(FOCUS_DIM)};
   return mix(under, color, ink * fixture.a) + halo;
+}
+
+// Palay is ground: under an agent, not over it as other hardware is.
+bool groundFixture(vec4 fixture) {
+  int part = int(fixture.g * 255.0 + 0.5) & 63;
+  return fixture.a != 0.0 && (part == ${FixturePart.palay} || part == ${FixturePart.palayCover});
 }
 
 int maskBit(int mask, int cls) { return cls < 32 ? ((mask >> cls) & 1) : 0; }
@@ -951,6 +963,11 @@ void main() {
       if (lifeClass == u_vehicle && (lifeFlags & ${TURN_SIGNAL_BIT}) != 0 && (lifeByte & 128) == 0) color = vec3(${TURN_SIGNAL_COLOR.map(float).join(', ')});
     }
     if (lifeClass == u_vehicle && (lifeFlags & ${BEACON_BIT}) != 0) color = beaconColor(lifeByte & 3);
+    if (groundFixture(fixture)) {
+      vec3 ground = fixtureOver(back, fixture, inCell, cell, fixtureAllowed, signalHalo);
+      o_color = vec4(rainOver(mix(ground, color, coverage), cell, inCell), 1.0);
+      return;
+    }
     o_color = vec4(rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell), 1.0);
     return;
   }
