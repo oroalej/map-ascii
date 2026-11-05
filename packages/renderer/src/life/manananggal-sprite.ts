@@ -1,7 +1,9 @@
 /**
- * The manananggal's sprite sheet (SPEC.md §4), painted once in code rather than from the font: an
- * upper body on bat wings, fanged, with its entrails hanging from the waist and, on a roof, its long
- * tongue let down. The legs it left behind are a single frame, since they don't move.
+ * The manananggal's sprite sheet (SPEC.md §4), painted once in code rather than from the font. The
+ * map looks straight down, so it is drawn from above, face to the ground, with its head toward the
+ * top of the frame: parted hair streaming down its back, arms reaching ahead, bat wings to either
+ * side and its entrails trailing behind. The legs it left behind are a single frame, since they
+ * don't move, with the raw waist uppermost.
  */
 import { SPRITE_COLUMNS, SPRITE_ROWS, SPRITE_SIZE, SpriteFrame } from './manananggal-frames';
 
@@ -15,14 +17,12 @@ export const Ink = {
   skinShade: 6,
   hair: 7,
   hairLight: 8,
-  eye: 9,
-  gutDark: 10,
-  gut: 11,
-  fang: 12,
-  dress: 13,
-  dressShade: 14,
-  mouth: 15,
-  tongue: 16,
+  gutDark: 9,
+  gut: 10,
+  claw: 11,
+  dress: 12,
+  dressShade: 13,
+  tongue: 14,
 } as const;
 type Ink = (typeof Ink)[keyof typeof Ink];
 
@@ -34,23 +34,22 @@ const PALETTE: readonly (readonly [number, number, number, number])[] = [
   [226, 110, 120, 255],
   [224, 206, 182, 255],
   [164, 140, 124, 255],
-  [24, 18, 34, 255],
-  [78, 66, 108, 255],
-  [255, 58, 48, 255],
+  [38, 30, 58, 255],
+  [104, 90, 142, 255],
   [150, 30, 58, 255],
   [236, 112, 124, 255],
   [255, 248, 228, 255],
   [84, 70, 112, 255],
   [56, 46, 78, 255],
-  [40, 6, 14, 255],
   [214, 74, 96, 255],
 ];
 
 type Point = readonly [number, number];
 const mix = (a: number, b: number, t: number) => a + (b - a) * t;
 const mixPoint = (a: Point, b: Point, t: number): Point => [mix(a[0], b[0], t), mix(a[1], b[1], t)];
-const polar = (from: Point, angle: number, length: number, squash = 1): Point => [
-  from[0] + Math.cos(angle) * length * squash,
+/** From `from`, along `angle` above +x (so toward the head), with its x narrowed by `span`. */
+const polar = (from: Point, angle: number, length: number, span = 1): Point => [
+  from[0] + Math.cos(angle) * length * span,
   from[1] - Math.sin(angle) * length,
 ];
 
@@ -102,7 +101,7 @@ class Canvas {
       const t = i / steps,
         [x, y] = mixPoint(a, b, t),
         r = mix(r0, r1, t);
-      if (r <= 0.5) this.put(Math.floor(x + SPRITE_SIZE / 2), Math.floor(y + SPRITE_SIZE / 2), ink);
+      if (r <= 0.5) this.dot(x, y, ink);
       else this.ellipse(x, y, r, r, ink);
     }
   }
@@ -127,32 +126,34 @@ class Canvas {
   }
 }
 
-/** The points of one wing on the figure's right (+x), raised by `lift` in -1..1, drawn in by `fold`. */
-function wingPoints(lift: number, fold: number) {
-  const shoulder: Point = [4, -5];
-  const arm = 0.1 + lift * 0.55;
-  const forearm = arm + 0.32;
-  // Seen from ahead, a wing at the top or bottom of its beat is foreshortened.
-  const squash = Math.cos(lift * 0.55) * 0.84;
-  const elbow = polar(shoulder, arm, 7.5, squash);
-  const wrist = polar(elbow, forearm, 6.5, squash);
+/**
+ * The points of the wing on the figure's right (+x). From above, a beat shows as the wing narrowing
+ * at the top and bottom of its stroke (`span`) and reaching ahead or falling back (`sweep`).
+ */
+function wingPoints(span: number, sweep: number, fold: number) {
+  const shoulder: Point = [3, -3];
+  const arm = 0.4 + sweep,
+    forearm = 0.12 + sweep * 1.4;
+  const elbow = polar(shoulder, arm, 7.5, span);
+  const wrist = polar(elbow, forearm, 7, span);
   const spread = {
     shoulder,
     elbow,
     wrist,
     tips: [
-      polar(wrist, forearm - 0.3, 7, squash),
-      polar(wrist, forearm - 1.15, 10, squash),
-      polar(wrist, forearm - 2, 12, squash),
+      polar(wrist, forearm - 0.1, 7, span),
+      polar(wrist, forearm - 1, 10.5, span),
+      polar(wrist, forearm - 1.95, 13, span),
     ] as const,
     root: [3, 6] as Point,
   };
+  // Folded, they lie back along its body like a cloak, with the wrists at its shoulders.
   const drawn = {
-    shoulder: [3.5, -6] as Point,
-    elbow: [9, -5] as Point,
-    wrist: [8.5, -13] as Point,
-    tips: [[11.5, 8] as Point, [8, 15] as Point, [3.5, 15] as Point] as const,
-    root: [2, -1] as Point,
+    shoulder: [3.5, -4.5] as Point,
+    elbow: [8.5, -5] as Point,
+    wrist: [8, -9.5] as Point,
+    tips: [[9.5, 7] as Point, [6.5, 12] as Point, [2.6, 13.5] as Point] as const,
+    root: [1.2, 0] as Point,
   };
   return {
     shoulder: mixPoint(spread.shoulder, drawn.shoulder, fold),
@@ -174,8 +175,8 @@ function scallop(a: Point, b: Point, anchor: Point): Point[] {
   return points;
 }
 
-function drawWing(c: Canvas, side: 1 | -1, lift: number, fold: number) {
-  const w = wingPoints(lift, fold);
+function drawWing(c: Canvas, side: 1 | -1, span: number, sweep: number, fold: number) {
+  const w = wingPoints(span, sweep, fold);
   const flip = (p: Point): Point => [p[0] * side, p[1]];
   const [t0, t1, t2] = w.tips as [Point, Point, Point];
   c.polygon([w.wrist, t0, ...scallop(t0, t1, w.wrist), t1].map(flip), Ink.wing);
@@ -187,119 +188,82 @@ function drawWing(c: Canvas, side: 1 | -1, lift: number, fold: number) {
   for (const tip of w.tips) c.line(flip(w.wrist), flip(tip), 0.7, 0.4, Ink.bone);
   c.line(flip(w.shoulder), flip(w.elbow), 1.1, 0.9, Ink.bone);
   c.line(flip(w.elbow), flip(w.wrist), 0.9, 0.7, Ink.bone);
-  // The hooked claw at the wrist.
-  c.line(flip(w.wrist), flip([w.wrist[0] + 0.6, w.wrist[1] - 2.4]), 0.6, 0.4, Ink.fang);
+  // The hooked claw at the wrist, pointing ahead.
+  c.line(flip(w.wrist), flip([w.wrist[0] + 0.5, w.wrist[1] - 2.4]), 0.6, 0.4, Ink.claw);
 }
 
-/** Head, hair and torso, `dy` lower on the frame; `hunch` brings the head down into the shoulders. */
-function drawBody(c: Canvas, dy: number, sway: number, hunch: number, blink: boolean) {
-  const head = -11.5 + dy + hunch * 2;
-  // Hair behind everything, falling past the shoulders and lifting in the beat.
+/** Its back in a torn dress, down to the ragged waist, and its arms reaching ahead. */
+function drawTorso(c: Canvas) {
   c.polygon(
     [
-      [-5, head - 1],
-      [-7 + sway, 1 + dy],
-      [-6 + sway * 1.5, 7 + dy],
-      [-3, 3 + dy],
-      [3, 3 + dy],
-      [6 + sway * 1.5, 7 + dy],
-      [7 + sway, 1 + dy],
-      [5, head - 1],
-    ],
-    Ink.hair,
-  );
-  c.line([-5.6 + sway, 0 + dy], [-5.4 + sway * 1.4, 5 + dy], 0.4, 0.4, Ink.hairLight);
-  c.line([5.6 + sway, 0 + dy], [5.4 + sway * 1.4, 5 + dy], 0.4, 0.4, Ink.hairLight);
-
-  // Torn dress, narrowing to the ragged waist.
-  c.polygon(
-    [
-      [-5, -5 + dy],
-      [5, -5 + dy],
-      [3.6, 3 + dy],
-      [2.6, 5 + dy],
-      [1.2, 3.6 + dy],
-      [0, 5.4 + dy],
-      [-1.2, 3.6 + dy],
-      [-2.6, 5 + dy],
-      [-3.6, 3 + dy],
+      [-5.4, -4.5],
+      [5.4, -4.5],
+      [4.8, -1],
+      [3.6, 4.5],
+      [2.6, 6.5],
+      [1.2, 5],
+      [0, 6.8],
+      [-1.2, 5],
+      [-2.6, 6.5],
+      [-3.6, 4.5],
+      [-4.8, -1],
     ],
     Ink.dress,
   );
   c.polygon(
     [
-      [1.5, -5 + dy],
-      [5, -5 + dy],
-      [3.6, 3 + dy],
-      [2.6, 5 + dy],
-      [1.2, 3.6 + dy],
+      [2.4, -4.5],
+      [5.4, -4.5],
+      [4.8, -1],
+      [3.6, 4.5],
+      [2.6, 6.5],
+      [1.6, 5.2],
     ],
     Ink.dressShade,
   );
-  // Neck and bare shoulders.
-  c.polygon(
-    [
-      [-5, -5.6 + dy],
-      [5, -5.6 + dy],
-      [1.6, -3.4 + dy],
-      [-1.6, -3.4 + dy],
-    ],
-    Ink.skin,
-  );
-  c.ellipse(0, head + 4, 1.7, 2.6, Ink.skinShade);
-
-  // Arms, thin, with the hands hooked forward.
   for (const side of [1, -1] as const) {
-    c.line([side * 5, -4.6 + dy], [side * 7, 0.6 + dy], 1, 0.8, Ink.skin);
-    c.line([side * 7, 0.6 + dy], [side * 4.4, 3.2 + dy], 0.8, 0.7, Ink.skinShade);
-    c.dot(side * 3.7, 4 + dy, Ink.fang);
-    c.dot(side * 4.7, 4.2 + dy, Ink.fang);
+    c.ellipse(side * 5, -3.8, 1.8, 1.6, Ink.skin);
+    c.line([side * 5.4, -4.4], [side * 7.4, -8], 1, 0.8, Ink.skin);
+    c.line([side * 7.4, -8], [side * 4.8, -12.6], 0.8, 0.7, Ink.skinShade);
+    c.dot(side * 3.9, -14, Ink.claw);
+    c.dot(side * 4.9, -14.2, Ink.claw);
+    c.dot(side * 5.9, -13.6, Ink.claw);
   }
+}
 
-  // Face, with the hair parted over it.
-  c.ellipse(0, head, 4.1, 4.8, Ink.skin);
+/** The crown of its head, and parted hair lying back along its spine, drifting by `drift`. */
+function drawHead(c: Canvas, cy: number, drift: number, length: number) {
+  const end = cy + length;
   c.polygon(
     [
-      [-4.8, head + 1.6],
-      [-4.8, head - 3],
-      [-2.2, head - 5.4],
-      [2.2, head - 5.4],
-      [4.8, head - 3],
-      [4.8, head + 1.6],
-      [3.2, head - 1.6],
-      [0.6, head - 3.6],
-      [-0.6, head - 3.6],
-      [-3.2, head - 1.6],
+      [-3.6, cy],
+      [-3.1, cy + length * 0.4],
+      [-2.7 + drift * 0.5, cy + length * 0.7],
+      [-1 + drift, end],
+      [0.2 + drift, end + 1.5],
+      [1.2 + drift, end],
+      [2.7 + drift * 0.5, cy + length * 0.7],
+      [3.1, cy + length * 0.4],
+      [3.6, cy],
     ],
     Ink.hair,
   );
-  c.dot(-2.2, head - 4.2, Ink.hairLight);
-  c.dot(-1, head - 4.6, Ink.hairLight);
+  c.ellipse(0, cy, 4.2, 4.6, Ink.hair);
+  // Strands, and the pale parting that says this is the top of a head.
   for (const side of [1, -1] as const) {
-    const x = side > 0 ? 1.2 : -2.2;
-    if (blink) {
-      c.dot(x, head - 0.5, Ink.skinShade);
-      c.dot(x + 1, head - 0.5, Ink.skinShade);
-    } else {
-      c.dot(x, head - 0.5, Ink.eye);
-      c.dot(x + 1, head - 0.5, Ink.eye);
-    }
+    c.line([side * 2.4, cy - 2.2], [side * 2.6, cy + 2.4], 0.4, 0.4, Ink.hairLight);
+    c.line(
+      [side * 1.7, cy + 3],
+      [side * 1.3 + drift * 0.7, cy + length * 0.75],
+      0.4,
+      0.4,
+      Ink.hairLight,
+    );
   }
-  // Open mouth and fangs.
-  c.polygon(
-    [
-      [-1.8, head + 1.6],
-      [1.8, head + 1.6],
-      [1.1, head + 3.4],
-      [-1.1, head + 3.4],
-    ],
-    Ink.mouth,
-  );
-  c.dot(-1.5, head + 1.8, Ink.fang);
-  c.dot(1.5, head + 1.8, Ink.fang);
+  c.line([0, cy - 3.8], [0, cy + 2.6], 0.4, 0.4, Ink.skinShade);
 }
 
-/** Loops of gut hanging from the waist, waving by `phase` in 0..1. */
+/** Loops of gut trailing behind the waist, waving by `phase` in 0..1. */
 function drawEntrails(c: Canvas, phase: number, top: number, length: number) {
   const wave = phase * Math.PI * 2;
   const strand = (
@@ -330,43 +294,55 @@ function drawEntrails(c: Canvas, phase: number, top: number, length: number) {
   c.dot(1, top, Ink.gut);
 }
 
-/** How high the wings are through the beat, by the frame's share of it. */
-export const wingLift = (phase: number) => Math.sin(phase * Math.PI * 2 + 0.25);
+/** How narrow and how far ahead the wings are at this share of the beat. */
+export function wingBeatShape(phase: number) {
+  const angle = phase * Math.PI * 2 + 0.25;
+  return { span: Math.cos(Math.sin(angle) * 0.7) * 0.9, sweep: -Math.cos(angle) * 0.16 };
+}
 
 function flapFrame(c: Canvas, frame: number) {
   const phase = frame / SpriteFrame.flaps,
-    lift = wingLift(phase);
-  drawWing(c, 1, lift, 0);
-  drawWing(c, -1, lift, 0);
-  drawBody(c, lift * 0.8, lift * 0.8, 0, false);
+    { span, sweep } = wingBeatShape(phase);
+  drawWing(c, 1, span, sweep, 0);
+  drawWing(c, -1, span, sweep, 0);
+  drawTorso(c);
+  drawHead(c, -8.5, Math.sin(phase * Math.PI * 2) * 0.9, 16);
   c.outline();
 }
 
 function foldFrame(c: Canvas, frame: number) {
   const fold = (frame + 1) / SpriteFrame.folds;
-  const lift = wingLift(0) * (1 - fold);
-  drawBody(c, lift * 0.8 + fold, 0, fold, false);
-  drawWing(c, 1, lift, fold);
-  drawWing(c, -1, lift, fold);
+  const { span, sweep } = wingBeatShape(0);
+  // The wings come over its back half way in.
+  if (fold < 0.5) {
+    drawWing(c, 1, span, sweep, fold);
+    drawWing(c, -1, span, sweep, fold);
+    drawTorso(c);
+  } else {
+    drawTorso(c);
+    drawWing(c, 1, span, sweep, fold);
+    drawWing(c, -1, span, sweep, fold);
+  }
+  drawHead(c, -8.5 + fold * 1.5, 0, 16 - fold * 4);
   c.outline();
 }
 
 function perchFrame(c: Canvas, frame: number) {
-  const phase = (frame % 3) / 3;
+  const phase = frame / SpriteFrame.perches;
   drawEntrails(c, phase, 6, 13);
-  drawBody(c, 1, 0, 1, frame === SpriteFrame.perches - 1);
-  drawWing(c, 1, 0, 1);
-  drawWing(c, -1, 0, 1);
-  // The long tongue let down from the mouth, in front of everything.
-  const mouth = -6;
-  let previous: Point = [0, mouth];
-  const sway = Math.sin(phase * Math.PI * 2) * 2.2;
-  for (let i = 1; i <= 10; i++) {
-    const t = i / 10;
-    const next: Point = [Math.sin(t * 2.6) * sway * t, mouth + t * 26];
-    c.line(previous, next, 0.7, 0.5, Ink.tongue);
+  drawTorso(c);
+  drawWing(c, 1, 0.9, 0, 1);
+  drawWing(c, -1, 0.9, 0, 1);
+  // The long tongue let out ahead of it over the roof, feeling its way.
+  const sway = Math.sin(phase * Math.PI * 2) * 2;
+  let previous: Point = [0, -11];
+  for (let i = 1; i <= 8; i++) {
+    const t = i / 8;
+    const next: Point = [Math.sin(t * 4.2) * sway * t, -11 - t * 11];
+    c.line(previous, next, 0.8, 0.5, Ink.tongue);
     previous = next;
   }
+  drawHead(c, -7, Math.sin(phase * Math.PI * 2) * 0.4, 12);
   c.outline();
 }
 
@@ -375,43 +351,28 @@ function trailFrame(c: Canvas, frame: number) {
   c.outline();
 }
 
-/** Drawn in the middle half of the frame, so the quad can be sized to match the upper body's pixels. */
+/** From above: feet showing past a torn skirt, and the raw waist uppermost. */
 function lowerFrame(c: Canvas) {
   for (const side of [1, -1] as const) {
-    const hip: Point = [side * 2.4, -2];
-    const knee: Point = [side * 2.7, 4];
-    const ankle: Point = [side * 2.5, 10];
-    c.line(hip, knee, 1.7, 1.3, Ink.skin);
-    c.line(knee, ankle, 1.3, 1, side > 0 ? Ink.skinShade : Ink.skin);
-    c.line(ankle, [side * 3.6, 11], 1, 0.8, Ink.skinShade);
+    c.ellipse(side * 2.7, 7.6, 1.7, 2.8, Ink.skin);
+    c.dot(side * 2, 10.2, Ink.skinShade);
+    c.dot(side * 3.2, 10.4, Ink.skinShade);
   }
+  const hem: Point[] = [];
+  for (let i = 0; i < 18; i++) {
+    const angle = (i / 18) * Math.PI * 2;
+    const r = i % 2 ? 7.4 : 8.6;
+    hem.push([Math.cos(angle) * r, Math.sin(angle) * r * 0.9]);
+  }
+  c.polygon(hem, Ink.dress);
   c.polygon(
-    [
-      [-4.6, -7],
-      [4.6, -7],
-      [5.6, 0.5],
-      [3.6, -0.5],
-      [1.8, 1],
-      [0, -0.5],
-      [-1.8, 1],
-      [-3.6, -0.5],
-      [-5.6, 0.5],
-    ],
-    Ink.dress,
-  );
-  c.polygon(
-    [
-      [1.5, -7],
-      [4.6, -7],
-      [5.6, 0.5],
-      [3.6, -0.5],
-      [1.8, 1],
-    ],
+    hem.filter(([x]) => x > 1.5),
     Ink.dressShade,
   );
-  c.ellipse(0, -7.4, 4.6, 1.8, Ink.gutDark);
-  c.ellipse(-0.8, -7.6, 2.4, 0.9, Ink.gut);
-  c.dot(1.8, -7, Ink.gut);
+  c.ellipse(0, 0, 4.8, 4.2, Ink.dressShade);
+  c.ellipse(0, 0, 3.6, 3, Ink.gutDark);
+  c.ellipse(-0.5, -0.4, 1.9, 1.5, Ink.gut);
+  c.dot(1.4, 0.8, Ink.gut);
   c.outline();
 }
 

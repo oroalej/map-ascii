@@ -249,6 +249,24 @@ it('selects independently of tile enumeration and releases each required anchor 
   expect(sample([invalid]).sprites).toEqual([]);
 });
 
+it('turns smoothly through a whole cycle, keeping its heading on the roof', () => {
+  const t = folkloreTile(),
+    g = new FolkloreGeometry([t], t),
+    c = g.candidates[0]!,
+    roof = g.roofs[1]!,
+    night = calendar(11).epochDay;
+  const timing = manananggalTiming(c, night);
+  const at = (elapsed: number) => manananggalPose(c, roof, night, elapsed, 360);
+  const gap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  for (let t = 0.2; t < timing.span * 2; t += 0.1)
+    expect(gap(at(t).heading, at(t + 0.1).heading)).toBeLessThan(0.5);
+  const down = at(timing.flight + 1).heading;
+  expect(at(timing.flight + timing.landing - 1).heading).toBeCloseTo(down, 8);
+  // It came in along that line.
+  const from = at(timing.flight - 6).at;
+  expect(gap(down, Math.atan2(roof.at.y - from.y, roof.at.x - from.x))).toBeLessThan(1e-6);
+});
+
 it('beats its wings in bursts and holds a glide between them', () => {
   const beats = Array.from({ length: 640 }, (_, i) => wingBeat(i / 100));
   expect(beats.every((b) => b >= 0 && b < 1)).toBe(true);

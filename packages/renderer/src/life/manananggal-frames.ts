@@ -10,13 +10,13 @@ export const SpriteFrame = {
   /** The wings through one beat. Index 0 is the glide. */
   flap: 0,
   flaps: 8,
-  /** From the glide to wings drawn round it like a cloak. */
+  /** From the glide to wings folded along its back like a cloak. */
   fold: 8,
   folds: 4,
-  /** Hunched on a roof, tongue swaying; the last of them blinks. */
+  /** Hunched on a roof, wings folded, tongue let out ahead and swaying. */
   perch: 12,
   perches: 4,
-  /** The entrails swaying, drawn under the flap and fold frames. */
+  /** The entrails trailing and swaying, drawn under the flap and fold frames. */
   trail: 16,
   trails: 4,
   /** The legs. */

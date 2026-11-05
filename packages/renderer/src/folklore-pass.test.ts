@@ -107,23 +107,23 @@ it('picks the frame for each moment of the manananggal, with its entrails under 
   // Its last frames are the end of their sets at the very top of each range.
   expect(manananggalFrames(figure({ phase: 0.999 })) % 64).toBe(SpriteFrame.flaps - 1);
   expect(manananggalFrames(figure({ fold: 0.999 })) % 64).toBe(SpriteFrame.perch - 1);
-  const perched = figure({ pose: 'perched', fold: 1, phase: 0, wave: 0.99 });
-  expect(manananggalFrames(perched)).toBe(SpriteFrame.perch + 2);
-  expect(manananggalFrames({ ...perched, phase: 1 })).toBe(SpriteFrame.perch + 3);
+  const perched = figure({ pose: 'perched', fold: 1, phase: 0, wave: 0 });
+  expect(manananggalFrames(perched)).toBe(SpriteFrame.perch);
+  expect(manananggalFrames({ ...perched, wave: 0.99 })).toBe(SpriteFrame.perch + 3);
 });
-it('leans the manananggal into its flight, upright when folded, and leaves the legs still', () => {
-  const lean = (over: Parameters<typeof figure>[0]) =>
-    folkloreLayout({ ...packet, sprites: [figure(over)] }, view)[0]!.lean;
-  expect(lean({ heading: 0 })).toBeGreaterThan(0.2);
-  expect(lean({ heading: Math.PI })).toBeLessThan(-0.2);
-  expect(lean({ heading: Math.PI / 2 })).toBeCloseTo(0);
-  expect(lean({ heading: 0, fold: 1 })).toBe(0);
+it('turns the manananggal to face its heading, and leaves the legs as they are', () => {
+  const turn = (heading: number) =>
+    folkloreLayout({ ...packet, sprites: [figure({ heading })] }, view)[0]!.turn;
+  // Head-up in its frame: east turns it a quarter clockwise, north not at all.
+  expect(turn(0)).toBeCloseTo(Math.PI / 2);
+  expect(turn(-Math.PI / 2)).toBeCloseTo(0);
+  expect(turn(Math.PI / 2)).toBeCloseTo(Math.PI);
   const legs = folkloreLayout(
-    { ...packet, sprites: [figure({ kind: 'lower-half' as never })] },
+    { ...packet, sprites: [figure({ kind: 'lower-half', heading: 1 })] },
     view,
   )[0]!;
   expect(legs.glyph).toBe(SpriteFrame.lower);
-  expect(legs.lean).toBe(0);
+  expect(legs.turn).toBe(0);
 });
 it('sizes the figure to a square of its frames at least, and in metres when closer', () => {
   const size = (zoom: number, dpr: number) =>

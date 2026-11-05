@@ -18,13 +18,11 @@ export type FolkloreQuad = {
   h: number;
   /** A ghost's atlas glyph; else its sprite frame, plus 64 times one more than a frame under it. */
   glyph: number;
-  /** How far the figure leans into its flight, radians clockwise. */
-  lean: number;
+  /** How far to turn the figure from head-up, radians clockwise. */
+  turn: number;
 };
 /** The figure's quad, CSS px at least and metres beyond that: its frames are this many px across. */
 const FIGURE = { px: 48, meters: 5 } as const;
-/** How far the manananggal leans when flying straight across the screen, radians. */
-const LEAN = 0.32;
 const under = (frame: number, trail: number) =>
   frame + 64 * (SpriteFrame.trail + Math.min(SpriteFrame.trails - 1, trail) + 1);
 /** Which frames show this moment of the manananggal: wings beating, folding in, or on a roof. */
@@ -32,9 +30,9 @@ export function manananggalFrames(sprite: FolkloreSprite): number {
   const fold = sprite.fold ?? 0,
     wave = sprite.wave ?? 0;
   if (fold >= 1)
-    return sprite.phase >= 1
-      ? SpriteFrame.perch + SpriteFrame.perches - 1
-      : SpriteFrame.perch + Math.floor(wave * (SpriteFrame.perches - 1));
+    return (
+      SpriteFrame.perch + Math.min(SpriteFrame.perches - 1, Math.floor(wave * SpriteFrame.perches))
+    );
   const trail = Math.floor(wave * SpriteFrame.trails);
   return fold > 0
     ? under(
@@ -69,13 +67,11 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
       : lower
         ? SpriteFrame.lower
         : manananggalFrames(sprite);
-    const lean =
-      sprite.kind === 'manananggal'
-        ? Math.cos(sprite.heading) * LEAN * (1 - (sprite.fold ?? 0))
-        : 0;
+    // Its head is at the top of the frame, and a heading of 0 is east.
+    const turn = sprite.kind === 'manananggal' ? sprite.heading + Math.PI / 2 : 0;
     return x + w / 2 < 0 || y + h / 2 < 0 || x - w / 2 > view.width || y - h / 2 > view.height
       ? []
-      : [{ sprite, x, y, w, h, glyph, lean }];
+      : [{ sprite, x, y, w, h, glyph, turn }];
   });
 }
 export function folkloreHit(
@@ -207,7 +203,7 @@ export function folklorePass(
     data[offset + 4] = ghost ? theme.map.atlas.index(FOLKLORE_GLYPHS[q.glyph]!) : q.glyph;
     data[offset + 5] = q.sprite.alpha;
     data[offset + 6] = ghost ? 0 : q.sprite.kind === 'lower-half' ? 2 : 1;
-    data[offset + 7] = q.lean;
+    data[offset + 7] = q.turn;
   }
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, view.width, view.height);

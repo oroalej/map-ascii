@@ -1,5 +1,5 @@
 import { FOCUS_DIM } from '../focus';
-import { SPRITE_COLUMNS, SPRITE_ROWS } from '../life/manananggal-frames';
+import { SPRITE_COLUMNS, SPRITE_ROWS, SPRITE_SIZE } from '../life/manananggal-frames';
 
 export const folkloreVertex = `#version 300 es
 precision highp float;
@@ -59,8 +59,9 @@ void main() {
     color = vec3(0.73, 0.94, 1.0);
     alpha = v_style.y * max(ink, halo * 0.22);
   } else {
-    // The top frame over the one under it, leaning about the middle of the quad.
-    vec2 d = v_uv - 0.5;
+    // The top frame over the one under it, turned about the middle of the quad. Its pixels stay
+    // square on the screen at any heading, like the map's cells, rather than tilting with it.
+    vec2 d = (floor(v_uv * ${SPRITE_SIZE}.0) + 0.5) / ${SPRITE_SIZE}.0 - 0.5;
     float c = cos(v_style.w), s = sin(v_style.w);
     vec2 uv = vec2(c * d.x + s * d.y, c * d.y - s * d.x) + 0.5;
     vec4 figure = vec4(0.0);
