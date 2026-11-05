@@ -8,6 +8,7 @@ import {
 } from '@atlas/shared';
 import { inTile, SITE_STRIDE, type LifeGeometry, type LifeLine } from './geometry';
 import { WalkingGraph, type WalkPoint } from './navigation';
+import { moverShare, peopleShare } from './mover-share';
 import { between, random, hashString } from './random';
 import { VEHICLES } from './vehicles';
 import {
@@ -1370,7 +1371,7 @@ export class LocalScenes {
           (owns && !owns(m)) ||
           (near && !near(m.x, m.y)) ||
           (shows && !shows('person')) ||
-          (env.levels && m.rank >= env.levels.person)
+          (env.levels && m.rank >= peopleShare(m, env.levels))
         )
           continue;
         const left = this.cursorHolds.get(m);
@@ -1451,7 +1452,7 @@ export class LocalScenes {
       const { kind } = visit.site;
       if (
         visit.state !== 'return' &&
-        ((env.levels && m.rank >= env.levels[m.kind]) ||
+        ((env.levels && m.rank >= moverShare(m, env.levels)) ||
           (this.wet && (kind === 'vendor' || kind === 'rest')) ||
           (kind === 'vendor' && visit.site.stall?.open === false) ||
           (!this.wet && visit.sheltering && (m.kind !== 'person' || visit.state !== 'shelter')))
@@ -1670,7 +1671,7 @@ export class LocalScenes {
         (owns && !owns(m)) ||
         (shows && !shows(m.kind)) ||
         (near && !near(m.x, m.y)) ||
-        (env.levels && m.rank >= env.levels[m.kind])
+        (env.levels && m.rank >= moverShare(m, env.levels))
       )
         continue;
       if (m.kind === 'vehicle' && m.vehicle) {
@@ -1732,7 +1733,7 @@ export class LocalScenes {
                   : site.kind === 'rest') &&
               (!site.stall ||
                 (site.stall.open !== false &&
-                  (!env.levels || site.stall.rank < env.levels.person))),
+                  (!env.levels || site.stall.rank < peopleShare(site.stall, env.levels)))),
           )
           .sort((a, b) => a.d - b.d)
           .slice(0, 3);

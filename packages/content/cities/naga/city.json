@@ -262,7 +262,200 @@
         ]
       }
     ],
-    "source": "OpenStreetMap transit features; modes are identified by the mapped terminal names. These sites stage simulated local scenes. Traffic signal locations follow project-owner corrections (2026-10-01), including the follow-ups restoring Magsaysay Avenue's junctions on either side of the bridge: Penafrancia/M. T. Villanueva (OSM node 254709879) and Dayangdang/Balatas-Cararayan (OSM node 254713607), and Panganiban Drive at Misericordia/Lerma (OSM node 254716718).",
+    "rhythm": {
+      "vehicle": [
+        [0, 0.2],
+        [4, 0.2],
+        [5, 0.45],
+        [6.5, 0.9],
+        [7.5, 1],
+        [9.5, 0.7],
+        [12, 0.7],
+        [14, 0.6],
+        [16.5, 0.95],
+        [18, 1],
+        [19.5, 0.7],
+        [21.5, 0.35]
+      ],
+      "person": [
+        [0, 0.1],
+        [4, 0.08],
+        [5, 0.3],
+        [6.5, 0.85],
+        [7.5, 1],
+        [9, 0.7],
+        [12, 0.8],
+        [13.5, 0.65],
+        [16.5, 0.95],
+        [18, 1],
+        [20, 0.7],
+        [22, 0.25]
+      ],
+      "boat": [
+        [0, 0.2],
+        [4, 0.35],
+        [5.5, 0.9],
+        [8, 1],
+        [11, 0.5],
+        [15.5, 0.8],
+        [18, 0.4],
+        [20.5, 0.2]
+      ],
+      "centre": [
+        [0, 0.3],
+        [5, 0.25],
+        [7, 0.6],
+        [9, 1],
+        [18, 1],
+        [20, 0.7],
+        [22, 0.35]
+      ],
+      "home": [
+        [0, 0.7],
+        [5, 0.8],
+        [6.5, 1],
+        [9, 0.55],
+        [15, 0.5],
+        [17, 0.9],
+        [18.5, 1],
+        [21, 0.9],
+        [23, 0.7]
+      ]
+    },
+    "rhythm_days": [
+      {
+        "weekdays": [6],
+        "rhythm": {
+          "vehicle": [
+            [0, 0.2],
+            [5, 0.3],
+            [7, 0.55],
+            [9.5, 0.85],
+            [12, 0.9],
+            [16, 0.85],
+            [18, 0.9],
+            [20, 0.65],
+            [22, 0.35]
+          ],
+          "person": [
+            [0, 0.1],
+            [5, 0.2],
+            [7, 0.5],
+            [9.5, 0.8],
+            [12, 0.95],
+            [16, 0.9],
+            [18, 1],
+            [20, 0.8],
+            [22, 0.35]
+          ],
+          "centre": [
+            [0, 0.3],
+            [6, 0.3],
+            [9, 0.8],
+            [11, 1],
+            [18, 1],
+            [20, 0.7],
+            [22, 0.35]
+          ],
+          "home": [
+            [0, 0.7],
+            [6, 0.7],
+            [9, 0.8],
+            [12, 0.8],
+            [17, 0.95],
+            [21, 0.9],
+            [23, 0.7]
+          ]
+        }
+      },
+      {
+        "weekdays": [0],
+        "rhythm": {
+          "vehicle": [
+            [0, 0.2],
+            [5, 0.2],
+            [7.5, 0.4],
+            [9.5, 0.6],
+            [12, 0.7],
+            [16, 0.75],
+            [18, 0.8],
+            [20, 0.55],
+            [22, 0.3]
+          ],
+          "person": [
+            [0, 0.1],
+            [4, 0.12],
+            [6, 0.4],
+            [9, 0.7],
+            [12, 0.8],
+            [16, 0.85],
+            [18, 0.95],
+            [20, 0.7],
+            [22, 0.3]
+          ],
+          "centre": [
+            [0, 0.3],
+            [5, 0.3],
+            [8, 0.6],
+            [10, 0.7],
+            [13, 0.95],
+            [18, 1],
+            [20, 0.6],
+            [22, 0.3]
+          ],
+          "home": [
+            [0, 0.7],
+            [6, 0.75],
+            [10, 0.65],
+            [15, 0.75],
+            [17, 1],
+            [21, 0.9],
+            [23, 0.7]
+          ]
+        }
+      }
+    ],
+    "schedules": {
+      "worship": [
+        {
+          "weekdays": [1, 2, 3, 4, 5, 6],
+          "times": ["05:30", "06:30", "07:30"]
+        },
+        {
+          "weekdays": [1, 2, 3, 4, 5],
+          "times": ["17:30"]
+        },
+        {
+          "weekdays": [6],
+          "times": ["15:00", "16:30", "18:00"]
+        },
+        {
+          "weekdays": [0],
+          "times": [
+            "04:30",
+            "06:00",
+            "07:30",
+            "09:00",
+            "10:30",
+            "12:00",
+            "15:30",
+            "17:00",
+            "18:30",
+            "20:00"
+          ]
+        }
+      ],
+      "school": {
+        "weekdays": [1, 2, 3, 4, 5],
+        "in": "07:30",
+        "out": "16:30"
+      },
+      "shops": {
+        "open": "08:00",
+        "close": "20:00"
+      }
+    },
+    "source": "OpenStreetMap transit features; modes are identified by the mapped terminal names. These sites stage simulated local scenes. Traffic signal locations follow project-owner corrections (2026-10-01), including the follow-ups restoring Magsaysay Avenue's junctions on either side of the bridge: Penafrancia/M. T. Villanueva (OSM node 254709879) and Dayangdang/Balatas-Cararayan (OSM node 254713607), and Panganiban Drive at Misericordia/Lerma (OSM node 254716718). The daily rhythm is illustrative: the curves are the project's impression of Naga's weekdays, Saturdays and Sundays, not traffic counts. Mass times are the Naga Metropolitan Cathedral's as listed by Philmass (updated 2026-03-25, https://philmass.com/Asia/Philippines/Camarines-Sur/Naga-City/Roman-Catholic-Churches/St.-John-the-Evangelist-Parish-(Naga-Metropolitan-Cathedral)/mass-schedule.html), which assigns some Saturday and Sunday afternoon times by layout; every church uses them. School hours are illustrative: DepEd Order No. 12, s. 2024 lets each public school set its own schedule, and no published Naga bell schedule was found. Shop hours are illustrative, consistent with SM City Naga's listed 10:00-21:00 (https://www.smsupermalls.com/mall-directory/sm-city-naga).",
     "signals": {
       "derive": false,
       "add": [

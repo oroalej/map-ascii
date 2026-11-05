@@ -1,4 +1,5 @@
 import { gathererShare } from './gatherer-share';
+import { peopleShare } from './mover-share';
 /** Adapts authoritative visits and existing group members to presentation-only dialogue. */
 import type { MomentOptions } from './moments-host';
 import { MOMENTS, type MomentAnchor } from './moments';
@@ -98,7 +99,9 @@ export class SceneSpeechHost {
         owner.rank <
           ('place' in owner
             ? gathererShare(owner, this.sceneEnv?.levels)
-            : (this.sceneEnv?.levels?.person ?? 1)) &&
+            : this.sceneEnv?.levels
+              ? peopleShare(owner, this.sceneEnv.levels)
+              : 1) &&
         ('kind' in owner
           ? tile.movers.includes(owner) &&
             !tile.scenes.hidden(owner) &&

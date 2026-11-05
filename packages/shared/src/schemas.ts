@@ -19,9 +19,12 @@ import {
   type ClimateConfig,
 } from './climate';
 import {
+  DEFAULT_RHYTHM,
   FOLKLORE_SITE_KINDS,
+  RHYTHM_DISTRICTS,
   RHYTHM_KINDS,
   SEASON_ANCHOR_KINDS,
+  curveAt,
   runtimeCityLife,
   type CityLifeConfig,
   type RuntimeCityLife,
@@ -1443,6 +1446,9 @@ const RhythmCurve = z
     message: 'hours must be ascending',
   });
 
+/** Curves by agent kind, and by district as factors on the people out (rhythm.ts). */
+const CityRhythm = z.partialRecord(z.enum([...RHYTHM_KINDS, ...RHYTHM_DISTRICTS]), RhythmCurve);
+
 const ClockTime = z.string().regex(CLOCK_TIME_PATTERN, 'expected HH:MM');
 const Weekdays = z
   .array(z.int().min(0).max(6))
@@ -2003,7 +2009,9 @@ export const CityLife = z
         { message: 'duplicate life site osm_id' },
       )
       .optional(),
-    rhythm: z.partialRecord(z.enum(RHYTHM_KINDS), RhythmCurve).optional(),
+    rhythm: CityRhythm.optional(),
+    /** Curves for some days of the week, replacing `rhythm`'s on those days. */
+    rhythm_days: z.array(z.strictObject({ weekdays: Weekdays, rhythm: CityRhythm })).optional(),
     schedules: z
       .strictObject({
         /** Services at places of worship: weekdays (0 = Sunday) and local start times. */
@@ -2022,6 +2030,31 @@ export const CityLife = z
     source: z.string().min(1),
   })
   .superRefine((life, ctx) => {
+    const days = new Set<number>();
+    life.rhythm_days?.forEach((day, index) => {
+      for (const weekday of day.weekdays) {
+        if (days.has(weekday))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['rhythm_days', index, 'weekdays'],
+            message: `weekday ${weekday} has two rhythms`,
+          });
+        days.add(weekday);
+      }
+      // Agents show by the curve's share: a jump at midnight would make them pop in or out.
+      for (const key of [...RHYTHM_KINDS, ...RHYTHM_DISTRICTS]) {
+        const curve = day.rhythm[key];
+        if (!curve) continue;
+        const everyday =
+          life.rhythm?.[key] ?? (key === 'centre' || key === 'home' ? [] : DEFAULT_RHYTHM[key]);
+        if (Math.abs(curveAt(curve, 0) - curveAt(everyday, 0)) > 0.01)
+          ctx.addIssue({
+            code: 'custom',
+            path: ['rhythm_days', index, 'rhythm', key],
+            message: "a day's curve must meet the everyday curve at midnight",
+          });
+      }
+    });
     if (
       life.folklore &&
       !life.seasons?.some((season) => season.id === life.folklore!.ghosts.undas_season)
