@@ -125,16 +125,24 @@ it('turns the manananggal to face its heading, and leaves the legs as they are',
   expect(legs.glyph).toBe(SpriteFrame.lower);
   expect(legs.turn).toBe(0);
 });
-it('sizes the figure to a square of its frames at least, and in metres when closer', () => {
+it('sizes the figure smaller when zoomed out, and in metres when closest', () => {
   const size = (zoom: number, dpr: number) =>
     folkloreLayout(
       { ...packet, sprites: [figure()] },
       { ...view, dpr, camera: { ...view.camera, zoom } },
     )[0]!;
-  expect(size(15, 1).w).toBe(48);
-  expect(size(15, 1).h).toBe(48);
-  expect(size(15, 2).w).toBe(96);
+  expect(size(15, 1).w).toBe(24);
+  expect(size(15, 1).h).toBe(24);
+  expect(size(15, 2).w).toBe(48);
+  expect(size(16.25, 1).w).toBeCloseTo(36);
+  expect(size(17.5, 1).w).toBe(48);
   expect(size(22, 1).w).toBeGreaterThan(48);
+  // The legs share its quad, and are painted in the middle of it, so they stay the smaller.
+  const legs = folkloreLayout(
+    { ...packet, sprites: [figure({ kind: 'lower-half' })] },
+    { ...view, camera: { ...view.camera, zoom: 15 } },
+  )[0]!;
+  expect(legs.w).toBe(24);
 });
 it('keeps uniform scratch independent and clears unused or disabled haunts', () => {
   const a = createHauntUniformScratch(),

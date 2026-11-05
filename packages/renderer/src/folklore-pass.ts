@@ -21,8 +21,17 @@ export type FolkloreQuad = {
   /** How far to turn the figure from head-up, radians clockwise. */
   turn: number;
 };
-/** The figure's quad, CSS px at least and metres beyond that: its frames are this many px across. */
-const FIGURE = { px: 48, meters: 5 } as const;
+/**
+ * The figure's quad: this many metres, but never under a size in CSS px, so it stays findable. That
+ * floor grows with zoom up to the px its frames are painted at, so wide views don't show it towering
+ * over the city.
+ */
+const FIGURE = { far: { zoom: 15, px: 24 }, near: { zoom: 17.5, px: 48 }, meters: 5 } as const;
+const figureFloor = (zoom: number) => {
+  const { far, near } = FIGURE;
+  const t = Math.max(0, Math.min(1, (zoom - far.zoom) / (near.zoom - far.zoom)));
+  return far.px + (near.px - far.px) * t;
+};
 const under = (frame: number, trail: number) =>
   frame + 64 * (SpriteFrame.trail + Math.min(SpriteFrame.trails - 1, trail) + 1);
 /** Which frames show this moment of the manananggal: wings beating, folding in, or on a roof. */
@@ -56,7 +65,10 @@ export function folkloreLayout(packet: FolklorePacket, view: View): FolkloreQuad
       y = (py - cy) * view.dpr + view.height / 2;
     const ghost = sprite.kind === 'ghost',
       lower = sprite.kind === 'lower-half';
-    const w = Math.max(view.dpr * (ghost ? 14 : FIGURE.px), scale * (ghost ? 1.6 : FIGURE.meters));
+    const w = Math.max(
+      view.dpr * (ghost ? 14 : figureFloor(view.camera.zoom)),
+      scale * (ghost ? 1.6 : FIGURE.meters),
+    );
     const h = ghost ? Math.max(view.dpr * 20, scale * 2.4) : w;
     const glyph = ghost
       ? sprite.pose === 'wisp'
