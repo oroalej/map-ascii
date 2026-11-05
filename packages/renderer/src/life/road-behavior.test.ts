@@ -173,16 +173,18 @@ describe('accepted road lateral state', () => {
     expect(m.laneSignal).toBe('left');
   });
 
-  it('retries a proportional lateral step within the same physical budget', () => {
+  it('retries a shorter step that moves sideways in proportion to its travel', () => {
     const { life, m } = road();
     m.maneuver = { kind: 'lane', target: 0.5 };
-    const before = life.pose(m);
+    const before = life.pose(m),
+      start = m.d;
     const guard: GroundGuard = (owner, previous) =>
-      'kind' in owner && previous && 'kind' in previous
-        ? Math.abs((owner.lat ?? 0) - (previous.lat ?? 0)) <= 0.06
-        : true;
+      'kind' in owner && previous && 'kind' in previous ? owner.d - previous.d <= 0.25 * pm : true;
     life.step(0.1, undefined, undefined, undefined, undefined, guard);
-    expect(m.lat).toBeCloseTo(-0.05);
+    const forward = (m.d - start) / pm;
+    expect(forward).toBeCloseTo(0.2, 1);
+    expect(Math.abs(m.lat ?? 0)).toBeGreaterThan(0);
+    expect(Math.abs(m.lat ?? 0)).toBeLessThanOrEqual(Math.tan(Math.PI / 12) * forward);
     const after = life.pose(m);
     expect(Math.hypot(after.x - before.x, after.y - before.y) / pm).toBeLessThanOrEqual(0.2 + 1e-8);
     expect(Math.abs(Math.atan(m.latYaw ?? 0))).toBeLessThanOrEqual(Math.PI / 12);
@@ -247,43 +249,38 @@ describe('accepted road lateral state', () => {
     { dir: -1, lat: -3.2, lane: 0.9, side: 'right' },
     { dir: -1, lat: 3.2, lane: 0.1, side: 'left' },
   ] as const)(
-    'completes a swept $side return in direction $dir after its protected-stop gap opens',
+    'drives on holding a $side return in direction $dir, then steers back when its gap opens',
     ({ dir, lat, lane, side }) => {
       const { life, m } = road(dir);
-      m.d = 4095 - 31 * pm;
+      m.d = 300 * pm;
       m.x = dir === 1 ? m.d : 4095 - m.d;
       m.speed = 8 * pm;
-      m.v = pm;
+      m.v = 4 * pm;
       m.lane = lane;
       m.lat = lat;
-      m.latYaw = 0.15;
       m.maneuver = { kind: 'lane', target: 0.5, returning: true };
       m.laneSignal = 'left';
-      const peer = { ...m, lat: undefined, latYaw: undefined, maneuver: undefined };
+      const peer = { ...m, lat: undefined, maneuver: undefined };
       life.movers.push(peer);
       for (let frame = 0; frame < 3 * 30; frame++) {
         peer.d = m.d;
         peer.x = m.x;
         life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
       }
-      expect((4095 - m.d) / pm).toBeCloseTo(LANE.clear);
+      expect(m.d).toBeGreaterThan(300 * pm);
       expect(m.maneuver?.kind).toBe('lane');
       expect(m.maneuver?.returning).toBe(true);
       expect(m.lat).toBe(lat);
-      expect(m.latYaw).not.toBeUndefined();
       life.movers.pop();
-      const stopped = m.d;
+      const held = m.d;
       let completed = false;
-      for (let frame = 0; frame < 8 * 30; frame++) {
+      for (let frame = 0; frame < 20 * 30; frame++) {
         const previous = life.pose(m);
         life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
         const current = life.pose(m);
-        const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
-        const travel =
-          Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
-          radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy);
-        expect(travel).toBeLessThanOrEqual(m.speed / pm / 30 + 1e-8);
-        expect(m.d).toBeCloseTo(stopped);
+        expect(Math.hypot(current.x - previous.x, current.y - previous.y) / pm).toBeLessThanOrEqual(
+          m.speed / pm / 30 + 1e-8,
+        );
         if (!m.maneuver) {
           completed = true;
           break;
@@ -291,6 +288,7 @@ describe('accepted road lateral state', () => {
         expect(m.laneSignal).toBe(side);
       }
       expect(completed).toBe(true);
+      expect(m.d).toBeGreaterThan(held);
       expect(m.lat).toBeUndefined();
       expect(m.latYaw).toBeUndefined();
       expect(m.laneSignal).toBeUndefined();
@@ -298,52 +296,24 @@ describe('accepted road lateral state', () => {
     },
   );
 
-  it.each([1, -1] as const)(
-    'keeps a left return signal while yaw settles in direction %s',
-    (dir) => {
-      const { life, m } = road(dir);
-      m.lane = 0.1;
-      m.lat = 3.2;
-      m.maneuver = { kind: 'return', target: m.lane, returning: true };
-      m.laneSignal = 'left';
-      m.speed = m.v = 8 * pm;
-      let settling = 0;
-      for (let frame = 0; frame < 200 && m.maneuver; frame++) {
-        life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
-        if (m.maneuver) {
-          expect(m.laneSignal).toBe('left');
-          if (Math.abs(m.lat ?? 0) < 1e-6 && m.latYaw !== undefined) settling++;
-        }
-      }
-      expect(settling).toBeGreaterThan(0);
-      expect(m.maneuver).toBeUndefined();
-      expect(m.lat).toBeUndefined();
-      expect(m.latYaw).toBeUndefined();
-      expect(m.laneSignal).toBeUndefined();
-    },
-  );
-
-  it.each([1 / 30, 0.1])('retries a proportional standstill return at dt=%s', (dt) => {
-    const { life, m } = road();
-    m.d = m.x = 4095 - LANE.clear * pm;
-    m.v = 0;
-    m.lat = -0.43;
-    m.latYaw = 0.15;
+  it.each([1, -1] as const)('keeps a left return signal to the end in direction %s', (dir) => {
+    const { life, m } = road(dir);
+    m.lane = 0.1;
+    m.lat = 3.2;
     m.maneuver = { kind: 'return', target: m.lane, returning: true };
-    const previous = life.pose(m);
-    const guard: GroundGuard = (owner, before) =>
-      !('kind' in owner && before && 'kind' in before) ||
-      Math.abs((owner.lat ?? 0) - (before.lat ?? 0)) <= LANE.lateral * dt * 0.6;
-    life.step(dt, undefined, undefined, undefined, undefined, guard);
-    expect(m.lat).toBeCloseTo(-0.43 + (LANE.lateral * dt) / 2);
-    const current = life.pose(m);
-    const radius = Math.hypot(VEHICLES.car.length, VEHICLES.car.width) / 2;
-    expect(
-      Math.hypot(current.x - previous.x, current.y - previous.y) / pm +
-        radius * Math.hypot(current.hx - previous.hx, current.hy - previous.hy),
-    ).toBeLessThanOrEqual(((m.speed / pm) * dt) / 2 + 1e-8);
-    expect(m.latYaw).toBeLessThan(0.15);
-    expect(m.d).toBeCloseTo(4095 - LANE.clear * pm);
+    m.laneSignal = 'left';
+    m.speed = m.v = 8 * pm;
+    let steered = false;
+    for (let frame = 0; frame < 300 && m.maneuver; frame++) {
+      life.step(1 / 30, undefined, undefined, undefined, undefined, () => true);
+      steered ||= m.latYaw !== undefined;
+      if (m.maneuver) expect(m.laneSignal).toBe('left');
+    }
+    expect(steered).toBe(true);
+    expect(m.maneuver).toBeUndefined();
+    expect(m.lat).toBeUndefined();
+    expect(m.latYaw).toBeUndefined();
+    expect(m.laneSignal).toBeUndefined();
   });
 
   it('rolls back refused standstill returns and freezes them under inspection', () => {
@@ -523,6 +493,10 @@ describe('prospective gaps across a road split', () => {
     'admits a normally stepped pass without hard braking at a split in direction %s',
     (dir) => {
       const { life, m, rear } = splitTraffic(dir);
+      // Steering out takes travel: this car has road to pull out behind the parked truck.
+      const lead = life.movers[2]!;
+      lead.d += 30 * pm;
+      lead.x += dir * 30 * pm;
       let entered = false;
       for (let frame = 0; frame < 600; frame++) {
         const before = rear.v!;
@@ -679,7 +653,16 @@ describe('deterministic passing', () => {
         side: 'left',
         on: blinkOn(123, clock),
       });
-    expect(LANE).toEqual({ lateral: 1, gain: 1.5, patience: 2, clear: 30, cooldown: 6 });
+    expect(LANE).toEqual({
+      lateral: 1.5,
+      comfort: 1,
+      rolling: 0.5,
+      yieldAfter: 1.5,
+      gain: 1.5,
+      patience: 2,
+      clear: 30,
+      cooldown: 6,
+    });
   });
 
   it.each([30, 60, 120])('replays complete accepted pass state at %s Hz', (hz) => {

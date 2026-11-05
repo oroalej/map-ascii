@@ -228,6 +228,7 @@ import { DialogueMemory } from './dialogue';
 import { SignalControl, SignalPresses, signalState, type SignalOffsets } from './signals';
 import { approach, nextSpeed, stopBefore, stoppingReach } from './motion';
 import { fillet, filletLength, curvePose, type Pose, type Curve } from './curves';
+import { steerLength, steerLimits, steerStep, steerStraight } from './lane-steer';
 import { bendAt, laneBend, LANE_BEND, type LaneTerrain } from './lane-clearance';
 import {
   boxAhead,
@@ -547,6 +548,8 @@ export type Mover = {
   roadShift?: number;
   /** Retained direction of accepted steering during a forward-blocked episode. */
   roadSteering?: 1 | -1;
+  /** Metres still to reverse in a straight line before steering out past what blocked it. */
+  roadBackoff?: number;
   /** A checked shorter turn curve, in metres, after a blocked default arc. */
   curveLengthM?: number;
   curveCorner?: { x: number; y: number };
@@ -1368,6 +1371,7 @@ export class TileLife {
     m.v = preview.v;
     m.roadShift = preview.roadShift;
     m.roadSteering = preview.roadSteering;
+    m.roadBackoff = preview.roadBackoff;
     if (preview.boatShift !== undefined) m.boatShift = preview.boatShift;
     if (
       m.chosenLane !== undefined ||
@@ -1761,6 +1765,7 @@ export class TileLife {
         (m.kind === 'cat' && (this.catPointer?.get(m)?.left ?? 0) > 0),
       true,
     );
+    this.scenes.curbShift = (m) => Math.abs(this.curbLane(m) - this.mergeLane(m));
     yield* this.scenes.prepare(geo, this.stalls);
     yield* this.spawnCats();
     return this;
@@ -2387,14 +2392,15 @@ export class TileLife {
           exit?: number,
         ) => {
           const value = this.routeLane(m, line, dir, travelled, came, exit);
-          if (line !== m.line) return this.shiftedOffset(m, value, line);
+          // A body between lanes turns from where it is: its held offset carries through the arc.
+          if (line !== m.line) return this.shiftedOffset(m, value, line) + (m.lat ?? 0);
           const road = this.roadWidth(line);
           const curb = Math.max(0, road / 2 - VEHICLES[m.vehicle!].width / 2 - ROAD_MARGIN_M);
           const scene =
             identity === m
               ? this.scenes.offset(m, value, curb)
               : this.scenes.offsetAt(identity, m, value, curb);
-          return this.shiftedOffset(m, scene);
+          return this.shiftedOffset(m, scene) + (m.lat ?? 0);
         };
         if (inLine === m.line && outLine === m.line) {
           const at =
@@ -2531,6 +2537,26 @@ export class TileLife {
     return found;
   }
 
+  /** How fast a curb stop's approach moves the lane sideways here, m per metre travelled. */
+  private curbSlope(m: Mover, identity: Mover): number {
+    const pm = this.perMeter,
+      normal = this.mergeLane(m),
+      curb = this.curbLane(m);
+    const at = (metres: number) => ({
+      x: m.x + m.hx * metres * pm,
+      y: m.y + m.hy * metres * pm,
+    });
+    return (
+      this.scenes.offsetAt(identity, at(0.5), normal, curb) -
+      this.scenes.offsetAt(identity, at(-0.5), normal, curb)
+    );
+  }
+
+  /** Where a vehicle keeps at a curb, m right of its line's centre. */
+  private curbLane(m: Mover, line = m.line): number {
+    return Math.max(0, this.roadWidth(line) / 2 - VEHICLES[m.vehicle!].width / 2 - ROAD_MARGIN_M);
+  }
+
   /** Pure render/clearance pose; the route cursor stays on the centreline. */
   pose(m: Mover, out: Pose = { x: 0, y: 0, hx: 0, hy: 0 }, identity = m): Pose {
     const offset = this.offsetOf(m, identity) * this.perMeter;
@@ -2543,7 +2569,10 @@ export class TileLife {
       const slope =
         (m.roadYaw ?? 0) +
         (m.latYaw ?? 0) +
-        (this.offsetVaries(m, 0.5, 0.5) ? this.laneSlope(m) : 0);
+        (this.offsetVaries(m, 0.5, 0.5) ? this.laneSlope(m) : 0) +
+        (this.scenes.hasCurbScenes && this.scenes.merging(identity)
+          ? this.curbSlope(m, identity)
+          : 0);
       if (Math.abs(slope) > 1e-4) {
         const hx = m.hx - m.hy * slope,
           hy = m.hy + m.hx * slope;
@@ -5323,18 +5352,244 @@ export class TileLife {
     if (m.roadScan !== undefined) m.roadScan = Math.max(0, m.roadScan - dt);
   }
 
-  /** Propose once per trial; retries start from the same immutable accepted state. */
-  private proposeLateral(m: Mover, before: Mover, distance: number, dt: number, share = 1) {
-    if (!before.maneuver) return 0;
-    const difference = this.maneuverOffset(before) - this.offsetOf(before, m);
-    if (before.maneuver.returning && before.maneuver.kind !== 'return') return 0;
-    const limit = Math.min(
-      LANE.lateral * dt * share,
-      (distance / this.perMeter) * Math.sin(Math.PI / 12),
+  /** A body following a turn's arc takes its heading from the arc, so its steering waits. */
+  private onCornerArc(m: Mover, identity: Mover): boolean {
+    if (!this.curvable[m.line]) return false;
+    const behind = this.cornerWithin(m, m.from, m.d, identity);
+    if (behind && m.d <= behind.after) return true;
+    const remaining = this.segment(m.from, m.from + m.dir) - m.d;
+    const ahead = this.cornerWithin(m, m.from + m.dir, remaining, identity);
+    return !!ahead && remaining <= ahead.before;
+  }
+
+  /** One steering step from the accepted state; retries start from the same immutable state. */
+  private steerFrom(m: Mover, before: Mover, dx: number) {
+    const slope = before.latYaw ?? 0;
+    const limits = steerLimits(m.vehicle, (before.v ?? before.speed) / this.perMeter);
+    const state = before.maneuver;
+    if (
+      state &&
+      !(state.returning && state.kind !== 'return') &&
+      !this.arcWithin(before, m, Math.abs(slope) / limits.curvature + dx)
+    )
+      return steerStep(slope, this.maneuverOffset(before) - this.offsetOf(before, m), dx, limits);
+    // A held return, any heading left over, and a nose about to take a turn all straighten
+    // without seeking the target.
+    return steerStraight(slope, dx, limits);
+  }
+
+  /** Whether the arc of the turn ahead begins within `metres`. */
+  private arcWithin(m: Mover, identity: Mover, metres: number): boolean {
+    if (!this.curvable[m.line]) return false;
+    const remaining = this.segment(m.from, m.from + m.dir) - m.d;
+    const ahead = this.cornerWithin(m, m.from + m.dir, remaining, identity);
+    return !!ahead && remaining - ahead.before <= metres * this.perMeter;
+  }
+
+  /** Forward travel, tile units, that uses `distance` of path at the heading this step holds. */
+  private steerForward(m: Mover, before: Mover, distance: number): number {
+    const slope = before.latYaw ?? 0;
+    const estimate = this.steerFrom(m, before, distance / this.perMeter / Math.hypot(1, slope));
+    return distance / Math.hypot(1, (slope + estimate.slope) / 2);
+  }
+
+  /** Sideways motion is what the accepted heading makes of the forward travel actually taken. */
+  private steerMoved(m: Mover, before: Mover, moved: number) {
+    if (this.onCornerArc(before, m)) {
+      m.lat = before.lat;
+      m.latYaw = undefined;
+      return;
+    }
+    if (moved < 0) {
+      m.lat = before.latYaw
+        ? (before.lat ?? 0) + (moved / this.perMeter) * before.latYaw
+        : before.lat;
+      m.latYaw = before.latYaw;
+      return;
+    }
+    const { slope, sideways } = this.steerFrom(m, before, moved / this.perMeter);
+    m.lat = sideways === 0 ? before.lat : (before.lat ?? 0) + sideways;
+    m.latYaw = Math.abs(slope) > 1e-6 ? slope : undefined;
+  }
+
+  /**
+   * Steer the checked road shift over `travel` metres toward `remaining` metres (or straight,
+   * if undefined), at most `sideLimit` metres this step. Sets the heading and returns the
+   * sideways metres it produced.
+   */
+  private steerShift(
+    m: Mover,
+    before: Mover,
+    travel: number,
+    remaining: number | undefined,
+    sideLimit: number,
+  ): number {
+    this.shiftSteered = true;
+    if (travel <= 0) return 0;
+    const limits = steerLimits(m.vehicle, (before.v ?? before.speed) / this.perMeter);
+    limits.maxSlope = Math.min(ROAD_AVOID.slope, sideLimit / travel);
+    const slope = before.roadYaw ?? 0;
+    const step =
+      remaining === undefined
+        ? steerStraight(slope, travel, limits)
+        : steerStep(slope, remaining, travel, limits);
+    m.roadYaw = Math.abs(step.slope) > 1e-6 ? step.slope : undefined;
+    return step.sideways;
+  }
+
+  /** Move a cursor back along its line, across interior vertices. Returns how far it went. */
+  private reverseOnLine(m: Mover, distance: number): number {
+    const start = m.dir === 1 ? this.first(m.line) : this.last(m.line);
+    let left = distance;
+    while (left > m.d && m.from !== start) {
+      left -= m.d;
+      m.from -= m.dir;
+      m.d = this.segment(m.from, m.from + m.dir);
+    }
+    const last = Math.min(left, m.d);
+    m.d -= last;
+    return distance - left + last;
+  }
+
+  /** The body stays where it is; its displacement becomes an ordinary road shift to recover. */
+  private abandonManeuver(m: Mover) {
+    if (m.lat) m.roadShift = (m.roadShift ?? 0) + m.lat;
+    if (m.latYaw) m.roadYaw = (m.roadYaw ?? 0) + m.latYaw;
+    m.lat = m.latYaw = m.maneuver = m.laneSignal = undefined;
+    m.laneCooldown = LANE.cooldown;
+    m.filterRetry = FILTER.retry;
+  }
+
+  /**
+   * The road shift after `travel` metres of steering out toward `side`, braking its heading to
+   * reach the edge of the road straight. A narrower road can clamp a retained shift well before
+   * its stored value, so this starts from the same effective lane, and its first increment moves.
+   */
+  private steerOut(
+    m: Mover,
+    before: Mover,
+    side: 1 | -1,
+    travel: number,
+    dt: number,
+  ): number | undefined {
+    const spec = VEHICLES[m.vehicle!];
+    const [low, high] = this.laneBounds(spec.width, before.line);
+    const at = this.offsetOf(before, m);
+    // Heading back to its own lane it stops there; otherwise it can use the road to the edge.
+    const home = at - this.offsetOf({ ...before, roadShift: undefined }, m);
+    const edge = side * home < 0 ? -home : (side > 0 ? high : low) - at;
+    const stored = before.roadShift ?? 0;
+    const effective =
+      this.vehicleLane(before, before.line) -
+      laneOffset(
+        this.roadWidth(before.line),
+        spec.width,
+        before.chosenLane ?? before.lane,
+        spec.curb,
+        this.geo.oneway?.[before.line] ?? 0,
+      ) -
+      (before.lat ?? 0);
+    const behind = this.cornerWithin(before, before.from, before.d, m);
+    const remaining = this.segment(before.from, before.from + before.dir) - before.d;
+    const ahead = this.cornerWithin(before, before.from + before.dir, remaining, m);
+    // Active arcs keep both existing tangent offsets.
+    const origin =
+      (behind && before.d <= behind.after) || (ahead && remaining <= ahead.before)
+        ? stored
+        : effective;
+    const limit = this.geo.oneway?.[before.line] ? this.roadWidth(before.line) : 1;
+    const change = this.steerShift(m, before, travel, edge, ROAD_AVOID.steer * dt);
+    return Math.max(-limit, Math.min(limit, origin + change));
+  }
+
+  /**
+   * Plan or continue a straight reverse. Steering out needs travel, so a vehicle stopped against
+   * something backs up far enough for the shortest way past to clear it: its own lane if that
+   * is clear ahead, else whichever side is.
+   */
+  private commitBackoff(m: Mover, before: Mover, reversed: number, fits: GroundGuard) {
+    if (before.roadBackoff !== undefined) {
+      const left = before.roadBackoff - reversed;
+      m.roadBackoff = left > 1e-6 ? left : undefined;
+      return;
+    }
+    const limits = steerLimits(m.vehicle, 0);
+    limits.maxSlope = ROAD_AVOID.slope;
+    const [low, high] = this.laneBounds(VEHICLES[m.vehicle!].width, before.line);
+    const at = this.offsetOf(before, m);
+    const home = at - this.offsetOf({ ...before, roadShift: undefined }, m);
+    const preferred: 1 | -1 =
+      before.roadSteering ?? (Math.sign(before.roadShift ?? 0) > 0 ? 1 : -1);
+    let side: 1 | -1 | undefined;
+    let shift = 0;
+    if (Math.abs(home) > 0.25 && this.clearAhead(m, before, -home, fits)) {
+      side = home > 0 ? -1 : 1;
+      shift = Math.abs(home);
+    }
+    for (let step = 0.5; side === undefined && step <= high - low; step += 0.5)
+      for (const candidate of [preferred, -preferred as 1 | -1]) {
+        const to = at + candidate * step;
+        if (to < low || to > high || !this.clearAhead(m, before, candidate * step, fits)) continue;
+        side = candidate;
+        shift = step;
+        break;
+      }
+    // No side clears fixed ground: whatever stopped it moves, so try the other way next time.
+    side ??= before.roadSteering ? (-preferred as 1 | -1) : preferred;
+    shift ||= ROAD_AVOID.backoffShift;
+    m.roadSteering = side;
+    const needed = steerLength(side * shift, before.roadYaw ?? 0, limits) + ROAD_AVOID.backoffPad;
+    m.roadBackoff = Math.max(0, needed - reversed) || undefined;
+  }
+
+  /** Whether the road is clear ahead of a vehicle `shift` metres to its side, without moving it. */
+  private clearAhead(m: Mover, before: Mover, shift: number, fits: GroundGuard): boolean {
+    const trial = snapshotMover(m);
+    let clear = true;
+    for (const metres of ROAD_AVOID.backoffLook) {
+      const ahead = metres * this.perMeter;
+      m.d = before.d + ahead;
+      m.x = before.x + before.hx * ahead;
+      m.y = before.y + before.hy * ahead;
+      m.roadShift = (before.roadShift ?? 0) + shift;
+      m.roadYaw = m.lat = m.latYaw = undefined;
+      if (!fits(m)) {
+        clear = false;
+        break;
+      }
+    }
+    restoreMover(m, trial);
+    return clear;
+  }
+
+  /**
+   * Whether a vehicle has the road to steer past a leader that isn't opening the way. Steering
+   * needs travel, so one already boxed in behind a stopped vehicle keeps its place.
+   */
+  private roomToSteerOut(m: Mover, leader: Mover, target: number): boolean {
+    if (Math.max(0, (leader.v ?? leader.speed) / this.perMeter) >= LANE.rolling) return true;
+    return this.followGap(m, leader) >= this.steerOutLength(m, leader, target);
+  }
+
+  /** Road a vehicle needs to get its full width past a stationary leader, m. */
+  private steerOutLength(m: Mover, leader: Mover, target: number): number {
+    const clear =
+      this.roadEnvelope(m, undefined, target).width +
+      this.roadEnvelope(leader).width +
+      FOLLOW.roadGap -
+      Math.abs(this.offsetOf(m) - this.offsetOf(leader));
+    if (clear <= 0) return 0;
+    return steerLength(clear, 0, steerLimits(m.vehicle, (m.v ?? m.speed) / this.perMeter)) + 1;
+  }
+
+  /** Metres from a vehicle's nose to its minimum following gap behind `leader`, straight. */
+  private followGap(m: Mover, leader: Mover): number {
+    return (
+      (leader.dir * this.along[leader.from]! + leader.d - m.dir * this.along[m.from]! - m.d) /
+        this.perMeter -
+      (VEHICLES[m.vehicle!].length + VEHICLES[leader.vehicle!].length) / 2 -
+      FOLLOW.minGap
     );
-    const change = Math.max(-limit, Math.min(limit, difference));
-    m.lat = (before.lat ?? 0) + change;
-    return Math.abs(change) * this.perMeter;
   }
 
   private finishLateral(m: Mover, _before: Mover) {
@@ -5380,7 +5635,7 @@ export class TileLife {
     const along = Math.abs(pose.hx * m.hx + pose.hy * m.hy);
     const across = Math.abs(-pose.hy * m.hx + pose.hx * m.hy);
     const lateral =
-      !!m.maneuver &&
+      (!!m.maneuver || future !== undefined) &&
       (Math.abs((future ?? this.maneuverOffset(m)) - this.offsetOf(m)) > 1e-6 || !!m.latYaw);
     out.length = Math.max(
       (along * length + across * width) / 2,
@@ -5580,7 +5835,9 @@ export class TileLife {
       (this.followLeaders[index]! < 0 ||
         (m.filterRetry ?? 0) > 0 ||
         (m.roadScan ?? 0) > 0 ||
-        (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+        // A rider commits while there is still road left to steer out in.
+        ((m.v ?? m.speed) / this.perMeter > FILTER.max &&
+          this.followGap(m, this.movers[this.followLeaders[index]!]!) > FILTER.reach) ||
         m.roadShift !== undefined ||
         m.curveLengthM !== undefined ||
         this.scenes.merging(m) ||
@@ -5657,7 +5914,8 @@ export class TileLife {
       !queue ||
       velocity === undefined ||
       velocity >= FILTER.enter ||
-      (m.v ?? m.speed) / this.perMeter > FILTER.max ||
+      ((m.v ?? m.speed) / this.perMeter > FILTER.max &&
+        this.followGap(m, this.movers[leaderIndex]!) > FILTER.reach) ||
       (m.filterRetry ?? 0) > 0 ||
       m.roadShift !== undefined ||
       m.curveLengthM !== undefined ||
@@ -5702,7 +5960,12 @@ export class TileLife {
           break;
         }
       }
-      if (!clear || !this.roadGapSafe(m, offset)) continue;
+      if (
+        !clear ||
+        !this.roadGapSafe(m, offset) ||
+        !this.roomToSteerOut(m, this.movers[leaderIndex]!, offset)
+      )
+        continue;
       m.maneuver = chosen;
       m.laneSignal = offset < at ? 'left' : 'right';
       m.lanePatience = undefined;
@@ -5729,15 +5992,14 @@ export class TileLife {
     const state = m.maneuver;
     if (state) {
       if (state.kind === 'filter' || state.corridor !== undefined) return;
-      const target = this.maneuverOffset(m),
-        delta = Math.abs(target - this.offsetOf(m));
-      const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+      const target = this.maneuverOffset(m);
       const room = this.roadProtectedRoom(m, table);
-      if (
-        !state.returning &&
-        room >= LANE.clear + (bound * delta) / LANE.lateral &&
-        this.roadGapSafe(m, target, true)
-      )
+      const finish = steerLength(
+        target - this.offsetOf(m),
+        m.latYaw ?? 0,
+        steerLimits(m.vehicle, (m.v ?? m.speed) / this.perMeter),
+      );
+      if (!state.returning && room >= LANE.clear + finish && this.roadGapSafe(m, target, true))
         return;
       const preference = m.chosenLane ?? m.lane;
       if (this.roadGapSafe(m, this.laneTargetOffset(m, preference), true)) {
@@ -5769,17 +6031,25 @@ export class TileLife {
     }
     const leaderIndex = this.followLeaders[index]!,
       leader = leaderIndex >= 0 ? this.movers[leaderIndex] : undefined;
-    if (
-      !leader ||
-      leader.line !== m.line ||
-      leader.dir !== m.dir ||
-      (m.speed - this.followTargets[index]!) / this.perMeter + 1e-8 < LANE.gain
-    ) {
+    if (!leader || leader.line !== m.line || leader.dir !== m.dir) {
+      m.lanePatience = undefined;
+      return;
+    }
+    // A stopped vehicle ahead can't be waited out, and pulling out takes road, so a driver
+    // starts while there is still enough of it left.
+    const velocity = (m.v ?? m.speed) / this.perMeter;
+    const pullOut =
+      (leader.v ?? leader.speed) / this.perMeter < LANE.rolling &&
+      this.followGap(m, leader) <=
+        this.steerOutLength(m, leader, this.offsetOf(m) + 1) + velocity * LANE.patience &&
+      this.roadProtectedRoom(m, table) >=
+        LANE.clear + this.steerOutLength(m, leader, this.offsetOf(m) + 1);
+    if (!pullOut && (m.speed - this.followTargets[index]!) / this.perMeter + 1e-8 < LANE.gain) {
       m.lanePatience = undefined;
       return;
     }
     m.lanePatience = (m.lanePatience ?? 0) + dt;
-    if (m.lanePatience + 1e-8 < LANE.patience || (m.roadScan ?? 0) > 0) return;
+    if ((!pullOut && m.lanePatience + 1e-8 < LANE.patience) || (m.roadScan ?? 0) > 0) return;
     m.roadScan = 0.5;
     const layout = this.directionalLanes(m.line);
     const lane = Math.max(
@@ -5787,14 +6057,16 @@ export class TileLife {
       Math.min(layout.count - 1, Math.floor((m.chosenLane ?? m.lane) * layout.count)),
     );
     const bound = Math.max(m.speed, m.v ?? m.speed) / this.perMeter;
+    const limits = steerLimits(m.vehicle, bound);
     for (const candidate of [lane - 1, lane + 1]) {
       if (candidate < 0 || candidate >= layout.count) continue;
       const preference = (candidate + 0.5) / layout.count;
       const target = this.laneTargetOffset(m, preference);
-      const duration = Math.abs(target - this.offsetOf(m)) / LANE.lateral;
       if (
-        this.roadProtectedRoom(m, table) + 1e-8 < LANE.clear + bound * duration ||
-        !this.roadGapSafe(m, target)
+        this.roadProtectedRoom(m, table) + 1e-8 <
+          LANE.clear + steerLength(target - this.offsetOf(m), 0, limits) ||
+        !this.roadGapSafe(m, target) ||
+        !this.roomToSteerOut(m, leader, target)
       )
         continue;
       m.maneuver = { kind: 'lane', target: preference };
@@ -5802,6 +6074,14 @@ export class TileLife {
       m.lanePatience = undefined;
       return;
     }
+  }
+
+  /**
+   * A vehicle between lanes that the guard keeps refusing isn't going anywhere yet. Traffic beside
+   * it passes by where it stands, which is often what it is waiting for.
+   */
+  private pinned(m: Mover): boolean {
+    return !!m.maneuver && (m.guardWait ?? 0) >= LANE.yieldAfter;
   }
 
   private mergingOverlap(
@@ -5818,8 +6098,11 @@ export class TileLife {
     // Keep a following gap throughout that maneuver, including both lateral directions.
     if (a.roadShift !== undefined || b.roadShift !== undefined) return true;
     if (a.maneuver || b.maneuver) {
-      const futureA = a.maneuver ? futureOffset(i) : lane;
-      const futureB = b.maneuver ? futureOffset(j) : offsets[j]!;
+      // A held return is going nowhere yet; the gap check before it moves protects that lane.
+      const seeks = (o: Mover) =>
+        !this.pinned(o) && !!o.maneuver && (!o.maneuver.returning || o.maneuver.kind === 'return');
+      const futureA = seeks(a) ? futureOffset(i) : lane;
+      const futureB = seeks(b) ? futureOffset(j) : offsets[j]!;
       const gap = Math.max(
         Math.min(lane, futureA) - Math.max(offsets[j]!, futureB),
         Math.min(offsets[j]!, futureB) - Math.max(lane, futureA),
@@ -5829,8 +6112,8 @@ export class TileLife {
     const mergingA = this.scenes.merging(a),
       mergingB = this.scenes.merging(b);
     // A lane that bends or meets a narrower road moves sideways: compare where it goes next.
-    const bendsA = !mergingA && this.offsetVaries(a, FOLLOW.laneAheadM),
-      bendsB = !mergingB && this.offsetVaries(b, FOLLOW.laneAheadM);
+    const bendsA = !mergingA && !this.pinned(a) && this.offsetVaries(a, FOLLOW.laneAheadM),
+      bendsB = !mergingB && !this.pinned(b) && this.offsetVaries(b, FOLLOW.laneAheadM);
     const width = (VEHICLES[a.vehicle!].width + VEHICLES[b.vehicle!].width) / 2;
     if (!mergingA && !mergingB && !bendsA && !bendsB) return false;
     const futureA =
@@ -5949,6 +6232,13 @@ export class TileLife {
           ((ahead.x - at.x) * m.hx + (ahead.y - at.y) * m.hy) / pm - front - rear,
         );
       }
+      // A vehicle working its way out of a blockage needs road behind it to back into.
+      if (
+        leader.roadBackoff !== undefined ||
+        leader.roadSteering !== undefined ||
+        (leader.terrainWait ?? 0) > 0
+      )
+        gap -= ROAD_AVOID.room;
       const room = Math.max(0, gap - FOLLOW.minGap) * pm;
       if (room < 0.5 * pm) diagnostics?.following(m, leader);
       const wetRoad = this.scenes.raining && m.kind === 'vehicle' && !!m.vehicle;
@@ -6273,6 +6563,8 @@ export class TileLife {
     }
     return fitsGround(m, before, undefined, rejected);
   }
+  /** Whether the current trial has already steered its road shift. */
+  private shiftSteered = false;
   private readonly standaloneGround: GroundGuard = (owner, before) =>
     !('kind' in owner) ||
     (owner.kind !== 'cat' && owner.kind !== 'dog') ||
@@ -6925,11 +7217,6 @@ export class TileLife {
       if (m.kind === 'vehicle') {
         this.tickRoadTimers(m, dt);
         this.updateLane(i, dt, table, otherRoadLimit);
-        if (m.maneuver && m.maneuver.kind !== 'filter' && m.maneuver.corridor === undefined)
-          distance = Math.min(
-            distance,
-            Math.max(0, this.roadProtectedRoom(m, table) - LANE.clear) * this.perMeter,
-          );
       }
       // Unguarded craft have no rejected trials; avoid allocating rollback snapshots for them.
       if (
@@ -6945,6 +7232,7 @@ export class TileLife {
         continue;
       }
       const before = walking && m.momentFacing ? snapshotMover(m) : { ...m };
+      const backing = m.kind === 'vehicle' && (before.roadBackoff ?? 0) > 0;
       motionTrial.origin = undefined;
       motionTrial.varies = undefined;
       const restoreBlock = m.kind === 'vehicle' ? this.blockedRestoration.get(m) : undefined;
@@ -6969,14 +7257,27 @@ export class TileLife {
         !this.cornerWithin(m, m.from, m.d) &&
         !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d)
       ) {
-        const old = m.roadShift ?? 0,
-          delta = curbTarget - old;
-        const change = Math.min(
-          Math.abs(delta),
+        const old = m.roadShift ?? 0;
+        const change = this.steerShift(
+          m,
+          before,
+          distance / this.perMeter,
+          curbTarget - old,
           ROAD_AVOID.restore * dt,
-          (ROAD_AVOID.slope * distance) / this.perMeter,
         );
-        if (change) m.roadShift = old + Math.sign(delta) * change;
+        if (change) m.roadShift = old + change;
+      } else if (
+        m.kind === 'vehicle' &&
+        !m.maneuver &&
+        m.roadSteering !== undefined &&
+        !backing &&
+        distance > 0 &&
+        !this.cornerWithin(m, m.from, m.d) &&
+        !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d)
+      ) {
+        // Drive out on full lock: slowly enough that the heading's limit, not its speed, decides.
+        distance = Math.min(distance, (ROAD_AVOID.steer / ROAD_AVOID.slope) * dt * this.perMeter);
+        m.roadShift = this.steerOut(m, before, m.roadSteering, distance / this.perMeter, dt);
       } else if (
         m.kind === 'vehicle' &&
         !m.maneuver &&
@@ -6987,26 +7288,16 @@ export class TileLife {
         !this.cornerWithin(m, m.from, m.d) &&
         !this.cornerWithin(m, m.from + m.dir, this.segment(m.from, m.from + m.dir) - m.d)
       ) {
-        const change = Math.min(
-          Math.abs(m.roadShift),
+        m.roadShift += this.steerShift(
+          m,
+          before,
+          distance / this.perMeter,
+          -m.roadShift,
           ROAD_AVOID.restore * dt,
-          (ROAD_AVOID.slope * distance) / this.perMeter,
         );
-        m.roadShift -= Math.sign(m.roadShift) * change;
-        if (Math.abs(m.roadShift) < 1e-8) m.roadShift = undefined;
+        if (Math.abs(m.roadShift) < 1e-8 && m.roadYaw === undefined) m.roadShift = undefined;
       }
-      // A safe return can straighten at a stop without advancing past its forward cap.
-      // Unsafe returning lanes retain their accepted pose until the full sweep opens.
-      const lateralBudget =
-        before.maneuver?.corridor !== undefined
-          ? Math.max(distance, this.filterCap(before) * dt)
-          : before.maneuver?.kind === 'return' ||
-              (before.maneuver?.kind === 'lane' &&
-                !before.maneuver.returning &&
-                Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8)
-            ? Math.max(distance, before.speed * dt)
-            : distance;
-      const lateral = this.proposeLateral(m, before, lateralBudget, dt);
+      const steering = m.kind === 'vehicle' && (!!before.maneuver || before.latYaw !== undefined);
       if (walking) {
         if (m.momentFacing) faceGroup(m, m.hx, m.hy);
         m.avoid = (m.avoid ?? 0) * Math.max(0, 1 - (WALK_ASIDE.restore * distance) / this.perMeter);
@@ -7015,13 +7306,13 @@ export class TileLife {
         m.kind === 'vehicle' && before.roadShift !== m.roadShift
           ? Math.abs(this.offsetOf(m) - this.offsetOf(before, m)) * this.perMeter
           : 0;
-      const forwardDistance = Math.sqrt(
-        Math.max(0, distance * distance - (restored + lateral) ** 2),
-      );
+      const available = Math.sqrt(Math.max(0, distance * distance - restored * restored));
+      const forwardDistance = steering ? this.steerForward(m, before, available) : available;
       let moved =
         distance === 0 && m.vehicle && m.v === 0
           ? 0
           : this.advance(m, forwardDistance, true, this.enteredExits);
+      if (steering) this.steerMoved(m, before, moved);
       if (
         guard &&
         m.kind === 'vehicle' &&
@@ -7036,27 +7327,22 @@ export class TileLife {
         for (let retry = 0; retry < 3; retry++) {
           const pose = this.pose(m);
           const travel = Math.hypot(pose.x - origin.x, pose.y - origin.y);
-          if (travel <= lateralBudget + 1e-8 * this.perMeter || travel === 0) break;
-          m.d = before.d + ((m.d - before.d) * lateralBudget) / travel;
+          if (travel <= distance + 1e-8 * this.perMeter || travel === 0) break;
+          m.d = before.d + ((m.d - before.d) * distance) / travel;
           this.advance(m, 0, false);
           moved = Math.max(0, m.d - before.d);
+          if (steering) this.steerMoved(m, before, moved);
         }
       }
       let curveForward = 0;
       terrainRejected = false;
 
       if (m.kind === 'vehicle' || walking) {
-        this.trialYaw(m, before, moved, lateralBudget, dt);
-        let fits = this.motionFits(
-          m,
-          before,
-          distance,
-          dt,
-          !!guard,
-          fitsGround,
-          rejected,
-          motionTrial,
-        );
+        this.trialYaw(m, before, moved);
+        // A committed reverse doesn't probe forward: the room it just made would cancel it.
+        let fits =
+          !backing &&
+          this.motionFits(m, before, distance, dt, !!guard, fitsGround, rejected, motionTrial);
         const forwardTerrainRejected = terrainRejected;
         if (!fits && m.kind === 'vehicle' && guard?.eventDenied?.(m)) {
           // A live street closure is deliberate. Stop at its checked edge
@@ -7066,7 +7352,7 @@ export class TileLife {
           env?.diagnostics?.tag(m, 'eventClosure');
           continue;
         }
-        if (!fits && distance > 0 && guard?.contact) {
+        if (!fits && !backing && distance > 0 && guard?.contact) {
           const trial = snapshotMover(m);
           restoreMover(m, before);
           guard.contact(m, trial);
@@ -7087,7 +7373,7 @@ export class TileLife {
                 m,
               )));
         if (!fits || correctingCurve) {
-          if (!fits && m.kind === 'vehicle') {
+          if (!fits && !backing && m.kind === 'vehicle') {
             // Keep the checked bypass until its complete footprint has departed
             // this rejection. Recentering then uses the ordinary swept guard.
             this.blockedRestoration.set(m, {
@@ -7110,11 +7396,11 @@ export class TileLife {
           ];
           if (m.kind === 'vehicle' && before.roadShift !== undefined) tries.unshift([0, 1]);
           let limit = 0;
-          let steeringOrigin = before.roadShift ?? 0;
           const steeringSpeed = Math.min(ROAD_AVOID.steer, m.speed / this.perMeter / Math.SQRT2);
           if (
             m.kind === 'vehicle' &&
             !before.maneuver &&
+            !backing &&
             m.vehicle &&
             this.curvable[m.line] &&
             distance > 1e-8 * this.perMeter &&
@@ -7145,7 +7431,7 @@ export class TileLife {
                 Math.min(length, Math.min(shape.before, shape.after) / this.perMeter);
             if (effective && effective > 2) {
               const oldPose = (motionTrial.origin ??= this.pose(before, undefined, m));
-              for (const share of [1, 0.25, 0]) {
+              for (const share of [1, 0.25]) {
                 restoreMover(m, before);
                 m.curveLengthM = Math.max(2, effective - dt * steeringSpeed);
                 m.curveCorner = corner;
@@ -7205,43 +7491,17 @@ export class TileLife {
             ];
           } else if (
             m.kind === 'vehicle' &&
-            !before.maneuver &&
+            (!before.maneuver || backing) &&
             m.vehicle &&
-            distance > 1e-8 * this.perMeter &&
+            (distance > 1e-8 * this.perMeter || backing) &&
             !intentionalHold &&
             this.scenes.transferable(m)
           ) {
             const side = before.roadSteering ?? (Math.sign(before.roadShift ?? 0) || -1);
-            const spec = VEHICLES[m.vehicle];
-            const effectiveShift =
-              this.vehicleLane(before, before.line) -
-              laneOffset(
-                this.roadWidth(before.line),
-                spec.width,
-                before.chosenLane ?? before.lane,
-                spec.curb,
-                this.geo.oneway?.[before.line] ?? 0,
-              ) -
-              (before.lat ?? 0);
-            if (Math.abs(effectiveShift - steeringOrigin) > 1e-8) {
-              const behind = this.cornerWithin(before, before.from, before.d, m);
-              const remaining = this.segment(before.from, before.from + before.dir) - before.d;
-              const ahead = this.cornerWithin(before, before.from + before.dir, remaining, m);
-              // A narrower road can clamp a retained shift well before its stored
-              // value. Start retries at the same effective lane, so their first
-              // increment moves. Active arcs keep both existing tangent offsets.
-              if (!(behind && before.d <= behind.after) && !(ahead && remaining <= ahead.before))
-                steeringOrigin = effectiveShift;
-            }
-            tries = [
-              [side, 0.5],
-              [side, 0],
-              [side, -1],
-              [-side, 0.5],
-              [-side, 0],
-              [-side, -1],
-              ...tries,
-            ];
+            // Only fixed ground calls for reversing; other traffic gets waited out.
+            tries = backing
+              ? [[0, -1]]
+              : [[side, 0.5], [-side, 0.5], ...tries, ...(forwardTerrainRejected ? [[0, -1]] : [])];
           }
           for (const [side, share] of tries) {
             if (fits) break;
@@ -7251,10 +7511,12 @@ export class TileLife {
               if (share === 0 && m.avoid === (before.avoid ?? 0)) continue;
               m.walked = (m.walked ?? 0) + (distance * share!) / this.perMeter;
             } else if (side) {
-              const shiftLimit = this.geo.oneway?.[m.line] ? this.roadWidth(m.line) : 1;
-              m.roadShift = Math.max(
-                -shiftLimit,
-                Math.min(shiftLimit, steeringOrigin + side * dt * steeringSpeed),
+              m.roadShift = this.steerOut(
+                m,
+                before,
+                side as 1 | -1,
+                (distance * share!) / this.perMeter,
+                dt,
               );
               const lateral = Math.abs(this.offsetOf(m) - this.offsetOf(before, m));
               if (lateral < 1e-8 || lateral > dt * steeringSpeed + 1e-8) continue;
@@ -7265,30 +7527,29 @@ export class TileLife {
                 if (this.matchesCurve(m, vertex) && !this.corner(m, vertex)) continue;
               }
             }
-            const retryLateral = before.maneuver
-              ? this.proposeLateral(m, before, lateralBudget * share!, dt, share)
-              : 0;
             if (!walking && share! < 0) {
-              const retreat = Math.min(m.d, dt * this.perMeter * steeringSpeed);
+              const retreat = this.reverseOnLine(
+                m,
+                dt *
+                  this.perMeter *
+                  Math.min(ROAD_AVOID.reverse, m.speed / this.perMeter / Math.SQRT2),
+              );
               if (retreat <= 1e-8 * this.perMeter) continue;
-              m.d -= retreat;
               this.advance(m, 0, false);
               moved = -retreat;
-            } else
+              if (steering) this.steerMoved(m, before, moved);
+            } else {
+              const portion = distance * share!;
               moved = this.advance(
                 m,
-                Math.sqrt(Math.max(0, (distance * share!) ** 2 - retryLateral ** 2)),
+                steering ? this.steerForward(m, before, portion) : portion,
                 true,
                 this.enteredExits,
               );
-            this.trialYaw(
-              m,
-              before,
-              moved,
-              lateralBudget * Math.max(0, share!),
-              dt * Math.max(0, share!),
-            );
-            if (side && !walking && !this.bodyCentresOwned(m, pass?.owns)) continue;
+              if (steering) this.steerMoved(m, before, moved);
+            }
+            this.trialYaw(m, before, moved);
+            if (!walking && (side || share! < 0) && !this.bodyCentresOwned(m, pass?.owns)) continue;
             if (
               (fits = this.motionFits(
                 m,
@@ -7302,52 +7563,51 @@ export class TileLife {
               ))
             ) {
               if (!walking && side) m.roadSteering = side as 1 | -1;
+              if (!walking && share! < 0)
+                this.commitBackoff(m, before, -moved / this.perMeter, fitsGround);
               break;
-            }
-          }
-          if (
-            !fits &&
-            guard &&
-            m.kind === 'vehicle' &&
-            m.vehicle &&
-            before.roadYaw &&
-            distance > 1e-8 * this.perMeter &&
-            !intentionalHold &&
-            this.scenes.transferable(m)
-          ) {
-            // A retained steering angle can pin the nose before there is room
-            // for the forward travel that normally straightens it. Rotate only
-            // through the same swept guard and the remaining physical budget.
-            restoreMover(m, before);
-            const origin = this.pose(before, undefined, m);
-            const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
-            const change = Math.min(Math.abs(before.roadYaw), (dt * steeringSpeed) / radius);
-            m.roadYaw = before.roadYaw - Math.sign(before.roadYaw) * change;
-            const pose = this.pose(m);
-            const travel =
-              Math.hypot(pose.x - origin.x, pose.y - origin.y) / this.perMeter +
-              radius * Math.hypot(pose.hx - origin.hx, pose.hy - origin.hy);
-            if (
-              travel > 1e-8 &&
-              travel <= (m.speed * dt) / this.perMeter + 1e-8 &&
-              this.bodyCentresOwned(m, pass?.owns) &&
-              fitsGround(m, before)
-            ) {
-              moved = 0;
-              fits = true;
             }
           }
         }
         if (!fits) {
           restoreMover(m, before);
           moved = 0;
+          // Nowhere left to reverse into: steer out from here with the room it made.
+          if (backing) m.roadBackoff = undefined;
         } else if (m.kind === 'vehicle') this.clearPastCurve(m);
         if (m.kind === 'vehicle') this.finishLateral(m, before);
         if (walking && fits) m.walked = (before.walked ?? 0) + Math.max(0, moved) / this.perMeter;
         if (m.kind === 'vehicle' && !intentionalHold) {
           const refused = distance > 1e-8 * this.perMeter && (!fits || moved <= distance * 1e-6);
-          m.terrainWait = refused && terrainRejected ? (before.terrainWait ?? 0) + dt : undefined;
-          m.guardWait = refused ? (before.guardWait ?? 0) + dt : undefined;
+          // A recovery's forward run still hasn't passed what stopped it, so it keeps counting.
+          const unresolved = distance > 1e-8 * this.perMeter && this.blockedProgress.has(m);
+          m.terrainWait =
+            (refused && terrainRejected) || ((unresolved || backing) && before.terrainWait)
+              ? (before.terrainWait ?? 0) + dt
+              : undefined;
+          m.guardWait =
+            refused || (unresolved && before.guardWait) ? (before.guardWait ?? 0) + dt : undefined;
+          // Pinned beside something on its way into a junction, a vehicle between lanes can't
+          // move until that body leaves, which its own grant may be preventing. It gives up its
+          // place in the queue and goes after it; if the other is waiting on it regardless, it
+          // backs up out of the way.
+          if (before.roadBackoff !== undefined && m.roadBackoff === undefined)
+            // Having reversed, it tries again from scratch.
+            m.guardWait = undefined;
+          else if (this.pinned(m)) {
+            for (const r of [...table.holds(m)]) table.release(m, r.movement.key);
+            if (m.roadBackoff === undefined && m.guardWait! >= 2 * LANE.yieldAfter)
+              m.roadBackoff = ROAD_AVOID.room;
+          }
+          // Fixed ground won't move: stop reserving the lane and recover like any blocked vehicle.
+          if (m.maneuver && (m.terrainWait ?? 0) >= LANE.yieldAfter) this.abandonManeuver(m);
+          // Pinned both ways: whoever queued up behind backs off to give it room.
+          if (!fits && !m.maneuver && (m.terrainWait ?? 0) >= LANE.yieldAfter)
+            for (let j = 0; j < this.movers.length; j++) {
+              const rear = this.movers[j]!;
+              if (this.followLeaders[j] === i && rear.roadBackoff === undefined)
+                rear.roadBackoff = ROAD_AVOID.room;
+            }
         }
         const commanded = distance;
         let ordinaryForward = false;
@@ -7582,57 +7842,28 @@ export class TileLife {
   }
 
   /** Trial heading is part of the body accepted by the guard, including retry and rollback. */
-  private trialYaw(m: Mover, before: Mover, moved: number, lateralBudget = 0, lateralDt = 0) {
-    if (m.kind === 'vehicle' && (m.maneuver || before.latYaw !== undefined)) {
-      const forward = Math.abs(moved) / this.perMeter;
-      const sideways = (m.lat ?? 0) - (before.lat ?? 0);
-      const bound = Math.tan(Math.PI / 12);
-      const target = forward > 1e-8 ? Math.max(-bound, Math.min(bound, sideways / forward)) : 0;
-      let yaw = (before.latYaw ?? 0) + (target - (before.latYaw ?? 0)) * Math.min(1, forward * 1.5);
-      if (
-        Math.abs(yaw) <= 1e-3 &&
-        m.maneuver?.kind !== 'filter' &&
-        Math.abs(this.maneuverOffset(m) - this.offsetOf(m)) <= 1e-6 &&
-        m.vehicle
-      ) {
-        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
-        const remaining = Math.max(
-          0,
-          (before.speed * lateralDt) / this.perMeter - Math.hypot(forward, sideways),
-        );
-        if (radius * Math.abs(Math.atan(yaw)) <= remaining) yaw = 0;
+  private trialYaw(m: Mover, before: Mover, moved: number) {
+    if (m.kind === 'vehicle') {
+      // A retained heading keeps carrying the body sideways until driving straightens it out.
+      const steered = this.shiftSteered;
+      this.shiftSteered = false;
+      if (steered) return;
+      m.roadYaw = before.roadYaw;
+      if (!before.roadYaw || this.onCornerArc(before, m)) return;
+      if (moved < 0) {
+        // Backing straight out along its heading: the body retraces its path without turning.
+        m.roadShift = (before.roadShift ?? 0) + (moved / this.perMeter) * before.roadYaw;
+        return;
       }
-      if (
-        forward <= 1e-8 &&
-        m.vehicle &&
-        (before.maneuver?.kind === 'return' ||
-          (before.maneuver?.kind === 'lane' &&
-            !before.maneuver.returning &&
-            Math.abs(this.maneuverOffset(before) - this.offsetOf(before)) <= 1e-8))
-      ) {
-        const radius = Math.hypot(VEHICLES[m.vehicle].length, VEHICLES[m.vehicle].width) / 2;
-        const remaining = Math.max(0, lateralBudget / this.perMeter - Math.abs(sideways));
-        const angle = Math.atan(before.latYaw ?? 0);
-        const change = Math.min(
-          Math.abs(angle),
-          remaining / radius,
-          (LANE.lateral * lateralDt) / radius,
-        );
-        yaw = Math.tan(angle - Math.sign(angle) * change);
-      }
-      m.latYaw = Math.abs(yaw) > 1e-6 ? yaw : undefined;
+      const change = this.steerShift(m, before, moved / this.perMeter, undefined, Infinity);
+      this.shiftSteered = false;
+      if (change) m.roadShift = (before.roadShift ?? 0) + change;
+      return;
     }
     m.roadYaw = before.roadYaw;
-    if (
-      !(m.kind === 'vehicle' && (m.roadShift !== undefined || before.roadYaw !== undefined)) &&
-      !(isWalker(m.kind) && (m.avoid !== before.avoid || before.roadYaw !== undefined))
-    )
-      return;
+    if (!(isWalker(m.kind) && (m.avoid !== before.avoid || before.roadYaw !== undefined))) return;
     const forward = moved / this.perMeter;
-    const sideways =
-      m.kind === 'vehicle'
-        ? (m.roadShift ?? 0) - (before.roadShift ?? 0)
-        : (m.avoid ?? 0) - (before.avoid ?? 0);
+    const sideways = (m.avoid ?? 0) - (before.avoid ?? 0);
     const target =
       forward > 1e-4
         ? Math.max(-2 * ROAD_AVOID.slope, Math.min(2 * ROAD_AVOID.slope, sideways / forward))
@@ -7640,10 +7871,7 @@ export class TileLife {
     const previous = before.roadYaw ?? 0;
     // Distance easing leaves stopped actors' headings unchanged.
     const yaw = previous + (target - previous) * Math.max(0, Math.min(1, forward * 1.5));
-    m.roadYaw =
-      (m.kind === 'vehicle' ? m.roadShift === undefined : !m.avoid) && Math.abs(yaw) < 1e-3
-        ? undefined
-        : yaw;
+    m.roadYaw = !m.avoid && Math.abs(yaw) < 1e-3 ? undefined : yaw;
   }
 
   private pedestrianLimiter(

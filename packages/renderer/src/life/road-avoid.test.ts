@@ -659,8 +659,13 @@ describe('terrain-blocked road vehicles', () => {
       const completed = new Set<Mover>();
       life.movers.push(jeep);
       for (let frame = 0; frame < 9000; frame++) {
-        if (frame === 300) life.movers.push(motorcycle);
-        if (frame === 600) life.movers.push(car);
+        // Each joins once the start of the road is free: traffic backs up behind a blocked car.
+        const free = life.movers.every((o) => o.line !== 0 || o.d > 12 * pm);
+        const joining = frame >= 600 ? car : motorcycle;
+        if (frame >= 300 && free && !life.movers.includes(motorcycle) && !completed.has(motorcycle))
+          life.movers.push(motorcycle);
+        else if (frame >= 600 && free && !life.movers.includes(joining) && !completed.has(joining))
+          life.movers.push(joining);
         world.step(1 / 30, undefined, 21);
         for (const m of life.movers)
           for (const body of life.groundBodies(m))

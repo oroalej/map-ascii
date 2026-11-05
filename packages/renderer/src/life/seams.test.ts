@@ -509,7 +509,10 @@ describe('runtime geographic seam handover', () => {
     world.step(0.1);
     const after = target.pose(m);
     expect(after.x).toBeGreaterThan(before.x);
-    expect(after.y).toBeCloseTo(before.y);
+    // The retained steering carries on as ordinary travel, without any jump at the seam.
+    expect(Math.abs(after.y - before.y)).toBeLessThanOrEqual(
+      Math.tan(Math.PI / 12) * (after.x - before.x),
+    );
   });
 
   it.each([1, -1] as const)(

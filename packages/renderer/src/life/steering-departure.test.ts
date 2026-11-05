@@ -2,7 +2,6 @@ import { expect, it } from 'vitest';
 import { LifeBuilder, LifeLine } from './geometry';
 import { LifeWorld, type GroundGuard, type Mover, type WorldGroundGuard } from './simulate';
 import { worldTiles } from './testing/scenarios';
-import { VEHICLES } from './vehicles';
 
 function fixture() {
   const tile = { z: 16, x: 55192, y: 30266 };
@@ -50,41 +49,44 @@ function fixture() {
   return { world, life, m, physical };
 }
 
-it.each([30, 60])('straightens a blocked nose through guarded, bounded steps at %s Hz', (hz) => {
-  const { life, m, physical } = fixture();
-  const initial = m.x;
-  let rotations = 0;
-  const guard: GroundGuard = (next, before, reserve, reject) => {
-    if (next !== m || !('kind' in next) || !before || !('kind' in before)) return false;
-    // Translation cannot clear this approach while the retained nose angle remains.
-    // Every permitted rotation and departure still uses the production physical sweep.
-    if (
-      (next.roadYaw ?? 0) > 0.02 &&
-      (next.d !== before.d || (next.roadYaw ?? 0) >= (before.roadYaw ?? 0))
-    )
-      return false;
-    if (next.d === before.d && (next.roadYaw ?? 0) < (before.roadYaw ?? 0)) {
-      const a = life.pose(before, undefined, m),
-        b = life.pose(m);
-      const spec = VEHICLES[m.vehicle!];
-      const travel =
-        Math.hypot(b.x - a.x, b.y - a.y) / life.perMeter +
-        (Math.hypot(spec.length, spec.width) / 2) * Math.hypot(b.hx - a.hx, b.hy - a.hy);
-      expect(travel).toBeLessThanOrEqual(m.speed / life.perMeter / hz + 1e-8);
-      rotations++;
+it.each([30, 60])(
+  'backs a pinned nose out along its heading, then drives straight at %s Hz',
+  (hz) => {
+    const { life, m, physical } = fixture();
+    const initial = m.x;
+    let reversed = 0,
+      released = false;
+    const guard: GroundGuard = (next, before, reserve, reject) => {
+      if (next !== m || !('kind' in next) || !before || !('kind' in before)) return false;
+      // The nose touches something ahead: nothing is allowed forward until it has backed off.
+      if (!released && next.d > before.d) {
+        reject?.('terrain');
+        return false;
+      }
+      if (next.d < before.d) {
+        // It retraces its heading exactly, without pivoting on the spot.
+        expect(next.roadYaw).toBe(before.roadYaw);
+        reversed++;
+      }
+      expect(next.d === before.d && next.roadYaw !== before.roadYaw).toBe(false);
+      return physical(life, next, before, undefined, reserve, m, reject);
+    };
+    for (let frame = 0; frame < hz; frame++)
+      life.step(1 / hz, undefined, undefined, undefined, undefined, guard);
+    expect(reversed).toBeGreaterThan(0);
+    expect(m.x).toBeLessThan(initial);
+    released = true;
+    m.roadBackoff = undefined;
+    for (let frame = 0; frame < 12 * hz; frame++) {
+      life.step(1 / hz, undefined, undefined, undefined, undefined, guard);
+      expect(m.dir).toBe(1);
     }
-    return physical(life, next, before, undefined, reserve, m, reject);
-  };
-  for (let frame = 0; frame < 3 * hz; frame++) {
-    life.step(1 / hz, undefined, undefined, undefined, undefined, guard);
-    expect(m.dir).toBe(1);
-  }
-  expect(rotations).toBeGreaterThan(0);
-  expect(m.roadYaw ?? 0).toBeLessThan(0.02);
-  expect((m.x - initial) / life.perMeter).toBeGreaterThan(0.5);
-});
+    expect(m.roadYaw ?? 0).toBeLessThan(0.02);
+    expect((m.x - initial) / life.perMeter).toBeGreaterThan(0.5);
+  },
+);
 
-it('restores a refused rotation without consuming its translation or routing', () => {
+it('restores a refused step without consuming its translation or routing', () => {
   const { life, m } = fixture();
   const before = structuredClone(m);
   life.step(1 / 30, undefined, undefined, undefined, undefined, () => false);

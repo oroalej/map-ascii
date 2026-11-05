@@ -31,10 +31,14 @@ export type CrossroadsMetrics = {
   grantViolations: number;
   stopViolations: number;
   gapViolations: number;
+  steeringViolations: number;
   windows: number[][];
   partialWindow: number[];
   errors: string[];
 };
+/** How far from each end of an arm a vehicle may still be on a fillet, m. */
+const STEERING_MARGIN_M = 30;
+
 export type CrossroadsObserver = (life: TileLife, before: readonly Mover[]) => void;
 
 /** Type-only dependencies keep PRE and current runtime graphs completely independent. */
@@ -182,6 +186,7 @@ export function* crossroadsSteps(
     grantViolations: 0,
     stopViolations: 0,
     gapViolations: 0,
+    steeringViolations: 0,
     windows: [],
     partialWindow: [],
     errors: [],
@@ -211,7 +216,7 @@ export function* crossroadsSteps(
   let warmSteps = 0,
     warmCaps = 0;
   const violation = (
-    kind: 'grantViolations' | 'stopViolations' | 'gapViolations',
+    kind: 'grantViolations' | 'stopViolations' | 'gapViolations' | 'steeringViolations',
     detail: string,
   ) => {
     result[kind]++;
@@ -221,6 +226,7 @@ export function* crossroadsSteps(
     if (variant === 'mixed' && frame === 300) for (const truck of trucks) truck.speed = 8 * pm;
     const before = life.movers.map((m) => ({ ...m }));
     const movements = life.movers.map((m) => table.movement(m));
+    const poses = life.movers.map((m) => ({ ...life.pose(m) }));
     world.step(1 / 30, undefined, 18, undefined, undefined, undefined, minimum);
     observe?.(life, before);
     const holders = table.snapshot().filter((r) => r.since !== undefined);
@@ -232,6 +238,25 @@ export function* crossroadsSteps(
       const m = life.movers[i]!,
         old = before[i]!;
       result.maxWait = Math.max(result.maxWait, table.waited(m));
+      // Away from the arcs a road vehicle only moves sideways through travel along its heading.
+      if (
+        old.line === m.line &&
+        old.from === m.from &&
+        old.dir === m.dir &&
+        Math.min(old.d, m.d) > STEERING_MARGIN_M * pm &&
+        Math.max(old.d, m.d) < (220 - STEERING_MARGIN_M) * pm
+      ) {
+        const to = life.pose(m),
+          dx = (to.x - poses[i]!.x) / pm,
+          dy = (to.y - poses[i]!.y) / pm;
+        const forward = Math.abs(dx * m.hx + dy * m.hy),
+          sideways = Math.abs(dy * m.hx - dx * m.hy);
+        if (sideways > Math.tan(Math.PI / 12) * forward * 1.001 + 1e-6)
+          violation(
+            'steeringViolations',
+            `frame ${frame}: actor ${i} moved ${sideways} m sideways over ${forward} m`,
+          );
+      }
       if ((m.routing?.turns ?? 0) > (old.routing?.turns ?? 0)) {
         const move = movements[i];
         if (
