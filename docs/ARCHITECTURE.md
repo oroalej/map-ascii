@@ -482,7 +482,7 @@ In Android Chrome, with a build that has this report:
 
 **CPU gate `pack/desktop`: pass (+5 %).** 2.325 → 2.369 ms median (+1.9 %), p95 +1.3 %, with frames byte-identical to `616c5b0`. Control -0.9 % median, -0.2 % p95.
 
-**CPU gate `water/boats`: unmet (+5 %).** A step, `visible()` and a pack with wakes, 34 boats in view: 0.405 → 0.445 ms median (+9.9 %), p95 +14.7 %. Control +0.8 % median, -1.0 % p95, so this is not noise. The first measurement was +12.6 %; removing per-boat allocation and per-cell glyph lookups from `drawWakes` took it to +9.9 %. The added cost is about 0.04 ms a frame in a fixture of 80 river lines, far denser than a real river. A real Naga scene was not measured.
+**CPU gate `water/boats`: unmet (+5 %), accepted by the owner on 2026-11-05.** A step, `visible()` and a pack with wakes, 34 boats in view: 0.405 → 0.445 ms median (+9.9 %), p95 +14.7 %. Control +0.8 % median, -1.0 % p95, so this is not noise. The first measurement was +12.6 %; removing per-boat allocation and per-cell glyph lookups from `drawWakes` took it to +9.9 %. The added cost is about 0.04 ms a frame in a fixture of 80 river lines, far denser than a real river. A real Naga scene was not measured.
 
 ### Harvest and dawn mist gates (2026-11-05)
 
