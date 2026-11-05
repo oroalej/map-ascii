@@ -1665,7 +1665,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           state: LampState.shop,
           seed: seed & 31,
         },
-        hours: shopHours(seed, options.cityLife),
+        hours: shopHours(seed, options.cityLife, shopsHere[i + 3] === 1),
       });
     }
     // Floodlit landmarks: a wash of light over each footprint, and a little past it.

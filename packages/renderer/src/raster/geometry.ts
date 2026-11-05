@@ -495,6 +495,8 @@ export function ringCentroid(ring: readonly TilePoint[]): TilePoint {
 }
 
 const isBuilding = (cls: string) => cls.startsWith('building');
+/** The kind of shop that lights up before dawn (`schedules.bakery`). */
+const EARLY_SHOP_KIND = 'shop=bakery';
 
 /** Direction the light comes from, in tile coordinates (y down): from the south-east. */
 
@@ -1042,6 +1044,7 @@ export function buildTileGeometry(
           p,
           shopPosition && unitMeters ? Number(shop_radius_m) / unitMeters : radius,
           featureId,
+          feature.properties.kind === EARLY_SHOP_KIND,
         );
       };
       const width = Number(feature.properties.width ?? 0);

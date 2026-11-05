@@ -153,6 +153,26 @@ describe('shopHours', () => {
     expect(share(21)).toBeGreaterThan(0.5);
   });
 
+  it('opens a bakery before dawn only when the city gives its hours', () => {
+    const shops = { open: '08:00', close: '20:00' };
+    const bakery = { open: '04:00', close: '18:00' };
+    const seeds = Array.from({ length: 2000 }, (_, seed) => seed);
+    const openAt = (hour: number, hours: ReturnType<typeof shopHours>[]) =>
+      hours.filter((h) => shopOpen(h, hour * 60)).length / hours.length;
+    const life = { source: 'test', schedules: { shops, bakery } };
+    const bakeries = seeds.map((seed) => shopHours(seed, life, true));
+    expect(openAt(5.5, bakeries)).toBeGreaterThan(0.9);
+    expect(openAt(19.5, bakeries)).toBeLessThan(0.15);
+    // Other shops, and a city without bakery hours, are as before.
+    expect(seeds.map((seed) => shopHours(seed, life))).toEqual(
+      seeds.map((seed) => shopHours(seed, { schedules: { shops } })),
+    );
+    expect(seeds.map((seed) => shopHours(seed, { schedules: { shops } }, true))).toEqual(
+      seeds.map((seed) => shopHours(seed, { schedules: { shops } })),
+    );
+    expect(shopHours(7)).toEqual(shopHours(7, undefined, true));
+  });
+
   it('handles hours that run past midnight', () => {
     const h = { open: 18 * 60, close: 2 * 60, allNight: false };
     expect(shopOpen(h, 23 * 60)).toBe(true);

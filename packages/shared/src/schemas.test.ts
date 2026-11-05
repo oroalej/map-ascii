@@ -730,6 +730,8 @@ describe('City', () => {
     expect(ok({ worship: [{ weekdays: [0, 0], times: ['06:00'] }] })).toBe(false);
     expect(ok({ worship: [{ weekdays: [0], times: ['6am'] }] })).toBe(false);
     expect(ok({ school: { weekdays: [1], in: '16:30', out: '07:30' } })).toBe(false);
+    expect(ok({ bakery: { open: '04:00', close: '18:00' } })).toBe(true);
+    expect(ok({ bakery: { open: '4am', close: '18:00' } })).toBe(false);
   });
 
   it('takes window hours for every group, with a source', () => {

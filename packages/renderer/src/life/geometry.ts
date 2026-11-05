@@ -313,7 +313,7 @@ export type LifeGeometry = {
   flagpoles?: Float32Array;
   /** Floodlit landmarks: center x, y and radius (tile units; life/lights.ts `FLOOD_STRIDE`). */
   floods: Float32Array;
-  /** Shops and markets, lit while open: center x, y and radius (tile units, `SHOP_STRIDE`). */
+  /** Shops and markets, lit while open: center x, y, radius and early flag (`SHOP_STRIDE`). */
   shops: Float32Array;
   /**
    * Places people gather at (`PLACE_STRIDE` floats each): center x, y (tile units), the place's
@@ -903,10 +903,13 @@ export class LifeBuilder {
     this.floods.push(p.x, p.y, radius);
   }
 
-  /** A shop or market centered at `p`, `radius` tile units across, lit while it is open. */
-  shop(p: TilePoint, radius: number, id = `${p.x}/${p.y}`) {
+  /**
+   * A shop or market centered at `p`, `radius` tile units across, lit while it is open; `early`
+   * for one that keeps early hours, a bakery's (`shopHours`).
+   */
+  shop(p: TilePoint, radius: number, id = `${p.x}/${p.y}`, early = false) {
     if (!inTile(p)) return;
-    shopEntry(this.shops, id, [p.x, p.y, radius]);
+    shopEntry(this.shops, id, [p.x, p.y, radius, early ? 1 : 0]);
   }
 
   /**

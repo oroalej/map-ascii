@@ -69,6 +69,8 @@ export type LifeSchedules = {
   school?: SchoolSchedule;
   /** Shops' typical hours, which light them at night (`shopHours`); default `DEFAULT_SHOPS`. */
   shops?: ShopSchedule;
+  /** A bakery's typical hours; without it, a bakery keeps a shop's. */
+  bakery?: ShopSchedule;
 };
 
 /** Illustrative night folklore; schedules describe the simulation, not reported hauntings. */
@@ -294,10 +296,15 @@ function unitOf(seed: number, salt: number): number {
  * unless the city gives its own): it opens from 2 hours before the typical time to 1½ after;
  * most (70%) close within an hour of the typical time, some (20%) close early, a few (7%) stay
  * open up to 2½ hours late, and 3% are open all night. With the default, about nine in ten are
- * closed by 21:00. An impression, not data about any shop.
+ * closed by 21:00. An `early` shop, a bakery, spreads around `schedules.bakery` instead when the
+ * city gives it. An impression, not data about any shop.
  */
-export function shopHours(seed: number, life?: Pick<CityLifeConfig, 'schedules'>): ShopHours {
-  const typical = life?.schedules?.shops ?? DEFAULT_SHOPS;
+export function shopHours(
+  seed: number,
+  life?: Pick<CityLifeConfig, 'schedules'>,
+  early = false,
+): ShopHours {
+  const typical = (early && life?.schedules?.bakery) || life?.schedules?.shops || DEFAULT_SHOPS;
   const day = (m: number) => ((Math.round(m) % 1440) + 1440) % 1440;
   const which = unitOf(seed, 2);
   if (which < 0.03) return { open: 0, close: 0, allNight: true };

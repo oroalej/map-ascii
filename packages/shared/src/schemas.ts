@@ -2045,6 +2045,8 @@ export const CityLife = z
           .optional(),
         /** Shops' typical opening and closing times (each keeps its own around them). */
         shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
+        /** A bakery's typical opening and closing times, in place of `shops`. */
+        bakery: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
       })
       .optional(),
     /** How many windows show lit through the night, per kind of building (rhythm.ts). */
