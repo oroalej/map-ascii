@@ -187,6 +187,9 @@ City {                           // cities/<slug>/city.json
   // The daily rhythm (SPEC.md §4 "Time of day"): per kind (vehicle, person, boat, train), how
   // much is out over the local day, as [hour 0–24, share 0–1] points, hours ascending, read
   // straight between points and across midnight. A kind left out uses DEFAULT_RHYTHM.
+  // `centre` and `home` are factors (0–1) on the people out in a commercial centre and on
+  // residential streets; left out, a factor is 1. `rhythm_days` replaces curves on some weekdays
+  // (0 = Sunday): no weekday twice, and each curve must meet the everyday one at midnight.
   life?: {
     emergency?: EmergencyConfig; // optional illustrative vehicles and OSM station exclusions
     folklore?: FolkloreConfig; // optional sourced ghosts and seasonal manananggal
@@ -199,12 +202,14 @@ City {                           // cities/<slug>/city.json
       modes?: ('bus' | 'jeepney' | 'tricycle')[]; // required for stops and terminals
       covered?: boolean; source: string;
     }[];
-    rhythm?: { vehicle?: [number, number][]; person?: ...; boat?: ...; train?: ... };
+    rhythm?: { vehicle?: [number, number][]; person?: ...; boat?: ...; train?: ...; centre?: ...; home?: ... };
+    rhythm_days?: { weekdays: number[]; rhythm: /* same shape as rhythm */ }[];
     // When places fill up (SPEC.md §4 "Places"). Weekdays 0 = Sunday; times local HH:MM.
     // Without `worship`, churches only have a few visitors; without `school`, weekdays 07:00–16:00.
     schedules?: {
       worship?: { weekdays: number[]; times: string[] }[];
       school?: { weekdays: number[]; in: string; out: string };
+      shops?: { open: string; close: string };
     };
     source: string;
   };
