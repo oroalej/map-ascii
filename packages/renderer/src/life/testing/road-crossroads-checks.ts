@@ -77,9 +77,9 @@ export function checkCrossroads(variant: CrossroadsVariant, minimum: number, dur
         if (result.seconds < 60) expect(result.partialWindow.length).toBeGreaterThan(0);
         for (const arms of result.windows)
           expect(arms).toEqual(variant === 'original' ? [0, 1, 2, 3] : [2, 3]);
-        // PRE's movement-only guard wrapper measured 0 original rejections. The mixed fixture's
-        // filtering riders meet stopped traffic beside them: with no sideways escape, one tries
-        // for a few seconds before giving way, each try counting (about 3 a frame at 30 Hz).
+        // PRE's movement-only guard wrapper measured 0 original and 1 mixed rejection per minimum.
+        // Steering dropped the sideways-only tries, and the mixed fixture now measures 219 over
+        // 180 seconds. The sources aren't broken down; this only catches a large rise.
         expect(result.guardRejections).toBeLessThanOrEqual(variant === 'original' ? 0 : 300);
         // These terminal assertions require all 180 seconds of acceptance coverage.
         // Secondary-minimum CI files intentionally run only a 30-second smoke window;
