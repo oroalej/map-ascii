@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CellBit, cellBits } from './life/config';
+import { WINDOW_GROUPS, windowShares } from '@atlas/shared';
+import { CellBit, cellBits, WINDOW_GROUP_OF, windowShareUniform } from './life/config';
 import { seeThroughMask, seeThrough, subcellAreas } from './glyphs/select';
 import { CLASS_LABELS, themes } from './theme';
 import { legendEntries } from './legend';
@@ -198,5 +199,31 @@ describe('building_daytime', () => {
     expect(cellClassName('building', undefined)).toBe('building');
     expect(cellClassName('building_school', 'building=school')).toBe('building_school');
     expect(cellClassName('park', 'building=school')).toBe('park');
+  });
+});
+
+describe('window groups', () => {
+  it('names a group for every class with windows', () => {
+    const bits = cellBits();
+    const lit = renderClasses.filter((cls) => bits[classId(cls)]! & CellBit.window);
+    expect(lit.sort()).toEqual(Object.keys(WINDOW_GROUP_OF).sort());
+    expect(WINDOW_GROUP_OF.building).toBe('home');
+    expect(WINDOW_GROUP_OF.building_daytime).toBe('daytime');
+    expect(WINDOW_GROUP_OF.building_school).toBe('daytime');
+  });
+
+  it('packs shares in group order, the single default without a pack option', () => {
+    const shares = windowShareUniform(windowShares(0));
+    expect(shares).toHaveLength(WINDOW_GROUPS.length);
+    expect(new Set(shares)).toEqual(new Set([Float32Array.of(0.12)[0]]));
+    const packed = windowShareUniform({
+      home: 1,
+      daytime: 2,
+      market: 3,
+      worship: 4,
+      hospital: 5,
+      station: 6,
+    });
+    expect(Array.from(packed)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

@@ -8,6 +8,8 @@ import {
   rhythmFor,
   shopHours,
   shopOpen,
+  WINDOW_GROUPS,
+  windowShares,
 } from './rhythm';
 import { CityLife } from './schemas';
 
@@ -230,5 +232,36 @@ describe('rhythm by weekday and district', () => {
   it('rejects a weekday given two rhythms', () => {
     const day = { weekdays: [0], rhythm: { person: [[0, 0.5]] } };
     expect(parse([day, day])).toBe(false);
+  });
+});
+
+describe('windowShares', () => {
+  const windows = {
+    home: [
+      [19, 0.12],
+      [23, 0.04],
+    ],
+    daytime: [[0, 0.01]],
+    market: [[0, 0.02]],
+    worship: [[0, 0.03]],
+    hospital: [[0, 0.25]],
+    station: [[0, 0.12]],
+    source: 'test',
+  } as const;
+
+  it('gives every group the same share without a pack option', () => {
+    for (const minutes of [0, 300, 1230])
+      for (const group of WINDOW_GROUPS) expect(windowShares(minutes)[group]).toBe(0.12);
+    expect(windowShares(0, {})).toEqual(windowShares(1000));
+  });
+
+  it('follows each group through its curve, past midnight too', () => {
+    const at = (hour: number) => windowShares(hour * 60, { windows });
+    expect(at(19).home).toBeCloseTo(0.12);
+    expect(at(21).home).toBeCloseTo(0.08);
+    expect(at(23).home).toBeCloseTo(0.04);
+    expect(at(1).home).toBeCloseTo(0.04 + (0.08 * 2) / 20);
+    expect(at(1).hospital).toBe(0.25);
+    expect(at(1).daytime).toBe(0.01);
   });
 });

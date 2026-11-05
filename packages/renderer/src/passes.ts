@@ -30,7 +30,14 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
-import { bandVisibility, CLASS_ZOOM, PALAY_ROWS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  PALAY_ROWS_ZOOM,
+  SEASON_ZOOM,
+  windowShares,
+  ZOOM_FADE,
+} from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -80,7 +87,7 @@ import {
 import { labelScreenArea } from './label-candidates';
 import { labelIntersectsArea, type Box, type LabelLayout } from './label-layout';
 import type { LabelMemory, LabelMemoryEntry, LabelOrderKey } from './label-stability';
-import { cellBits } from './life/config';
+import { cellBits, windowShareUniform } from './life/config';
 import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
@@ -1019,7 +1026,11 @@ export type Weather = {
   mist?: number;
   mistOffset?: readonly [number, number];
   mistDetail?: boolean;
+  /** Windows lit per group (life/config.ts `windowShareUniform`); a default share without it. */
+  windowShare?: Float32Array;
 };
+
+const DEFAULT_WINDOW_SHARES = windowShareUniform(windowShares(0));
 
 const fixturesOf = new WeakMap<
   CellTargets,
@@ -1362,6 +1373,7 @@ export function glyphPass(
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
+    u_windowShare: weather.windowShare ?? DEFAULT_WINDOW_SHARES,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_fixtures: targets.fixtureTex,

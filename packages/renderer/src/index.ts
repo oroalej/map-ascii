@@ -21,6 +21,7 @@ import {
   type HarvestNow,
   epochDay,
   occurrence as dateOccurrence,
+  windowShares,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -156,6 +157,7 @@ import {
   FLOOD,
   SHOP,
   STREETLIGHT,
+  windowShareUniform,
   type Activity,
 } from './life/config';
 import {
@@ -1952,6 +1954,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     emit('seasonchange', seasonSnapshot);
   };
   let liveOccurrence: string | undefined;
+  let windowShare = windowShareUniform(windowShares(0, options.cityLife));
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
@@ -2057,6 +2060,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     );
     if (Math.abs(nextMist - mist) > SKY.dirtyCover || (nextMist === 0 && mist !== 0)) {
       mist = nextMist;
+      drawDirty = true;
+    }
+    const nextWindows = windowShareUniform(windowShares(local.minutes, options.cityLife));
+    if (nextWindows.some((share, i) => Math.abs(share - windowShare[i]!) > 0.001)) {
+      windowShare = nextWindows;
       drawDirty = true;
     }
     if (
@@ -2486,6 +2494,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         mistDetail:
           knobs.clouds &&
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
+        windowShare,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;

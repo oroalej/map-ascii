@@ -18,7 +18,8 @@
  * ownership. Uniform names below describe these inputs; documentation stays outside the
  * GLSL string so it does not add to the shipped shader payload.
  */
-import { classId, Flags, MAX_CLASSES } from '../classes';
+import { WINDOW_GROUPS } from '@atlas/shared';
+import { classId, Flags, MAX_CLASSES, roofClasses } from '../classes';
 import { BIRD_ACCENT_BIT, BIRD_SILHOUETTE_BIT, BIRD_SPECIES_ORDER } from '../life/birds';
 import {
   BIRD_SHADOW,
@@ -27,6 +28,7 @@ import {
   GROUND_SHADOW,
   LIFE_GROUND_SHADOW,
   LIFE_SHADOW,
+  WINDOW_GROUP_OF,
 } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
 import { HELD_CLOCK_BASE, ORDINARY_CLOCK } from '../life/effect-clocks';
@@ -233,6 +235,7 @@ ${effectClocks ? 'uniform bool u_hasEffectClocks;' : 'const bool u_hasEffectCloc
 uniform sampler2D u_subClass; // visible surfaces at the canopy's 2 x 3 edge samples
 uniform sampler2D u_subAttr;
 uniform int u_cellBits[${MAX_CLASSES}];
+uniform float u_windowShare[${WINDOW_GROUPS.length}]; // life/config.ts windowShareUniform
 uniform ivec2 u_origin;
 uniform sampler2D u_attr;
 uniform int u_crownClass;
@@ -311,6 +314,17 @@ vec3 toned(vec3 color, int tone, float night) {
   if (tone == ${Tone.light}) return mix(color, vec3(cloudShade), ${float(TONE.light)} * (1.0 - night));
   if (tone == ${Tone.dry}) return min(color * vec3(${TONE.dry.map(float).join(', ')}), 1.0);
   return color;
+}
+
+// The share of this class's cells lit as windows at full night (life/config.ts WINDOW_GROUP_OF).
+float windowShare(int cls) {
+${roofClasses
+  .map(
+    (lit) =>
+      `  if (cls == ${classId(lit)}) return u_windowShare[${WINDOW_GROUPS.indexOf(WINDOW_GROUP_OF[lit])}];`,
+  )
+  .join(' ')}
+  return 0.0;
 }
 
 vec3 fillOf(int cls, vec3 color) {
@@ -1087,7 +1101,7 @@ void main() {
     // More windows light up as the night deepens; each flickers a little on its own beat. The
     // world cell's hash picks them, so they stay put as the map pans.
     uint h = cellHash(u_origin + cell);
-    if (float((h >> 4u) & 255u) / 255.0 < night * 0.12) {
+    if (float((h >> 4u) & 255u) / 255.0 < night * windowShare(cls)) {
       float beat = float((h >> 12u) & 7u) + 1.0;
       float flicker = u_shimmer ? 0.88 + 0.12 * sin(u_time * beat * 0.7) : 1.0;
       color = mix(color, vec3(1.0, 0.82, 0.48) * flicker, 0.85);

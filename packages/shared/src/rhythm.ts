@@ -103,6 +103,11 @@ export type EmergencyConfig = {
   source: string;
 };
 
+/** Kinds of building that keep their own window hours. */
+export const WINDOW_GROUPS = ['home', 'daytime', 'market', 'worship', 'hospital', 'station'] as const;
+export type WindowGroup = (typeof WINDOW_GROUPS)[number];
+export type WindowCurves = Record<WindowGroup, RhythmCurve> & { source: string };
+
 export type CityLifeConfig = {
   peddlers?: PeddlerConfig[];
   folklore?: FolkloreConfig;
@@ -127,6 +132,8 @@ export type CityLifeConfig = {
   rhythm_days?: RhythmDay[];
   /** When places fill up (the pack's own; its `source` covers them). */
   schedules?: LifeSchedules;
+  /** How many windows show lit through the night, per kind of building; default all the same. */
+  windows?: WindowCurves;
   /** Where the rhythm comes from (content rule: claims carry a source). */
   source: string;
 };
@@ -240,6 +247,23 @@ export const districtFactor = (
   const curve = cityCurve(life, district, clock.weekday);
   return curve ? curveAt(curve, clock.minutes) : 1;
 };
+
+/** The share of a building's cells lit at full night when a city gives no `windows`. */
+export const DEFAULT_WINDOW_SHARE = 0.12;
+
+/** The share of windows lit at `minutes` past local midnight, per group. An impression. */
+export function windowShares(
+  minutes: number,
+  life?: Pick<CityLifeConfig, 'windows'>,
+): Record<WindowGroup, number> {
+  const curves = life?.windows;
+  return Object.fromEntries(
+    WINDOW_GROUPS.map((group) => [
+      group,
+      curves ? curveAt(curves[group], minutes) : DEFAULT_WINDOW_SHARE,
+    ]),
+  ) as Record<WindowGroup, number>;
+}
 
 /** School hours when a city gives none: weekdays, 07:00 to 16:00. An impression. */
 export const DEFAULT_SCHOOL: SchoolSchedule = {

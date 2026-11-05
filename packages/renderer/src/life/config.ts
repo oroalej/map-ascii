@@ -12,6 +12,8 @@ import {
   VEHICLE_TYPES,
   placeShare,
   rhythmFor,
+  WINDOW_GROUPS,
+  type WindowGroup,
   type CityLifeConfig,
   type PlaceKind,
   type RhythmDistrict,
@@ -941,6 +943,21 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
   dog: CellBit.person,
   cat: CellBit.person,
 };
+
+/** The window hours each lit class keeps (`windowShares`). */
+export const WINDOW_GROUP_OF: Readonly<Record<(typeof roofClasses)[number], WindowGroup>> = {
+  building: 'home',
+  building_daytime: 'daytime',
+  building_school: 'daytime',
+  building_market: 'market',
+  building_religious: 'worship',
+  building_hospital: 'hospital',
+  building_station: 'station',
+};
+
+/** The glyph pass's `u_windowShare`: a group's share at its index in `WINDOW_GROUPS`. */
+export const windowShareUniform = (shares: Readonly<Record<WindowGroup, number>>): Float32Array =>
+  Float32Array.from(WINDOW_GROUPS, (group) => shares[group]);
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
 const water = ['water_river', 'water_stream', 'water_area', 'water_sea'];

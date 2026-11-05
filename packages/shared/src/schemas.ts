@@ -2047,6 +2047,18 @@ export const CityLife = z
         shops: z.strictObject({ open: ClockTime, close: ClockTime }).optional(),
       })
       .optional(),
+    /** How many windows show lit through the night, per kind of building (rhythm.ts). */
+    windows: z
+      .strictObject({
+        home: RhythmCurve,
+        daytime: RhythmCurve,
+        market: RhythmCurve,
+        worship: RhythmCurve,
+        hospital: RhythmCurve,
+        station: RhythmCurve,
+        source: z.string().min(1),
+      })
+      .optional(),
     source: z.string().min(1),
   })
   .superRefine((life, ctx) => {
