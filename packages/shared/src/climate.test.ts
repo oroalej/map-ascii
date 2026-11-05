@@ -122,14 +122,16 @@ describe('harvestAt', () => {
     expect(at('harvested', 0.59).tractors).toBe(0.5);
     expect(at('harvested', 0.6).tractors).toBe(0);
     expect(at('growing', 0.5).tractors).toBe(0);
-    expect(harvestAt({ stage: 'flooded', progress: 0 }, { ...harvest, tractors: false }, 720))
-      .toMatchObject({ tractors: 0 });
+    expect(
+      harvestAt({ stage: 'flooded', progress: 0 }, { ...harvest, tractors: false }, 720),
+    ).toMatchObject({ tractors: 0 });
   });
   it('lets ducks out on harvested fields only', () => {
     expect(at('harvested', 0.95).ducks).toBe(1);
     expect(at('flooded', 0).ducks).toBe(0);
-    expect(harvestAt({ stage: 'harvested', progress: 0 }, { ...harvest, ducks: false }, 720))
-      .toMatchObject({ ducks: 0 });
+    expect(
+      harvestAt({ stage: 'harvested', progress: 0 }, { ...harvest, ducks: false }, 720),
+    ).toMatchObject({ ducks: 0 });
   });
   it('burns straw between 10 % and 60 % of harvested, inside its hours', () => {
     expect(at('harvested', 0.09, 16).burning).toBe(false);

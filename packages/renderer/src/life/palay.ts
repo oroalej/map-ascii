@@ -100,17 +100,14 @@ const fieldBox = (rings: readonly (readonly TilePoint[])[]) => {
 const inField = (fields: readonly Field[], p: TilePoint) =>
   fields.some(
     ({ rings, box }) =>
-      p.x >= box[0]! &&
-      p.x <= box[2]! &&
-      p.y >= box[1]! &&
-      p.y <= box[3]! &&
-      insideRings(rings, p),
+      p.x >= box[0]! && p.x <= box[2]! && p.y >= box[1]! && p.y <= box[3]! && insideRings(rings, p),
   );
 
 /** Each road's longest run through each lattice cell of this tile. */
 function latticeRuns(tile: TileAddress, lines: DryingLines, cell: number): Map<string, Run> {
   const runs = new Map<string, Run>();
-  const cellOf = (value: number, origin: number) => Math.floor((origin * TILE_EXTENT + value) / cell);
+  const cellOf = (value: number, origin: number) =>
+    Math.floor((origin * TILE_EXTENT + value) / cell);
   const perTile = Math.round(TILE_EXTENT / cell);
   const tileX = tile.x * perTile,
     tileY = tile.y * perTile;
