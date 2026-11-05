@@ -471,6 +471,13 @@ In Android Chrome, with a build that has this report:
 | Device | Chrome | Cold? | `ready` (ms) | Slowest link (ms) | Blocked (ms) | Parallel | z16 pan fps / tier | z18 pan fps / tier | z18 night fps / tier |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
+### City movement (2026-11-05)
+
+- **Crossings pre-pass.** `life/rail-crossings.ts` finds crossings per tile at prepare, from geometry only (`railway=level_crossing` isn't fetched), and keeps each road line's stops in `along` units as `SignalControl` does. `crossingStates` in `life/train-motion.ts` runs beside `trainLimits` over the whole world and recomputes every crossing's `closed` and `firm` from the trains' current state, with nothing carried between frames, so a crossing can't stay shut. It uses `metricFrame` so trains in neighbouring tiles count, and walks a train's path only when a crossing is already near its head. Tiles without crossings pay one filter.
+- **Stateless actors.** `life/flyways.ts` and `life/dismissal.ts` follow `life/field-life.ts`: pure functions of shared time and a position hash, appended after every other agent up to `maxAgents`. Each actor's release time comes from `minutes - age`, where its age is a phase of real seconds, so a pinned Time chip keeps them moving and those released in a window finish their trip after it closes. No random stream advances, and they cannot move an existing agent.
+- **Gate results.** `schoolGates` keeps each school's nearest road point and the walks from it in a `WeakMap` per `LifeGeometry`, worked out on the first frame a tile is in the window, never before.
+- **Parking** is a draw-loop filter (`levels.parking`). Slots and shares are assigned after the last parking draw, from position, so placements and `parkingLines` are unchanged and hidden cars remain standing bodies.
+
 ### Harvest and dawn mist gates (2026-11-05)
 
 `verify:life` against `e0f2c22` is exact in all 24 scenarios, in comparison and replay, so harvest leaves existing agents' spawning and movement unchanged.
