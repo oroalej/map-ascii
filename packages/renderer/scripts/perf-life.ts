@@ -431,7 +431,8 @@ try {
     const action = (module: Simulation) => () => {
       const world = new module.LifeWorld();
       world.sync(crossingTiles);
-      for (let frame = 0; frame < 300; frame++) world.step(1 / 30, undefined, 17);
+      // Long enough for the first train to arrive: it then runs through for minutes.
+      for (let frame = 0; frame < 3300; frame++) world.step(1 / 30, undefined, 17);
       return () => {
         world.step(1 / 30, undefined, 17);
         return world.visible(17, levels, middle);

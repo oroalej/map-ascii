@@ -160,12 +160,21 @@ export class RailCrossings {
           const x = coords[v * 2]!,
             y = coords[v * 2 + 1]!;
           const hasNext = v + 1 < starts[road + 1]!;
-          for (let w = starts[rail]!; w < starts[rail + 1]!; w++) {
+          for (let w = starts[rail]!; w + 1 < starts[rail + 1]!; w++) {
             const cx = coords[w * 2]!,
               cy = coords[w * 2 + 1]!;
-            if (Math.hypot(x - cx, y - cy) <= reach)
-              hits.push({ x: cx, y: cy, line: road, at: this.along[v]! });
-            if (!hasNext || w + 1 >= starts[rail + 1]!) continue;
+            // Simplified tiles can drop the shared vertex from the track, so measure to its segment.
+            const sx = coords[w * 2 + 2]! - cx,
+              sy = coords[w * 2 + 3]! - cy;
+            const u = Math.max(
+              0,
+              Math.min(1, ((x - cx) * sx + (y - cy) * sy) / (sx * sx + sy * sy || 1)),
+            );
+            const qx = cx + sx * u,
+              qy = cy + sy * u;
+            if (Math.hypot(x - qx, y - qy) <= reach)
+              hits.push({ x: qx, y: qy, line: road, at: this.along[v]! });
+            if (!hasNext) continue;
             const nx = coords[v * 2 + 2]!,
               ny = coords[v * 2 + 3]!;
             const t = properCrossing(x, y, nx, ny, cx, cy, coords[w * 2 + 2]!, coords[w * 2 + 3]!);
