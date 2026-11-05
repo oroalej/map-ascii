@@ -85,8 +85,10 @@ export const renderClasses: readonly RenderClass[] = [
   // reuse their slot so every other geographic cell class retains its numeric id.
   ...ATLAS_CLASSES.map((cls) => (cls === 'building_part' ? 'marker_heritage' : cls)),
   'building_part',
-  ...partClasses,
+  ...partClasses.filter((cls) => cls !== 'building_daytime'),
   ...lifeClasses,
+  // Last, so every other class keeps the id it had.
+  'building_daytime',
 ];
 
 /**
