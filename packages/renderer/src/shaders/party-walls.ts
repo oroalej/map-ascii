@@ -1,11 +1,10 @@
-import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
-import { classId, Flags } from '../classes';
+import { classId, Flags, roofClasses } from '../classes';
 import { wallJoinGlsl } from './wall-mask';
 
 /** CPU twin: glyphs/party-walls.ts. The 5x5 cache is only populated at compatible contacts. */
 export const partyWallsGlsl = /* glsl */ `
 ${wallJoinGlsl}
-bool roofBuilding(int cls) { return ${ROOF_BUILDING_CLASSES.map((c) => `cls == ${classId(c)}`).join(' || ')}; }
+bool roofBuilding(int cls) { return ${roofClasses.map((c) => `cls == ${classId(c)}`).join(' || ')}; }
 uint partyIds[25];
 bool partyMembers[25];
 bool partyThrough[25];

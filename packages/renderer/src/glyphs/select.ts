@@ -2,7 +2,6 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
-import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
 import { combineWind, type CursorWind } from '../life/cursor-wind';
 import {
   classId,
@@ -13,6 +12,7 @@ import {
   PavingVariant,
   pavingOverrideBase,
   renderClasses,
+  roofClasses,
   type RenderClass,
 } from '../classes';
 import {
@@ -152,7 +152,7 @@ export const SUB = { cols: 2, rows: 3 } as const;
 
 /** Classes whose edges are drawn with sextants: areas, not lines or markers. */
 export const subcellClasses: readonly RenderClass[] = [
-  ...ROOF_BUILDING_CLASSES,
+  ...roofClasses,
   'building_part',
   'building_woodwork',
   'water_area',
@@ -358,7 +358,7 @@ export const pixelStands = (
 ): boolean => cellStanding && (!edge || crown || standing(sampleKind, sampleHeight));
 
 /**
- * A cell's light texel (`shadeTex`, RG8), what the select pass writes from one set of samples:
+ * A cell's light texel (`shadeTex`, red and green), what the select pass writes from one set of samples:
  * green is the cell's own light (`cellLight`), which a standing cell's pixels read at its centre,
  * so outlines stay crisp; red is the light the ground would get there, which ground pixels read
  * filtered across cells. On ground the two are the same; under a roof or crown, red is that
@@ -392,6 +392,64 @@ export const pixelLight = (
 /** A cell's light, 0–1, from its shadow and contact shade: what the select pass writes. */
 export const cellLight = (shadow: number, contact: number): number =>
   (1 - SHADOW.dark * shadow) * (1 - contact);
+
+/**
+ * Water depth (`waterDepth`). Rings of 8 samples, nearest first, as [cells across, cells down]
+ * (cells are about 1.8× as tall as wide). `thin` is a run one cell thick, which stays one tone.
+ * `bank`, `deep` and `ink` are how far the depth moves water toward its tokens (theme.ts).
+ */
+export const WATER_DEPTH = {
+  rings: [
+    [1, 1],
+    [2, 1],
+    [4, 2],
+  ],
+  thin: 0.25,
+  bank: 0.6,
+  deep: 0.75,
+  ink: 0.25,
+} as const;
+
+/**
+ * The sun's glitter on water (the glyph pass, `sunGlint`): the peak share of cells it catches, on
+ * open water and on flooded paddies, how far it washes a cell toward `waterGlint`, the size of a
+ * patch in cells, and the gain that keeps the mean share at its peak despite the patches.
+ */
+export const GLINT = {
+  water: 0.06,
+  paddy: 0.03,
+  wash: 0.7,
+  block: [6, 3],
+  patchGain: 2.857,
+} as const;
+
+/**
+ * How far a water cell is from its bank, what the select pass writes to `shadeTex` blue: 0 at the
+ * bank and 1 in open water, from the nearest ring holding a non-water sample. `isWater` takes an
+ * offset in cells.
+ */
+export function waterDepth(isWater: (dx: number, dy: number) => boolean): number {
+  const across = isWater(1, 0) || isWater(-1, 0);
+  const down = isWater(0, 1) || isWater(0, -1);
+  if (!across || !down) return WATER_DEPTH.thin;
+  const { rings } = WATER_DEPTH;
+  for (let ring = 0; ring < rings.length; ring++) {
+    const [x, y] = rings[ring]!;
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dx = -1; dx <= 1; dx++)
+        if ((dx || dy) && !isWater(dx * x, dy * y)) return ring / rings.length;
+  }
+  return 1;
+}
+
+/**
+ * How far depth moves a color toward each token, 0–1 (the glyph pass's `waterToned`): below
+ * depth 0.5 toward the bank, above it toward the deep, with none at 0.5.
+ */
+export const waterTone = (depth: number): { bank: number; deep: number } => ({
+  bank: Math.max(0, Math.min(1, 1 - 2 * depth)) * WATER_DEPTH.bank,
+  deep: Math.max(0, Math.min(1, 2 * depth - 1)) * WATER_DEPTH.deep,
+});
 
 /** An edge's sextant is drawn this far from the feature's fill toward its glyph color, 0–1. */
 export const EDGE_INK = 0.4;

@@ -54,6 +54,7 @@ import {
   type RoofSurfaceFrame,
 } from './roofs';
 import {
+  cellClassName,
   classId,
   Flags,
   Marking,
@@ -494,6 +495,8 @@ export function ringCentroid(ring: readonly TilePoint[]): TilePoint {
 }
 
 const isBuilding = (cls: string) => cls.startsWith('building');
+/** The kind of shop that lights up before dawn (`schedules.bakery`). */
+const EARLY_SHOP_KIND = 'shop=bakery';
 
 /** Direction the light comes from, in tile coordinates (y down): from the south-east. */
 
@@ -952,7 +955,7 @@ export function buildTileGeometry(
     for (let f = 0; f < layer.length; f++) {
       const feature = layer.feature(f);
       const className = String(feature.properties.class ?? '');
-      const cls = classId(className);
+      const cls = classId(cellClassName(className, feature.properties.kind));
       if (cls === 0) continue;
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
@@ -1041,6 +1044,7 @@ export function buildTileGeometry(
           p,
           shopPosition && unitMeters ? Number(shop_radius_m) / unitMeters : radius,
           featureId,
+          feature.properties.kind === EARLY_SHOP_KIND,
         );
       };
       const width = Number(feature.properties.width ?? 0);

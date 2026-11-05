@@ -730,6 +730,29 @@ describe('City', () => {
     expect(ok({ worship: [{ weekdays: [0, 0], times: ['06:00'] }] })).toBe(false);
     expect(ok({ worship: [{ weekdays: [0], times: ['6am'] }] })).toBe(false);
     expect(ok({ school: { weekdays: [1], in: '16:30', out: '07:30' } })).toBe(false);
+    expect(ok({ bakery: { open: '04:00', close: '18:00' } })).toBe(true);
+    expect(ok({ bakery: { open: '4am', close: '18:00' } })).toBe(false);
+  });
+
+  it('takes window hours for every group, with a source', () => {
+    const windows = {
+      home: [[19, 0.12]],
+      daytime: [[0, 0.01]],
+      market: [[0, 0.02]],
+      worship: [[0, 0.03]],
+      hospital: [[0, 0.25]],
+      station: [[0, 0.12]],
+      source: 'illustrative',
+    };
+    const ok = (value: unknown) =>
+      City.safeParse({ ...city, life: { windows: value, source: 'x' } }).success;
+    expect(ok(windows)).toBe(true);
+    expect(ok({ ...windows, source: undefined })).toBe(false);
+    expect(ok({ ...windows, source: '' })).toBe(false);
+    expect(ok({ ...windows, hospital: undefined })).toBe(false);
+    expect(ok({ ...windows, home: [[19, 1.5]] })).toBe(false);
+    expect(ok({ ...windows, home: [] })).toBe(false);
+    expect(ok({ ...windows, shed: [[0, 0.1]] })).toBe(false);
   });
 
   it('rejects an inverted bbox', () => {

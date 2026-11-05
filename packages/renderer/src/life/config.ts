@@ -4,7 +4,6 @@
  */
 import {
   LAMP_PLACEMENT,
-  ROOF_BUILDING_CLASSES,
   curveAt,
   districtFactor,
   hasDistricts,
@@ -14,6 +13,8 @@ import {
   VEHICLE_TYPES,
   placeShare,
   rhythmFor,
+  WINDOW_GROUPS,
+  type WindowGroup,
   type CityLifeConfig,
   type ParkingSlot,
   type PlaceKind,
@@ -24,7 +25,15 @@ import {
   type HarvestNow,
   type CropStage,
 } from '@atlas/shared';
-import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
+import {
+  classId,
+  groundClasses,
+  MAX_CLASSES,
+  renderClasses,
+  roofClasses,
+  type LifeClass,
+  type RenderClass,
+} from '../classes';
 import { LifeLine } from './geometry';
 import { VEHICLES } from './vehicles';
 
@@ -686,6 +695,48 @@ export const GROUND_SHADOW = {
 export const LIFE_GROUND_SHADOW = 2;
 
 /**
+ * A boat's wake (life/wakes.ts): a life texel with no agent bit whose last byte is this draws its
+ * glyph as foam on water cells; land cells ignore it (shaders/glyph.ts).
+ */
+export const LIFE_WAKE = 3;
+
+/**
+ * Boat wakes (life/wakes.ts): the zoom they start at; the speeds a boat has none below and its
+ * longest at (m/s); each arm's angle from straight behind (the Kelvin angle, degrees); the length
+ * behind the stern by craft (m) and the share of it a slow boat keeps; its limits in cells, and the
+ * length it shows all its detail from; how fast a crest widens (m per m); the weakest foam drawn;
+ * how much speckle roughens its edges; the glyph for each foam strength, strongest first (weaker
+ * only tints the water); and how many boats and cells each frame may spend on them.
+ */
+export const WAKE = {
+  zoom: { min: 15 },
+  minSpeed: 0.3,
+  fullSpeed: 2.5,
+  angle: 19.5,
+  length: { rowboat: 14, banca: 34, motorboat: 44 },
+  baseLength: 0.4,
+  minCells: 4,
+  maxCells: 48,
+  fineCells: 24,
+  rim: 0.06,
+  minFoam: 0.05,
+  speckle: 0.2,
+  glyphs: [
+    { from: 0.58, glyph: '≈' },
+    { from: 0.34, glyph: '~' },
+    { from: 0.22, glyph: '·' },
+  ],
+  maxPerFrame: 64,
+  maxVisits: 8000,
+} as const;
+
+/** A boat's wake at `zoom`, 0–1 by its speed in m/s; none when it is slow, held, or too far out. */
+export const boatWake = (zoom: number, speed: number, held: boolean): number | undefined =>
+  held || zoom < WAKE.zoom.min || speed <= WAKE.minSpeed
+    ? undefined
+    : Math.min(1, speed / WAKE.fullSpeed);
+
+/**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):
  * fewer people and cars at night, and birds roost after dusk. Each agent has a fixed rank in
  * 0–1 and shows while its rank is below this.
@@ -950,9 +1001,24 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
   cat: CellBit.person,
 };
 
+/** The window hours each lit class keeps (`windowShares`). */
+export const WINDOW_GROUP_OF: Readonly<Partial<Record<RenderClass, WindowGroup>>> = {
+  building: 'home',
+  building_daytime: 'daytime',
+  building_school: 'daytime',
+  building_market: 'market',
+  building_religious: 'worship',
+  building_hospital: 'hospital',
+  building_station: 'station',
+};
+
+/** The glyph pass's `u_windowShare`: a group's share at its index in `WINDOW_GROUPS`. */
+export const windowShareUniform = (shares: Readonly<Record<WindowGroup, number>>): Float32Array =>
+  Float32Array.from(WINDOW_GROUPS, (group) => shares[group]);
+
 const roads = ['road_major', 'road_mid', 'road_minor'];
 const water = ['water_river', 'water_stream', 'water_area', 'water_sea'];
-const lit: readonly string[] = ROOF_BUILDING_CLASSES;
+const lit: readonly string[] = roofClasses;
 /** Where people can't stand: roofs, water, and walls. */
 const noWalking = new Set([
   ...lit,

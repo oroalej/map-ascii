@@ -249,7 +249,7 @@ it.each([false, true])(
   },
 );
 
-it('creates the cell light as a filtered R8 second attachment of the glyph target, and deletes it', () => {
+it('creates the cell light as a filtered RGBA8 second attachment of the glyph target, and deletes it', () => {
   const constants = new Map<string, number>();
   const calls: { name: string; args: unknown[] }[] = [];
   let made = 0;
@@ -277,7 +277,7 @@ it('creates the cell light as a filtered R8 second attachment of the glyph targe
   const image = calls.find(
     (c, i) => c.name === 'texImage2D' && calls[i - 2]?.args[1] === targets.shadeTex,
   );
-  expect(image?.args.slice(2, 8)).toEqual([k('RG8'), 12, 7, 0, k('RG'), k('UNSIGNED_BYTE')]);
+  expect(image?.args.slice(2, 8)).toEqual([k('RGBA8'), 12, 7, 0, k('RGBA'), k('UNSIGNED_BYTE')]);
   // Linear, edge-clamped: the parameters set while it is bound, after its storage.
   const bound = calls.findIndex((c) => c.name === 'bindTexture' && c.args[1] === targets.shadeTex);
   const next = calls.findIndex((c, i) => i > bound && c.name === 'createTexture');

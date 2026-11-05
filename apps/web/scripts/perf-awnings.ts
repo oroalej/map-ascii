@@ -9,12 +9,11 @@ import { createHash } from 'node:crypto';
 import { cities } from '../e2e/helpers';
 import { detailReady } from './detail-ready';
 import { serveExport } from './serve-export';
-import { classId, Flags, groundClasses } from '../../../packages/renderer/src/classes';
+import { classId, Flags, groundClasses, roofClasses } from '../../../packages/renderer/src/classes';
 import { awningReport, type AwningSample } from './awning-report';
 import { verifyAwningColors } from './awning-shader';
 import { partyWallsGlsl } from '../../../packages/renderer/src/shaders/party-walls';
 import { wallJoinGlsl } from '../../../packages/renderer/src/shaders/wall-mask';
-import { ROOF_BUILDING_CLASSES } from '../../../packages/shared/src/roof-plan';
 import { verifyPartyWalls } from './party-wall-shader';
 import { prepareExport } from './static-export';
 import { currentSourceHash } from '../../../packages/renderer/scripts/snapshot';
@@ -368,7 +367,7 @@ try {
     content: `globalThis.__name = (value) => value; (${installCapture.toString()})(${JSON.stringify(
       {
         buildingClasses: groundClasses.map(classId),
-        roofClasses: ROOF_BUILDING_CLASSES.map(classId),
+        roofClasses: roofClasses.map(classId),
         landmark: Flags.landmark,
         crown: classId('tree_crown'),
         party: partyMode,

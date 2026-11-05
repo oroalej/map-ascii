@@ -30,7 +30,14 @@ import { normalizeFocus, type LifeFocus } from './focus';
 import type { GridPlacement as PickingGrid } from './picking';
 export { placeGrid, metersPerCssPx, type View, type Grid, type GridPlacement } from './grid';
 import * as twgl from 'twgl.js';
-import { bandVisibility, CLASS_ZOOM, PALAY_ROWS_ZOOM, SEASON_ZOOM, ZOOM_FADE } from '@atlas/shared';
+import {
+  bandVisibility,
+  CLASS_ZOOM,
+  PALAY_ROWS_ZOOM,
+  SEASON_ZOOM,
+  windowShares,
+  ZOOM_FADE,
+} from '@atlas/shared';
 import {
   classDepths,
   classId,
@@ -80,7 +87,7 @@ import {
 import { labelScreenArea } from './label-candidates';
 import { labelIntersectsArea, type Box, type LabelLayout } from './label-layout';
 import type { LabelMemory, LabelMemoryEntry, LabelOrderKey } from './label-stability';
-import { cellBits } from './life/config';
+import { cellBits, windowShareUniform } from './life/config';
 import { LIFE_OCCLUDERS } from './life/surface-visibility';
 import {
   createUtilityPackingScratch,
@@ -519,6 +526,8 @@ export function selectPass(
   cursor?: CursorWind,
   /** The frame's lighting (`frameLighting`), shared with the glyph pass; grass ink follows it. */
   lighting: FrameLighting = NOON,
+  /** Whether water reads its depth (quality.ts `waterDetail`). */
+  waterDepth = false,
 ) {
   const { tables } = themeRes.map;
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.glyphFbo);
@@ -533,6 +542,7 @@ export function selectPass(
     u_baseId: targets.base.idTex,
     u_shadows: shadows,
     u_awnings: awnings,
+    u_waterDepth: waterDepth,
     ...cropUniforms(crop),
     u_attr: targets.attrTex,
     u_id: targets.idTex,
@@ -799,6 +809,8 @@ export function lifePass(
   },
   /** Color agents sextant by sextant (quality.ts `lifeDetail`). */
   detail = false,
+  /** Trail wakes behind moving boats (quality.ts `waterDetail`). */
+  wakes = false,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -829,6 +841,7 @@ export function lifePass(
         bounds?.right,
         bounds?.bottom,
         detail,
+        wakes,
       ]
     : undefined;
   if (
@@ -905,6 +918,7 @@ export function lifePass(
       throngMask: buffers.crowdMask,
       throngCells: buffers.crowdCells,
       parts: lifeParts,
+      wakes,
     },
     puffs,
   );
@@ -1019,7 +1033,15 @@ export type Weather = {
   mist?: number;
   mistOffset?: readonly [number, number];
   mistDetail?: boolean;
+  /** Water depth, sun glints and wakes (quality.ts `waterDetail`). */
+  waterFeatures?: boolean;
+  /** The sun's glitter on water, 0–1 (life/sun.ts `sunGlint`); zero without `waterFeatures`. */
+  sunGlint?: number;
+  /** Windows lit per group (life/config.ts `windowShareUniform`); a default share without it. */
+  windowShare?: Float32Array;
 };
+
+const DEFAULT_WINDOW_SHARES = windowShareUniform(windowShares(0));
 
 const fixturesOf = new WeakMap<
   CellTargets,
@@ -1350,6 +1372,11 @@ export function glyphPass(
     u_focusLife: focus.life.size > 0,
     u_focusClasses: focus.mask,
     u_waterDetail: !!weather.detail && !reducedMotion,
+    u_waterDepth: !!weather.waterFeatures,
+    u_waterBank: themeRes.uniforms.waterBank,
+    u_waterDeep: themeRes.uniforms.waterDeep,
+    u_waterGlint: themeRes.uniforms.waterGlint,
+    u_waterFoam: themeRes.uniforms.waterFoam,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,
@@ -1362,6 +1389,7 @@ export function glyphPass(
     u_subClass: targets.sub.classTex,
     u_subAttr: targets.sub.attrTex,
     u_cellBits: lifeCellBits,
+    u_windowShare: weather.windowShare ?? DEFAULT_WINDOW_SHARES,
     u_origin: [grid.originCol, grid.originRow],
     u_attr: targets.attrTex,
     u_fixtures: targets.fixtureTex,
@@ -1370,6 +1398,7 @@ export function glyphPass(
     u_signalLight: targets.signalLightTex,
     u_dpr: view.dpr,
     u_moon: moon,
+    u_sunGlint: weather.sunGlint ?? 0,
     u_crownClass: classId('tree_crown'),
     u_crownSun: sun && sun.altitude > 0 ? sunVector(sun) : [-Math.SQRT1_2, -Math.SQRT1_2, 0.7],
     u_vehicle: classId('life_vehicle'),

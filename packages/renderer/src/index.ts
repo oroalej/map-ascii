@@ -22,6 +22,7 @@ import {
   type HarvestNow,
   epochDay,
   occurrence as dateOccurrence,
+  windowShares,
   type ShopHours,
 } from '@atlas/shared';
 import { sameReferenceMembers } from './cache-inputs';
@@ -157,6 +158,7 @@ import {
   FLOOD,
   SHOP,
   STREETLIGHT,
+  windowShareUniform,
   type Activity,
 } from './life/config';
 import {
@@ -201,7 +203,7 @@ import { SpeechController, type SpeechInView } from './life/speech';
 import { EmojiController, type EmojiInView } from './life/emoji-view';
 import { CueReadback } from './life/cue-readback';
 export type { EmojiInView } from './life/emoji-view';
-import { daylight as daylightAt, solarPosition, type Sun } from './life/sun';
+import { daylight as daylightAt, solarPosition, sunGlint, type Sun } from './life/sun';
 import {
   prevailingWind,
   rainFor,
@@ -1545,6 +1547,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           }
         : undefined,
       knobs.lifeDetail,
+      knobs.waterDetail,
     );
     lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;
@@ -1667,7 +1670,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           state: LampState.shop,
           seed: seed & 31,
         },
-        hours: shopHours(seed, options.cityLife),
+        hours: shopHours(seed, options.cityLife, shopsHere[i + 3] === 1),
       });
     }
     // Floodlit landmarks: a wash of light over each footprint, and a little past it.
@@ -1956,6 +1959,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     emit('seasonchange', seasonSnapshot);
   };
   let liveOccurrence: string | undefined;
+  let windowShare = windowShareUniform(windowShares(0, options.cityLife));
+  let glint = 0;
   const updateSun = (at: number) => {
     if (at - lastSun < SUN_MS) return;
     lastSun = at;
@@ -2062,6 +2067,16 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     );
     if (Math.abs(nextMist - mist) > SKY.dirtyCover || (nextMist === 0 && mist !== 0)) {
       mist = nextMist;
+      drawDirty = true;
+    }
+    const nextGlint = sunGlint(position.altitude);
+    if (Math.abs(nextGlint - glint) > 0.001) {
+      glint = nextGlint;
+      drawDirty = true;
+    }
+    const nextWindows = windowShareUniform(windowShares(local.minutes, options.cityLife));
+    if (nextWindows.some((share, i) => Math.abs(share - windowShare[i]!) > 0.001)) {
+      windowShare = nextWindows;
       drawDirty = true;
     }
     if (
@@ -2491,6 +2506,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         mistDetail:
           knobs.clouds &&
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
+        windowShare,
+        waterFeatures: knobs.waterDetail,
+        sunGlint: knobs.waterDetail ? glint : 0,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;
@@ -2528,6 +2546,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
             cropPass,
             knobs.groundWind ? cursor : undefined,
             lighting,
+            knobs.waterDetail,
           ),
         );
         timed('fixtures', () => drawFixtures(cellsDrawn, time, wind));

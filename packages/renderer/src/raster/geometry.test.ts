@@ -657,7 +657,7 @@ describe('classifyRings', () => {
     expect(flags).toContain(Flags.frontage | Flags.frontageLow);
     expect(flags).toContain(Flags.frontage | Flags.frontageHigh | Flags.ridged);
     expect(Array.from(result.life.commerce!)).toContain(-10);
-    expect(result.life.shops.length).toBe(6);
+    expect(result.life.shops.length).toBe(8);
   });
   it('keeps one owned shop light and the same commerce anchor across clipped tile copies', () => {
     const left = { z: 16, x: 55192, y: 30266 },
@@ -696,7 +696,7 @@ describe('classifyRings', () => {
         tile,
       );
     });
-    expect(geometries.map((g) => g.life.shops.length)).toEqual([3, 0]);
+    expect(geometries.map((g) => g.life.shops.length)).toEqual([4, 0]);
     expect(geometries[0]!.life.commerce![0]! - geometries[1]!.life.commerce![0]!).toBeCloseTo(4096);
     expect(geometries[0]!.life.shops[2]! * metersPerUnit(left)).toBeCloseTo(30);
   });
@@ -1852,10 +1852,12 @@ describe('buildTileGeometry life', () => {
       tile,
     );
     const shops = Array.from(g.life.shops);
-    expect(shops).toHaveLength(6);
+    expect(shops).toHaveLength(8);
     expect(shops.slice(0, 2)).toEqual([1100, 1100]);
     expect(shops[2]).toBeCloseTo(Math.hypot(100, 100));
-    expect(shops.slice(3, 5)).toEqual([3000, 3000]);
+    expect(shops[3]).toBe(0);
+    expect(shops.slice(4, 6)).toEqual([3000, 3000]);
+    expect(shops[7]).toBe(0);
   });
 
   it('floodlights landmarks over their footprint, in the tile that holds them', () => {
@@ -2120,5 +2122,58 @@ it('emits field footprints and drying strips only for a harvest city or folklore
     ...plain,
     fields: undefined,
     drying: undefined,
+  });
+});
+
+describe('building use', () => {
+  const build = (properties: TileFeatureLike['properties']) =>
+    buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building', height: 6, id: 'way/1', ...properties }, [
+            square(100, 100, 400),
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+
+  it('draws a daytime kind in its own class, and keeps every other result the same', () => {
+    const school = build({ kind: 'building=school' });
+    const home = build({ kind: 'building=yes' });
+    const untagged = build({});
+    expect(vertices(school.fills).map((v) => v.cls)).toContain(classId('building_daytime'));
+    expect(vertices(school.fills).map((v) => v.cls)).not.toContain(classId('building'));
+    for (const other of [home, untagged])
+      expect(vertices(other.fills).every((v) => v.cls === classId('building'))).toBe(true);
+    const shape = (g: typeof school) =>
+      vertices(g.fills).map(({ x, y, height, flags }) => ({ x, y, height, flags }));
+    expect(shape(school)).toEqual(shape(home));
+    expect(lifeTransferables(school.life).length).toBe(lifeTransferables(home.life).length);
+    expect(school.life.obstacles).toEqual(home.life.obstacles);
+    expect(school.life.places).toEqual(home.life.places);
+  });
+});
+
+describe('early shops', () => {
+  it('flags a bakery, and only a bakery, in the transferred buffer', () => {
+    const build = (kind: string) =>
+      buildTileGeometry(
+        {
+          poi: layer([
+            feature(1, { class: 'furniture', variant: 'shop_food', kind, id: `node/${kind}` }, [
+              [[500, 500]],
+            ]),
+          ]),
+        },
+        createIdRegistry(),
+        { z: 16, x: 55192, y: 30266 },
+      ).life;
+    const bakery = build('shop=bakery');
+    expect(bakery.shops).toHaveLength(4);
+    expect(bakery.shops[3]).toBe(1);
+    expect(lifeTransferables(bakery)).toContain(bakery.shops.buffer);
+    expect(build('shop=convenience').shops[3]).toBe(0);
   });
 });

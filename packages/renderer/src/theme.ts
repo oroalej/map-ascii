@@ -89,6 +89,13 @@ export type Theme = {
   birdPaints: readonly (readonly [number, number])[];
   /** Dawn mist: before the sun is up, then as it warms (shaders/glyph.ts `mistOver`). */
   mist: readonly [number, number];
+  /** Water at its muddy edge, and in mid-river (shaders/glyph.ts `waterToned`). */
+  waterBank: number;
+  waterDeep: number;
+  /** The sun's glitter on water, a wash rather than added light, so it reads on paper too. */
+  waterGlint: number;
+  /** A boat's wake: pale on the dark map, deep ink on paper, where pale wouldn't show. */
+  waterFoam: number;
 };
 
 /** Connectivity-mask order: 0 none, 1 N, 2 E, 3 NE, 4 S, …, 15 all; then 16 `╱`, 17 `╲`. */
@@ -248,6 +255,13 @@ type Palette = Record<
   birdPaints: readonly (readonly [number, number])[];
   /** Dawn mist: before the sun is up, then as it warms (shaders/glyph.ts `mistOver`). */
   mist: readonly [number, number];
+  /** Water at its muddy edge, and in mid-river (shaders/glyph.ts `waterToned`). */
+  waterBank: number;
+  waterDeep: number;
+  /** The sun's glitter on water, a wash rather than added light, so it reads on paper too. */
+  waterGlint: number;
+  /** A boat's wake: pale on the dark map, deep ink on paper, where pale wouldn't show. */
+  waterFoam: number;
 };
 
 /** Glyphs and classes from SPEC.md §4; only the colors differ between themes. */
@@ -276,6 +290,10 @@ function makeTheme(background: number, c: Palette): Theme {
         : [0xeb8876, 0xf2deb5, 0x71b6a2, 0xf2deb5, 0x85a8e0, 0xf2deb5, 0xd8b56b, 0xf2deb5],
     birdPaints: c.birdPaints,
     mist: c.mist,
+    waterBank: c.waterBank,
+    waterDeep: c.waterDeep,
+    waterGlint: c.waterGlint,
+    waterFoam: c.waterFoam,
     styles: {
       // Thin runs draw as strokes (glyphs/select.ts waterStrokeVariant).
       water_river: {
@@ -297,6 +315,7 @@ function makeTheme(background: number, c: Palette): Theme {
       path: { kind: 'road', glyphs: pathLine, color: c.path },
       rail: { kind: 'road', glyphs: railLine, color: c.rail },
       building: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
+      building_daytime: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
       building_religious: {
         kind: 'building',
         glyphs: buildingRamp,
@@ -444,6 +463,10 @@ export const themes: Record<ThemeName, Theme> = {
       [0xc9b48e, 0x3f7a55],
     ],
     mist: [0x8fa6b8, 0xd8cdb8],
+    waterBank: 0x3a3a26,
+    waterDeep: 0x05141f,
+    waterGlint: 0xfff2c8,
+    waterFoam: 0xe4f6f8,
   }),
   light: makeTheme(0xf4f1e8, {
     river: 0x137f9a,
@@ -500,6 +523,10 @@ export const themes: Record<ThemeName, Theme> = {
       [0x7d6642, 0x24583a],
     ],
     mist: [0xdce7ee, 0xf7f0e2],
+    waterBank: 0xe0d6b8,
+    waterDeep: 0x8fbcc9,
+    waterGlint: 0xfffdf0,
+    waterFoam: 0x0e5f78,
   }),
 };
 
@@ -520,6 +547,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   path: 'Path or alley',
   rail: 'Railway',
   building: 'Building',
+  building_daytime: 'Building',
   building_religious: 'Place of worship',
   building_school: 'School',
   building_hospital: 'Hospital',

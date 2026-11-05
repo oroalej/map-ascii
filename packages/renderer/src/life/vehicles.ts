@@ -470,6 +470,16 @@ export const VEHICLES: Readonly<Record<CraftType, VehicleSpec>> = {
 
 /** Lines over the water (ropes, poles), by direction on screen: across, up and down, rising, falling. */
 export const LINE_GLYPHS = { across: '─', upDown: '│', rising: '╱', falling: '╲' } as const;
+export type LineGlyph = (typeof LINE_GLYPHS)[keyof typeof LINE_GLYPHS];
+/** The glyph for a line's step of `dc` columns and `dr` rows (rows count down the screen). */
+export const stepGlyph = (dc: number, dr: number): LineGlyph =>
+  dr === 0
+    ? LINE_GLYPHS.across
+    : dc === 0
+      ? LINE_GLYPHS.upDown
+      : dc * dr < 0
+        ? LINE_GLYPHS.rising
+        : LINE_GLYPHS.falling;
 /** The pennant at the top of a pole. */
 export const PENNANT_GLYPH = '¶';
 

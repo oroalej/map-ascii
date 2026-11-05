@@ -336,6 +336,90 @@ try {
       `pack/desktop: ${agents.length} agents; median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
     );
   }
+  if ('water/boats'.startsWith(casePrefix)) {
+    // Boats moving on a stretch of river at close zoom, with their wakes: a step, the visible
+    // agents and the pack each frame, in each revision's own source.
+    if (!frozen) throw new Error('Water comparison requires complete frozen source graphs');
+    const riverTiles = Array.from({ length: 4 }, (_, i) => {
+      const at = { ...tile, x: tile.x + (i % 2) - 1, y: tile.y + (i >> 1) - 1 };
+      const river = new LifeBuilder();
+      for (let k = 0; k < 20; k++)
+        river.line(
+          [
+            { x: 0, y: 100 + k * 200 },
+            { x: 4095, y: 100 + k * 200 },
+          ],
+          LifeLine.river,
+          undefined,
+          i * 100 + k + 1,
+        );
+      return { key: `river${i}`, tile: at, life: river.finish() };
+    });
+    const riverCenter = tileToLngLat(tile, { x: 0, y: 0 });
+    const riverCamera = { lng: riverCenter[0], lat: riverCenter[1], zoom: 18 };
+    const riverBounds = (() => {
+      const [[west, south], [east, north]] = viewportFor(riverCamera, {
+        width: 1920,
+        height: 1080,
+      }).getBounds() as [[number, number], [number, number]];
+      return [west, south, east, north] as LngLatBounds;
+    })();
+    const cell = { w: 5, h: 9 };
+    const view = { camera: riverCamera, dpr: 1, width: 1920, height: 1080 };
+    const size = windowCells(view, cell);
+    const placed = placeGrid(view, cell, size.cols, size.rows, windowMargin(view, cell));
+    const grid = {
+      cols: size.cols,
+      rows: size.rows,
+      cellWidth: cell.w,
+      cellHeight: cell.h,
+      toCell: placed.toCell,
+    };
+    const action = async (graph: typeof frozenCurrent, module: Simulation) => {
+      const draw = (await import(graph.path('life/draw.ts'))) as typeof drawModule;
+      const theme = (await import(graph.path('theme.ts'))) as typeof themeModule;
+      const glyphs = ['', ...theme.mapGlyphs(theme.themes.dark)];
+      const indices = new Map(glyphs.map((glyph, index) => [glyph, index]));
+      const glyphIndex = (glyph: string) => indices.get(glyph) ?? 0;
+      const prepared = draw.buildLifeGlyphs(glyphIndex);
+      const out = new Uint8Array(grid.cols * grid.rows * 4),
+        owners = new Uint32Array(grid.cols * grid.rows);
+      const world = new module.LifeWorld({ river: { banca: 1, motorboat: 1 } });
+      world.sync(riverTiles);
+      for (let frame = 0; frame < 40; frame++) world.step(1 / 30, undefined, 18, riverBounds);
+      const shown = () => world.visible(18, 1, riverCenter, undefined, riverBounds);
+      return {
+        count: () => shown().filter((agent) => agent.kind === 'boat').length,
+        frame: () => {
+          world.step(1 / 30, undefined, 18, riverBounds);
+          // A packer that doesn't know `wakes` ignores it, so both sides take the same call.
+          const metadata = { owners, wakes: true };
+          return draw.packLife(
+            out,
+            grid,
+            shown(),
+            theme.themes.dark,
+            glyphIndex,
+            null,
+            prepared,
+            metadata,
+          );
+        },
+      };
+    };
+    const old = await action(frozen, baseline),
+      next = await action(frozenCurrent, changed);
+    const boats = next.count();
+    ok(boats > 0, 'No boats in view');
+    const timings = compare(
+      () => old.frame,
+      () => next.frame,
+    );
+    rows.push({ name: 'water/boats', timings, counts: { boats } });
+    console.log(
+      `water/boats: ${boats} boats; median ${(timings.medianGain * 100).toFixed(1)}% reduction; p95 ${(timings.p95Change * 100).toFixed(1)}% change`,
+    );
+  }
   if ('harvest/balatas'.startsWith(casePrefix)) {
     // Farm tiles at the opening zoom at the peak of the harvest, every actor out at once.
     const farmTiles = Array.from({ length: 4 }, (_, i) => {

@@ -3,9 +3,9 @@
  * It mirrors `glyphs/select.ts` (the unit-tested CPU version). Output 0 (RGBA8): glyph atlas
  * index, class id, the cell's state (picking.ts `cellState`: hover, highlighted, selected; plus
  * `EDGE_STATE` for a sub-cell edge, and vegetation's wind level and tone; see glyphs/select.ts),
- * and the class whose fill is the cell's background. Output 1 (RG8, `shadeTex`): the light from
+ * and the class whose fill is the cell's background. Output 1 (RGBA8, `shadeTex`): the light from
  * soft shadows and contact shade, red the ground's and green the cell's own (glyphs/select.ts
- * `shadeTexel`).
+ * `shadeTexel`), and blue the depth of water (`waterDepth`).
  *
  * Flat views also get the cell pass at `SUB` samples per cell: where an area's edge crosses a
  * cell, the cell draws the sextant of the samples inside it (glyphs/select.ts `subcellEdge`).
@@ -46,6 +46,7 @@ import {
   SUB,
   WALL_DOUBLE_ROW,
   WALL_SINGLE_ROW,
+  WATER_DEPTH,
   WATER_RIPPLE,
   WATER_STROKE_GLYPHS,
   WaterStroke,
@@ -72,6 +73,7 @@ uniform sampler2D u_baseClass;    // underlying geometry before animated crowns
 uniform sampler2D u_baseAttr;
 uniform sampler2D u_baseId;
 uniform sampler2D u_table;        // MAX_VARIANTS x MAX_CLASSES glyph indices (+ wall rows)
+uniform bool u_waterDepth;        // quality.ts waterDetail
 uniform int u_kind[${MAX_CLASSES}];
 uniform int u_count[${MAX_CLASSES}];
 uniform int u_connect[${MAX_CLASSES}];
@@ -389,6 +391,25 @@ int waterStroke(ivec2 p, ivec2 w) {
   return -1;
 }
 
+// How far a water cell is from its bank (glyphs/select.ts waterDepth).
+float waterDepthAt(ivec2 p) {
+  bool across = isWater(p + ivec2(1, 0)) || isWater(p + ivec2(-1, 0));
+  bool down = isWater(p + ivec2(0, 1)) || isWater(p + ivec2(0, -1));
+  if (!across || !down) return ${float(WATER_DEPTH.thin)};
+  const ivec2 rings[${WATER_DEPTH.rings.length}] = ivec2[${WATER_DEPTH.rings.length}](${WATER_DEPTH.rings
+    .map(([x, y]) => `ivec2(${x}, ${y})`)
+    .join(', ')});
+  for (int ring = 0; ring < ${WATER_DEPTH.rings.length}; ring++) {
+    for (int dy = -1; dy <= 1; dy++) {
+      for (int dx = -1; dx <= 1; dx++) {
+        if ((dx != 0 || dy != 0) && !isWater(p + ivec2(dx, dy) * rings[ring]))
+          return float(ring) / ${float(WATER_DEPTH.rings.length)};
+      }
+    }
+  }
+  return 1.0;
+}
+
 // The height standing in a cell that casts a shadow: buildings, trees and their crowns (not
 // terrain, whose height byte is its band).
 float castsAt(ivec2 q) {
@@ -488,7 +509,8 @@ void main() {
   g_standing = self > 0.0 ? ${STANDING_STATE}.0 : 0.0;
   vec2 shade = cellLight(p, self);
   float light = shade.y;
-  o_shade = vec4(shade, 0.0, 1.0);
+  // Without the water detail, blue stays 1 and the glyph pass doesn't read it.
+  o_shade = vec4(shade, !u_waterDepth ? 1.0 : kind == ${kindCodes.water} ? waterDepthAt(p) : 0.0, 1.0);
   // Shared call sites below, here and for the walls: each call inlines the whole function, and
   // these two dominate this shader's compile time on ANGLE D3D11.
   bool empty = cls == 0 || kind == 0;

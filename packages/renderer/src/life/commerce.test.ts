@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LifeBuilder, LifeLine, MAX_TILE_SHOPS, lifeTransferables } from './geometry';
+import { SHOP_STRIDE } from './lights';
 import { MAX_TILE_AGENTS, VENDORS } from './config';
 import { LifeWorld } from './simulate';
 import { worldTiles } from './testing/scenarios';
@@ -122,7 +123,7 @@ describe('commerce admission', () => {
     }
     const geo = b.finish();
     expect(geo.commerce!.length).toBe(MAX_TILE_SHOPS * 2);
-    expect(geo.shops.length).toBe(MAX_TILE_SHOPS * 3);
+    expect(geo.shops.length).toBe(MAX_TILE_SHOPS * SHOP_STRIDE);
     expect(lifeTransferables(geo)).toContain(geo.commerce!.buffer);
   });
 });
