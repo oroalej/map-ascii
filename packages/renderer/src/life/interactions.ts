@@ -39,8 +39,14 @@ export const INTERACTIONS = {
   terminalQueue: 3,
   /** Begin service only after the vehicle has completed its approach, m/s. */
   arrivalSpeed: 0.1,
-  /** Blend a transit vehicle from its ordinary lane toward the curb over this distance, m. */
+  /**
+   * Blend a transit vehicle from its ordinary lane toward the curb over at least this distance, m;
+   * `curbRun` is the road it takes per metre of that move, m, and `curbTightest` the shortest
+   * it may take, so a smoothstep's steepest slope stays below a vehicle's 15° heading limit.
+   */
   curbBlend: 20,
+  curbRun: 6,
+  curbTightest: 5.6,
   /** Extra distance for selecting an approaching service stop, m. */
   stopPad: 4,
   /** Seconds a vehicle serves a stop, and a customer spends at a stall. */
@@ -67,6 +73,8 @@ type Site = WalkPoint & {
   direction: number;
   stall?: Stall;
   clearingShower?: number;
+  /** How far the stop stands off its road's centre line, m, measured from its nearest segment. */
+  roadGap?: number;
 };
 export type Visit = {
   site: Site;
@@ -115,6 +123,8 @@ type Service = {
   boarded: number;
   arriving: boolean;
   passenger?: Mover;
+  /** Metres from the stop when the service began: the curb move has only this much road. */
+  from?: number;
 };
 export type YieldHooks<Prefix extends unknown[] = []> = {
   contact?: (...args: [...Prefix, mover: Mover, trial?: Mover]) => void;
@@ -200,6 +210,8 @@ export class LocalScenes {
   >();
   private readonly yieldHeld = new WeakSet<Mover>();
   private readonly stopCooldown = new Map<Mover, Site>();
+  /** Metres a vehicle must move sideways to reach the curb; set by the tile that owns it. */
+  curbShift: (m: Mover) => number = () => 0;
   private wet = false;
   private showers = 0;
   private rain = 0;
@@ -366,6 +378,7 @@ export class LocalScenes {
         if (d < best) {
           best = d;
           site.road = line;
+          site.roadGap = d / this.perMeter;
           site.roadWidth = geo.widths[line] || 6;
           site.direction = dx * (site.y - y) - dy * (site.x - x) >= 0 ? 1 : -1;
           site.hx = (dx / length) * site.direction;
@@ -1678,7 +1691,8 @@ export class LocalScenes {
         const modes = TRANSIT_BITS[m.vehicle as keyof typeof TRANSIT_BITS] ?? 0;
         if (!modes || this.services.has(m)) continue;
         const previous = this.stopCooldown.get(m);
-        if (previous && dist(m, previous) > 40 * this.perMeter) this.stopCooldown.delete(m);
+        if (previous && this.fromStop(m, previous) > Math.max(40, this.curbReach(m)))
+          this.stopCooldown.delete(m);
         const velocity = m.v ?? 0;
         const brakingRoom = stoppingReach(
           velocity,
@@ -1693,9 +1707,21 @@ export class LocalScenes {
             !(site.modes & modes) ||
             site.road !== m.line ||
             site.direction !== m.dir ||
-            dist(m, site) >
-              Math.max(15 * this.perMeter, brakingRoom + INTERACTIONS.stopPad * this.perMeter) ||
             ahead(site, m) < brakingRoom
+          )
+            continue;
+          const from = this.fromStop(m, site);
+          if (
+            // Searches come round about once a second, so a vehicle can arrive a second's
+            // travel inside the move's start.
+            from * this.perMeter >
+              Math.max(
+                this.curbReach(m) * this.perMeter,
+                brakingRoom + INTERACTIONS.stopPad * this.perMeter,
+              ) +
+                velocity ||
+            // Too close to steer across to the curb: drive on to the next stop.
+            from < INTERACTIONS.curbTightest * this.curbShift(m)
           )
             continue;
           const services = [...this.services].filter(
@@ -1708,6 +1734,7 @@ export class LocalScenes {
             arriving: true,
             time: between(this.rng, INTERACTIONS.dwell),
             boarded: 0,
+            from,
           });
           break;
         }
@@ -1803,15 +1830,25 @@ export class LocalScenes {
   offsetAt(m: Mover, at: WalkPoint, normal: number, curb: number): number {
     const site = this.curbSite(m);
     if (!site) return normal;
-    const blend = Math.max(0, 1 - dist(at, site) / (INTERACTIONS.curbBlend * this.perMeter));
-    return normal + (curb - normal) * blend;
+    const reach = Math.min(this.curbReach(m), this.services.get(m)?.from ?? Infinity);
+    const u = Math.max(0, 1 - this.fromStop(at, site) / reach);
+    // A smoothstep, so the nose is straight both at the stop and where the move begins.
+    return normal + (curb - normal) * u * u * (3 - 2 * u);
+  }
+  /** Road a curb move takes for this vehicle, m. */
+  private curbReach(m: Mover): number {
+    return Math.max(INTERACTIONS.curbBlend, INTERACTIONS.curbRun * this.curbShift(m));
+  }
+  /** Metres to a stop, not counting how far it stands off the road. */
+  private fromStop(at: WalkPoint, site: WalkPoint & Pick<Site, 'roadGap'>): number {
+    return Math.max(0, dist(at, site) / this.perMeter - (site.roadGap ?? 0));
   }
   get hasCurbScenes(): boolean {
     return this.services.size > 0 || this.stopCooldown.size > 0;
   }
   merging(m: Mover): boolean {
     const site = this.curbSite(m);
-    return !!site && dist(m, site) < INTERACTIONS.curbBlend * this.perMeter;
+    return !!site && this.fromStop(m, site) < this.curbReach(m);
   }
   hidden(m: Mover): boolean {
     return this.visits.get(m)?.state === 'aboard';

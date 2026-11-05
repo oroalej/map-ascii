@@ -142,14 +142,54 @@ export const frontClearance = (length: number): number => length / 2 + FOLLOW.mi
 /** Conservative broad phase for ordinary terminal approaches, m/s and m. */
 export const TERMINAL = { cruise: 12, pad: 4, creep: 1 } as const;
 /**
- * Vehicle terrain recovery: lane slope in m/m; bounded steering and restoring speeds in m/s.
- * Recovery steering can retreat while stopped; road edge allowance for inferred widths is in m.
+ * Vehicle terrain recovery: lane slope in m/m; bounded steering, restoring and reversing speeds
+ * in m/s; road edge allowance for inferred widths in m. A vehicle stopped against something
+ * reverses straight, then steers out; `backoffShift` is the sideways room, m, it plans for when
+ * no side visibly clears the fixed ground, and `room` the road, m, a follower leaves behind a
+ * vehicle working its way out.
  */
-export const ROAD_AVOID = { slope: 0.25, steer: 0.6, restore: 0.4, shoulder: 0.5 } as const;
-/** Passing uses actor-active seconds and metre/m/s limits, with deterministic lane preference. */
-export const LANE = { lateral: 1, gain: 1.5, patience: 2, clear: 30, cooldown: 6 } as const;
-/** Two-wheelers retain a physically clear queue corridor until a safe return. */
-export const FILTER = { enter: 1.5, leave: 4, gain: 3, max: 5, clear: 15, retry: 3 } as const;
+export const ROAD_AVOID = {
+  slope: 0.25,
+  steer: 0.6,
+  restore: 0.4,
+  reverse: 1.2,
+  backoffShift: 1.5,
+  /** Spare road when planning a reverse, m, and how far ahead of it to check it is clear, m. */
+  backoffPad: 1.5,
+  backoffLook: [0.5, 3, 6, 10],
+  room: 6,
+  shoulder: 0.5,
+} as const;
+/**
+ * Passing uses actor-active seconds and metre/m/s limits, with deterministic lane preference.
+ * `lateral` is the peak sideways speed of a lane change, m/s; `comfort` its sideways
+ * acceleration, m/s² (lane-steer.ts); `rolling` the lead speed, m/s, under which a leader
+ * no longer opens the road a vehicle needs to steer out; `yieldAfter` the seconds a vehicle
+ * between lanes stays refused before it gives way at a junction.
+ */
+export const LANE = {
+  lateral: 1.5,
+  comfort: 1,
+  rolling: 0.5,
+  yieldAfter: 1.5,
+  gain: 1.5,
+  patience: 2,
+  clear: 30,
+  cooldown: 6,
+} as const;
+/**
+ * Two-wheelers retain a physically clear queue corridor until a safe return. Above `max` m/s a
+ * rider commits only within `reach` m of the queue, so it brakes as it steers out.
+ */
+export const FILTER = {
+  enter: 1.5,
+  leave: 4,
+  gain: 3,
+  max: 5,
+  reach: 25,
+  clear: 15,
+  retry: 3,
+} as const;
 /**
  * Out of view, a vehicle leaves once fixed obstacles have stopped it this many seconds in a row,
  * or the movement guard has refused it for any reason this long.
@@ -208,25 +248,35 @@ export const RECOVERY = {
 export const COS20 = Math.cos(Math.PI / 9),
   COS30 = Math.cos(Math.PI / 6);
 
-/** m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
+/**
+ * m/s²: acceleration, comfortable braking, routine braking limit, lateral acceleration.
+ * `turnRadius` is the tightest circle it steers at a crawl, m; `sway` scales how hard it may
+ * lean into a lane change (lane-steer.ts), so a rider threads a queue a car could not.
  * Safety caps may exceed maxBrake to prevent overlap or overshoot. */
-export type Kinematics = { accel: number; brake: number; maxBrake: number; lateral: number };
+export type Kinematics = {
+  accel: number;
+  brake: number;
+  maxBrake: number;
+  lateral: number;
+  turnRadius: number;
+  sway?: number;
+};
 export const KINEMATICS: Readonly<Record<string, Kinematics>> = {
-  default: { accel: 1.5, brake: 2.5, maxBrake: 5, lateral: 2 },
-  car: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5 },
-  motorcycle: { accel: 2.5, brake: 3.5, maxBrake: 7, lateral: 3 },
-  tricycle: { accel: 1.2, brake: 2.5, maxBrake: 5, lateral: 1.8 },
-  jeepney: { accel: 1, brake: 2, maxBrake: 5, lateral: 1.5 },
-  bus: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
-  truck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
-  bicycle: { accel: 1, brake: 2, maxBrake: 4, lateral: 2 },
-  rowboat: { accel: 0.3, brake: 0.4, maxBrake: 0.8, lateral: 1 },
-  motorboat: { accel: 0.8, brake: 0.8, maxBrake: 1.5, lateral: 1.5 },
-  banca: { accel: 0.5, brake: 0.6, maxBrake: 1.2, lateral: 1.2 },
-  locomotive: { accel: 0.8, brake: 0.9, maxBrake: 1.5, lateral: 1 },
-  ambulance: { accel: 1.6, brake: 2.5, maxBrake: 5.5, lateral: 2 },
-  police: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5 },
-  firetruck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3 },
+  default: { accel: 1.5, brake: 2.5, maxBrake: 5, lateral: 2, turnRadius: 6 },
+  car: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5, turnRadius: 5.5 },
+  motorcycle: { accel: 2.5, brake: 3.5, maxBrake: 7, lateral: 3, turnRadius: 3, sway: 2.5 },
+  tricycle: { accel: 1.2, brake: 2.5, maxBrake: 5, lateral: 1.8, turnRadius: 4 },
+  jeepney: { accel: 1, brake: 2, maxBrake: 5, lateral: 1.5, turnRadius: 8 },
+  bus: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3, turnRadius: 10 },
+  truck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3, turnRadius: 10 },
+  bicycle: { accel: 1, brake: 2, maxBrake: 4, lateral: 2, turnRadius: 3, sway: 2.5 },
+  rowboat: { accel: 0.3, brake: 0.4, maxBrake: 0.8, lateral: 1, turnRadius: 10 },
+  motorboat: { accel: 0.8, brake: 0.8, maxBrake: 1.5, lateral: 1.5, turnRadius: 15 },
+  banca: { accel: 0.5, brake: 0.6, maxBrake: 1.2, lateral: 1.2, turnRadius: 15 },
+  locomotive: { accel: 0.8, brake: 0.9, maxBrake: 1.5, lateral: 1, turnRadius: 100 },
+  ambulance: { accel: 1.6, brake: 2.5, maxBrake: 5.5, lateral: 2, turnRadius: 6 },
+  police: { accel: 2, brake: 3, maxBrake: 6, lateral: 2.5, turnRadius: 5.5 },
+  firetruck: { accel: 0.8, brake: 1.8, maxBrake: 4.5, lateral: 1.3, turnRadius: 10 },
 };
 export const kinematicsOf = (craft?: string): Kinematics =>
   KINEMATICS[craft ?? ''] ?? KINEMATICS.default!;

@@ -100,8 +100,9 @@ it('retains physical yaw through accepted vehicle retreat and refused retries', 
   const start = car.x;
   let retreats = 0;
   for (let frame = 0; frame < 12; frame++) {
-    life.step(1 / 30, undefined, undefined, undefined, undefined, (next, before) => {
+    life.step(1 / 30, undefined, undefined, undefined, undefined, (next, before, _, reject) => {
       const fits = !!before && next.x < before.x - 1e-8;
+      if (!fits) reject?.('terrain');
       if (fits) {
         retreats++;
         expect((before.x - next.x) / pm).toBeLessThanOrEqual(car.speed / pm / 30);
@@ -1114,9 +1115,8 @@ it.each([
     life.movers.push(m);
     expect(blocked.hits(life.groundBodies(m))).toBe(false);
     expect(life.offsetOf(m)).toBeCloseTo(-(3 - VEHICLES.car.width / 2 + ROAD_AVOID.shoulder));
-    // Main permits the outer shoulder; clearing it and restoring the lane takes
-    // longer than the former narrower envelope. Keep the physical pace bound.
-    for (let frame = 0; frame < 300; frame++) {
+    // It reverses clear of the obstruction before it can steer past, then restores its lane.
+    for (let frame = 0; frame < 750; frame++) {
       const before = life.pose(m);
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
       const after = life.pose(m);
@@ -1222,7 +1222,7 @@ it.each([false, true])(
     life.movers.push(m);
     // Measure the accepted detour before main restores the original seeded lane.
     let farthestShift = -Infinity;
-    for (let frame = 0; frame < 300; frame++) {
+    for (let frame = 0; frame < 900; frame++) {
       const before = life.pose(m);
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
       const after = life.pose(m);
@@ -1496,8 +1496,8 @@ it.each([false, true])(
     life.movers.push(m);
     let backward = false;
     let closestShift = Infinity;
-    // Checked nose alignment adds a short approach while keeping the same physical pace.
-    for (let frame = 0; frame < 18 * 30; frame++) {
+    // Backing off and steering out adds a manoeuvre while keeping the same physical pace.
+    for (let frame = 0; frame < 40 * 30; frame++) {
       const before = life.pose(m),
         x = m.x;
       world.step(1 / 30, undefined, 17, undefined, undefined, undefined, 2.9);
@@ -1514,7 +1514,7 @@ it.each([false, true])(
     }
     if (reactive) {
       expect(backward).toBe(true);
-      expect(closestShift).toBeLessThan(-2.8);
+      expect(closestShift).toBeLessThan(-1.5);
     }
     expect((m.x - 1000) / pm).toBeGreaterThan(85);
   },

@@ -190,7 +190,8 @@ it.each([
     if (release === 'cleared')
       for (const fixture of [f, plain])
         fixture.life.movers.splice(fixture.life.movers.indexOf(fixture.human), 1);
-    for (let i = 0; i < (release === 'cleared' ? 100 : 180); i++) {
+    // It backs off and tries steering out before it gives up and turns round.
+    for (let i = 0; i < 400 && !recover.mock.calls.length; i++) {
       f.step();
       plain.step();
     }
