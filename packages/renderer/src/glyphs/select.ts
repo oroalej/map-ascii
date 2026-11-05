@@ -2,7 +2,6 @@
  * Glyph selection rules (ARCHITECTURE.md §4). The select shader (`shaders/select.ts`) implements
  * the same formulas on the GPU; these CPU versions build its lookup tables and are unit-tested.
  */
-import { ROOF_BUILDING_CLASSES } from '@atlas/shared';
 import { combineWind, type CursorWind } from '../life/cursor-wind';
 import {
   classId,
@@ -13,6 +12,7 @@ import {
   PavingVariant,
   pavingOverrideBase,
   renderClasses,
+  roofClasses,
   type RenderClass,
 } from '../classes';
 import {
@@ -152,7 +152,7 @@ export const SUB = { cols: 2, rows: 3 } as const;
 
 /** Classes whose edges are drawn with sextants: areas, not lines or markers. */
 export const subcellClasses: readonly RenderClass[] = [
-  ...ROOF_BUILDING_CLASSES,
+  ...roofClasses,
   'building_part',
   'building_woodwork',
   'water_area',

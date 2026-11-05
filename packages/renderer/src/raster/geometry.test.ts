@@ -2122,3 +2122,34 @@ it('emits field footprints and drying strips only for a harvest city or folklore
     drying: undefined,
   });
 });
+
+describe('building use', () => {
+  const build = (properties: TileFeatureLike['properties']) =>
+    buildTileGeometry(
+      {
+        buildings: layer([
+          feature(3, { class: 'building', height: 6, id: 'way/1', ...properties }, [
+            square(100, 100, 400),
+          ]),
+        ]),
+      },
+      createIdRegistry(),
+      { z: 16, x: 55192, y: 30266 },
+    );
+
+  it('draws a daytime kind in its own class, and keeps every other result the same', () => {
+    const school = build({ kind: 'building=school' });
+    const home = build({ kind: 'building=yes' });
+    const untagged = build({});
+    expect(vertices(school.fills).map((v) => v.cls)).toContain(classId('building_daytime'));
+    expect(vertices(school.fills).map((v) => v.cls)).not.toContain(classId('building'));
+    for (const other of [home, untagged])
+      expect(vertices(other.fills).every((v) => v.cls === classId('building'))).toBe(true);
+    const shape = (g: typeof school) =>
+      vertices(g.fills).map(({ x, y, height, flags }) => ({ x, y, height, flags }));
+    expect(shape(school)).toEqual(shape(home));
+    expect(lifeTransferables(school.life).length).toBe(lifeTransferables(home.life).length);
+    expect(school.life.obstacles).toEqual(home.life.obstacles);
+    expect(school.life.places).toEqual(home.life.places);
+  });
+});

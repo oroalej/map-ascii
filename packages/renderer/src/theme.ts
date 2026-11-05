@@ -297,6 +297,7 @@ function makeTheme(background: number, c: Palette): Theme {
       path: { kind: 'road', glyphs: pathLine, color: c.path },
       rail: { kind: 'road', glyphs: railLine, color: c.rail },
       building: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
+      building_daytime: { kind: 'building', glyphs: buildingRamp, color: c.building, fill: 0.22 },
       building_religious: {
         kind: 'building',
         glyphs: buildingRamp,
@@ -520,6 +521,7 @@ export const CLASS_LABELS: Readonly<Record<RenderClass, string>> = {
   path: 'Path or alley',
   rail: 'Railway',
   building: 'Building',
+  building_daytime: 'Building',
   building_religious: 'Place of worship',
   building_school: 'School',
   building_hospital: 'Hospital',

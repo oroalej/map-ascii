@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CellBit, cellBits } from './life/config';
-import { seeThroughMask, subcellAreas } from './glyphs/select';
+import { seeThroughMask, seeThrough, subcellAreas } from './glyphs/select';
+import { CLASS_LABELS, themes } from './theme';
+import { legendEntries } from './legend';
 import {
+  cellClassName,
   classDepths,
   classesIn,
   classId,
@@ -48,7 +51,7 @@ it('admits heightless building grounds above id 31 without admitting roads or ma
   for (const cls of ['road_major', 'road_mid', 'road_minor', 'marker_station', 'marker_hospital'])
     expect(flags[classId(cls)]).toBe(0);
   expect(flags[0]).toBe(0);
-  expect(Array.from(flags).filter(Boolean)).toHaveLength(6);
+  expect(Array.from(flags).filter(Boolean)).toHaveLength(7);
 });
 
 it('limits paving overrides to surfaces below the planting tier', () => {
@@ -151,4 +154,49 @@ it('allows crown overlap on roads and compares every roof class, including ids a
     expect(surfaces[classId(cls)]).toBe(2);
   for (const cls of ['water_river', 'marker_landmark', 'tree', 'trees', 'grass'])
     expect(surfaces[classId(cls)]).toBe(0);
+});
+
+describe('building_daytime', () => {
+  const daytime = classId('building_daytime');
+  const building = classId('building');
+
+  it('matches `building` in every class table', () => {
+    const tables: [string, ArrayLike<number>][] = [
+      ['depth', classDepths()],
+      ['visibility at 12', classVisibility(12)],
+      ['visibility at 17', classVisibility(17)],
+      ['ground', groundFlags()],
+      ['crown surface', crownSurfaces()],
+      ['subcell', subcellAreas()],
+      ['cell bits', cellBits()],
+    ];
+    for (const [name, table] of tables) expect(table[daytime], name).toBe(table[building]);
+    expect(seeThrough).not.toContain('building_daytime');
+    expect(CLASS_LABELS.building_daytime).toBe(CLASS_LABELS.building);
+  });
+
+  it('has the style of `building` in both themes', () => {
+    for (const theme of Object.values(themes))
+      expect(theme.styles.building_daytime).toEqual(theme.styles.building);
+  });
+
+  it('shares the legend entry of `building`', () => {
+    const entries = legendEntries('dark', 17, ['building', 'building_daytime']);
+    const matching = entries.filter((e) => e.id === 'class:building');
+    expect(matching).toHaveLength(1);
+    expect(matching[0]!.classes).toEqual(expect.arrayContaining(['building', 'building_daytime']));
+    expect(entries.some((e) => e.id === 'class:building_daytime')).toBe(false);
+  });
+
+  it('applies only to the pipeline class `building` of a daytime kind', () => {
+    for (const kind of ['school', 'college', 'university', 'commercial'])
+      expect(cellClassName('building', `building=${kind}`)).toBe('building_daytime');
+    for (const kind of ['retail', 'office', 'public', 'industrial'])
+      expect(cellClassName('building', `building=${kind}`)).toBe('building_daytime');
+    expect(cellClassName('building', 'building=yes')).toBe('building');
+    expect(cellClassName('building', 'amenity=restaurant')).toBe('building');
+    expect(cellClassName('building', undefined)).toBe('building');
+    expect(cellClassName('building_school', 'building=school')).toBe('building_school');
+    expect(cellClassName('park', 'building=school')).toBe('park');
+  });
 });

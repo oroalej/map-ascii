@@ -4,7 +4,6 @@
  */
 import {
   LAMP_PLACEMENT,
-  ROOF_BUILDING_CLASSES,
   curveAt,
   districtFactor,
   hasDistricts,
@@ -22,7 +21,14 @@ import {
   type HarvestNow,
   type CropStage,
 } from '@atlas/shared';
-import { classId, groundClasses, MAX_CLASSES, renderClasses, type LifeClass } from '../classes';
+import {
+  classId,
+  groundClasses,
+  MAX_CLASSES,
+  renderClasses,
+  roofClasses,
+  type LifeClass,
+} from '../classes';
 import { LifeLine } from './geometry';
 import { VEHICLES } from './vehicles';
 
@@ -938,7 +944,7 @@ export const agentBit: Readonly<Record<AgentKind, number>> = {
 
 const roads = ['road_major', 'road_mid', 'road_minor'];
 const water = ['water_river', 'water_stream', 'water_area', 'water_sea'];
-const lit: readonly string[] = ROOF_BUILDING_CLASSES;
+const lit: readonly string[] = roofClasses;
 /** Where people can't stand: roofs, water, and walls. */
 const noWalking = new Set([
   ...lit,

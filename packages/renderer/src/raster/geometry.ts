@@ -54,6 +54,7 @@ import {
   type RoofSurfaceFrame,
 } from './roofs';
 import {
+  cellClassName,
   classId,
   Flags,
   Marking,
@@ -952,7 +953,7 @@ export function buildTileGeometry(
     for (let f = 0; f < layer.length; f++) {
       const feature = layer.feature(f);
       const className = String(feature.properties.class ?? '');
-      const cls = classId(className);
+      const cls = classId(cellClassName(className, feature.properties.kind));
       if (cls === 0) continue;
       const isRegion = feature.properties.region === true;
       const { fills, lines, points } = isRegion ? regional : main;
