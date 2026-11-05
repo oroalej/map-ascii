@@ -26,6 +26,7 @@ import {
 import { DOG_LENGTH_M, dogFit, dogGlyph, dogInk } from './dogs';
 import { CAT_LENGTH_M, catGlyph, catInk } from './cats';
 import { castGroundShadows } from './ground-shadows';
+import { drawWakes } from './wakes';
 import { headingOf, type Heading } from './masters';
 import {
   FIGURE_HEIGHT_M,
@@ -66,10 +67,10 @@ import {
 } from './group-placement';
 import {
   fineplanFor,
-  LINE_GLYPHS,
   miniSector,
   PART_GLYPHS,
   planPart,
+  stepGlyph,
   planPartIn,
   SILHOUETTE_MIN_CELLS,
   STAMP_MIN_CELLS,
@@ -318,6 +319,8 @@ export type LifePackMetadata = {
   throngCells?: number[];
   /** Color vehicles sextant by sextant (life/parts-layer.ts); without it, one color per cell. */
   parts?: LifePartsTarget;
+  /** Trail wakes behind moving boats (life/wakes.ts, quality.ts `waterDetail`). */
+  wakes?: boolean;
 };
 
 /** Every complete texel write also replaces its frame-local owner. */
@@ -705,6 +708,7 @@ export function packLife(
         bodySun,
         glyphs.sextants,
       );
+    if (metadata.wakes) drawWakes(out, grid, agents, glyphIndex);
     drawPuffs(out, grid, puffs, glyphIndex, stampedVehicles);
     return drawn;
   } finally {
@@ -2262,15 +2266,7 @@ function drawLine(
     // The step on to the next cell (from the one before, at the end); rows count down.
     const [nc, nr] = path[k + 1] ?? [2 * c - path[k - 1]![0], 2 * r - path[k - 1]![1]];
     const [dc, dr] = [nc - c, nr - r];
-    const glyph =
-      dr === 0
-        ? LINE_GLYPHS.across
-        : dc === 0
-          ? LINE_GLYPHS.upDown
-          : dc * dr < 0
-            ? LINE_GLYPHS.rising
-            : LINE_GLYPHS.falling;
-    marks.push({ at, glyph: glyphIndex(glyph) });
+    marks.push({ at, glyph: glyphIndex(stepGlyph(dc, dr)) });
   });
   marks.forEach(({ at, glyph }, k) => {
     const tip = line.tip && k === marks.length - 1 ? line.tip : undefined;

@@ -179,6 +179,7 @@ import {
   usableLines,
   VENDORS,
   COMMERCE,
+  boatWake,
   type AgentKind,
   type PlaceBehavior,
 } from './config';
@@ -9196,6 +9197,8 @@ export type VisibleAgent = {
   lat: number;
   /** A point 1 m ahead, for the heading on screen (movers only). */
   ahead?: [number, number];
+  /** A moving boat's wake, 0–1 by its speed (life/wakes.ts); absent when it leaves none. */
+  wake?: number;
   /**
    * Vehicles and boats: a point 1 m to the right, for their width on screen; their kind and
    * paint; and whether it is parked (lamps off).
@@ -13825,6 +13828,10 @@ export class LifeWorld {
                 : undefined,
             flap: 0,
           };
+          if (m.kind === 'boat') {
+            const wake = boatWake(zoom, (m.v ?? m.speed) / perMeter, m.pause > 0);
+            if (wake !== undefined) agent.wake = wake;
+          }
           if (lamps) agent.lamps = lamps;
           if (m.emergency) {
             if (emergencyParked(m)) agent.parked = true;

@@ -21,6 +21,7 @@ export function themeUniforms(theme: Theme) {
     waterBank: rgb(theme.waterBank),
     waterDeep: rgb(theme.waterDeep),
     waterGlint: rgb(theme.waterGlint),
+    waterFoam: rgb(theme.waterFoam),
   };
 }
 export type ThemeUniforms = ReturnType<typeof themeUniforms>;

@@ -15,6 +15,8 @@ import {
   UMBRELLA,
   UMBRELLA_MOTION,
   VENDORS,
+  WAKE,
+  boatWake,
 } from './config';
 import { BirdPose, Habitat } from './birds';
 import { DOG_PAINTS } from './dogs';
@@ -1040,6 +1042,40 @@ describe('vehicles and boats', () => {
     const boats = life.movers.filter((m) => m.kind === 'boat');
     expect(boats.length).toBeGreaterThan(0);
     expect(boats.every((m) => m.vehicle === 'banca')).toBe(true);
+  });
+
+  it('gives a moving boat a wake by its speed, from its own zoom, and nothing else one', () => {
+    const life = geometry([[LifeLine.river, [[0, 2048], [4095, 2048]]]], [], []);
+    const world = new LifeWorld({ river: { banca: 1 } });
+    world.sync([{ key: '16/55192/30266', tile, life }]);
+    world.step(0.1);
+    const center = tileToLngLat(tile, { x: 2048, y: 2048 });
+    const boats = (zoom: number) => world.visible(zoom, 1, center).filter((a) => a.kind === 'boat');
+    expect(boats(16).length).toBeGreaterThan(0);
+    for (const boat of boats(16)) {
+      expect(boat.wake).toBeGreaterThan(0);
+      expect(boat.wake).toBeLessThanOrEqual(1);
+    }
+    expect(boats(WAKE.zoom.min).every((boat) => boat.wake !== undefined)).toBe(true);
+    // Boats show from further out than their wakes do.
+    expect(boats(14).length).toBeGreaterThan(0);
+    expect(boats(14).every((boat) => boat.wake === undefined)).toBe(true);
+    expect(
+      world
+        .visible(18, 1, center)
+        .filter((a) => a.kind !== 'boat')
+        .every((a) => a.wake === undefined),
+    ).toBe(true);
+  });
+
+  it('gives a boat no wake when slow, held or too far out', () => {
+    expect(boatWake(16, 1, false)).toBeCloseTo(1 / WAKE.fullSpeed);
+    expect(boatWake(16, 99, false)).toBe(1);
+    expect(boatWake(WAKE.zoom.min, 1, false)).toBeDefined();
+    expect(boatWake(WAKE.zoom.min - 0.01, 1, false)).toBeUndefined();
+    expect(boatWake(16, WAKE.minSpeed, false)).toBeUndefined();
+    expect(boatWake(16, 0, false)).toBeUndefined();
+    expect(boatWake(16, 2, true)).toBeUndefined();
   });
 
   /** A tile holding only the given vehicles on a road running east. */

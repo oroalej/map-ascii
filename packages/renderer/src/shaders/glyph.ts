@@ -28,6 +28,7 @@ import {
   GROUND_SHADOW,
   LIFE_GROUND_SHADOW,
   LIFE_SHADOW,
+  LIFE_WAKE,
   WINDOW_GROUP_OF,
 } from '../life/config';
 import { FOCUS_DIM, LIFE_FOCUS_BIT } from '../focus';
@@ -270,6 +271,7 @@ uniform bool u_waterDepth;
 uniform vec3 u_waterBank;
 uniform vec3 u_waterDeep;
 uniform vec3 u_waterGlint;
+uniform vec3 u_waterFoam;
 uniform float u_sunGlint;
 uniform bool u_fish;
 uniform ivec2 u_fishWater;
@@ -1013,6 +1015,8 @@ void main() {
       }
     }
   }
+  // A boat's wake, on water only (life/wakes.ts); any other cell ignores the texel.
+  bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};
   int lifeClass = int(life.g * 255.0 + 0.5) & 63;
   bool crowdCell=false,crowdInk=false;
   if(u_hasCrowdMask) {
@@ -1096,6 +1100,7 @@ void main() {
     // Fish only in rivers and ponds; rain splashes on any water, below boats and labels.
     int effect = waterEffect(cell, cls == u_fishWater.x || cls == u_fishWater.y);
     if (effect >= 0) glyph = u_waterGlyphs[effect];
+    if (wakeCell) glyph = int(life.r * 255.0 + 0.5) + 256 * (int(life.g * 255.0 + 0.5) >> 6);
   }
   ivec2 slot = ivec2(glyph % u_columns, glyph / u_columns) * ivec2(u_cell);
   float coverage = texelFetch(u_atlas, slot + inCell, 0).r;
@@ -1171,6 +1176,8 @@ void main() {
   // A sub-cell edge draws the feature's part in a tone between its fill and its glyphs, so the
   // shape reads as one area with a crisp rim.
   if (waterTones && water) color = waterToned(color, shadeTexel.b, ${float(WATER_DEPTH.ink)});
+  // Foam keeps its color under cloud, and dims only with the night.
+  if (wakeCell) color = mix(color, u_waterFoam * (1.0 - 0.6 * night), 0.75);
   if (edge) color = mix(fillOf(cls, color), color, ${EDGE_INK});
   color *= shade;
   if (u_focus) {

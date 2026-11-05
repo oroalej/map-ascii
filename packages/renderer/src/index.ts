@@ -1544,6 +1544,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           }
         : undefined,
       knobs.lifeDetail,
+      knobs.waterDetail,
     );
     lifeShown = agents.length > 0 || !!crowdEvent;
     lifeAgents = agents;

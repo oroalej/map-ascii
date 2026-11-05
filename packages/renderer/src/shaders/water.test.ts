@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GLINT } from '../glyphs/select';
+import { LIFE_WAKE } from '../life/config';
 import { themes } from '../theme';
 import { glyphFragmentFor } from './glyph';
 import { selectFragment } from './select';
@@ -30,6 +31,15 @@ describe('sun glint', () => {
     let sum = 0;
     for (let i = 0; i < 256; i++) sum += smooth((i / 255 - 0.45) / 0.4);
     expect((sum / 256) * GLINT.patchGain).toBeCloseTo(1, 1);
+  });
+});
+
+describe('wakes', () => {
+  it('draws only on water, behind the detail gate', () => {
+    const source = glyphFragmentFor();
+    expect(source).toContain(`bool wakeCell = u_waterDepth && water && shadowByte == ${LIFE_WAKE};`);
+    expect(source).toContain('if (wakeCell) glyph = ');
+    expect(source).toContain('if (wakeCell) color = mix(color, u_waterFoam');
   });
 });
 

@@ -809,6 +809,8 @@ export function lifePass(
   },
   /** Color agents sextant by sextant (quality.ts `lifeDetail`). */
   detail = false,
+  /** Trail wakes behind moving boats (quality.ts `waterDetail`). */
+  wakes = false,
 ): number {
   const { cols, rows } = targets;
   const buffers = texels(targets);
@@ -839,6 +841,7 @@ export function lifePass(
         bounds?.right,
         bounds?.bottom,
         detail,
+        wakes,
       ]
     : undefined;
   if (
@@ -915,6 +918,7 @@ export function lifePass(
       throngMask: buffers.crowdMask,
       throngCells: buffers.crowdCells,
       parts: lifeParts,
+      wakes,
     },
     puffs,
   );
@@ -1372,6 +1376,7 @@ export function glyphPass(
     u_waterBank: themeRes.uniforms.waterBank,
     u_waterDeep: themeRes.uniforms.waterDeep,
     u_waterGlint: themeRes.uniforms.waterGlint,
+    u_waterFoam: themeRes.uniforms.waterFoam,
     u_fish: !!weather.fish && !reducedMotion,
     u_fishWater: fishWater,
     u_waterGlyphs: themeRes.map.waterGlyphs,

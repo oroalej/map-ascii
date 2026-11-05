@@ -692,6 +692,35 @@ export const GROUND_SHADOW = {
 export const LIFE_GROUND_SHADOW = 2;
 
 /**
+ * A boat's wake (life/wakes.ts): a life texel with no agent bit whose last byte is this draws its
+ * glyph as foam on water cells; land cells ignore it (shaders/glyph.ts).
+ */
+export const LIFE_WAKE = 3;
+
+/**
+ * Boat wakes: the zoom they start at, the speeds a boat has none below and its longest at (m/s),
+ * each arm's angle from straight behind (degrees), its length by craft (m), the share of that a
+ * slow boat keeps, its limits in cells, and how many boats get one per frame.
+ */
+export const WAKE = {
+  zoom: { min: 15 },
+  minSpeed: 0.3,
+  fullSpeed: 2.5,
+  angle: 18,
+  length: { rowboat: 4, banca: 9, motorboat: 14 },
+  baseLength: 0.4,
+  minCells: 2,
+  maxCells: 20,
+  maxPerFrame: 64,
+} as const;
+
+/** A boat's wake at `zoom`, 0–1 by its speed in m/s; none when it is slow, held, or too far out. */
+export const boatWake = (zoom: number, speed: number, held: boolean): number | undefined =>
+  held || zoom < WAKE.zoom.min || speed <= WAKE.minSpeed
+    ? undefined
+    : Math.min(1, speed / WAKE.fullSpeed);
+
+/**
  * How much of each kind is out at a time of day (`daylight`, 0 night – 1 day, life/sun.ts):
  * fewer people and cars at night, and birds roost after dusk. Each agent has a fixed rank in
  * 0–1 and shows while its rank is below this.
