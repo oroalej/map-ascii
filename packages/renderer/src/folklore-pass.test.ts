@@ -72,9 +72,20 @@ const figure = (over: Partial<FolklorePacket['sprites'][number]> = {}) => ({
 const under = (code: number) => Math.floor(code / 64) - 1;
 it('draws only the ghosts while the sheet is on its way', async () => {
   const draw = vi.fn();
-  const gl = new Proxy({ drawArraysInstanced: draw }, {
-    get: (target, key) => (target[key as string] ??= vi.fn(() => ({}))),
-  }) as unknown as GL;
+  const methods = new Map<string | symbol, unknown>([['drawArraysInstanced', draw]]);
+  const gl = new Proxy(
+    {},
+    {
+      get: (_, key) => {
+        if (!methods.has(key))
+          methods.set(
+            key,
+            vi.fn(() => ({})),
+          );
+        return methods.get(key);
+      },
+    },
+  ) as unknown as GL;
   const p = {} as Programs;
   const theme = {
     map: { atlas: { index: () => 416, columns: 16 }, atlasTex: {} },
