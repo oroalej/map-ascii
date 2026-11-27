@@ -83,3 +83,16 @@ export function onSeam(along: number, dotMeters: number): boolean {
   const pitch = seamPitch(dotMeters);
   return along - Math.floor(along / pitch) * pitch < dotMeters;
 }
+
+/**
+ * Ground surfaces on the fine cell steps (shaders/glyph.ts `groundTexture`): paving shows slab
+ * joints `slab` m apart (never closer than `minDots` dots) at `jointLight`, and carriageways an
+ * asphalt grain, `grain` of their dots at `grainLight`.
+ */
+export const GROUND_TEXTURE = {
+  slab: 1.2,
+  minDots: 4,
+  jointLight: 0.82,
+  grain: 0.06,
+  grainLight: 0.84,
+} as const;

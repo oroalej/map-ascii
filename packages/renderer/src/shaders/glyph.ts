@@ -60,7 +60,7 @@ import {
   WIND_SHIFT,
 } from '../glyphs/select';
 import { CellState } from '../picking';
-import { ROOF_TEXTURE, RoofCode } from '../glyphs/roofs';
+import { GROUND_TEXTURE, ROOF_TEXTURE, RoofCode } from '../glyphs/roofs';
 import { LABEL_BOX } from '../labels';
 import { RAIN } from '../life/wind';
 import { MIST, SKY, skyNoiseGlsl } from '../life/sky';
@@ -919,6 +919,24 @@ float roofTexture(vec4 attr, ivec2 cell, vec2 grid) {
   return float(h & 1023u) / 1024.0 < ${float(ROOF_TEXTURE.speckle)} ? ${float(ROOF_TEXTURE.speckleLight)} : 1.0;
 }
 
+// Open ground on the fine steps (glyphs/roofs.ts GROUND_TEXTURE): the share of its light a pixel
+// of paving or carriageway keeps.
+float groundTexture(int cls, vec2 grid) {
+  if (u_meterStep.x <= 0.0) return 1.0;
+  vec2 dotM = max(u_dither, 1.0) / u_cell * u_meterStep;
+  vec2 m = u_meterOrigin + grid / u_cell * u_meterStep;
+  if (cls == ${classId('paving')}) {
+    vec2 slab = max(vec2(${float(GROUND_TEXTURE.slab)}), ${float(GROUND_TEXTURE.minDots)} * dotM);
+    vec2 inSlab = m - floor(m / slab) * slab;
+    return inSlab.x < dotM.x || inSlab.y < dotM.y ? ${float(GROUND_TEXTURE.jointLight)} : 1.0;
+  }
+  if (cls == ${classId('road_major')} || cls == ${classId('road_mid')} || cls == ${classId('road_minor')}) {
+    uint h = cellHash(ivec2(floor(m / dotM)));
+    return float(h & 1023u) / 1024.0 < ${float(GROUND_TEXTURE.grain)} ? ${float(GROUND_TEXTURE.grainLight)} : 1.0;
+  }
+  return 1.0;
+}
+
 void mapMain();
 
 // Labels sit on top of the finished map. Their box dims the map instead of hiding it, and only
@@ -1264,6 +1282,7 @@ void mapMain() {
     color *= roofLight;
     back *= roofLight;
   }
+  if (u_dither > 0.0 && !edge) back *= groundTexture(cls, grid);
   if (u_dither > 0.0) coverage = step(ditherThreshold(grid), coverage);
   o_color = vec4(${misted('rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell)')}, 1.0);
 }
