@@ -77,6 +77,12 @@ export function labelCellShows(id: number, k: number, vis: number): boolean {
 export const OVERLAY_NONE = 0;
 export const OVERLAY_BLANK = 1;
 
+/**
+ * How a label's box sits on the map (shaders/glyph.ts): the map under it keeps `dim` of its
+ * light, and background fills `rim` CSS px around each stroke.
+ */
+export const LABEL_BOX = { dim: 0.4, rim: 1.5 } as const;
+
 /** The overlay grid (the same size as the cell grid) and what has been placed on it. */
 export type Overlay = {
   /** Street names placed whole and rotated with their street (`rotatedLabelVertices`). */

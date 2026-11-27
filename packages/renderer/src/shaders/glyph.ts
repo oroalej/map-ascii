@@ -60,6 +60,7 @@ import {
   WIND_SHIFT,
 } from '../glyphs/select';
 import { CellState } from '../picking';
+import { LABEL_BOX } from '../labels';
 import { RAIN } from '../life/wind';
 import { MIST, SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
@@ -868,7 +869,39 @@ vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   return u_accent * halo * 0.18 * focusPulse();
 }
 
+// A label's ink at a pixel of its own coarser grid (density.ts): x the ink, y 1 inside a label's
+// box (its text cells and their one-cell margin).
+vec2 labelInk(vec2 labelGrid) {
+  ivec2 labelCell = ivec2(floor(labelGrid / u_labelCell));
+  vec4 over = texelFetch(u_overlay, labelCell, 0);
+  int code = int(over.r * 255.0 + 0.5) + 256 * int(over.g * 255.0 + 0.5);
+  if (code == 0) return vec2(0.0);
+  int index = code - 1;
+  ivec2 at = ivec2(index % u_labelColumns, index / u_labelColumns) * ivec2(u_labelCell);
+  ivec2 inLabel = ivec2(labelGrid - vec2(labelCell) * u_labelCell);
+  return vec2(texelFetch(u_labelAtlas, at + inLabel, 0).r, 1.0);
+}
+
+void mapMain();
+
+// Labels sit on top of the finished map. Their box dims the map instead of hiding it, and only
+// a rim around each stroke is solid background, so the ground stays readable under a name.
 void main() {
+  mapMain();
+  vec2 labelGrid = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y) + u_labelShift;
+  vec2 label = labelInk(labelGrid);
+  if (label.y == 0.0) return;
+  float rim = 0.0;
+  float reach = ${float(LABEL_BOX.rim)} * u_dpr;
+  for (int i = 0; i < 8; i++) {
+    float angle = float(i) * ${float(Math.PI / 4)};
+    rim = max(rim, labelInk(labelGrid + reach * vec2(cos(angle), sin(angle))).x);
+  }
+  vec3 under = mix(o_color.rgb * ${float(LABEL_BOX.dim)}, u_background, rim);
+  o_color = vec4(mix(under, u_labelColor, label.x), 1.0);
+}
+
+void mapMain() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
   vec2 grid = screen + u_shift;
   ivec2 cell = ivec2(floor(grid / u_cell));
@@ -877,20 +910,6 @@ void main() {
   ivec2 subAt = cell * sub + clamp(ivec2(vec2(inCell) / u_cell * vec2(sub)), ivec2(0), sub - 1);
   pixelSub = subAt;
 
-  // Labels sit on top, on their own coarser grid (density.ts); their cells show the
-  // background, which gives them a halo.
-  vec2 labelGrid = screen + u_labelShift;
-  ivec2 labelCell = ivec2(floor(labelGrid / u_labelCell));
-  vec4 over = texelFetch(u_overlay, labelCell, 0);
-  int code = int(over.r * 255.0 + 0.5) + 256 * int(over.g * 255.0 + 0.5);
-  if (code > 0) {
-    int index = code - 1;
-    ivec2 at = ivec2(index % u_labelColumns, index / u_labelColumns) * ivec2(u_labelCell);
-    ivec2 inLabel = ivec2(labelGrid - vec2(labelCell) * u_labelCell);
-    float ink = texelFetch(u_labelAtlas, at + inLabel, 0).r;
-    o_color = vec4(mix(u_background, u_labelColor, ink), 1.0);
-    return;
-  }
 
   cloudShade = cloudFactor(grid);
   vec4 g = texelFetch(u_glyphs, cell, 0);
