@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { cellStep, coarsened, DEFAULT_CELLS, detailZoom, STEP_HYSTERESIS, stepCell } from './density';
+import {
+  cellStep,
+  coarsened,
+  DEFAULT_CELLS,
+  detailZoom,
+  STEP_HYSTERESIS,
+  stepCell,
+} from './density';
 
 describe('cell size by zoom', () => {
   it('shrinks the cells in steps as the camera zooms in', () => {

@@ -59,7 +59,10 @@ const effects: Knobs = {
 };
 export const TIERS = [
   { name: 'high', knobs: high },
-  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5, minCell: 4 } },
+  {
+    name: 'crowd',
+    knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5, minCell: 4 },
+  },
   { name: 'effects', knobs: effects },
   { name: 'pixels', knobs: { ...effects, crowd: 0.3, morph: false, maxDpr: 1.25 } },
 ] as const;
