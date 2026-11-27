@@ -4,6 +4,7 @@
  * on the cell size, density.ts), and the cell-grid render targets. Each group is created and
  * deleted as a unit, so a lost WebGL context can be rebuilt from scratch (index.ts).
  */
+import { FINE_CELL_WIDTH } from './density';
 import type * as twgl from 'twgl.js';
 import {
   deleteFolklore,
@@ -534,7 +535,14 @@ export function createMapGlyphs(
   font: string,
 ): MapGlyphs {
   const cellDev = toDevice(cellCss, dpr);
-  const atlas = buildGlyphAtlas(mapGlyphs(theme), cellDev.w, cellDev.h, font, MAX_GLYPHS + 1);
+  const atlas = buildGlyphAtlas(
+    mapGlyphs(theme),
+    cellDev.w,
+    cellDev.h,
+    font,
+    MAX_GLYPHS + 1,
+    cellCss.width < FINE_CELL_WIDTH,
+  );
   const atlasTex = createTexture(gl, gl.R8, gl.RED, atlas.width, atlas.height, atlas.data);
   const tables = buildGlyphTables(theme, atlas.index);
   const tableTex = createTexture(gl, gl.RG8, gl.RG, MAX_VARIANTS, MAX_CLASSES, tables.table);

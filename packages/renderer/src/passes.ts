@@ -1,3 +1,4 @@
+import { FINE_CELL_WIDTH } from './density';
 import type { Ripple } from './life/cursor-effects';
 import { cursorUniforms, type CursorWind } from './life/cursor-wind';
 import { throng, type ThrongFieldPool, type ThrongGuardFactory } from './life/throng';
@@ -1397,6 +1398,7 @@ export function glyphPass(
     u_signalGlow: (fixturesOf.get(targets)?.packed.signals.length ?? 0) > 0,
     u_signalLight: targets.signalLightTex,
     u_dpr: view.dpr,
+    u_dither: view.cellDev.w / view.dpr < FINE_CELL_WIDTH ? Math.max(1, Math.floor(view.dpr)) : 0,
     u_moon: moon,
     u_sunGlint: weather.sunGlint ?? 0,
     u_crownClass: classId('tree_crown'),

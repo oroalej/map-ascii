@@ -283,6 +283,14 @@ uniform vec3 u_fixturePaints[11];
 uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
+// Device px per dither dot on the fine cell steps (density.ts), else 0: there every pixel is
+// either ink or background, and partial coverage becomes an ordered pattern of dots.
+uniform float u_dither;
+float ditherThreshold(vec2 at) {
+  ivec2 p = ivec2(floor(at / max(u_dither, 1.0))) & 3;
+  int bayer[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+  return (float(bayer[p.y * 4 + p.x]) + 0.5) / 16.0;
+}
 uniform float u_moon;
 ${cloudUniformsGlsl}
 
@@ -1194,6 +1202,7 @@ void main() {
     color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
     if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
+  if (u_dither > 0.0) coverage = step(ditherThreshold(grid), coverage);
   o_color = vec4(${misted('rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell)')}, 1.0);
 }
 `;

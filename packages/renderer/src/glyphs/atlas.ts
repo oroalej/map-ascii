@@ -41,7 +41,16 @@ const boxArms: Record<string, Arms> = {
 };
 
 /** Coverage bitmap for one glyph slot inside a larger buffer. */
-type Slot = { data: Uint8Array; stride: number; x0: number; y0: number; w: number; h: number };
+type Slot = {
+  data: Uint8Array;
+  stride: number;
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
+  /** A fine cell (density.ts): no shade gap. */
+  fine?: boolean;
+};
 
 function fill(slot: Slot, x0: number, y0: number, x1: number, y1: number) {
   const { data, stride, w, h } = slot;
@@ -193,7 +202,7 @@ export const SHADE_GAP_MIN_WIDTH = 8;
 function drawBlock(slot: Slot, glyph: string) {
   const { data, stride, w, h } = slot;
   const shade = shadeCoverage[glyph];
-  const gap = shade !== undefined && w >= SHADE_GAP_MIN_WIDTH ? 1 : 0;
+  const gap = shade !== undefined && !slot.fine && w >= SHADE_GAP_MIN_WIDTH ? 1 : 0;
   const bottom = glyph === '▀' ? Math.ceil(h / 2) : h - gap;
   const value = shade ?? 255;
   for (let y = 0; y < bottom; y++) {
@@ -534,6 +543,13 @@ function context2d(width: number, height: number): Context2D {
   return ctx;
 }
 
+/**
+ * The flat coverage (0–255) a letter of mean coverage `mean` keeps on a fine cell: lifted so the
+ * lightest mark still shows a dot, and capped below the shade blocks' darkest.
+ */
+export const fineTone = (mean: number): number =>
+  Math.round(Math.min(190, Math.max(0, mean) * 2.2 + 16));
+
 /** Rasterize `glyphs` into an atlas of `cellWidth × cellHeight` device-pixel slots. */
 export function buildGlyphAtlas(
   glyphs: readonly string[],
@@ -541,6 +557,7 @@ export function buildGlyphAtlas(
   cellHeight: number,
   font = DEFAULT_FONT,
   maxGlyphs = 0xfffe,
+  fine = false,
 ): GlyphAtlas {
   const all = [' ', ...glyphs.filter((g) => g !== ' ')];
   if (all.length > maxGlyphs)
@@ -559,17 +576,33 @@ export function buildGlyphAtlas(
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fff';
   const data = new Uint8Array(width * height);
+  const lettered: Slot[] = [];
   all.forEach((glyph, i) => {
     const x0 = (i % ATLAS_COLUMNS) * cellWidth;
     const y0 = Math.floor(i / ATLAS_COLUMNS) * cellHeight;
-    const slot = { data, stride: width, x0, y0, w: cellWidth, h: cellHeight };
-    if (!drawProcedural(slot, glyph) && glyph !== ' ')
+    const slot = { data, stride: width, x0, y0, w: cellWidth, h: cellHeight, fine };
+    if (!drawProcedural(slot, glyph) && glyph !== ' ') {
       ctx.fillText(glyph, x0 + cellWidth / 2, y0 + cellHeight / 2 + 1);
+      lettered.push(slot);
+    }
   });
 
   // Merge the font-drawn glyphs (alpha channel) under the procedural ones.
   const pixels = ctx.getImageData(0, 0, width, height).data;
   for (let i = 0; i < data.length; i++) data[i] = Math.max(data[i]!, pixels[i * 4 + 3]!);
+
+  // A fine cell cannot resolve a letter: it keeps the letter's weight as a flat tone, which the
+  // glyph pass dithers into dots, so denser characters still read as denser ground.
+  if (fine) {
+    for (const slot of lettered) {
+      let sum = 0;
+      for (let y = 0; y < slot.h; y++)
+        for (let x = 0; x < slot.w; x++) sum += data[(slot.y0 + y) * width + slot.x0 + x]!;
+      const tone = fineTone(sum / (slot.w * slot.h));
+      for (let y = 0; y < slot.h; y++)
+        data.fill(tone, (slot.y0 + y) * width + slot.x0, (slot.y0 + y) * width + slot.x0 + slot.w);
+    }
+  }
 
   return { data, width, height, columns: ATLAS_COLUMNS, index: (g) => indices.get(g) ?? 0 };
 }
