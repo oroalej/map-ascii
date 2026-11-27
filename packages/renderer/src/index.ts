@@ -55,6 +55,7 @@ import type { CropPass } from './passes';
 import { createCellTargets, deleteCellTargets, type CellTargets } from './gpu';
 import {
   cellStep,
+  coarsened,
   DEFAULT_CELLS,
   DEFAULT_LABEL_CELL,
   detailZoom,
@@ -620,7 +621,9 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     qualityWarmupDraw = true;
   };
 
-  const schedule = options.cells ?? DEFAULT_CELLS;
+  const fullSchedule = options.cells ?? DEFAULT_CELLS;
+  // Lower quality tiers stop at a coarser cell; the steps they keep hold their indices.
+  let schedule = coarsened(fullSchedule, knobs.minCell);
   const labelCss = options.labelCell ?? DEFAULT_LABEL_CELL;
   const baseMinZoom = options.minZoom ?? MIN_ZOOM;
   const limits: CameraLimits = {
@@ -2352,6 +2355,10 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       const nextKnobs = TIERS[nextTier]!.knobs;
       // Only a change in the pixel ratio actually drawn resizes the targets.
       if (Math.min(deviceDpr, nextKnobs.maxDpr) !== dpr) sizeDirty = true;
+      if (nextKnobs.minCell !== knobs.minCell) {
+        schedule = coarsened(fullSchedule, nextKnobs.minCell);
+        sizeDirty = true;
+      }
       knobs = nextKnobs;
       drawDirty = true;
       resetQualitySamples();

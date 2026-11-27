@@ -18,6 +18,8 @@ export type Knobs = {
   /** Vehicles and figures colored sextant by sextant (life/parts-layer.ts). */
   lifeDetail: boolean;
   maxDpr: number;
+  /** The narrowest map cell in CSS px (density.ts `coarsened`): cell passes cost per cell. */
+  minCell: number;
 };
 const high: Knobs = {
   crowd: 1,
@@ -35,6 +37,7 @@ const high: Knobs = {
   lifeDetail: true,
   /** High-DPI screens draw at most 2× (cell targets and the glyph pass scale with it). */
   maxDpr: 2,
+  minCell: 3,
 };
 const effects: Knobs = {
   ...high,
@@ -52,10 +55,11 @@ const effects: Knobs = {
   lifeDetail: false,
   // Never sharper than the tier above it.
   maxDpr: 1.5,
+  minCell: 5,
 };
 export const TIERS = [
   { name: 'high', knobs: high },
-  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5 } },
+  { name: 'crowd', knobs: { ...high, crowd: 0.6, throng: 0.7, maxAgents: 700, maxDpr: 1.5, minCell: 4 } },
   { name: 'effects', knobs: effects },
   { name: 'pixels', knobs: { ...effects, crowd: 0.3, morph: false, maxDpr: 1.25 } },
 ] as const;
