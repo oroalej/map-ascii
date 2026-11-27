@@ -9,7 +9,8 @@ import {
 
 // Motion fixtures explicitly start active Life; startup deferral is covered in index.ready.test.
 function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions) {
-  const atlas = createRenderer(canvas, options);
+  // A step request on every drawn frame, unless a test paces them itself.
+  const atlas = createRenderer(canvas, { stepPace: false, ...options });
   if (options.life?.enabled !== false && !options.reducedMotion) {
     atlas.setLife({ enabled: false });
     atlas.setLife({ enabled: true });
@@ -3012,6 +3013,52 @@ describe('label focus in the renderer frame', () => {
     expect(vi.mocked(crownPass).mock.calls[0]![8]).toBeUndefined();
     draw(752);
     expect(crownPass).toHaveBeenCalledOnce();
+  });
+
+  it('spaces step requests out by zoom, rests after a slow step and carries the time', async () => {
+    atlas.destroy();
+    let took = 0;
+    const request = vi.fn<(input: FrameInput) => boolean>(() => true);
+    vi.spyOn(InlineHosts, 'createConfiguredInlineHost').mockReturnValue({
+      invalidateFrame() {},
+      invalidateFolklore() {},
+      sync() {},
+      clearTiles() {},
+      request,
+      tookMs: () => took,
+      latest: () => undefined,
+      setProcessions() {},
+      setEmergency() {},
+      setLive() {},
+      play: () => false,
+      stop() {},
+      dispose() {},
+    });
+    atlas = createAtlas(canvas, {
+      tilesUrl: '/test.pmtiles',
+      bounds: [-1, -1, 1, 1],
+      initialCamera: { lat: 0, lng: 0, zoom: 18 },
+      year: 2026,
+      lifeWorker: false,
+      stepPace: true,
+    });
+    await vi.dynamicImportSettled();
+    draw(1000);
+    request.mockClear();
+    // 30 fps idle frames: at zoom 18 a step every other frame (66 ms).
+    for (let at = 1033; at <= 1400; at += 33) draw(at);
+    const quick = request.mock.calls.length;
+    expect(quick).toBeGreaterThanOrEqual(5);
+    expect(quick).toBeLessThanOrEqual(6);
+    // The skipped frame's time is carried, never dropped.
+    expect(request.mock.calls.at(-1)![0].step.dt).toBeCloseTo(0.066, 2);
+    // A 45 ms step earns a 45 ms rest: one step in three frames.
+    took = 45;
+    request.mockClear();
+    for (let at = 1433; at <= 2000; at += 33) draw(at);
+    expect(request.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(request.mock.calls.length).toBeLessThanOrEqual(7);
+    expect(request.mock.calls.at(-1)![0].step.dt).toBeCloseTo(0.099, 2);
   });
 
   it('paces idle hover gusts and ripples at the ordinary animation cadence', () => {

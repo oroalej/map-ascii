@@ -118,3 +118,31 @@ export function watchVisibility(canvas: HTMLCanvasElement, onChange: (watched: b
     },
   };
 }
+
+/**
+ * How often the Life simulation steps. Unpaced, the worker starts its next step the moment one
+ * returns and keeps a whole core busy; yet agents land on map cells, so stepping faster than
+ * they cross a cell shows nothing. `base` is the shortest gap between steps from a zoom up
+ * (wider views move fewer pixels a second); `rest` keeps the worker idle for at least as long
+ * as its last step took; `maxMs` stays under the simulation's own clamp on a step
+ * (life/config.ts `MAX_STEP_S`), so paced time is never lost.
+ */
+export const STEP_PACE = {
+  base: [
+    { minZoom: 20, ms: 40 },
+    { minZoom: 19, ms: 50 },
+    { minZoom: -Infinity, ms: 66 },
+  ],
+  rest: 2,
+  maxMs: 90,
+} as const;
+
+/** The gap to keep between step requests at `zoom`, when the last step took `tookMs`. */
+export function stepInterval(zoom: number, tookMs: number): number {
+  const base = STEP_PACE.base.find((entry) => zoom >= entry.minZoom)!.ms;
+  return Math.min(STEP_PACE.maxMs, Math.max(base, tookMs * STEP_PACE.rest));
+}
+
+/** Whether a step may be asked for at `now`, the last having been asked for at `askedAt`. */
+export const stepDue = (now: number, askedAt: number, zoom: number, tookMs: number) =>
+  now - askedAt >= stepInterval(zoom, tookMs) - PACING_SLACK_MS;

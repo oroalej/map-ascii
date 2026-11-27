@@ -212,7 +212,14 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
-import { animationDue, cameraDue, frameInterval, nextAnchor, watchVisibility } from './pacing';
+import {
+  animationDue,
+  cameraDue,
+  frameInterval,
+  nextAnchor,
+  stepDue,
+  watchVisibility,
+} from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -307,6 +314,11 @@ export type AtlasOptions = {
   emoji?: boolean;
   /** Static city-pack utility policy; omitted means disabled. */
   utilities?: { derive: boolean };
+  /**
+   * Space simulation steps out by zoom and rest the worker after each (pacing.ts `STEP_PACE`).
+   * False asks for a step on every drawn frame. Default: true.
+   */
+  stepPace?: boolean;
   /** Drawing quality, independent of simulation and view state. Default: Auto. */
   quality?: QualityChoice;
   /** Where Auto begins, usually the tier from this device's last `qualitychange`. Default: 0. */
@@ -1369,6 +1381,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
 
   /** The agents last drawn, whose headlights throw beams at night (`drawLights`). */
   let lifeAgents: VisibleAgent[] = [];
+  /** Step pacing (pacing.ts `stepDue`): when the last step was asked for and how long it took. */
+  let stepAskedAt = -Infinity;
   const drawLife = (at: number, wind: WindNow) => {
     if (!targets || !themeRes || !placement) return;
     let agents: VisibleAgent[] = [];
@@ -1393,6 +1407,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         );
       const accepted =
         !lifePause.inspecting &&
+        (options.stepPace === false ||
+          stepDue(at, stepAskedAt, camera.zoom, host.tookMs?.() ?? 0)) &&
         host.request({
           ...(itemInspection
             ? {
@@ -1455,6 +1471,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           ],
         });
       if (accepted) {
+        stepAskedAt = at;
         // Zero-time requests do not visit flock pointer logic; retain activity for the next step.
         if (stepDelta > 0) acceptedPointerRevision = tapPointer.revision;
         lifePause.accept();
