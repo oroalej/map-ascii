@@ -541,7 +541,10 @@ void main() {
 
   bool strip = maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)};
   int wallRow = strip ? -1 : wallRowFor(kind, attr, cls);
-  int wall = strip || wallRow >= 0 ? wallMask(p, strip ? CURBS : OUTLINE) : -1;
+  // On the fine steps the outline is a sub-cell rim, so only a shopfront's awning needs the mask.
+  bool outlined = wallRow >= 0 && (!u_fine ||
+    (u_awnings && kind == ${kindCodes.building} && (int(attr.g * 255.0 + 0.5) & ${Flags.frontage}) != 0));
+  int wall = strip || outlined ? wallMask(p, strip ? CURBS : OUTLINE) : -1;
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (strip) {
