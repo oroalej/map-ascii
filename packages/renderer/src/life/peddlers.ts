@@ -156,7 +156,8 @@ export type PeddlerContext = {
   /** Metric swept static clearance, including uncut carriageways and neighboring tiles. */
   safe: (from: readonly Body[], to: readonly Body[]) => boolean;
   /** Read-only ordinary queries; peddlers cannot alter ordinary reservations. */
-  ordinary: () => readonly Body[];
+  /** With `near` (metres, this tile's frame), bodies that cannot reach that box may be left out. */
+  ordinary: (near?: BodyBox) => readonly Body[];
   held?: (owner: PeddlerOwner) => boolean;
   forget?: (owner: PeddlerOwner) => void;
   generation?: number;
@@ -205,10 +206,24 @@ function clipSegment(
   ];
 }
 
+/** A box in metres. */
+export type BodyBox = { x0: number; y0: number; x1: number; y1: number };
+/** Everything `bodies` can touch, with room for the 0.1 m clearance of an overlap test. */
+function bodyBox(bodies: readonly Body[]): BodyBox {
+  const box = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+  for (const b of bodies) {
+    const reach = (b.length + b.width) / 2 + 0.5;
+    box.x0 = Math.min(box.x0, b.x - reach);
+    box.y0 = Math.min(box.y0, b.y - reach);
+    box.x1 = Math.max(box.x1, b.x + reach);
+    box.y1 = Math.max(box.y1, b.y + reach);
+  }
+  return box;
+}
+
 export class PeddlerPopulation {
   readonly slots: Slot[];
   private readonly routes = new Map<PeddlerConfig, Route[]>();
-  private ordinaryBodies: readonly Body[] = [];
   private readonly obstacles = new PolygonIndex();
   private readonly streetIds?: Set<number>;
   private readonly restrictedLineIds: ReadonlySet<number>;
@@ -440,7 +455,7 @@ export class PeddlerPopulation {
     const from = peddlerBodies(owner.config.prop, owner, hx, hy),
       to = peddlerBodies(owner.config.prop, target, hx, hy);
     for (const bodies of [
-      this.ordinaryBodies,
+      this.context.ordinary(bodyBox([...from, ...to])),
       ...this.owners
         .filter((p) => p !== owner)
         .map((p) => peddlerBodies(p.config.prop, p, p.hx, p.hy)),
@@ -456,7 +471,7 @@ export class PeddlerPopulation {
         !this.context.safe([envelope], [envelope]) ||
         this.obstacles.hits([envelope]) ||
         [
-          ...this.ordinaryBodies,
+          ...this.context.ordinary(bodyBox([envelope])),
           ...this.owners
             .filter((p) => p !== owner)
             .flatMap((p) => peddlerBodies(p.config.prop, p, p.hx, p.hy)),
@@ -665,10 +680,8 @@ export class PeddlerPopulation {
           env.rain < DIALOGUE_WEATHER.heavyRain &&
           ordinaryPopulation < MAX_TILE_AGENTS,
       )
-    ) {
-      this.ordinaryBodies = [];
+    )
       return;
-    }
     const pointer = env.pointer && lngLatToTile(this.context.tile, ...env.pointer.lngLat);
     const hovered = (owner: PeddlerOwner) =>
       !!pointer &&
@@ -685,7 +698,6 @@ export class PeddlerPopulation {
       });
       return lng >= bounds[0] && lng <= bounds[2] && lat >= bounds[1] && lat <= bounds[3];
     };
-    this.ordinaryBodies = this.context.ordinary();
     for (const slot of this.slots) {
       const window = peddlerWindow(slot.config, env.minutes),
         share = peddlerShare(slot.config, env);

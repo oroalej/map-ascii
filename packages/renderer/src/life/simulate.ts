@@ -21,7 +21,7 @@ import {
   type ParkingSlot,
 } from '@atlas/shared';
 import type { PeddlerConfig, PeddlerProp } from '@atlas/shared';
-import { PeddlerPopulation, type PeddlerSignals } from './peddlers';
+import { PeddlerPopulation, type BodyBox, type PeddlerSignals } from './peddlers';
 import {
   CrossingReservations,
   CrossingWaits,
@@ -470,6 +470,11 @@ const VEHICLE_KINDS = Object.keys(VEHICLES) as CraftType[];
 const LONGEST_ROAD_VEHICLE_M = Math.max(
   ...VEHICLE_TYPES.map((type) => VEHICLES[type as CraftType].length),
 );
+/**
+ * How far any body of a non-train actor lies from the point that stands for it, m, generously:
+ * its own length plus lane offsets and a corner curve.
+ */
+const PEDDLER_ACTOR_REACH_M = LONGEST_ROAD_VEHICLE_M + 20;
 
 /**
  * The way someone faces partway through turning round (`Mover.turning`): from the facing they
@@ -9706,62 +9711,87 @@ export class LifeWorld {
     this.vendorGrounds.set(terrain, index);
     return index;
   }
+  /** Per step: each actor's bodies in the reference tile's metres, worked out on first use. */
   private peddlerOrdinarySnapshot?: {
     ref: TileLife;
-    sources: { life: TileLife; bodies: Body[] }[];
+    bodies: Map<object, Body[]>;
   };
-  private ordinaryPeddlerBodies(life: TileLife): Body[] {
-    let snapshot = this.peddlerOrdinarySnapshot;
-    if (!snapshot) {
-      const ref = this.groundTerrain?.ref ?? life;
-      snapshot = { ref, sources: [] };
-      for (const other of this.tiles.values()) {
-        const frame = metricFrame(other, ref),
-          bodies: Body[] = [];
-        for (const actors of [other.movers, other.gatherers, other.stalls])
-          for (const actor of actors) {
-            if (!this.owns(other, actor)) continue;
-            for (const body of other.groundBodies(actor))
-              bodies.push({
-                ...body,
-                x: frame.x + body.x * frame.scale,
-                y: frame.y + body.y * frame.scale,
-                length: body.length * frame.scale,
-                width: body.width * frame.scale,
-              });
-          }
-        for (const parked of other.parked) {
-          const spec = VEHICLES[parked.vehicle];
-          bodies.push({
-            x: frame.x + (parked.x / other.perMeter) * frame.scale,
-            y: frame.y + (parked.y / other.perMeter) * frame.scale,
-            hx: parked.hx,
-            hy: parked.hy,
-            length: spec.length * frame.scale,
-            width: spec.width * frame.scale,
-          });
-        }
-        snapshot.sources.push({ life: other, bodies });
-      }
-      this.peddlerOrdinarySnapshot = snapshot;
-    }
+  /**
+   * Ordinary bodies a peddler of `life` could touch, in its metres. With `near`, only actors
+   * that can reach that box are posed: posing every mover of every tile each step cost more
+   * than the rest of the peddlers together.
+   */
+  private ordinaryPeddlerBodies(life: TileLife, near?: BodyBox): Body[] {
+    const snapshot = (this.peddlerOrdinarySnapshot ??= {
+      ref: this.groundTerrain?.ref ?? life,
+      bodies: new Map(),
+    });
     const frame = metricFrame(snapshot.ref, life),
       bodies: Body[] = [];
-    for (const source of snapshot.sources) {
-      const neighbor = metricFrame(source.life, life);
+    for (const other of this.tiles.values()) {
+      const neighbor = metricFrame(other, life);
       if (
         Math.abs(neighbor.x) > EXTENT / life.perMeter + 20 ||
         Math.abs(neighbor.y) > EXTENT / life.perMeter + 20
       )
         continue;
-      for (const body of source.bodies)
-        bodies.push({
-          ...body,
-          x: frame.x + body.x * frame.scale,
-          y: frame.y + body.y * frame.scale,
-          length: body.length * frame.scale,
-          width: body.width * frame.scale,
+      const toRef = metricFrame(other, snapshot.ref);
+      const far = (x: number, y: number, reach: number) => {
+        if (!near) return false;
+        const lx = neighbor.x + (x / other.perMeter) * neighbor.scale,
+          ly = neighbor.y + (y / other.perMeter) * neighbor.scale;
+        return (
+          lx < near.x0 - reach ||
+          lx > near.x1 + reach ||
+          ly < near.y0 - reach ||
+          ly > near.y1 + reach
+        );
+      };
+      const add = (key: object, build: () => Body[]) => {
+        let own = snapshot.bodies.get(key);
+        if (!own) snapshot.bodies.set(key, (own = build()));
+        for (const body of own)
+          bodies.push({
+            ...body,
+            x: frame.x + body.x * frame.scale,
+            y: frame.y + body.y * frame.scale,
+            length: body.length * frame.scale,
+            width: body.width * frame.scale,
+          });
+      };
+      for (const actors of [other.movers, other.gatherers, other.stalls])
+        for (const actor of actors) {
+          // A train's cars trail far behind the point that stands for it.
+          const train = 'kind' in actor && !!actor.train;
+          if (!train && far(actor.x, actor.y, PEDDLER_ACTOR_REACH_M)) continue;
+          add(actor, () =>
+            this.owns(other, actor)
+              ? other.groundBodies(actor).map((body) => ({
+                  ...body,
+                  x: toRef.x + body.x * toRef.scale,
+                  y: toRef.y + body.y * toRef.scale,
+                  length: body.length * toRef.scale,
+                  width: body.width * toRef.scale,
+                }))
+              : [],
+          );
+        }
+      for (const parked of other.parked) {
+        if (far(parked.x, parked.y, PEDDLER_ACTOR_REACH_M)) continue;
+        add(parked, () => {
+          const spec = VEHICLES[parked.vehicle];
+          return [
+            {
+              x: toRef.x + (parked.x / other.perMeter) * toRef.scale,
+              y: toRef.y + (parked.y / other.perMeter) * toRef.scale,
+              hx: parked.hx,
+              hy: parked.hy,
+              length: spec.length * toRef.scale,
+              width: spec.width * toRef.scale,
+            },
+          ];
         });
+      }
     }
     return bodies;
   }
@@ -9832,7 +9862,7 @@ export class LifeWorld {
                 indexes.some((index) => index.sweptHits(body, end[i]!)),
               );
             },
-            ordinary: () => this.ordinaryPeddlerBodies(life),
+            ordinary: (near) => this.ordinaryPeddlerBodies(life, near),
           },
           this.peddlerConfig,
           {
