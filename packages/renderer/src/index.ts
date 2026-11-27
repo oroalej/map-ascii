@@ -213,7 +213,15 @@ import {
   type WindChoice,
   type WindNow,
 } from './life/wind';
-import { animationDue, cameraDue, frameInterval, nextAnchor, watchVisibility } from './pacing';
+import {
+  animationDue,
+  cameraDue,
+  frameInterval,
+  LIGHT_FRAME_GUARD,
+  lightFrames,
+  nextAnchor,
+  watchVisibility,
+} from './pacing';
 import { MAX_HIGHLIGHT, Picker, type PickResult } from './picking';
 import {
   EXTENT,
@@ -727,6 +735,12 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
   let lastDraw = -Infinity;
   /** The ideal time of the last drawn frame, which pacing keeps to (pacing.ts `nextAnchor`). */
   let frameAnchor = -Infinity;
+  /** Whether drawn frames are cheap enough to animate at the interactive rate while idle. */
+  let framesLight = false;
+  /** The smoothed gap between light frames, and until when a missed rate bars another try. */
+  let lightGapMs = 0;
+  let lightStreak = 0;
+  let lightBarredUntil = -Infinity;
   /** Frames drawn since the map was created (shader warmup starts one link per frame). */
   let drawnFrames = 0;
   /**
@@ -2398,6 +2412,7 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     const animating = animationDue(now, frameAnchor, lastInput, {
       reducedMotion,
       watched: watch.watched(),
+      light: framesLight,
     });
     const cursorPoint = lifeRunning() && !flight ? lifePointer(cssSize()) : undefined;
     if (cursorPoint && lifeHover.pointerPoint) {
@@ -2654,12 +2669,26 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         profiler?.add('shaderWait', programs.demandWaitMs);
         programs.demandWaitMs = 0;
       }
+      const previousDrawAt = lastDraw;
       lastDraw = now;
-      frameAnchor = nextAnchor(now, frameAnchor, frameInterval(now, lastInput));
+      frameAnchor = nextAnchor(now, frameAnchor, frameInterval(now, lastInput, framesLight));
       drawnFrames++;
       drawnCamera = camera;
       drawnSize = cssSize();
       frameMs = smooth(frameMs, performance.now() - frameStart);
+      // Without a GPU timer the GPU is taken to cost what the CPU does; the gap between frames
+      // then shows whether the display really keeps up.
+      if (framesLight && animating && !cellsDrawn) {
+        // The first light frame follows an idle-rate gap, which says nothing.
+        if (lightStreak++ > 0) lightGapMs = smooth(lightGapMs, now - previousDrawAt);
+        if (lightGapMs > LIGHT_FRAME_GUARD.missed) lightBarredUntil = now + LIGHT_FRAME_GUARD.retry;
+      } else {
+        lightStreak = 0;
+        lightGapMs = 0;
+      }
+      framesLight =
+        now >= lightBarredUntil &&
+        lightFrames(framesLight, frameMs + (gpuTimer.milliseconds ?? frameMs));
       if (!qualityWarmupDraw) previousDraw = { at: now, cpuMs: performance.now() - frameStart };
       qualityWarmupDraw = false;
       profiler?.draw(performance.now() - frameStart, agentsDrawn);
