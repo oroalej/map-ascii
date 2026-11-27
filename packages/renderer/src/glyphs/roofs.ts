@@ -57,3 +57,29 @@ export function roofSlopeVariant(
   const dot = length ? (sign * (x * sun[0] + y * sun[1])) / length : 0;
   return dot > 0.25 ? 2 : dot < -0.25 ? 1 : null;
 }
+
+/**
+ * Roof surfaces on the fine cell steps (shaders/glyph.ts `roofTexture`). Pitched roofs show sheet
+ * seams running down the slope, `seam` m apart and never closer than `minDots` dither dots, each
+ * keeping `seamLight` of the roof's light. Flat roofs show a concrete speckle (`speckle` of their
+ * dots at `speckleLight`) and a parapet ring at `parapetLight` one cell in from the rim. The
+ * material is inferred from the roof's shape, as the shape is from the footprint.
+ */
+export const ROOF_TEXTURE = {
+  seam: 0.75,
+  minDots: 3,
+  seamLight: 0.72,
+  speckle: 0.07,
+  speckleLight: 0.8,
+  parapetLight: 0.78,
+} as const;
+
+/** Meters between seams when a dither dot covers `dotMeters` of ground. */
+export const seamPitch = (dotMeters: number): number =>
+  Math.max(ROOF_TEXTURE.seam, ROOF_TEXTURE.minDots * dotMeters);
+
+/** Whether a point `along` m along the seam axis lies on a seam, one dot wide. */
+export function onSeam(along: number, dotMeters: number): boolean {
+  const pitch = seamPitch(dotMeters);
+  return along - Math.floor(along / pitch) * pitch < dotMeters;
+}
