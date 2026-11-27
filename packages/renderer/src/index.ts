@@ -2348,8 +2348,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
     }
     advanceFlight(now);
     const deviceDpr = window.devicePixelRatio || 1;
-    const nextTier = quality.decide(now, !flight && now - lastInput >= 1000, (tier) =>
-      Math.min(deviceDpr, TIERS[tier]!.knobs.maxDpr),
+    // A tier with another pixel ratio or cell floor resizes the targets, so it waits for quiet.
+    const nextTier = quality.decide(
+      now,
+      !flight && now - lastInput >= 1000,
+      (tier) => Math.min(deviceDpr, TIERS[tier]!.knobs.maxDpr) + 100 * TIERS[tier]!.knobs.minCell,
     );
     if (nextTier !== undefined) {
       const nextKnobs = TIERS[nextTier]!.knobs;
