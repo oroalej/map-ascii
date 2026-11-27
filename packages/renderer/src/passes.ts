@@ -561,6 +561,7 @@ export function selectPass(
     u_pavingVisible: bandVisibility(CLASS_ZOOM.paving, view.camera.zoom) > 0,
     u_roadMask: roads,
     u_cellAspect: view.cellDev.h / view.cellDev.w,
+    u_fine: view.cellDev.w / view.dpr < FINE_CELL_WIDTH,
     u_hover: highlights.hover,
     u_selected: highlights.selected,
     u_highlight: highlights.highlight,

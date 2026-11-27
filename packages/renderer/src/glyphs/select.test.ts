@@ -540,6 +540,8 @@ describe('building outlines', () => {
 
   it('never outlines grounds (building classes without a height)', () => {
     expect(wallStyle('building', false, 0, 19)).toBeNull();
+    // A landmark campus is a ground too: its buildings would each sit inside a ring of wall.
+    expect(wallStyle('building', true, 0, 19)).toBeNull();
   });
 
   it('looks through paths, statues, and markers', () => {
