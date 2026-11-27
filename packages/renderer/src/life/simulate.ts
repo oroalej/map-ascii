@@ -104,7 +104,7 @@ import {
   type LifeViewContext,
   type PendingSeed,
 } from './births';
-import type { FrameProfiler } from '../profile';
+import type { FrameProfiler, ProfileStage } from '../profile';
 import {
   bandVisibility,
   VEHICLE_TYPES,
@@ -12576,6 +12576,15 @@ export class LifeWorld {
     this.syncSeason(weather?.season);
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
     const clamped = Math.min(MAX_STEP_S, Math.max(0, dt));
+    // Profiling splits the step into its sections (profile.ts `step*` stages).
+    const profiler = this.profiler;
+    let sectionStart = profiler?.time() ?? 0;
+    const section = (stage: ProfileStage) => {
+      if (!profiler) return;
+      const at = profiler.time();
+      profiler.add(stage, at - sectionStart);
+      sectionStart = at;
+    };
     // Timed playback follows accepted viewer time, while physical movement keeps its safe step.
     // Otherwise a slow drawing frame stretches the scheduled event and its displayed clock.
     if (this.played?.timing) this.played.elapsed += Math.max(0, dt);
@@ -12724,6 +12733,7 @@ export class LifeWorld {
       this.clearSeamRecovery(m);
       return true;
     };
+    section('stepSetup');
     for (const tile of this.tiles.values()) {
       const near = this.activityNear(tile, bounds, STEP_MARGIN_M * tile.perMeter);
       const active = (m: Mover) =>
@@ -12762,6 +12772,7 @@ export class LifeWorld {
         env.diagnostics?.recovery(m, 'seam');
       }
     }
+    section('stepEligibility');
     for (const tile of this.tiles.values()) tile.prepareTraffic(eligibility.get(tile)!);
     this.junctionTraffic.begin(this.tiles.values().next().value!);
     for (const tile of this.tiles.values())
@@ -12826,6 +12837,7 @@ export class LifeWorld {
       history.queued = history.seconds >= SEAMS.rejectedSeconds;
       if (history.queued) this.queuedSeams.set(m, life);
     };
+    section('stepTraffic');
     for (const source of this.tiles.values())
       for (const m of source.movers) {
         if (
@@ -12906,6 +12918,7 @@ export class LifeWorld {
           });
         }
       }
+    section('stepSeams');
     for (const tile of this.tiles.values()) {
       const inTile = gustAt
         ? (x: number, y: number) => gustAt(...tileToLngLat(tile.tile, { x, y }))
@@ -12953,6 +12966,7 @@ export class LifeWorld {
         },
       );
     }
+    section('stepTiles');
     // All original owners have stepped once. New owners start stepping on the next frame.
     const effectOwners = intents.length ? new Map<Mover, TileLife>() : undefined;
     for (const { source, target, m, before, boundary } of intents) {
@@ -13047,6 +13061,7 @@ export class LifeWorld {
         }
       }
     }
+    section('stepTransfers');
     if (!shows || shows('train')) this.stepArrivals(clamped);
     this.retireStalled();
     this.admitBirths(clamped);
@@ -13079,7 +13094,9 @@ export class LifeWorld {
     this.retainCrossingClaims();
     this.crossingReservations.resolve();
     if (this.seasonalConfig) for (const tile of this.tiles.values()) this.trimSeasonalStalls(tile);
+    section('stepTail');
     this.stepPeddlers(clamped, zoom, env);
+    section('stepPeddlers');
     if (this.profiler)
       for (const [key, life] of this.tiles)
         for (const m of life.movers) {
