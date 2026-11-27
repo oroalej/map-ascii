@@ -9724,7 +9724,7 @@ export class LifeWorld {
   private ordinaryPeddlerBodies(life: TileLife, near?: BodyBox): Body[] {
     const snapshot = (this.peddlerOrdinarySnapshot ??= {
       ref: this.groundTerrain?.ref ?? life,
-      bodies: new Map(),
+      bodies: new Map<object, Body[]>(),
     });
     const frame = metricFrame(snapshot.ref, life),
       bodies: Body[] = [];
