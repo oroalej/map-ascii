@@ -355,7 +355,7 @@ describe('glyph program variants', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('waits for input to settle and warms one variant per idle turn without the extension', () => {
+  it('waits for input to settle before warming a variant without the extension', () => {
     const programs = fullPrograms(context);
     let quiet = false;
     prewarmGlyphPrograms(context, programs, () => quiet);
@@ -365,36 +365,36 @@ describe('glyph program variants', () => {
     quiet = true;
     vi.advanceTimersByTime(100);
     expect(createProgram).toHaveBeenCalledTimes(7);
-    glyphProgram(context, programs, true, false);
+    glyphProgram(context, programs, false, true);
     expect(createProgram).toHaveBeenCalledTimes(7);
     vi.advanceTimersByTime(300);
-    expect(programs.glyphVariants?.size).toBe(4);
-    expect(createProgram).toHaveBeenCalledTimes(9);
+    expect(programs.glyphVariants?.size).toBe(2);
+    expect(createProgram).toHaveBeenCalledTimes(7);
     expect(vi.getTimerCount()).toBe(0);
     deletePrograms(context, programs);
   });
 
-  it('warms only focus until candles appear, including an upgrade during a pending warmup', () => {
+  it('warms nothing until candles appear: focus is in every variant', () => {
     const programs = fullPrograms(context);
     prewarmGlyphPrograms(context, programs, () => true, false);
     vi.advanceTimersByTime(200);
-    expect(programs.glyphVariants?.size).toBe(2);
-    expect(createProgram).toHaveBeenCalledTimes(7);
-    prewarmGlyphPrograms(context, programs, () => true, false);
+    expect(programs.glyphVariants?.size).toBe(1);
+    expect(createProgram).toHaveBeenCalledTimes(6);
     expect(vi.getTimerCount()).toBe(0);
+    expect(glyphProgram(context, programs, true, false)).toBe(programs.glyph);
     prewarmGlyphPrograms(context, programs, () => true, true);
     vi.advanceTimersByTime(300);
-    expect(programs.glyphVariants?.size).toBe(4);
+    expect(programs.glyphVariants?.size).toBe(2);
     deletePrograms(context, programs);
     const upgraded = fullPrograms(context);
     prewarmGlyphPrograms(context, upgraded, () => true, false);
     prewarmGlyphPrograms(context, upgraded, () => true, true);
     vi.advanceTimersByTime(400);
-    expect(upgraded.glyphVariants?.size).toBe(4);
+    expect(upgraded.glyphVariants?.size).toBe(2);
     deletePrograms(context, upgraded);
   });
 
-  it('draws with a linked variant until a parallel link is ready and cancels the next link on disposal', () => {
+  it('draws with a linked variant until a parallel link is ready', () => {
     const pending = {
       ready: vi.fn(() => false),
       finish: vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>),
@@ -408,18 +408,18 @@ describe('glyph program variants', () => {
     expect(prepareProgram).toHaveBeenCalledTimes(1);
     expect(pending.finish).not.toHaveBeenCalled();
     // The frame never waits for the link: it draws with the base program until this one is ready.
-    expect(glyphProgram(context, programs, true, false)).toBe(programs.glyph);
+    expect(glyphProgram(context, programs, false, true)).toBe(programs.glyph);
     expect(pending.finish).not.toHaveBeenCalled();
     pending.ready.mockReturnValue(true);
-    expect(glyphProgram(context, programs, true, false)).toBe(
+    expect(glyphProgram(context, programs, false, true)).toBe(
       pending.finish.mock.results[0]!.value,
     );
     pending.ready.mockReturnValue(false);
     expect(createProgram).toHaveBeenCalledTimes(6);
     vi.advanceTimersByTime(100);
-    expect(prepareProgram).toHaveBeenCalledTimes(2);
+    expect(prepareProgram).toHaveBeenCalledTimes(1);
     deletePrograms(context, programs);
-    expect(pending.cancel).toHaveBeenCalledOnce();
+    expect(pending.cancel).not.toHaveBeenCalled();
     expect(gl.deleteProgram).toHaveBeenCalledTimes(7);
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -449,7 +449,8 @@ describe('glyph program variants', () => {
         return parallel;
       },
       true,
-      false,
+      // In a season, so there is more than one variant to link.
+      true,
       false,
       false,
       () => frame,
@@ -513,18 +514,18 @@ describe('glyph program variants', () => {
     });
     const programs = fullPrograms(context);
     expect(programs.demandWaitMs ?? 0).toBe(0);
-    glyphProgram(context, programs, true, false);
+    glyphProgram(context, programs, false, true);
     expect(programs.demandWaitMs).toBe(7);
-    glyphProgram(context, programs, true, false);
+    glyphProgram(context, programs, false, true);
     expect(programs.demandWaitMs).toBe(7);
     deletePrograms(context, programs);
     // Quiet synchronous warmup compiles leave demand timing alone; a later demand still counts.
     const warmed = fullPrograms(context);
-    prewarmGlyphPrograms(context, warmed, () => true, false);
+    prewarmGlyphPrograms(context, warmed, () => true, true);
     vi.advanceTimersByTime(100);
     expect(warmed.glyphVariants?.size).toBe(2);
     expect(warmed.demandWaitMs ?? 0).toBe(0);
-    glyphProgram(context, warmed, false, true);
+    glyphProgram(context, warmed, false, false, true);
     expect(warmed.demandWaitMs).toBe(7);
     deletePrograms(context, warmed);
     now.mockRestore();
@@ -557,30 +558,25 @@ describe('glyph program variants', () => {
   it('compiles inactive features away and reuses each combination across toggles', () => {
     const programs = fullPrograms(context);
     expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
-    const focus = glyphProgram(context, programs, true, false);
+    // Focus is a uniform in every variant, never a program of its own.
+    expect(glyphProgram(context, programs, true, false)).toBe(programs.glyph);
     const clocks = glyphProgram(context, programs, false, true);
-    const both = glyphProgram(context, programs, true, true);
-    expect(new Set([programs.glyph, focus, clocks, both]).size).toBe(4);
-    expect(glyphProgram(context, programs, true, false)).toBe(focus);
+    expect(clocks).not.toBe(programs.glyph);
+    expect(glyphProgram(context, programs, true, true)).toBe(clocks);
     expect(glyphProgram(context, programs, false, true)).toBe(clocks);
-    expect(glyphProgram(context, programs, true, true)).toBe(both);
     expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
-    expect(createProgram).toHaveBeenCalledTimes(9);
+    expect(createProgram).toHaveBeenCalledTimes(7);
     const fragments = vi.mocked(createProgram).mock.calls.map((call) => call[2]);
-    // Boot select and glyph, labels, cell, select, glyph, then the variants.
-    expect(fragments[5]).toContain('const bool u_focus = false;');
+    // Boot select and glyph, labels, cell, select, glyph, then the variant.
+    expect(fragments[5]).toContain('uniform bool u_focus;');
     expect(fragments[5]).toContain('const bool u_hasEffectClocks = false;');
     expect(fragments[6]).toContain('uniform bool u_focus;');
-    expect(fragments[6]).toContain('const bool u_hasEffectClocks = false;');
-    expect(fragments[7]).toContain('const bool u_focus = false;');
-    expect(fragments[7]).toContain('uniform bool u_hasEffectClocks;');
-    expect(fragments[8]).toContain('uniform bool u_focus;');
-    expect(fragments[8]).toContain('uniform bool u_hasEffectClocks;');
+    expect(fragments[6]).toContain('uniform bool u_hasEffectClocks;');
 
     deletePrograms(context, programs);
     const deleted = gl.deleteProgram.mock.calls.map(([program]) => program);
-    expect(deleted).toHaveLength(9);
-    expect(new Set(deleted).size).toBe(9);
+    expect(deleted).toHaveLength(7);
+    expect(new Set(deleted).size).toBe(7);
     expect(programs.glyphVariants?.size).toBe(0);
   });
 
@@ -610,7 +606,7 @@ describe('glyph program variants', () => {
     const programs = fullPrograms(context);
     prewarmGlyphPrograms(context, programs, () => true, true, false, false, false, undefined, true);
     vi.advanceTimersByTime(1000);
-    expect([32, 33, 34, 35].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    expect([32, 34].every((key) => programs.glyphVariants?.has(key))).toBe(true);
     deletePrograms(context, programs);
   });
 
@@ -629,12 +625,12 @@ describe('glyph program variants', () => {
     expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
     glyphProgram(context, programs, true, false, true);
     glyphProgram(context, programs, false, true, true);
-    expect(programs.glyphVariants?.size).toBe(4);
+    expect(programs.glyphVariants?.size).toBe(3);
     prewarmGlyphPrograms(context, programs, () => true);
     vi.advanceTimersByTime(400);
-    expect([0, 1, 2, 3].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    expect([0, 2, 4, 6].every((key) => programs.glyphVariants?.has(key))).toBe(true);
     deletePrograms(context, programs);
-    expect(gl.deleteProgram.mock.calls).toHaveLength(12);
+    expect(gl.deleteProgram.mock.calls).toHaveLength(9);
   });
   it('warms selected seasonal programs without allocating fireworks buffers and deletes unused links', () => {
     const programs = fullPrograms(context);
@@ -642,7 +638,7 @@ describe('glyph program variants', () => {
     vi.advanceTimersByTime(600);
     expect(programs.fireworksProgram).toBeDefined();
     expect(programs.fireworks).toBeUndefined();
-    expect([0, 1, 4, 5].every((key) => programs.glyphVariants?.has(key))).toBe(true);
+    expect([0, 4].every((key) => programs.glyphVariants?.has(key))).toBe(true);
     const count = vi.mocked(createProgram).mock.calls.length;
     glyphProgram(context, programs, false, false, true);
     prewarmGlyphPrograms(context, programs, () => true, false, true, true);
@@ -680,17 +676,17 @@ describe('glyph program variants', () => {
       finish: () => ({ program: {} }) as ReturnType<typeof createProgram>,
       cancel: vi.fn(),
     });
-    const both = { program: {} } as ReturnType<typeof createProgram>;
+    const all = { program: {} } as ReturnType<typeof createProgram>;
     const clocks = { program: {} } as ReturnType<typeof createProgram>;
     programs.glyphVariants!.set(2, clocks);
-    // Missing the focus feature, but nothing nearer is linked.
-    expect(glyphProgram(context, programs, true, true)).toBe(clocks);
-    programs.glyphVariants!.set(7, both);
+    // Seasonal with candles is asked for: clocks alone misses one feature, the base two.
+    expect(glyphProgram(context, programs, false, true, true)).toBe(clocks);
+    programs.glyphVariants!.set(38, all);
     // A variant with every asked feature wins: uniforms switch its extras off.
-    expect(glyphProgram(context, programs, true, true)).toBe(both);
+    expect(glyphProgram(context, programs, false, true, true)).toBe(all);
     expect(prepareProgram).toHaveBeenCalledTimes(1);
     programs.glyphVariants!.delete(2);
-    programs.glyphVariants!.delete(7);
+    programs.glyphVariants!.delete(38);
     deletePrograms(context, programs);
   });
 
@@ -704,8 +700,8 @@ describe('glyph program variants', () => {
     gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
     prewarmGlyphPrograms(context, programs, () => true);
     vi.advanceTimersByTime(700);
-    expect(programs.glyphVariants?.size).toBe(4);
-    expect(prepareProgram).toHaveBeenCalledTimes(3);
+    expect(programs.glyphVariants?.size).toBe(2);
+    expect(prepareProgram).toHaveBeenCalledTimes(1);
     glyphProgram(context, programs, true, true);
     expect(createProgram).toHaveBeenCalledTimes(6);
     deletePrograms(context, programs);
@@ -731,8 +727,8 @@ describe('glyph program variants', () => {
       cancel: vi.fn(),
     });
     // Asked for by a frame: linked in the background, drawn from the next ask on.
-    expect(glyphProgram(context, failed, true, false)).toBe(failed.glyph);
-    expect(glyphProgram(context, failed, true, false)).not.toBe(failed.glyph);
+    expect(glyphProgram(context, failed, false, true)).toBe(failed.glyph);
+    expect(glyphProgram(context, failed, false, true)).not.toBe(failed.glyph);
     expect(failed.glyphVariants?.size).toBe(2);
     deletePrograms(context, failed);
   });

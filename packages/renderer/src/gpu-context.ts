@@ -103,7 +103,7 @@ export type Programs = {
   cell: twgl.ProgramInfo;
   select: twgl.ProgramInfo;
   glyph: twgl.ProgramInfo;
-  /** At most eight variants; seasonal features compile only when their fixtures are needed. */
+  /** Keyed by effect clocks (2), seasonal (4) and field (32); each compiles only when needed. */
   glyphVariants?: Map<number, twgl.ProgramInfo>;
   glyphWarmup?: {
     clocks: boolean;
@@ -158,7 +158,9 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
     selectLite: [fullscreenVertex, selectLiteFragment],
     glyph: [
       fullscreenVertex,
-      glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false, field: false }),
+      // Focus is always compiled in: a uniform switches it, and a copy of this shader with it
+      // costs another whole link (about as long as this one) for the first hover or selection.
+      glyphFragmentFor({ focus: true, effectClocks: false, seasonal: false, field: false }),
     ],
   } as const;
   const parallel = !!gl.getExtension('KHR_parallel_shader_compile');
@@ -386,8 +388,9 @@ export function glyphProgram(
   const variants = programs.glyphVariants;
   // No variant is compiled for the boot shaders, which have none of these features.
   if (!variants || programs.boot) return programs.glyph;
-  const key =
-    Number(focus) | (Number(effectClocks) << 1) | (Number(seasonal) << 2) | (Number(field) << 5);
+  // Bit 0 was the focus variant; every variant has focus now (createPrograms).
+  void focus;
+  const key = (Number(effectClocks) << 1) | (Number(seasonal) << 2) | (Number(field) << 5);
   if (key === 0) return programs.glyph;
   let program = variants.get(key);
   if (!program) {
@@ -418,7 +421,7 @@ export function glyphProgram(
       }
       // One link at a time: a second big compile only slows the first.
       if (!programs.glyphDemand && !pending) {
-        const fragment = glyphFragmentFor({ focus, effectClocks, seasonal, field });
+        const fragment = glyphFragmentFor({ focus: true, effectClocks, seasonal, field });
         programs.glyphDemand = {
           key,
           timing: variantTiming(programs, key, fullscreenVertex.length + fragment.length),
@@ -435,7 +438,7 @@ export function glyphProgram(
       }
       programs.glyphWarmup!.pending = undefined;
     } else {
-      const fragment = glyphFragmentFor({ focus, effectClocks, seasonal, field });
+      const fragment = glyphFragmentFor({ focus: true, effectClocks, seasonal, field });
       const timing = variantTiming(programs, key, fullscreenVertex.length + fragment.length);
       program = createProgram(gl, fullscreenVertex, fragment);
       if (timing) timing.readyMs = timing.blockedMs = performance.now() - start;
@@ -534,9 +537,9 @@ export function prewarmGlyphPrograms(
   ) => [
     ...(folklore ? [16] : []),
     ...(fireworks ? [8] : []),
-    ...(seasonal ? (clocks ? [4, 5, 6, 7] : [4, 5]) : []),
-    ...(field ? (clocks ? [32, 33, 34, 35] : [32, 33]) : []),
-    ...(clocks ? [1, 2, 3] : [1]),
+    ...(seasonal ? (clocks ? [4, 6] : [4]) : []),
+    ...(field ? (clocks ? [32, 34] : [32]) : []),
+    ...(clocks ? [2] : []),
   ];
   const has = (key: number) =>
     key === 16
@@ -647,7 +650,7 @@ export function prewarmGlyphPrograms(
               ? folkloreFragment
               : key === 8
                 ? fireworksFragment
-                : glyphFragmentFor({ focus, effectClocks, seasonal, field });
+                : glyphFragmentFor({ focus: true, effectClocks, seasonal, field });
           warmup.pending = {
             key,
             timing: variantTiming(programs, key, vertex.length + fragment.length),
