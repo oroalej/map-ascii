@@ -231,6 +231,13 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
           submit('select');
           submit('glyph');
         }
+        // The big links start with the first frame, not with the program set: a set that is
+        // disposed at once (React's development double mount) never starts them, and a
+        // background tab starts them only when it is shown.
+        if (parallel && !timingOf('glyph')) {
+          submit('glyph');
+          submit('selectLite');
+        }
         // With parallel compile the lite select stands in first, and the full one is submitted
         // only now: one big link at a time keeps the driver's compiler off most of the machine.
         const first = parallel ? 'selectLite' : 'select';
@@ -281,11 +288,8 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
   });
   try {
     for (const name of ['bootSelect', 'bootGlyph', 'labels', 'cell'] as const) submit(name);
-    // Without parallel compile, the full programs link once a boot frame is on screen.
-    if (parallel && !holdBoot) {
-      submit('glyph');
-      submit('selectLite');
-    }
+    // The full programs are submitted from `poll`: with parallel compile on the first frame,
+    // without it once a boot frame is on screen.
     emptyVao = gl.createVertexArray();
     if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
     const programs: Programs = {

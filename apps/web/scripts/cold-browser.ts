@@ -22,6 +22,7 @@ import { serveExport } from './serve-export';
 
 const WAIT_MS = 300_000;
 const SETTLE_MS = 8000;
+const LINGER_MS = 45_000;
 
 type ColdWindow = Window & { atlasLongTasks: LongTask[] };
 type MarkTimes = { ready: number | null; detail: number | null };
@@ -40,7 +41,7 @@ type DebugStats = {
 };
 
 /** Load the page in `profile` and wait until no program is compiling any more. */
-async function load(base: string, city: string, profile: string): Promise<ColdLoad> {
+async function load(base: string, city: string, profile: string, lingerMs = 0): Promise<ColdLoad> {
   const context = await chromium.launchPersistentContext(profile, {
     headless: false,
     viewport: { width: 1920, height: 1080 },
@@ -100,6 +101,8 @@ async function load(base: string, city: string, profile: string): Promise<ColdLo
       );
     const shaders = report.shaders;
     const tasks = await page.evaluate<LongTask[]>(`window.atlasLongTasks`);
+    // The browser writes linked programs to its disk cache some time after the link.
+    await page.waitForTimeout(lingerMs);
     return {
       readyMs: final.ready,
       detailMs: final.detail ?? final.ready,
@@ -118,7 +121,7 @@ async function load(base: string, city: string, profile: string): Promise<ColdLo
 async function oneRun(base: string, city: string, index: number): Promise<ColdRun> {
   const profile = await mkdtemp(join(tmpdir(), 'atlas-cold-'));
   try {
-    const cold = await load(base, city, profile);
+    const cold = await load(base, city, profile, LINGER_MS);
     // The same profile again: what a returning visitor compiles.
     const warm = await load(base, city, profile);
     const run: ColdRun = { run: index, ...cold, warm };

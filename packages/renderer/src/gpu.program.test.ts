@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as twgl from 'twgl.js';
 import { prepareProgram, type GL } from './gpu';
 
@@ -26,7 +26,25 @@ function context() {
   return { gl, context: gl as unknown as GL };
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers();
+});
+afterEach(() => vi.useRealTimers());
+
+it('drops a cancelled link at once when it has already completed, and never after context loss', () => {
+  const { gl, context: ctx } = context();
+  gl.getProgramParameter.mockReturnValue(true);
+  prepareProgram(ctx, 'vertex', 'fragment').cancel();
+  expect(gl.deleteProgram).toHaveBeenCalledOnce();
+  const lost = context();
+  const pending = prepareProgram(lost.context, 'vertex', 'fragment');
+  pending.cancel();
+  lost.gl.isContextLost.mockReturnValue(true);
+  vi.advanceTimersByTime(250);
+  expect(lost.gl.deleteProgram).not.toHaveBeenCalled();
+  expect(vi.getTimerCount()).toBe(0);
+});
 
 it('defers blocking link/introspection queries until completion and transfers ownership once', () => {
   const { gl, context: ctx } = context();
@@ -53,7 +71,14 @@ it('releases partially linked resources once when cancelled or compilation fails
   expect(pending.ready()).toBe(false);
   expect(() => pending.finish()).toThrow('cancelled');
   expect(cancelled.gl.deleteShader).toHaveBeenCalledTimes(2);
+  // Still linking: deleting it now would hold the GPU process until the compile ends.
+  expect(cancelled.gl.deleteProgram).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1000);
+  expect(cancelled.gl.deleteProgram).not.toHaveBeenCalled();
+  cancelled.gl.getProgramParameter.mockReturnValue(true);
+  vi.advanceTimersByTime(250);
   expect(cancelled.gl.deleteProgram).toHaveBeenCalledOnce();
+  expect(vi.getTimerCount()).toBe(0);
   const failed = context();
   failed.gl.getProgramParameter.mockReturnValue(false);
   const bad = prepareProgram(failed.context, 'vertex', 'fragment');

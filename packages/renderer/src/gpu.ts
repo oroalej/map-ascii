@@ -67,6 +67,9 @@ export type PendingProgram = {
   cancel(): void;
 };
 
+/** How often a cancelled link is checked for completion before its program is deleted. */
+const CANCEL_POLL_MS = 250;
+
 /** Link without querying status until parallel compilation completes (or input needs it). */
 export function prepareProgram(gl: GL, vertex: string, fragment: string): PendingProgram {
   const extension = gl.getExtension('KHR_parallel_shader_compile');
@@ -79,13 +82,25 @@ export function prepareProgram(gl: GL, vertex: string, fragment: string): Pendin
     for (const shader of shaders) gl.deleteShader(shader);
     shaders.length = 0;
   };
-  const cancel = () => {
+  const cancel = (linked = false) => {
     if (cancelled || info) return;
     cancelled = true;
-    if (!gl.isContextLost()) {
-      deleteShaders();
+    if (gl.isContextLost()) return;
+    deleteShaders();
+    if (linked) {
       gl.deleteProgram(program);
+      return;
     }
+    // Deleting a program whose link is still running holds the browser's whole GPU process until
+    // that compile ends (7 s measured for the lite select on ANGLE Direct3D11): every tab stalls.
+    // So the program is dropped only once its link has completed.
+    const drop = () => {
+      if (gl.isContextLost()) return;
+      if (!extension || gl.getProgramParameter(program, extension.COMPLETION_STATUS_KHR))
+        gl.deleteProgram(program);
+      else setTimeout(drop, CANCEL_POLL_MS);
+    };
+    drop();
   };
   try {
     for (const [type, source] of [
@@ -125,11 +140,12 @@ export function prepareProgram(gl: GL, vertex: string, fragment: string): Pendin
         deleteShaders();
         return info;
       } catch (error) {
-        cancel();
+        // The status query above waited for the link, so nothing is compiling any more.
+        cancel(true);
         throw error;
       }
     },
-    cancel,
+    cancel: () => cancel(),
   };
 }
 

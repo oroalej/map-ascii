@@ -121,8 +121,12 @@ describe('glyph program variants', () => {
       expect(vi.mocked(prepareProgram).mock.calls.map((call) => call[2].length)).toEqual(
         expect.any(Array),
       );
-      expect(made).toHaveLength(6);
+      // The big links start with the first frame: a set disposed at once never starts them.
+      expect(made).toHaveLength(4);
       expect(programs.boot!.poll(0)).toBe('wait');
+      expect(made).toHaveLength(6);
+      expect(programs.boot!.poll(1)).toBe('wait');
+      expect(made).toHaveLength(6);
       expect(made.every((link) => link.finish.mock.calls.length === 0)).toBe(true);
     });
 
@@ -258,6 +262,9 @@ describe('glyph program variants', () => {
     const finish = vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>);
     vi.mocked(prepareProgram).mockImplementation(() => ({ ready, finish, cancel: vi.fn() }));
     const programs = createPrograms(context);
+    expect(programs.timings).toHaveLength(4);
+    expect(ready).not.toHaveBeenCalled();
+    programs.boot!.poll(0);
     expect(programs.timings!.map((t) => t.name).sort()).toEqual([
       'bootGlyph',
       'bootSelect',
@@ -268,7 +275,6 @@ describe('glyph program variants', () => {
     ]);
     expect(programs.timings!.every((t) => t.chars > 0 && t.readyMs === null)).toBe(true);
     expect(finish).not.toHaveBeenCalled();
-    expect(ready).not.toHaveBeenCalled();
     void programs.cell;
     const cell = programs.timings!.find((t) => t.name === 'cell')!;
     expect(cell.blockedMs).toEqual(expect.any(Number));
