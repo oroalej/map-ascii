@@ -19,7 +19,7 @@ import { bootGlyphFragment, bootSelectFragment } from './shaders/boot';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragmentFor } from './shaders/glyph';
-import { selectFragment } from './shaders/select';
+import { selectFragment, selectLiteFragment } from './shaders/select';
 import { labelVertex, labelFragment } from './shaders/labels';
 import { labelCharacters, mapGlyphs, type Theme } from './theme';
 import { buildLifeGlyphs, type LifeGlyphs } from './life/draw';
@@ -67,7 +67,7 @@ export type Boot = {
   drewTiles(): void;
 };
 
-type BaseName = 'labels' | 'cell' | 'select' | 'glyph' | 'bootSelect' | 'bootGlyph';
+type BaseName = 'labels' | 'cell' | 'select' | 'selectLite' | 'glyph' | 'bootSelect' | 'bootGlyph';
 type BaseLinks = {
   pending: Map<BaseName, PendingProgram>;
   finished: Map<BaseName, twgl.ProgramInfo>;
@@ -76,6 +76,13 @@ type BaseLinks = {
 export type Programs = {
   /** Present until the full programs are in use; the `select` and `glyph` getters draw boot. */
   boot?: Boot;
+  /**
+   * The lite select program is drawing (shaders/select.ts `selectLiteFragment`): no shadows,
+   * party walls or water depth yet.
+   */
+  lite?: boolean;
+  /** While `lite`: once per frame. True when the full select program has just taken over. */
+  upgrade?(): boolean;
   /** Small programs for optional passes (optional-programs.ts). */
   optional?: OptionalLinks;
   /** Base program compile times, for the device report (ARCHITECTURE.md §8 "Device baseline"). */
@@ -141,6 +148,7 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
     labels: [labelVertex, labelFragment],
     cell: [cellVertex, cellFragment],
     select: [fullscreenVertex, selectFragment],
+    selectLite: [fullscreenVertex, selectLiteFragment],
     glyph: [
       fullscreenVertex,
       glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false, field: false }),
@@ -214,11 +222,28 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
           submit('select');
           submit('glyph');
         }
+        // With parallel compile the lite select stands in first, and the full one is submitted
+        // only now: one big link at a time keeps the driver's compiler off most of the machine.
+        const first = parallel ? 'selectLite' : 'select';
         // Both polled, so each one's own finish time is recorded.
-        const select = linked('select');
+        const select = linked(first);
         const glyph = linked('glyph');
         if (select && glyph) {
-          finish('select');
+          if (parallel) {
+            if (!timingOf('select')) submit('select');
+            if (linked('select')) {
+              // A warm cache: the lite program is never drawn.
+              links.pending.get('selectLite')?.cancel();
+              links.pending.delete('selectLite');
+            } else if (!links.finished.has('bootSelect') && now - created < BOOT_GRACE_MS) {
+              // Nothing drawn yet, and a warm cache finishes about now.
+              return 'grace';
+            } else {
+              finish('selectLite');
+              programs.lite = true;
+            }
+          }
+          if (!programs.lite) finish('select');
           finish('glyph');
           return 'full';
         }
@@ -249,8 +274,8 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
     for (const name of ['bootSelect', 'bootGlyph', 'labels', 'cell'] as const) submit(name);
     // Without parallel compile, the full programs link once a boot frame is on screen.
     if (parallel && !holdBoot) {
-      submit('select');
       submit('glyph');
+      submit('selectLite');
     }
     emptyVao = gl.createVertexArray();
     if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
@@ -264,7 +289,17 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
         return finish('cell');
       },
       get select() {
-        return finish(programs.boot ? 'bootSelect' : 'select');
+        if (programs.boot) return finish('bootSelect');
+        return finish(programs.lite ? 'selectLite' : 'select');
+      },
+      upgrade() {
+        if (!programs.lite || !linked('select')) return false;
+        finish('select');
+        programs.lite = false;
+        const lite = links.finished.get('selectLite');
+        links.finished.delete('selectLite');
+        if (lite) gl.deleteProgram(lite.program);
+        return true;
       },
       get glyph() {
         return finish(programs.boot ? 'bootGlyph' : 'glyph');

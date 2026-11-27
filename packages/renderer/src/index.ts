@@ -2201,7 +2201,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
       ? lastDraw !== -Infinity
       : !flight && performance.now() - Math.max(lastInput, lastPointerInput) >= 1000);
   const warmSeasonalPrograms = (clocks = false) => {
-    if (!programs || programs.boot || lost || destroyed) return;
+    // One big link at a time: variants wait for the full select program too.
+    if (!programs || programs.boot || programs.lite || lost || destroyed) return;
     const seasonal =
       !!season &&
       ((!!season.candles && bandVisibility(SEASON_ZOOM.installations, camera.zoom) > 0) ||
@@ -2384,6 +2385,11 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
         drawDirty = true;
         resetQualitySamples();
       }
+    } else if (programs.lite && programs.upgrade?.()) {
+      // Shadows, party walls and water depth arrive with the full select program.
+      beginMorph(now);
+      drawDirty = true;
+      resetQualitySamples();
     }
     const animating = animationDue(now, frameAnchor, lastInput, {
       reducedMotion,
@@ -2507,8 +2513,8 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           knobs.clouds &&
           sky.meters / (2 ** camera.zoom * dpr) <= SKY.wrap / MIST.fineCells / SKY.detailPixels,
         windowShare,
-        waterFeatures: knobs.waterDetail,
-        sunGlint: knobs.waterDetail ? glint : 0,
+        waterFeatures: knobs.waterDetail && !programs.lite,
+        sunGlint: knobs.waterDetail && !programs.lite ? glint : 0,
       };
       const flare =
         placement && candleFlare ? candleFlare.uniforms(time, placement.toCell) : undefined;
@@ -2633,7 +2639,14 @@ export function createAtlas(canvas: HTMLCanvasElement, options: AtlasOptions): A
           emit('ready', { firstTileFrame: readyMs });
         }
         if (drawableBuffers) programs.boot?.drewTiles();
-        if (detailReadyMs === null && readyMs !== null && !programs.boot && !destroyed && !lost) {
+        if (
+          detailReadyMs === null &&
+          readyMs !== null &&
+          !programs.boot &&
+          !programs.lite &&
+          !destroyed &&
+          !lost
+        ) {
           detailReadyMs = performance.now() - createdAt;
           if (typeof performance.mark === 'function') performance.mark('atlas:detail');
           emit('detailready', { firstDetailFrame: detailReadyMs });

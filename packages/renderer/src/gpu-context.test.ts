@@ -74,11 +74,11 @@ describe('glyph program variants', () => {
     expect(programs.cell).toBe(programs.cell);
     expect(pending[3]!.finish).toHaveBeenCalledOnce();
     expect(glyphProgram(context, programs, false, false)).toBe(programs.glyph);
-    expect(pending[5]!.finish).toHaveBeenCalledOnce();
+    expect(pending[4]!.finish).toHaveBeenCalledOnce();
     deletePrograms(context, programs);
     expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
     expect(pending[2]!.cancel).toHaveBeenCalledOnce();
-    expect(pending[4]!.cancel).toHaveBeenCalledOnce();
+    expect(pending[5]!.cancel).toHaveBeenCalledOnce();
   });
   describe('boot shaders', () => {
     const links = (done: Set<number>) => {
@@ -105,8 +105,10 @@ describe('glyph program variants', () => {
       BOOT_GLYPH = 1,
       LABELS = 2,
       CELL = 3,
-      SELECT = 4,
-      GLYPH = 5;
+      GLYPH = 4,
+      SELECT_LITE = 5,
+      // Submitted only once the glyph and lite select links are done.
+      SELECT = 6;
     const SMALL = [BOOT_SELECT, BOOT_GLYPH, LABELS, CELL];
     const parallelContext = () => {
       gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
@@ -134,40 +136,59 @@ describe('glyph program variants', () => {
       expect(programs.select).toBe(made[BOOT_SELECT]!.finish.mock.results[0]!.value);
       expect(programs.glyph).toBe(made[BOOT_GLYPH]!.finish.mock.results[0]!.value);
       expect(glyphProgram(context, programs, true, true)).toBe(programs.glyph);
-      expect(made[SELECT]!.finish).not.toHaveBeenCalled();
-      done.add(SELECT);
+      expect(made[SELECT_LITE]!.finish).not.toHaveBeenCalled();
+      done.add(SELECT_LITE);
       expect(programs.boot!.poll(start + BOOT_GRACE_MS + 2)).toBe('boot');
-      expect(made[SELECT]!.finish).not.toHaveBeenCalled();
+      expect(made[SELECT_LITE]!.finish).not.toHaveBeenCalled();
+      // One big link at a time: the full select is not even submitted yet.
+      expect(made).toHaveLength(6);
       done.add(GLYPH);
       expect(programs.boot!.poll(start + BOOT_GRACE_MS + 3)).toBe('full');
+      expect(made).toHaveLength(7);
       // Until committed, the boot programs still draw: the morph snapshots the last boot frame.
       expect(programs.glyph).toBe(made[BOOT_GLYPH]!.finish.mock.results[0]!.value);
       programs.boot!.commit();
       expect(programs.boot).toBeUndefined();
-      expect(programs.select).toBe(made[SELECT]!.finish.mock.results[0]!.value);
+      expect(programs.lite).toBe(true);
+      expect(programs.select).toBe(made[SELECT_LITE]!.finish.mock.results[0]!.value);
       expect(programs.glyph).toBe(made[GLYPH]!.finish.mock.results[0]!.value);
       // The two boot programs are released at the swap.
       expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
+      // The lite select draws until the full one links, then is released, once.
+      expect(programs.upgrade!()).toBe(false);
+      expect(programs.select).toBe(made[SELECT_LITE]!.finish.mock.results[0]!.value);
+      done.add(SELECT);
+      expect(programs.upgrade!()).toBe(true);
+      expect(programs.lite).toBe(false);
+      expect(programs.select).toBe(made[SELECT]!.finish.mock.results[0]!.value);
+      expect(gl.deleteProgram).toHaveBeenCalledTimes(3);
+      expect(programs.upgrade!()).toBe(false);
+      expect(gl.deleteProgram).toHaveBeenCalledTimes(3);
     });
 
     it('skips boot on a warm cache', () => {
-      const made = links(new Set([...SMALL, SELECT, GLYPH]));
+      const made = links(new Set([...SMALL, SELECT_LITE, SELECT, GLYPH]));
       const programs = createPrograms(parallelContext());
       expect(programs.boot!.poll(performance.now())).toBe('full');
       programs.boot!.commit();
+      // The full select was ready within the grace: the lite one never draws.
+      expect(programs.lite).toBeFalsy();
+      expect(programs.select).toBe(made[SELECT]!.finish.mock.results[0]!.value);
+      expect(made[SELECT_LITE]!.finish).not.toHaveBeenCalled();
+      expect(made[SELECT_LITE]!.cancel).toHaveBeenCalledOnce();
       expect(made[BOOT_SELECT]!.finish).not.toHaveBeenCalled();
       expect(made[BOOT_SELECT]!.cancel).toHaveBeenCalledOnce();
       expect(made[BOOT_GLYPH]!.cancel).toHaveBeenCalledOnce();
     });
 
     it('records when each link was first seen done', () => {
-      const done = new Set([SELECT]);
+      const done = new Set([SELECT_LITE]);
       links(done);
       const programs = createPrograms(parallelContext());
       programs.boot!.poll(0);
       const timing = (name: string) => programs.timings!.find((t) => t.name === name)!;
-      expect(timing('select').readyMs).toEqual(expect.any(Number));
-      expect(timing('select').blockedMs).toBeNull();
+      expect(timing('selectLite').readyMs).toEqual(expect.any(Number));
+      expect(timing('selectLite').blockedMs).toBeNull();
       expect(timing('glyph').readyMs).toBeNull();
     });
 
@@ -177,9 +198,9 @@ describe('glyph program variants', () => {
       programs.boot!.poll(performance.now() + BOOT_GRACE_MS + 1);
       deletePrograms(context, programs);
       expect(programs.boot).toBeUndefined();
-      expect(made[SELECT]!.cancel).toHaveBeenCalledOnce();
+      expect(made[SELECT_LITE]!.cancel).toHaveBeenCalledOnce();
       expect(made[GLYPH]!.cancel).toHaveBeenCalledOnce();
-      expect(made[SELECT]!.finish).not.toHaveBeenCalled();
+      expect(made[SELECT_LITE]!.finish).not.toHaveBeenCalled();
     });
 
     it('never submits the full programs while held', () => {
@@ -198,7 +219,7 @@ describe('glyph program variants', () => {
         throw new Error('driver');
       });
       expect(programs.boot!.poll(performance.now() + BOOT_GRACE_MS + 1)).toBe('wait');
-      done.add(SELECT).add(GLYPH);
+      done.add(SELECT_LITE).add(GLYPH);
       expect(programs.boot!.poll(performance.now() + BOOT_GRACE_MS + 2)).toBe('full');
     });
 
@@ -243,7 +264,7 @@ describe('glyph program variants', () => {
       'cell',
       'glyph',
       'labels',
-      'select',
+      'selectLite',
     ]);
     expect(programs.timings!.every((t) => t.chars > 0 && t.readyMs === null)).toBe(true);
     expect(finish).not.toHaveBeenCalled();
@@ -252,7 +273,7 @@ describe('glyph program variants', () => {
     const cell = programs.timings!.find((t) => t.name === 'cell')!;
     expect(cell.blockedMs).toEqual(expect.any(Number));
     expect(cell.readyMs).toEqual(expect.any(Number));
-    expect(programs.timings!.find((t) => t.name === 'select')!.blockedMs).toBeNull();
+    expect(programs.timings!.find((t) => t.name === 'selectLite')!.blockedMs).toBeNull();
   });
   it('records a synchronous link as both ready and blocking', () => {
     const programs = fullPrograms(context);
