@@ -154,7 +154,7 @@ Residential extraction requires both the pack's fireworks capability and an acti
    - Convert to typed arrays per layer (triangulate polygons with earcut, keep lines as polylines).
    - Runs in a Web Worker; results are cached in an LRU by tile key.
 3. **Cell pass (GPU).**
-   - Render geometry into an offscreen framebuffer whose resolution equals the cell grid (e.g. 384×108 for a 1920×972 canvas at 5×9).
+   - Render geometry into an offscreen framebuffer whose resolution equals the cell grid (e.g. 384×108 for a 1920×972 canvas at 5×9). The fine steps from z19 and z20 (`density.ts`) raise that to 480×162 at 4×6 and 640×194 at 3×5, about 1.9× and 3× the cells, so the cell-resolution passes cost that much more there; the `crowd` tier stops at 4 px and the lower tiers at 5 px (`quality.ts` `minCell`). On those steps the glyph pass dithers coverage and light per pixel and adds the roof and ground textures (`shaders/glyph.ts` `u_dither`). Their frame cost is not yet measured.
    - Uses MRT (multiple render targets):
      - `classTex` (RGBA8, red only: feature class id; RGBA so the legend's readback needs no conversion)
      - `attrTex` (RGBA8: height, shade, time-visibility, flags)

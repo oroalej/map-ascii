@@ -51,10 +51,12 @@ const cellSchedule = (small: boolean): CellSchedule =>
   small
     ? {
         ...DEFAULT_CELLS,
-        steps: DEFAULT_CELLS.steps.map((s) => ({
-          ...s,
-          width: Math.max(s.width, SMALL_SCREEN_MIN_CELL),
-        })),
+        // A step raised to the floor drops its own height, and takes the schedule's aspect.
+        steps: DEFAULT_CELLS.steps.map((s) =>
+          s.width >= SMALL_SCREEN_MIN_CELL
+            ? s
+            : { minZoom: s.minZoom, width: SMALL_SCREEN_MIN_CELL },
+        ),
       }
     : DEFAULT_CELLS;
 
