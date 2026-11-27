@@ -113,7 +113,7 @@ describe('seasonal GPU fireworks', () => {
           field: false,
           folklore: false,
           cancel: vi.fn(),
-          pending: { key: 8, program: { ready: () => false, finish, cancel: vi.fn() } },
+          pending: { key: 8, program: { ready: () => true, finish, cancel: vi.fn() } },
         };
       const grid = placeGrid(view, view.cellDev, 202, 92).grid;
       for (const time of [2.6, 2.7])

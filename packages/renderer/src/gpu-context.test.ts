@@ -394,7 +394,7 @@ describe('glyph program variants', () => {
     deletePrograms(context, upgraded);
   });
 
-  it('reuses an unfinished parallel link when input arrives and cancels the next link on disposal', () => {
+  it('draws with a linked variant until a parallel link is ready and cancels the next link on disposal', () => {
     const pending = {
       ready: vi.fn(() => false),
       finish: vi.fn(() => ({ program: {} }) as ReturnType<typeof createProgram>),
@@ -407,9 +407,14 @@ describe('glyph program variants', () => {
     vi.advanceTimersByTime(200);
     expect(prepareProgram).toHaveBeenCalledTimes(1);
     expect(pending.finish).not.toHaveBeenCalled();
+    // The frame never waits for the link: it draws with the base program until this one is ready.
+    expect(glyphProgram(context, programs, true, false)).toBe(programs.glyph);
+    expect(pending.finish).not.toHaveBeenCalled();
+    pending.ready.mockReturnValue(true);
     expect(glyphProgram(context, programs, true, false)).toBe(
       pending.finish.mock.results[0]!.value,
     );
+    pending.ready.mockReturnValue(false);
     expect(createProgram).toHaveBeenCalledTimes(6);
     vi.advanceTimersByTime(100);
     expect(prepareProgram).toHaveBeenCalledTimes(2);
@@ -667,6 +672,28 @@ describe('glyph program variants', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('picks the nearest linked variant while the asked one links', () => {
+    const programs = fullPrograms(context);
+    gl.getExtension.mockReturnValue({ COMPLETION_STATUS_KHR: 123 });
+    vi.mocked(prepareProgram).mockReturnValue({
+      ready: () => false,
+      finish: () => ({ program: {} }) as ReturnType<typeof createProgram>,
+      cancel: vi.fn(),
+    });
+    const both = { program: {} } as ReturnType<typeof createProgram>;
+    const clocks = { program: {} } as ReturnType<typeof createProgram>;
+    programs.glyphVariants!.set(2, clocks);
+    // Missing the focus feature, but nothing nearer is linked.
+    expect(glyphProgram(context, programs, true, true)).toBe(clocks);
+    programs.glyphVariants!.set(7, both);
+    // A variant with every asked feature wins: uniforms switch its extras off.
+    expect(glyphProgram(context, programs, true, true)).toBe(both);
+    expect(prepareProgram).toHaveBeenCalledTimes(1);
+    programs.glyphVariants!.delete(2);
+    programs.glyphVariants!.delete(7);
+    deletePrograms(context, programs);
+  });
+
   it('publishes completed parallel variants once and retains demand compilation after a warmup failure', () => {
     vi.mocked(prepareProgram).mockImplementation(() => ({
       ready: () => true,
@@ -698,7 +725,14 @@ describe('glyph program variants', () => {
     expect(cancel).toHaveBeenCalledOnce();
     expect(failed.glyphVariants?.size).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
-    glyphProgram(context, failed, true, false);
+    vi.mocked(prepareProgram).mockReturnValue({
+      ready: () => true,
+      finish: () => ({ program: {} }) as ReturnType<typeof createProgram>,
+      cancel: vi.fn(),
+    });
+    // Asked for by a frame: linked in the background, drawn from the next ask on.
+    expect(glyphProgram(context, failed, true, false)).toBe(failed.glyph);
+    expect(glyphProgram(context, failed, true, false)).not.toBe(failed.glyph);
     expect(failed.glyphVariants?.size).toBe(2);
     deletePrograms(context, failed);
   });
