@@ -6,6 +6,8 @@ import {
   animationDue,
   cameraDue,
   frameInterval,
+  LIGHT_FRAME_MS,
+  lightFrames,
   IDLE_FRAME_MS,
   nextAnchor,
   PACING_SLACK_MS,
@@ -119,5 +121,24 @@ describe('watchVisibility', () => {
     const watch = watchVisibility(document.createElement('canvas'), () => {});
     expect(watch.watched()).toBe(false);
     watch.detach();
+  });
+});
+
+describe('light frames', () => {
+  it('keeps the interactive rate while idle only when frames are cheap', () => {
+    const idle = 10_000;
+    expect(frameInterval(idle, 0)).toBe(IDLE_FRAME_MS);
+    expect(frameInterval(idle, 0, true)).toBe(ACTIVE_FRAME_MS);
+    const pacing = { reducedMotion: false, watched: true };
+    expect(animationDue(idle, idle - ACTIVE_FRAME_MS, 0, { ...pacing, light: true })).toBe(true);
+    expect(animationDue(idle, idle - ACTIVE_FRAME_MS, 0, pacing)).toBe(false);
+  });
+
+  it('holds its rate between the two thresholds', () => {
+    const between = (LIGHT_FRAME_MS.enter + LIGHT_FRAME_MS.leave) / 2;
+    expect(lightFrames(false, LIGHT_FRAME_MS.enter - 1)).toBe(true);
+    expect(lightFrames(false, between)).toBe(false);
+    expect(lightFrames(true, between)).toBe(true);
+    expect(lightFrames(true, LIGHT_FRAME_MS.leave + 1)).toBe(false);
   });
 });

@@ -109,8 +109,12 @@ test('utility poles and overhead wires', async ({ page }) => {
           gl.uniform3fv(gl.getUniformLocation(program, 'u_fixturePaints'), paints);
           const off = read(false),
             on = read(true);
-          const changed = (x: number) =>
-            [0, 1, 2].some((c) => off[(4 * 40 + x) * 4 + c] !== on[(4 * 40 + x) * 4 + c]);
+          const delta = (x: number) =>
+            [0, 1, 2].reduce(
+              (sum, c) => sum + Math.abs(off[(4 * 40 + x) * 4 + c]! - on[(4 * 40 + x) * 4 + c]!),
+              0,
+            );
+          const changed = (x: number) => delta(x) > 0;
           result.push({
             theme,
             daylight,
@@ -120,7 +124,8 @@ test('utility poles and overhead wires', async ({ page }) => {
               'roof mask': !changed(9),
               'canopy mask': !changed(17),
               'water mask': !changed(25),
-              'label mask': !changed(33),
+              // A label's box dims the map under it (LABEL_BOX), the cable included.
+              'cable dimmed under a label': changed(33) && delta(33) < delta(1),
             },
           });
         }

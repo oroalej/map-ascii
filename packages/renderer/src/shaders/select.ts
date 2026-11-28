@@ -89,6 +89,7 @@ uniform int u_seeThrough;         // class ids outlines look through (bitmask)
 uniform int u_roadMask;           // carriageway class ids (bitmask)
 uniform bool u_pavingVisible;    // the cell pass can draw paving at the camera zoom
 uniform float u_cellAspect;       // cell height / width, for ridge directions
+uniform bool u_fine;              // a fine cell step (density.ts): outlines are sub-cell rims
 uniform uint u_hover;             // feature index under the pointer (0 = none)
 uniform uint u_selected;          // selected feature index (0 = none)
 uniform uvec4 u_highlight[${MAX_HIGHLIGHT / 4}]; // highlighted feature indices, four per entry
@@ -203,7 +204,9 @@ int wallRowFor(int kind, vec4 attr, int cls) {
   if (kind == ${kindCodes.foliage}) return -1;
   int flags = int(attr.g * 255.0 + 0.5);
   if ((flags & ${Flags.landmark}) != 0 && u_zoom >= ${float(OUTLINE_ZOOM.landmark)}) {
-    return kind == ${kindCodes.building} ? ${WALL_DOUBLE_ROW} : ${WALL_SINGLE_ROW};
+    // A landmark ground (a campus: building class, no height) is no more outlined than any other.
+    if (kind != ${kindCodes.building}) return ${WALL_SINGLE_ROW};
+    return attr.r > 0.0 ? ${WALL_DOUBLE_ROW} : -1;
   }
   // Grounds (no height) are never outlined.
   if (kind == ${kindCodes.building} && attr.r > 0.0 && u_zoom >= ${float(OUTLINE_ZOOM.building)}) {
@@ -286,7 +289,9 @@ bool subcellEdge(ivec2 p, int cls, vec4 id) {
       fgAttr = sampleAttr;
     }
   }
-  if (fg == 0 || wallRowFor(u_kind[fg], fgAttr, fg) >= 0) return false;
+  // A walled feature keeps whole-cell wall glyphs, except on the fine steps: there a wall glyph is
+  // a pixel wide and steps a whole cell at a time, so the rim follows the footprint by sixths.
+  if (fg == 0 || (!u_fine && wallRowFor(u_kind[fg], fgAttr, fg) >= 0)) return false;
   int mask = 0;
   int bg = 0;
   for (int i = 0; i < ${SUB.cols * SUB.rows}; i++) {
@@ -536,7 +541,10 @@ void main() {
 
   bool strip = maskBit(u_roadMask, cls) == 1 && u_zoom >= ${float(ROAD_AREA_ZOOM)};
   int wallRow = strip ? -1 : wallRowFor(kind, attr, cls);
-  int wall = strip || wallRow >= 0 ? wallMask(p, strip ? CURBS : OUTLINE) : -1;
+  // On the fine steps the outline is a sub-cell rim, so only a shopfront's awning needs the mask.
+  bool outlined = wallRow >= 0 && (!u_fine ||
+    (u_awnings && kind == ${kindCodes.building} && (int(attr.g * 255.0 + 0.5) & ${Flags.frontage}) != 0));
+  int wall = strip || outlined ? wallMask(p, strip ? CURBS : OUTLINE) : -1;
 
   // Carriageways at Place level: strips with curbs, blank road surface inside.
   if (strip) {
@@ -580,9 +588,12 @@ void main() {
           return;
         }
       }
-      vec2 wall = texelFetch(u_table, ivec2(mask, wallRow), 0).rg;
-      emit(wall, cls);
-      return;
+      // On the fine steps the sub-cell rim above is the outline; the cell keeps its interior.
+      if (!u_fine) {
+        vec2 wall = texelFetch(u_table, ivec2(mask, wallRow), 0).rg;
+        emit(wall, cls);
+        return;
+      }
     }
   }
 

@@ -60,6 +60,8 @@ import {
   WIND_SHIFT,
 } from '../glyphs/select';
 import { CellState } from '../picking';
+import { GROUND_TEXTURE, ROOF_TEXTURE, RoofCode } from '../glyphs/roofs';
+import { LABEL_BOX } from '../labels';
 import { RAIN } from '../life/wind';
 import { MIST, SKY, skyNoiseGlsl } from '../life/sky';
 import { cellHashGlsl } from './hash';
@@ -72,6 +74,9 @@ import { candleFlareGlsl } from '../life/candle-flare';
 import { hauntLampGlsl } from '../life/folklore-lighting';
 
 const float = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
+
+/** Flat light levels on the fine cell steps; the glyph pass stipples between them. */
+export const DITHER_LEVELS = 4;
 
 /**
  * The cloud field's inputs (life/sky.ts), and its shade at a point `at` cells into the grid:
@@ -283,6 +288,20 @@ uniform vec3 u_fixturePaints[11];
 uniform bool u_signalGlow;
 uniform sampler2D u_signalLight;
 uniform float u_dpr;
+// Device px per dither dot on the fine cell steps (density.ts), else 0: there every pixel is
+// either ink or background, and partial coverage becomes an ordered pattern of dots.
+uniform float u_dither;
+float ditherThreshold(vec2 at) {
+  ivec2 p = ivec2(floor(at / max(u_dither, 1.0))) & 3;
+  int bayer[16] = int[16](0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
+  return (float(bayer[p.y * 4 + p.x]) + 0.5) / 16.0;
+}
+// Light on the fine steps: a few flat levels, stippled between, so a shadow's edge and a lamp's
+// falloff are textures of dots, not smooth gradients.
+float stippled(float light, vec2 at) {
+  if (u_dither <= 0.0) return light;
+  return min(1.0, floor(light * ${float(DITHER_LEVELS)} + ditherThreshold(at)) / ${float(DITHER_LEVELS)});
+}
 uniform float u_moon;
 ${cloudUniformsGlsl}
 
@@ -860,7 +879,84 @@ vec3 focusHalo(vec2 grid, ivec2 cell, int cls, ivec2 subAt) {
   return u_accent * halo * 0.18 * focusPulse();
 }
 
+// A label's ink at a pixel of its own coarser grid (density.ts): x the ink, y 1 inside a label's
+// box (its text cells and their one-cell margin).
+vec2 labelInk(vec2 labelGrid) {
+  ivec2 labelCell = ivec2(floor(labelGrid / u_labelCell));
+  vec4 over = texelFetch(u_overlay, labelCell, 0);
+  int code = int(over.r * 255.0 + 0.5) + 256 * int(over.g * 255.0 + 0.5);
+  if (code == 0) return vec2(0.0);
+  int index = code - 1;
+  ivec2 at = ivec2(index % u_labelColumns, index / u_labelColumns) * ivec2(u_labelCell);
+  ivec2 inLabel = ivec2(labelGrid - vec2(labelCell) * u_labelCell);
+  return vec2(texelFetch(u_labelAtlas, at + inLabel, 0).r, 1.0);
+}
+
+// A roof's surface on the fine steps (glyphs/roofs.ts ROOF_TEXTURE, onSeam): the share of its
+// light a pixel keeps. attr is the cell's (r height, b ridge angle, a roof code).
+float roofTexture(vec4 attr, ivec2 cell, vec2 grid) {
+  if (attr.r <= 0.0 || u_meterStep.x <= 0.0) return 1.0;
+  vec2 dotM = max(u_dither, 1.0) / u_cell * u_meterStep;
+  vec2 m = u_meterOrigin + grid / u_cell * u_meterStep;
+  int roof = int(attr.a * 255.0 + 0.5);
+  bool side = roof == ${RoofCode.sidePos} || roof == ${RoofCode.sideNeg};
+  bool end = roof == ${RoofCode.endPos} || roof == ${RoofCode.endNeg};
+  if (side || end) {
+    // Seams run down the slope: across the ridge on its sides, along it on a hip's ends.
+    float theta = attr.b * ${float(Math.PI)};
+    vec2 ridge = vec2(cos(theta), sin(theta));
+    float along = dot(m, side ? ridge : vec2(-ridge.y, ridge.x));
+    float pitch = max(${float(ROOF_TEXTURE.seam)}, ${float(ROOF_TEXTURE.minDots)} * dotM.x);
+    return along - floor(along / pitch) * pitch < dotM.x ? ${float(ROOF_TEXTURE.seamLight)} : 1.0;
+  }
+  if (roof != ${RoofCode.none}) return 1.0;
+  // A flat roof: a parapet where the next cell is another height, and a concrete speckle.
+  for (int i = 0; i < 4; i++) {
+    ivec2 d = i == 0 ? ivec2(1, 0) : i == 1 ? ivec2(-1, 0) : i == 2 ? ivec2(0, 1) : ivec2(0, -1);
+    if (texelFetch(u_attr, cell + d, 0).r != attr.r) return ${float(ROOF_TEXTURE.parapetLight)};
+  }
+  uint h = cellHash(ivec2(floor(m / dotM)));
+  return float(h & 1023u) / 1024.0 < ${float(ROOF_TEXTURE.speckle)} ? ${float(ROOF_TEXTURE.speckleLight)} : 1.0;
+}
+
+// Open ground on the fine steps (glyphs/roofs.ts GROUND_TEXTURE): the share of its light a pixel
+// of paving or carriageway keeps.
+float groundTexture(int cls, vec2 grid) {
+  if (u_meterStep.x <= 0.0) return 1.0;
+  vec2 dotM = max(u_dither, 1.0) / u_cell * u_meterStep;
+  vec2 m = u_meterOrigin + grid / u_cell * u_meterStep;
+  if (cls == ${classId('paving')}) {
+    vec2 slab = max(vec2(${float(GROUND_TEXTURE.slab)}), ${float(GROUND_TEXTURE.minDots)} * dotM);
+    vec2 inSlab = m - floor(m / slab) * slab;
+    return inSlab.x < dotM.x || inSlab.y < dotM.y ? ${float(GROUND_TEXTURE.jointLight)} : 1.0;
+  }
+  if (cls == ${classId('road_major')} || cls == ${classId('road_mid')} || cls == ${classId('road_minor')}) {
+    uint h = cellHash(ivec2(floor(m / dotM)));
+    return float(h & 1023u) / 1024.0 < ${float(GROUND_TEXTURE.grain)} ? ${float(GROUND_TEXTURE.grainLight)} : 1.0;
+  }
+  return 1.0;
+}
+
+void mapMain();
+
+// Labels sit on top of the finished map. Their box dims the map instead of hiding it, and only
+// a rim around each stroke is solid background, so the ground stays readable under a name.
 void main() {
+  mapMain();
+  vec2 labelGrid = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y) + u_labelShift;
+  vec2 label = labelInk(labelGrid);
+  if (label.y == 0.0) return;
+  float rim = 0.0;
+  float reach = ${float(LABEL_BOX.rim)} * u_dpr;
+  for (int i = 0; i < 8; i++) {
+    float angle = float(i) * ${float(Math.PI / 4)};
+    rim = max(rim, labelInk(labelGrid + reach * vec2(cos(angle), sin(angle))).x);
+  }
+  vec3 under = mix(o_color.rgb * ${float(LABEL_BOX.dim)}, u_background, rim);
+  o_color = vec4(mix(under, u_labelColor, label.x), 1.0);
+}
+
+void mapMain() {
   vec2 screen = vec2(gl_FragCoord.x, u_height - gl_FragCoord.y);
   vec2 grid = screen + u_shift;
   ivec2 cell = ivec2(floor(grid / u_cell));
@@ -869,20 +965,6 @@ void main() {
   ivec2 subAt = cell * sub + clamp(ivec2(vec2(inCell) / u_cell * vec2(sub)), ivec2(0), sub - 1);
   pixelSub = subAt;
 
-  // Labels sit on top, on their own coarser grid (density.ts); their cells show the
-  // background, which gives them a halo.
-  vec2 labelGrid = screen + u_labelShift;
-  ivec2 labelCell = ivec2(floor(labelGrid / u_labelCell));
-  vec4 over = texelFetch(u_overlay, labelCell, 0);
-  int code = int(over.r * 255.0 + 0.5) + 256 * int(over.g * 255.0 + 0.5);
-  if (code > 0) {
-    int index = code - 1;
-    ivec2 at = ivec2(index % u_labelColumns, index / u_labelColumns) * ivec2(u_labelCell);
-    ivec2 inLabel = ivec2(labelGrid - vec2(labelCell) * u_labelCell);
-    float ink = texelFetch(u_labelAtlas, at + inLabel, 0).r;
-    o_color = vec4(mix(u_background, u_labelColor, ink), 1.0);
-    return;
-  }
 
   cloudShade = cloudFactor(grid);
   vec4 g = texelFetch(u_glyphs, cell, 0);
@@ -909,7 +991,7 @@ void main() {
   }
   vec2 shadeAt = standing ? vec2(cell) + 0.5 : grid / u_cell;
   vec3 shadeTexel = texture(u_shade, shadeAt / vec2(textureSize(u_shade, 0))).rgb;
-  float shade = standing ? shadeTexel.g : shadeTexel.r;
+  float shade = stippled(standing ? shadeTexel.g : shadeTexel.r, grid);
   // Highlights keep their own color, as the feature's fill does below.
   bool waterTones = u_waterDepth && state == ${CellState.none};
   if (waterTones && (u_cellBits[bgClass] & ${CellBit.boat}) != 0) back = waterToned(back, shadeTexel.b, 1.0);
@@ -952,6 +1034,7 @@ void main() {
     }
   }
   // Road spill never recolors fixture ink or rain streaks.
+  pool = stippled(pool, grid);
   rainLight = brakeGlow ? 0.0 : pool;
   // On water, the lamps along the bank reflect.
   bool water = (u_cellBits[cls] & ${CellBit.boat}) != 0;
@@ -1194,6 +1277,13 @@ void main() {
     color = member ? u_accent * focusPulse() : color * ${float(FOCUS_DIM)};
     if (!edge && bgClass == cls) back = (member ? mix(fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow, u_accent, 0.25 * focusPulse()) : (fillOf(cls, daylit(cropPigment(cls, tone))) * shade + glow) * ${float(FOCUS_DIM)}) + focusGlow;
   }
+  if (u_dither > 0.0 && !edge && awning == 0 && (u_cellBits[cls] & ${CellBit.grounds}) != 0) {
+    float roofLight = roofTexture(texelFetch(u_attr, cell, 0), cell, grid);
+    color *= roofLight;
+    back *= roofLight;
+  }
+  if (u_dither > 0.0 && !edge) back *= groundTexture(cls, grid);
+  if (u_dither > 0.0) coverage = step(ditherThreshold(grid), coverage);
   o_color = vec4(${misted('rainOver(fixtureOver(mix(back, color, coverage), fixture, inCell, cell, fixtureAllowed, signalHalo), cell, inCell)')}, 1.0);
 }
 `;

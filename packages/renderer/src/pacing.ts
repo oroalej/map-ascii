@@ -6,7 +6,7 @@
  * decides whether the map moves on its own.
  */
 
-/** While idle, animation redraws at most this often (30 fps). */
+/** While idle with costly frames, animation redraws at most this often (30 fps). */
 export const IDLE_FRAME_MS = 1000 / 30;
 /** Interaction (input, camera moves, the animation just after them) draws at most this often. */
 export const ACTIVE_FRAME_MS = 1000 / 60;
@@ -23,11 +23,34 @@ export type Pacing = {
   reducedMotion: boolean;
   /** Whether anyone can watch the map (`watchVisibility`). */
   watched: boolean;
+  /** Frames are cheap here (`lightFrames`): the idle animation keeps the interactive rate. */
+  light?: boolean;
 };
 
-/** The interval animation keeps at `now`: interactive just after input, else idle. */
-export const frameInterval = (now: number, lastInput: number) =>
-  now - lastInput < ACTIVE_MS ? ACTIVE_FRAME_MS : IDLE_FRAME_MS;
+/**
+ * A frame's cost (CPU plus GPU ms, smoothed) under which the idle animation runs at the
+ * interactive rate, and the cost over which it drops back. The gap keeps a scene near the line
+ * from switching rates every second.
+ */
+export const LIGHT_FRAME_MS = { enter: 7, leave: 10 } as const;
+
+/**
+ * The untimed GPU can still be the slow part. When light frames come further apart than `missed`
+ * ms (smoothed), the display isn't keeping the interactive rate: the idle rate returns for
+ * `retry` ms before the next try.
+ */
+export const LIGHT_FRAME_GUARD = { missed: 21, retry: 10_000 } as const;
+
+/** Whether frames costing `costMs` are light, given whether they were. */
+export const lightFrames = (was: boolean, costMs: number): boolean =>
+  costMs < (was ? LIGHT_FRAME_MS.leave : LIGHT_FRAME_MS.enter);
+
+/**
+ * The interval animation keeps at `now`: interactive just after input or while frames are
+ * `light`, else idle.
+ */
+export const frameInterval = (now: number, lastInput: number, light = false) =>
+  light || now - lastInput < ACTIVE_MS ? ACTIVE_FRAME_MS : IDLE_FRAME_MS;
 
 /**
  * Whether a frame at `now` keeps to `interval` after `anchor`, the ideal time of the last
@@ -50,16 +73,16 @@ export function nextAnchor(now: number, anchor: number, interval: number): numbe
 
 /**
  * Whether the animation is due a frame at `now` (ms, like `anchor` and `lastInput`): 60 fps
- * just after input, else 30 fps.
+ * just after input or while frames are light, else 30 fps.
  */
 export function animationDue(
   now: number,
   anchor: number,
   lastInput: number,
-  { reducedMotion, watched }: Pacing,
+  { reducedMotion, watched, light }: Pacing,
 ): boolean {
   if (reducedMotion || !watched) return false;
-  return due(now, anchor, frameInterval(now, lastInput));
+  return due(now, anchor, frameInterval(now, lastInput, light));
 }
 
 /**

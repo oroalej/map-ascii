@@ -5,13 +5,16 @@
  * as a "detail zoom".
  */
 
-/** A step of the schedule: from `minZoom` on, map cells are `width` CSS px wide. */
-export type CellStep = { minZoom: number; width: number };
+/**
+ * A step of the schedule: from `minZoom` on, map cells are `width` CSS px wide. `height` overrides
+ * the schedule's aspect, for the fine steps whose cells are closer to square.
+ */
+export type CellStep = { minZoom: number; width: number; height?: number };
 
 export type CellSchedule = {
   /** Ordered by `minZoom`; the first applies below every other. */
   steps: readonly CellStep[];
-  /** Cell height ÷ width. */
+  /** Cell height ÷ width, for steps without their own `height`. */
   aspect: number;
 };
 
@@ -21,6 +24,10 @@ export const DEFAULT_CELLS: CellSchedule = {
     { minZoom: 13, width: 7 },
     { minZoom: 15, width: 6 },
     { minZoom: 16.5, width: 5 },
+    // Fine steps: too small for letters, so the map reads as a dot grid (glyphs/atlas.ts) and each
+    // zoom level past the last detail threshold still resolves more of the ground.
+    { minZoom: 19, width: 4, height: 6 },
+    { minZoom: 20, width: 3, height: 5 },
   ],
   aspect: 1.8,
 };
@@ -47,8 +54,20 @@ export function cellStep(schedule: CellSchedule, zoom: number, current?: number)
 
 /** A step's cell size in CSS px. */
 export function stepCell(schedule: CellSchedule, step: number) {
-  const width = schedule.steps[step]!.width;
-  return { width, height: Math.round(width * schedule.aspect) };
+  const { width, height } = schedule.steps[step]!;
+  return { width, height: height ?? Math.round(width * schedule.aspect) };
+}
+
+/** Cells narrower than this cannot show a character; their glyphs draw as dots and tones. */
+export const FINE_CELL_WIDTH = 5;
+
+/**
+ * The schedule with no step finer than `minWidth`: lower quality tiers keep larger cells, since
+ * the cell-resolution passes cost in proportion to the cell count.
+ */
+export function coarsened(schedule: CellSchedule, minWidth: number): CellSchedule {
+  const steps = schedule.steps.filter((s, i) => i === 0 || s.width >= minWidth);
+  return steps.length === schedule.steps.length ? schedule : { ...schedule, steps };
 }
 
 /** The cell width detail thresholds (`OUTLINE_ZOOM` etc.) were set for. */

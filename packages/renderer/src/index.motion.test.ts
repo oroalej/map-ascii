@@ -2355,7 +2355,7 @@ describe('live motion preference', () => {
     expect(issue.mock.lastCall![0].camera).toEqual(atlas.getCamera());
   });
 
-  it('recovers Auto with skipped idle callbacks and keeps the idle draw cadence', () => {
+  it('recovers Auto with skipped idle callbacks and keeps to one draw a tick', () => {
     const step = vi.spyOn(LifeWorld.prototype, 'step');
     for (let at = 50; at <= 4500; at += 50) draw(at);
     expect(atlas.getStats().quality.tier).toBe(1);
@@ -2363,8 +2363,10 @@ describe('live motion preference', () => {
     step.mockClear();
     for (let at = 19_500; at < 24_500; at += 16) draw(at);
     expect(atlas.getStats().quality.tier).toBe(0);
-    // Every second 16 ms tick: 30 fps idle within the pacing slack, never every tick.
-    expect(step.mock.calls.length).toBeLessThanOrEqual(157);
+    // These frames cost nothing, so idle animation keeps the interactive rate (pacing.ts
+    // `lightFrames`): every 16 ms tick, and never more than one draw a tick.
+    expect(step.mock.calls.length).toBeGreaterThan(157);
+    expect(step.mock.calls.length).toBeLessThanOrEqual(313);
   });
 
   it('defers manual quality while a camera flight is active', () => {
@@ -3020,20 +3022,21 @@ describe('label focus in the renderer frame', () => {
     draw(1000);
     vi.mocked(selectPass).mockClear();
     vi.mocked(crownPass).mockClear();
-    // Hover is not camera input: the idle cadence (30 fps, within its slack) still applies.
-    for (let i = 1; i <= 25; i++) {
+    // Hover is not camera input: the animation cadence still applies (60 fps while frames are
+    // light, as these are; within its slack).
+    for (let i = 1; i <= 12; i++) {
       input.intents!.hover([100 + i * 3, 100]);
       draw(1000 + i);
     }
     expect(selectPass).not.toHaveBeenCalled();
     expect(crownPass).not.toHaveBeenCalled();
-    draw(1034);
+    draw(1017);
     expect(selectPass).toHaveBeenCalledOnce();
     expect(crownPass).toHaveBeenCalledOnce();
     expect(vi.mocked(glyphPass).mock.calls.at(-1)![11]!.ripples!.length).toBeGreaterThan(0);
-    draw(1040);
+    draw(1020);
     expect(selectPass).toHaveBeenCalledOnce();
-    draw(1068);
+    draw(1034);
     expect(selectPass).toHaveBeenCalledTimes(2);
   });
 

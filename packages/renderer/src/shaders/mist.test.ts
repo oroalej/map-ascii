@@ -18,7 +18,8 @@ describe('mistOver', () => {
     // Every map output goes through it; only labels and the background return without.
     const outputs = source.match(/o_color = vec4\((?!mistOver)[^\n]+/g) ?? [];
     for (const output of outputs) expect(output).not.toContain('rainOver');
-    expect(source).toContain('o_color = vec4(mix(u_background, u_labelColor, ink), 1.0);');
+    // A label is blended over the finished, misted map (its box dims it), never misted itself.
+    expect(source).toContain('o_color = vec4(mix(under, u_labelColor, label.x), 1.0);');
   });
 
   it('pays one branch outside the mist, so u_mist = 0 keeps today', () => {

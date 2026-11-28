@@ -35,7 +35,7 @@ import {
   personGlyphs,
 } from '../life/people';
 import { MINI_DIAGONALS, STALL_GLYPH, vehicleGlyphs } from '../life/vehicles';
-import { buildGlyphAtlas, drawProcedural, shadeCoverage } from './atlas';
+import { buildGlyphAtlas, drawProcedural, fineTone, shadeCoverage } from './atlas';
 
 const W = 10;
 const H = 18;
@@ -453,5 +453,21 @@ describe('glyph set', () => {
 
   it('keeps label text in its own set', () => {
     for (const g of ['A', 'z', 'ñ', '?']) expect(labelCharacters.includes(g), g).toBe(true);
+  });
+});
+
+describe('fine cells', () => {
+  it('fills a shade block edge to edge, with no gap for a mesh', () => {
+    const data = new Uint8Array(W * H);
+    drawProcedural({ data, stride: W, x0: 0, y0: 0, w: W, h: H, fine: true }, '▒');
+    expect(new Set(data)).toEqual(new Set([shadeCoverage['▒']]));
+    expect(draw('▒').at(W - 1, H - 1)).toBe(0);
+  });
+
+  it('keeps a letter as a tone that grows with its weight', () => {
+    // The lightest mark still clears the first dither threshold (1/32 of 255).
+    expect(fineTone(1)).toBeGreaterThan(255 / 32);
+    expect(fineTone(40)).toBeGreaterThan(fineTone(10));
+    expect(fineTone(255)).toBe(190);
   });
 });

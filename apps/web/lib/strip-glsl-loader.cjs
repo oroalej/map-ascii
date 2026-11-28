@@ -1,13 +1,31 @@
 /**
  * Build loader: removes what the minifier can't see inside `/* glsl *\/` template strings, which is
- * their comments, indentation and blank lines. Without this they ship to every visitor, about 9 KB
- * gzipped of the renderer chunk. Production only, so shader errors in `pnpm dev` keep line numbers.
+ * their comments, indentation, blank lines and the spaces around punctuation. Without this they
+ * ship to every visitor, about 10 KB gzipped of the renderer chunk. Production only, so shader
+ * errors in `pnpm dev` keep line numbers. Line breaks stay: without them the chunk gzips larger.
  */
 // Turbopack runs loaders as CommonJS.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const ts = require('typescript');
 
 const TAG = '/* glsl */';
+
+/**
+ * `code` without the spaces around its punctuation. The spaces at its two ends stay, because an
+ * interpolation may follow or precede them, and so do those between two signs (`a - -b`).
+ */
+function squeeze(code) {
+  const [, lead, core, trail] = /^(\s*)(.*?)(\s*)$/s.exec(code);
+  return (
+    lead +
+    core
+      .replace(/\s*([=*/<>&|?:;,{}()!%^[\]])\s*/g, '$1')
+      .replace(/(\S)\s*([+-])\s*(?=(\S))/g, (match, before, sign, after) =>
+        /[+-]/.test(before + after) ? match : before + sign,
+      ) +
+    trail
+  );
+}
 
 function stripGlsl(source) {
   if (!source.includes(TAG)) return source;
@@ -50,7 +68,9 @@ function stripGlsl(source) {
         const slashes = piece.indexOf('//');
         if (slashes >= 0) comment = true;
         const code = slashes >= 0 ? piece.slice(0, slashes) : piece;
-        line += line ? code : code.trimStart();
+        const start = line ? code : code.trimStart();
+        // A preprocessor line keeps its spaces: `#define A (b)` is not `#define A(b)`.
+        line += (line || start).startsWith('#') ? start : squeeze(start);
       });
     };
     if (ts.isNoSubstitutionTemplateLiteral(node)) {

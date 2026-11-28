@@ -592,7 +592,10 @@ export function wallStyle(
 ): WallStyle | null {
   if (terrace && zoom >= OUTLINE_ZOOM.building) return 'single';
   if (kind === 'seating' && zoom >= OUTLINE_ZOOM.building) return 'single';
-  if (landmark && zoom >= OUTLINE_ZOOM.landmark) return kind === 'building' ? 'double' : 'single';
+  if (landmark && zoom >= OUTLINE_ZOOM.landmark) {
+    if (kind !== 'building') return 'single';
+    return height > 0 ? 'double' : null;
+  }
   if (kind === 'building' && height > 0 && zoom >= OUTLINE_ZOOM.building) return 'single';
   return null;
 }

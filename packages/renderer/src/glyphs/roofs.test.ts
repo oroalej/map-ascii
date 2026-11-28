@@ -1,5 +1,13 @@
 import { expect, it } from 'vitest';
-import { RoofCode, roofLineAngle, roofSlopeVariant, roofSurfaceCode } from './roofs';
+import {
+  onSeam,
+  ROOF_TEXTURE,
+  RoofCode,
+  roofLineAngle,
+  roofSlopeVariant,
+  roofSurfaceCode,
+  seamPitch,
+} from './roofs';
 import { roofSurface, RoofShape } from '../raster/roofs';
 
 it('lights actual slope normals and keeps a parallel or zero sun on the height ramp', () => {
@@ -44,4 +52,15 @@ it('folds both hip directions at the byte wrap without negative glyph bins', () 
       expect(byte).toBeGreaterThanOrEqual(0);
       expect(byte).toBeLessThanOrEqual(255);
     }
+});
+
+it('spaces roof seams by the sheet, but never closer than the dots can show', () => {
+  expect(seamPitch(0.1)).toBe(ROOF_TEXTURE.seam);
+  expect(seamPitch(0.5)).toBe(ROOF_TEXTURE.minDots * 0.5);
+  // One dot of every pitch is a seam, on either side of the origin.
+  const dot = 0.25;
+  const seams = Array.from({ length: 12 }, (_, i) => onSeam((i - 6 + 0.5) * dot, dot));
+  expect(seams.filter(Boolean)).toHaveLength(4);
+  expect(onSeam(-0.1, dot)).toBe(false);
+  expect(onSeam(0.1, dot)).toBe(true);
 });
