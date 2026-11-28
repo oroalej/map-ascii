@@ -108,8 +108,25 @@ for (const city of cities) {
         const errors: string[] = [];
         page.on('pageerror', (error) => errors.push(error.message));
         await page.clock.setFixedTime(new Date('2026-07-10T04:00:00Z'));
+        const eventsSeason = city.seasons.find(
+          (s) =>
+            city.processions.some(
+              (p) => p.season === s.id && (p.kind === 'procession' || p.kind === 'parade'),
+            ) && city.processions.some((p) => p.season === s.id && p.kind === 'mass'),
+        );
+        const street =
+          eventsSeason &&
+          (city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'procession') ??
+            city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'parade'));
+        const start = city.generatedProcessions.find((p) => p.id === street?.id);
+        // Open a block from the first event's start: its flight is then the shortest one, which
+        // software WebGL finishes well inside the wait below. A flight across the city did not.
+        const near =
+          start && start.kind !== 'mass'
+            ? `&lat=${(start.route[0]![1] + 0.001).toFixed(5)}&lng=${start.route[0]![0].toFixed(5)}`
+            : '';
         // Use the event flow's Place entry zoom; full-detail geometry is covered separately.
-        await page.goto(`/${city.slug}?z=17.5`);
+        await page.goto(`/${city.slug}?z=17.5${near}`);
         await mapReady(page);
         const today = page.getByRole('button', { name: 'Season: Today', exact: true });
         await expect(today).toBeVisible();
@@ -143,13 +160,7 @@ for (const city of cities) {
           await expect(page.getByText(season.lanterns!.label, { exact: true })).toBeVisible();
         }
         expect(query(page)).toEqual(before);
-        const eventsSeason = city.seasons.find(
-          (s) =>
-            city.processions.some(
-              (p) => p.season === s.id && (p.kind === 'procession' || p.kind === 'parade'),
-            ) && city.processions.some((p) => p.season === s.id && p.kind === 'mass'),
-        );
-        if (eventsSeason) {
+        if (eventsSeason && street) {
           await page.emulateMedia({ reducedMotion: 'no-preference' });
           for (let i = 0; i <= city.seasons.length; i++) {
             const control = page.getByRole('button', { name: /^Season:/ });
@@ -157,9 +168,6 @@ for (const city of cities) {
               break;
             await control.press('Enter');
           }
-          const street =
-            city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'procession') ??
-            city.processions.find((p) => p.season === eventsSeason.id && p.kind === 'parade')!;
           const mass = city.processions.find(
             (p) => p.season === eventsSeason.id && p.kind === 'mass',
           )!;
