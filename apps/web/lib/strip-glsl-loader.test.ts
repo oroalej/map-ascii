@@ -16,15 +16,30 @@ describe('stripGlsl', () => {
   it('removes comments, indentation and blank lines', () => {
     expect(
       stripGlsl(shader('#version 300 es\n  // why\n\n  float a = 1.0; // why\n  float b;\n')),
-    ).toBe(shader('#version 300 es\nfloat a = 1.0;\nfloat b;\n'));
+    ).toBe(shader('#version 300 es\nfloat a=1.0;\nfloat b;\n'));
   });
 
   it('keeps interpolations, and drops the ones inside a comment', () => {
     expect(stripGlsl(shader('  float a = ${x};\n  // see ${y} too\n  ${z}\n'))).toBe(
-      shader('float a = ${x};\n${z}\n'),
+      shader('float a= ${x};\n${z}\n'),
     );
     expect(stripGlsl(shader('  if (a == ${x} && b) c(${y}); // d\n'))).toBe(
-      shader('if (a == ${x} && b) c(${y});\n'),
+      shader('if(a== ${x} &&b)c(${y});\n'),
+    );
+  });
+
+  it('removes the spaces around punctuation, but not where they separate tokens', () => {
+    expect(stripGlsl(shader('  if (a < 1.0) { b(c, d); } else { e[i - 1] = f ? g : -h; }\n'))).toBe(
+      shader('if(a<1.0){b(c,d);}else{e[i-1]=f?g:-h;}\n'),
+    );
+    // Two signs stay apart, or `a - -b` would read as a decrement.
+    expect(stripGlsl(shader('  a = b - -c + +d;\n'))).toBe(shader('a=b - -c + +d;\n'));
+    // `#define A (b)` is not `#define A(b)`.
+    expect(stripGlsl(shader('#define A (b + 1)\n  #define B (c)\n'))).toBe(
+      shader('#define A (b + 1)\n#define B (c)\n'),
+    );
+    expect(stripGlsl(shader('  ${type} ${name} = ${a} - ${b};\n'))).toBe(
+      shader('${type} ${name} = ${a} - ${b};\n'),
     );
   });
 
