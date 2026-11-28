@@ -708,8 +708,17 @@ void main() {
 `;
 
 /** Replace the body of the GLSL function that starts with `signature` by `body`. */
-function stubbed(source: string, signature: string, body: string): string {
-  const start = source.indexOf(signature);
+export function stubbed(source: string, signature: string, body: string): string {
+  // The production build drops the spaces around punctuation (strip-glsl-loader.cjs).
+  const tokens = signature.match(/\w+|[^\w\s]/g) ?? [];
+  const pattern = tokens
+    .map((token, i) =>
+      /\w/.test(token)
+        ? token + (/\w/.test(tokens[i + 1] ?? '') ? '\\s+' : '\\s*')
+        : `\\${token}\\s*`,
+    )
+    .join('');
+  const start = source.search(new RegExp(pattern));
   if (start < 0) throw new Error(`select shader: no function ${signature}`);
   const open = source.indexOf('{', start);
   let depth = 0;
