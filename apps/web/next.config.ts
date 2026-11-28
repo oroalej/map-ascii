@@ -18,9 +18,11 @@ const nextConfig: NextConfig = {
     root,
     rules: {
       '*.ts': {
-        // Shaders ship without comments or indentation (lib/strip-glsl-loader.cjs).
+        // Shaders ship without comments, indentation or spare spaces (lib/strip-glsl-loader.cjs).
         condition: { all: ['production', { content: /[/][*] glsl [*][/]/ }] },
-        loaders: ['./lib/strip-glsl-loader.cjs'],
+        // Turbopack keeps a loader's output until its input or options change, so a change to
+        // the loader itself needs a new revision here.
+        loaders: [{ loader: './lib/strip-glsl-loader.cjs', options: { revision: 2 } }],
         as: '*.ts',
       },
     },
