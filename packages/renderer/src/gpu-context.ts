@@ -14,12 +14,12 @@ import { MAX_CLASSES } from './classes';
 import { buildGlyphAtlas, type GlyphAtlas } from './glyphs/atlas';
 import { buildGlyphTables, MAX_GLYPHS, MAX_VARIANTS, type GlyphTables } from './glyphs/select';
 import { createProgram, createTexture, prepareProgram, type GL, type PendingProgram } from './gpu';
-import { deleteOptionalPrograms, type OptionalLinks } from './optional-programs';
+import { deleteOptionalPrograms, optionalProgram, type OptionalLinks } from './optional-programs';
 import { bootGlyphFragment, bootSelectFragment } from './shaders/boot';
 import { cellFragment, cellVertex } from './shaders/cell';
 import { fullscreenVertex } from './shaders/fullscreen';
 import { glyphFragmentFor } from './shaders/glyph';
-import { selectFragment } from './shaders/select';
+import { selectFragment, selectLiteFragment } from './shaders/select';
 import { labelVertex, labelFragment } from './shaders/labels';
 import { labelCharacters, mapGlyphs, type Theme } from './theme';
 import { buildLifeGlyphs, type LifeGlyphs } from './life/draw';
@@ -67,7 +67,7 @@ export type Boot = {
   drewTiles(): void;
 };
 
-type BaseName = 'labels' | 'cell' | 'select' | 'glyph' | 'bootSelect' | 'bootGlyph';
+type BaseName = 'labels' | 'cell' | 'select' | 'selectLite' | 'glyph' | 'bootSelect' | 'bootGlyph';
 type BaseLinks = {
   pending: Map<BaseName, PendingProgram>;
   finished: Map<BaseName, twgl.ProgramInfo>;
@@ -76,10 +76,19 @@ type BaseLinks = {
 export type Programs = {
   /** Present until the full programs are in use; the `select` and `glyph` getters draw boot. */
   boot?: Boot;
+  /**
+   * The lite select program is drawing (shaders/select.ts `selectLiteFragment`): no shadows,
+   * party walls or water depth yet.
+   */
+  lite?: boolean;
+  /** While `lite`: once per frame. True when the full select program has just taken over. */
+  upgrade?(): boolean;
   /** Small programs for optional passes (optional-programs.ts). */
   optional?: OptionalLinks;
   /** Base program compile times, for the device report (ARCHITECTURE.md §8 "Device baseline"). */
   timings?: ShaderTiming[];
+  /** `performance.now()` when the set was created: the origin of `timings`. */
+  timingsStart?: number;
   /** Separate ownership lets teardown cancel links without resolving lazy getters. */
   baseLinks?: BaseLinks;
   folklore?: FolkloreResources;
@@ -102,12 +111,17 @@ export type Programs = {
     fireworks: boolean;
     folklore: boolean;
     field: boolean;
-    pending?: { key: number; program: PendingProgram };
+    pending?: { key: number; program: PendingProgram; timing?: ShaderTiming };
     /** The rendered frame whose turn started the last parallel link. */
     started?: number;
     cancel(): void;
   };
   glyphWarmupFailed?: boolean;
+  /**
+   * A variant a frame asked for before it was linked. With parallel compile the frame never waits:
+   * it draws with the nearest linked variant until this one is ready.
+   */
+  glyphDemand?: { key: number; program: PendingProgram; timing?: ShaderTiming };
   /** Main-thread ms spent compiling or finishing a glyph variant on first demand, until read. */
   demandWaitMs?: number;
   /** For the full-screen passes, which have no vertex attributes. */
@@ -141,6 +155,7 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
     labels: [labelVertex, labelFragment],
     cell: [cellVertex, cellFragment],
     select: [fullscreenVertex, selectFragment],
+    selectLite: [fullscreenVertex, selectLiteFragment],
     glyph: [
       fullscreenVertex,
       glyphFragmentFor({ focus: false, effectClocks: false, seasonal: false, field: false }),
@@ -214,11 +229,35 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
           submit('select');
           submit('glyph');
         }
+        // The big links start with the first frame, not with the program set: a set that is
+        // disposed at once (React's development double mount) never starts them, and a
+        // background tab starts them only when it is shown.
+        if (parallel && !timingOf('glyph')) {
+          submit('glyph');
+          submit('selectLite');
+        }
+        // With parallel compile the lite select stands in first, and the full one is submitted
+        // only now: one big link at a time keeps the driver's compiler off most of the machine.
+        const first = parallel ? 'selectLite' : 'select';
         // Both polled, so each one's own finish time is recorded.
-        const select = linked('select');
+        const select = linked(first);
         const glyph = linked('glyph');
         if (select && glyph) {
-          finish('select');
+          if (parallel) {
+            if (!timingOf('select')) submit('select');
+            if (linked('select')) {
+              // A warm cache: the lite program is never drawn.
+              links.pending.get('selectLite')?.cancel();
+              links.pending.delete('selectLite');
+            } else if (!links.finished.has('bootSelect') && now - created < BOOT_GRACE_MS) {
+              // Nothing drawn yet, and a warm cache finishes about now.
+              return 'grace';
+            } else {
+              finish('selectLite');
+              programs.lite = true;
+            }
+          }
+          if (!programs.lite) finish('select');
           finish('glyph');
           return 'full';
         }
@@ -247,15 +286,13 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
   });
   try {
     for (const name of ['bootSelect', 'bootGlyph', 'labels', 'cell'] as const) submit(name);
-    // Without parallel compile, the full programs link once a boot frame is on screen.
-    if (parallel && !holdBoot) {
-      submit('select');
-      submit('glyph');
-    }
+    // The full programs are submitted from `poll`: with parallel compile on the first frame,
+    // without it once a boot frame is on screen.
     emptyVao = gl.createVertexArray();
     if (!emptyVao) throw new Error('ASCII Atlas: cannot allocate vertex array');
     const programs: Programs = {
       timings,
+      timingsStart: created,
       baseLinks: links,
       get labels() {
         return finish('labels');
@@ -264,7 +301,17 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
         return finish('cell');
       },
       get select() {
-        return finish(programs.boot ? 'bootSelect' : 'select');
+        if (programs.boot) return finish('bootSelect');
+        return finish(programs.lite ? 'selectLite' : 'select');
+      },
+      upgrade() {
+        if (!programs.lite || !linked('select')) return false;
+        finish('select');
+        programs.lite = false;
+        const lite = links.finished.get('selectLite');
+        links.finished.delete('selectLite');
+        if (lite) gl.deleteProgram(lite.program);
+        return true;
       },
       get glyph() {
         return finish(programs.boot ? 'bootGlyph' : 'glyph');
@@ -289,6 +336,45 @@ export function createPrograms(gl: GL, fullUniforms = false, holdBoot = false): 
   }
 }
 
+/** Start a device-report entry for a glyph variant or an optional effect program. */
+function variantTiming(programs: Programs, key: number, chars: number): ShaderTiming | undefined {
+  if (!programs.timings || programs.timingsStart === undefined) return undefined;
+  const timing: ShaderTiming = {
+    name: key === 16 ? 'folklore' : key === 8 ? 'fireworks' : `glyph:${key}`,
+    chars,
+    submittedMs: performance.now() - programs.timingsStart,
+    readyMs: null,
+    blockedMs: null,
+  };
+  programs.timings.push(timing);
+  return timing;
+}
+const sinceSubmitted = (programs: Programs, timing: ShaderTiming) =>
+  performance.now() - (programs.timingsStart ?? 0) - timing.submittedMs;
+
+/** Link a program on the main thread, recording how long the frame waited for it. */
+export function createTimedProgram(
+  gl: GL,
+  programs: Programs,
+  name: string,
+  vertex: string,
+  fragment: string,
+): twgl.ProgramInfo {
+  const start = performance.now();
+  const program = createProgram(gl, vertex, fragment);
+  if (programs.timings && programs.timingsStart !== undefined) {
+    const ms = performance.now() - start;
+    programs.timings.push({
+      name,
+      chars: vertex.length + fragment.length,
+      submittedMs: start - programs.timingsStart,
+      readyMs: ms,
+      blockedMs: ms,
+    });
+  }
+  return program;
+}
+
 export function glyphProgram(
   gl: GL,
   programs: Programs,
@@ -311,18 +397,115 @@ export function glyphProgram(
   if (!program) {
     const start = performance.now();
     const pending = programs.glyphWarmup?.pending;
+    if (demand && gl.getExtension('KHR_parallel_shader_compile')) {
+      // A link on the main thread queues behind whatever the driver is compiling, for seconds:
+      // the frame draws with a linked variant instead, and this one takes over once it is ready.
+      if (pending?.key === key) {
+        if (!pending.program.ready()) return standIn(programs, variants, key);
+        program = pending.program.finish();
+        if (pending.timing) {
+          pending.timing.readyMs ??= sinceSubmitted(programs, pending.timing);
+          pending.timing.blockedMs = performance.now() - start;
+        }
+        programs.glyphWarmup!.pending = undefined;
+        variants.set(key, program);
+        return program;
+      }
+      const asked = programs.glyphDemand;
+      if (asked?.program.ready()) {
+        if (asked.timing) asked.timing.readyMs ??= sinceSubmitted(programs, asked.timing);
+        const linked = asked.program.finish();
+        if (asked.timing) asked.timing.blockedMs = performance.now() - start;
+        variants.set(asked.key, linked);
+        programs.glyphDemand = undefined;
+        if (asked.key === key) return linked;
+      }
+      // One link at a time: a second big compile only slows the first.
+      if (!programs.glyphDemand && !pending) {
+        const fragment = glyphFragmentFor({ focus, effectClocks, seasonal, field });
+        programs.glyphDemand = {
+          key,
+          timing: variantTiming(programs, key, fullscreenVertex.length + fragment.length),
+          program: prepareProgram(gl, fullscreenVertex, fragment),
+        };
+      }
+      return standIn(programs, variants, key);
+    }
     if (pending?.key === key) {
       program = pending.program.finish();
+      if (pending.timing) {
+        pending.timing.readyMs ??= sinceSubmitted(programs, pending.timing);
+        pending.timing.blockedMs = performance.now() - start;
+      }
       programs.glyphWarmup!.pending = undefined;
-    } else
-      program = createProgram(
-        gl,
-        fullscreenVertex,
-        glyphFragmentFor({ focus, effectClocks, seasonal, field }),
-      );
+    } else {
+      const fragment = glyphFragmentFor({ focus, effectClocks, seasonal, field });
+      const timing = variantTiming(programs, key, fullscreenVertex.length + fragment.length);
+      program = createProgram(gl, fullscreenVertex, fragment);
+      if (timing) timing.readyMs = timing.blockedMs = performance.now() - start;
+    }
     variants.set(key, program);
     if (demand) programs.demandWaitMs = (programs.demandWaitMs ?? 0) + performance.now() - start;
   }
+  return program;
+}
+
+const bits = (n: number) => {
+  let count = 0;
+  for (; n; n &= n - 1) count++;
+  return count;
+};
+
+/**
+ * The linked variant nearest to `key`: one with every asked feature and the fewest others, since
+ * uniforms switch the others off; failing that, the one missing the fewest.
+ */
+function standIn(programs: Programs, variants: Map<number, twgl.ProgramInfo>, key: number) {
+  let best = programs.glyph;
+  let score = -Infinity;
+  for (const [have, program] of variants) {
+    const missing = bits(key & ~have);
+    const extra = bits(have & ~key);
+    const s = missing === 0 ? 100 - extra : -missing;
+    if (s > score) {
+      score = s;
+      best = program;
+    }
+  }
+  return best;
+}
+
+/**
+ * The fireworks (key 8) or folklore (key 16) program, once linked. With parallel compile the pass
+ * never waits for it: until then this returns undefined and the pass skips its frame.
+ */
+export function effectProgram(
+  gl: GL,
+  programs: Programs,
+  key: 8 | 16,
+  vertex: string,
+  fragment: string,
+): twgl.ProgramInfo | undefined {
+  const name = key === 16 ? 'folklore' : 'fireworks';
+  const held = key === 16 ? programs.folkloreProgram : programs.fireworksProgram;
+  if (held) {
+    if (key === 16) programs.folkloreProgram = undefined;
+    else programs.fireworksProgram = undefined;
+    return held;
+  }
+  const pending = programs.glyphWarmup?.pending;
+  if (pending?.key === key) {
+    if (!pending.program.ready()) return undefined;
+    if (pending.timing) pending.timing.readyMs ??= sinceSubmitted(programs, pending.timing);
+    const program = pending.program.finish();
+    programs.glyphWarmup!.pending = undefined;
+    return program;
+  }
+  if (!programs.optional || !gl.getExtension('KHR_parallel_shader_compile'))
+    return createTimedProgram(gl, programs, `${name} (waited)`, vertex, fragment);
+  const program = optionalProgram(gl, programs, name, vertex, fragment);
+  // The effect's own resources own it from here.
+  if (program) programs.optional.delete(name);
   return program;
 }
 
@@ -361,10 +544,10 @@ export function prewarmGlyphPrograms(
   ];
   const has = (key: number) =>
     key === 16
-      ? !!(programs.folklore || programs.folkloreProgram)
+      ? !!(programs.folklore || programs.folkloreProgram || programs.optional?.has('folklore'))
       : key === 8
-        ? !!(programs.fireworks || programs.fireworksProgram)
-        : variants.has(key);
+        ? !!(programs.fireworks || programs.fireworksProgram || programs.optional?.has('fireworks'))
+        : variants.has(key) || programs.glyphDemand?.key === key;
   if (programs.glyphWarmup) {
     const warmup = programs.glyphWarmup;
     warmup.clocks ||= effectClocks;
@@ -424,7 +607,10 @@ export function prewarmGlyphPrograms(
       const pending = warmup.pending;
       if (pending) {
         if (pending.program.ready()) {
+          if (pending.timing) pending.timing.readyMs ??= sinceSubmitted(programs, pending.timing);
+          const finishing = performance.now();
           const program = pending.program.finish();
+          if (pending.timing) pending.timing.blockedMs = performance.now() - finishing;
           if (pending.key === 16) programs.folkloreProgram = program;
           else if (pending.key === 8) programs.fireworksProgram = program;
           else variants.set(pending.key, program);
@@ -443,6 +629,11 @@ export function prewarmGlyphPrograms(
           return;
         }
         const rendered = frame?.();
+        // A variant a frame is waiting for links first, alone.
+        if (programs.glyphDemand) {
+          queue();
+          return;
+        }
         if (parallel && rendered !== undefined && rendered === warmup.started) {
           queue();
           return;
@@ -453,17 +644,18 @@ export function prewarmGlyphPrograms(
         const field = (key & 32) !== 0;
         if (parallel) {
           warmup.started = rendered;
+          const vertex =
+            key === 16 ? folkloreVertex : key === 8 ? fireworksVertex : fullscreenVertex;
+          const fragment =
+            key === 16
+              ? folkloreFragment
+              : key === 8
+                ? fireworksFragment
+                : glyphFragmentFor({ focus, effectClocks, seasonal, field });
           warmup.pending = {
             key,
-            program: prepareProgram(
-              gl,
-              key === 16 ? folkloreVertex : key === 8 ? fireworksVertex : fullscreenVertex,
-              key === 16
-                ? folkloreFragment
-                : key === 8
-                  ? fireworksFragment
-                  : glyphFragmentFor({ focus, effectClocks, seasonal, field }),
-            ),
+            timing: variantTiming(programs, key, vertex.length + fragment.length),
+            program: prepareProgram(gl, vertex, fragment),
           };
         } else if (key === 16)
           programs.folkloreProgram = createProgram(gl, folkloreVertex, folkloreFragment);
@@ -486,6 +678,8 @@ export function deletePrograms(gl: GL, p: Programs) {
   p.boot = undefined;
   deleteOptionalPrograms(gl, p.optional);
   p.glyphWarmup?.cancel();
+  p.glyphDemand?.program.cancel();
+  p.glyphDemand = undefined;
   for (const pending of p.baseLinks?.pending.values() ?? []) pending.cancel();
   p.baseLinks?.pending.clear();
   if (!gl.isContextLost()) {

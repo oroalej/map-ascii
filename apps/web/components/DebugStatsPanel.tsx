@@ -24,7 +24,15 @@ export default function DebugStatsPanel() {
   useEffect(() => {
     if (!atlas) return;
     const timer = setInterval(() => setStats(atlas.getStats()), REFRESH_MS);
+    // Read by the cold capture (scripts/cold-browser.ts) while programs are still linking.
+    const target = window as Window & { atlasDebugStats?: () => unknown };
+    target.atlasDebugStats = () => ({
+      shaders: atlas.getStats().shaders,
+      extensions: atlas.getStats().extensions,
+      gpuBackend: atlas.getProfile()?.gpuRenderer ?? null,
+    });
     return () => {
+      delete target.atlasDebugStats;
       clearInterval(timer);
       clearTimeout(captureTimer.current);
       setCapturing(false);

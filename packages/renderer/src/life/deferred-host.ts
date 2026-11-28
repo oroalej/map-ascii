@@ -33,6 +33,7 @@ export function deferredHost(
       return !!host;
     },
     latest: () => (disposed ? undefined : host?.latest()),
+    tookMs: () => host?.tookMs?.() ?? 0,
     request: (...args: Parameters<LifeHost['request']>) =>
       !disposed && (host?.request(...args) ?? false),
     sync: (...args: Parameters<LifeHost['sync']>) => {

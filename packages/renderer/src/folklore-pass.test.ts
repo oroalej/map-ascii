@@ -255,7 +255,7 @@ it.each(['cached', 'pending', 'demand'] as const)(
         folklore: true,
         field: false,
         cancel: vi.fn(),
-        pending: { key: 16, program: { ready: () => false, finish, cancel: vi.fn() } },
+        pending: { key: 16, program: { ready: () => true, finish, cancel: vi.fn() } },
       };
     folklorePass(gl, p, targets, theme, view, grid, []);
     expect(p.folklore).toBeUndefined();

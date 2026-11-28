@@ -106,6 +106,8 @@ export interface LifeHost {
   /** True when a step was accepted. Rejected requests leave dt accumulating on the caller. */
   request(input: FrameInput): boolean;
   latest(): FrameView | undefined;
+  /** How long the last finished step kept its thread busy, ms; 0 before the first. */
+  tookMs?(): number;
   /** Replace event geography without changing tile residency or ordinary population. */
   setProcessions(routes: readonly ProcessionRoute[]): void;
   setLive(id: string | undefined, progress?: number, occurrence?: string): void;
@@ -194,6 +196,7 @@ export function createInlineHostLazy(
       send((h) => h.stop());
     },
     request: (input) => !disposed && !!host && host.request(input),
+    tookMs: () => host?.tookMs?.() ?? 0,
     latest: () => {
       if (disposed) return;
       if (host) return host.latest();
@@ -250,6 +253,7 @@ export function createWorkerHost(
   const remote = Comlink.wrap<LifeWorkerApi>(worker);
   let ready = false,
     inFlight = false,
+    tookMs = 0,
     disposed = false,
     generation = allocateLifeGeneration(),
     agentEpoch = 0,
@@ -391,6 +395,7 @@ export function createWorkerHost(
       if (fallback) return fallback.request(input);
       if (!ready || inFlight) return false;
       inFlight = true;
+      const asked = performance.now();
       const requestedGeneration = generation;
       const requestedAgentEpoch = agentEpoch;
       const requestedFolkloreEpoch = folkloreEpoch;
@@ -488,9 +493,11 @@ export function createWorkerHost(
         .catch(fail)
         .finally(() => {
           inFlight = false;
+          tookMs = performance.now() - asked;
         });
       return true;
     },
+    tookMs: () => (fallback ? (fallback.tookMs?.() ?? 0) : tookMs),
     latest: () => {
       if (fallback) return fallback.latest();
       if (acceptedPost !== undefined)

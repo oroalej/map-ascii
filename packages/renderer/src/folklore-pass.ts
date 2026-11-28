@@ -1,8 +1,8 @@
 import * as twgl from 'twgl.js';
 import { project } from './camera';
 import { metersPerCssPx, type Grid, type View } from './grid';
-import { createProgram, createTexture, type GL, type CellTargets } from './gpu';
-import type { Programs, ThemeResources } from './gpu-context';
+import { createTexture, type GL, type CellTargets } from './gpu';
+import { effectProgram, type Programs, type ThemeResources } from './gpu-context';
 import { folkloreMinimumZoom, type FolklorePacket, type FolkloreSprite } from './life/folklore';
 import { FOLKLORE_GLYPHS } from './life/folklore-glyphs';
 import { FOLKLORE } from './life/folklore-config';
@@ -141,15 +141,9 @@ export type FolkloreResources = {
   sheet?: { width: number; height: number; data: Uint8Array };
   sheetRequested?: boolean;
 };
-function createFolklore(gl: GL, programs: Programs): FolkloreResources {
-  const pending = programs.glyphWarmup?.pending;
-  let program = programs.folkloreProgram;
-  if (!program && pending?.key === 16) {
-    program = pending.program.finish();
-    programs.glyphWarmup!.pending = undefined;
-  }
-  program ??= createProgram(gl, folkloreVertex, folkloreFragment);
-  programs.folkloreProgram = undefined;
+function createFolklore(gl: GL, programs: Programs): FolkloreResources | undefined {
+  const program = effectProgram(gl, programs, 16, folkloreVertex, folkloreFragment);
+  if (!program) return undefined;
   const vao = gl.createVertexArray(),
     buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -182,6 +176,8 @@ export function folklorePass(
 ) {
   if (!quads.length) return;
   const r = (programs.folklore ??= createFolklore(gl, programs));
+  // Still linking: the manananggal appears a moment later instead of holding the frame.
+  if (!r) return;
   if (!r.sprites && quads.some((q) => q.sprite.kind !== 'ghost')) {
     if (r.sheet) {
       const { width, height, data } = r.sheet;

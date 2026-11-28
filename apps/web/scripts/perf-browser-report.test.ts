@@ -1,7 +1,13 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
 import { resolve } from 'node:path';
-import { browserOptions, coldSummary, drawnIntervals, summarize } from './perf-browser-report';
+import {
+  browserOptions,
+  coldSummary,
+  compileBusy,
+  drawnIntervals,
+  summarize,
+} from './perf-browser-report';
 
 const output = resolve('fixture-scene.json');
 
@@ -26,6 +32,7 @@ it('summarizes cold runs by program with measured medians', () => {
     readyMs: ready,
     detailMs: ready + 100,
     longestTaskMs: ready / 2,
+    compileBusyMs: ready,
     parallelCompile: true,
     gpuBackend: 'GPU',
     shaders: [{ name: 'select', chars: 1, submittedMs: 0, readyMs: selectReady, blockedMs: 5 }],
@@ -35,8 +42,22 @@ it('summarizes cold runs by program with measured medians', () => {
     readyMedianMs: 200,
     detailMedianMs: 300,
     longestTaskMedianMs: 100,
+    compileBusyMedianMs: 200,
+    warmDetailMedianMs: null,
+    warmCompileBusyMedianMs: null,
     programs: { select: { readyMedianMs: 10, blockedMedianMs: 5 } },
   });
+});
+
+it('counts overlapping links once in the compile-busy time', () => {
+  const link = (submittedMs: number, readyMs: number | null) => ({
+    name: 'p',
+    chars: 1,
+    submittedMs,
+    readyMs,
+    blockedMs: null,
+  });
+  expect(compileBusy([link(0, 10), link(5, 10), link(30, 5), link(40, null)])).toBe(20);
 });
 
 it('keeps the legacy captures and requires an absolute output for a scene', () => {

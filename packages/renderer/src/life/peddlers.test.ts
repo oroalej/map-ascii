@@ -25,12 +25,16 @@ describe('isolated peddler population', () => {
     population.step(1, peddlerWeather, MAX_TILE_AGENTS);
     expect(query).not.toHaveBeenCalled();
     population.step(0, peddlerWeather, 0);
-    expect(query).toHaveBeenCalledTimes(1);
+    const born = query.mock.calls.length;
+    expect(born).toBeGreaterThan(0);
+    // Every query names the box it is about.
+    expect(query.mock.calls.every(([near]) => near && near.x1 > near.x0)).toBe(true);
     population.step(1, { ...peddlerWeather, minutes: 660 }, 0);
-    expect(query).toHaveBeenCalledTimes(2);
+    const leaving = query.mock.calls.length;
+    expect(leaving).toBeGreaterThan(born);
     population.clear();
     population.step(1, { ...peddlerWeather, minutes: 660 }, 0);
-    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenCalledTimes(leaving);
     const absent = peddlerFixture([{ ...peddlerConfig, share: 0 }]).population,
       none = vi.spyOn(absent.context, 'ordinary');
     absent.step(1, peddlerWeather, 0);
@@ -378,25 +382,36 @@ describe('world integration and ordinary isolation', () => {
     const neighbor: Body = { x: 0.5, y: 1500 / peddlerPM, hx: 1, hy: 0, length: 8, width: 1 };
     const source = vi.spyOn(b, 'groundBodies').mockImplementation(() => [{ ...neighbor }]);
     const phase = world as unknown as {
-        stepPeddlers(dt: number, zoom: number, env: LifeEnv): void;
-        ordinaryPeddlerBodies(life: object): Body[];
-      },
-      query = vi.spyOn(phase, 'ordinaryPeddlerBodies');
+      stepPeddlers(dt: number, zoom: number, env: LifeEnv): void;
+      ordinaryPeddlerBodies(life: object, near?: object): Body[];
+      peddlerOrdinarySnapshot?: object;
+    };
     phase.stepPeddlers(0, 19, { ...peddlerWeather, minutes: 180 });
     expect(source).not.toHaveBeenCalled();
-    phase.stepPeddlers(0, 19, peddlerWeather);
-    expect(source).toHaveBeenCalledTimes(1);
-    expect(query).toHaveBeenCalledTimes(2);
-    const bodiesA = query.mock.results[0]!.value as Body[],
-      bodiesB = query.mock.results[1]!.value as Body[],
+    // Within a step, every query shares the bodies posed so far.
+    const bodiesA = phase.ordinaryPeddlerBodies(a),
+      bodiesB = phase.ordinaryPeddlerBodies(b),
       projected = bodiesA[0]!;
+    expect(source).toHaveBeenCalledTimes(1);
     expect(projected.x).toBeCloseTo(EXTENT / peddlerPM + neighbor.x);
     expect(projected.y).toBeCloseTo(neighbor.y);
     expect(bodiesB[0]!.x).toBeCloseTo(neighbor.x);
+    // An actor that cannot reach the asked box is never posed.
+    const away = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    phase.peddlerOrdinarySnapshot = undefined;
+    expect(phase.ordinaryPeddlerBodies(b, away)).toHaveLength(0);
+    expect(source).toHaveBeenCalledTimes(1);
+    const mover = b.movers[0]!,
+      at = { x: mover.x / peddlerPM, y: mover.y / peddlerPM };
+    expect(
+      phase.ordinaryPeddlerBodies(b, { x0: at.x - 1, y0: at.y - 1, x1: at.x + 1, y1: at.y + 1 }),
+    ).toHaveLength(1);
+    expect(source).toHaveBeenCalledTimes(2);
+    // The next step poses afresh.
     neighbor.y += 10;
     phase.stepPeddlers(0, 19, peddlerWeather);
-    expect(source).toHaveBeenCalledTimes(2);
-    expect((query.mock.results[2]!.value as Body[])[0]!.y).toBeCloseTo(neighbor.y);
+    expect(phase.ordinaryPeddlerBodies(a)[0]!.y).toBeCloseTo(neighbor.y);
+    expect(source).toHaveBeenCalledTimes(3);
     const builder = new LifeBuilder();
     builder.line(
       [

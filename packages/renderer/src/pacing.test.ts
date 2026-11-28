@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MAX_STEP_S } from './life/config';
 import {
   ACTIVE_FRAME_MS,
   ACTIVE_MS,
@@ -9,6 +10,9 @@ import {
   IDLE_FRAME_MS,
   nextAnchor,
   PACING_SLACK_MS,
+  STEP_PACE,
+  stepDue,
+  stepInterval,
   watchVisibility,
 } from './pacing';
 
@@ -119,5 +123,29 @@ describe('watchVisibility', () => {
     const watch = watchVisibility(document.createElement('canvas'), () => {});
     expect(watch.watched()).toBe(false);
     watch.detach();
+  });
+});
+
+describe('step pacing', () => {
+  it('steps less often on wider views, where agents cross fewer pixels a second', () => {
+    expect(stepInterval(20.5, 0)).toBe(40);
+    expect(stepInterval(19.2, 0)).toBe(50);
+    expect(stepInterval(18, 0)).toBe(66);
+    expect(stepInterval(15, 0)).toBe(66);
+  });
+  it('rests for as long as the last step took, under the simulation clamp', () => {
+    expect(stepInterval(20.5, 10)).toBe(40);
+    expect(stepInterval(20.5, 30)).toBe(60);
+    expect(stepInterval(18, 40)).toBe(80);
+    expect(stepInterval(18, 70)).toBe(STEP_PACE.maxMs);
+    // Paced time is never lost: the longest gap stays within one simulated step.
+    expect(STEP_PACE.maxMs).toBeLessThan(MAX_STEP_S * 1000);
+  });
+  it('is due once the gap has passed, give or take a frame of jitter', () => {
+    expect(stepDue(1000, -Infinity, 18, 0)).toBe(true);
+    expect(stepDue(1040, 1000, 18, 0)).toBe(false);
+    expect(stepDue(1066 - PACING_SLACK_MS, 1000, 18, 0)).toBe(true);
+    expect(stepDue(1066, 1000, 18, 45)).toBe(false);
+    expect(stepDue(1090, 1000, 18, 45)).toBe(true);
   });
 });

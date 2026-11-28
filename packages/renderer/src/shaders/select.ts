@@ -706,3 +706,46 @@ void main() {
   emit(glyph, cls);
 }
 `;
+
+/** Replace the body of the GLSL function that starts with `signature` by `body`. */
+export function stubbed(source: string, signature: string, body: string): string {
+  // The production build drops the spaces around punctuation (strip-glsl-loader.cjs).
+  const tokens = signature.match(/\w+|[^\w\s]/g) ?? [];
+  const pattern = tokens
+    .map((token, i) =>
+      /\w/.test(token)
+        ? token + (/\w/.test(tokens[i + 1] ?? '') ? '\\s+' : '\\s*')
+        : `\\${token}\\s*`,
+    )
+    .join('');
+  const start = source.search(new RegExp(pattern));
+  if (start < 0) throw new Error(`select shader: no function ${signature}`);
+  const open = source.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}' && --depth === 0)
+      return `${source.slice(0, open)}{ ${body} }${source.slice(i + 1)}`;
+  }
+  throw new Error(`select shader: unbalanced ${signature}`);
+}
+
+/**
+ * The select pass without its three costliest blocks to compile: shadows and contact shade,
+ * party walls (buildings keep their own outlines), and water depth. Everything else, and every
+ * texel it writes, is the full shader's, so the same passes draw it. It links in a fraction of
+ * the full program's time on ANGLE D3D11 and stands in for it until that one is ready
+ * (gpu-context.ts).
+ */
+export const selectLiteFragment = [
+  ['vec2 shadowAmount(ivec2 p, float self)', 'return vec2(0.0);'],
+  ['float contactShade(ivec2 p)', 'return 0.0;'],
+  ['float waterDepthAt(ivec2 p)', 'return 0.0;'],
+  ['int partyWallMask(ivec2 p)', 'return -2;'],
+  ['bool partySeam(ivec2 p, int cls, vec4 attr)', 'return false;'],
+].reduce(
+  (source, [signature, body]) => stubbed(source, signature!, body!),
+  selectFragment
+    .replace(/uniform bool u_shadows;/, 'const bool u_shadows = false;')
+    .replace(/uniform bool u_waterDepth;/, 'const bool u_waterDepth = false;'),
+);

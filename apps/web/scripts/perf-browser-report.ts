@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path';
 /** Matched browser scenes (`pnpm perf:browser --scene <scene> --output <absolute path>`). */
 export const SCENES = ['idle', 'pan', 'zoom', 'night', 'fiesta', 'close'] as const;
 export type Scene = (typeof SCENES)[number];
-export type ColdOptions = { runs: number; output: string };
+export type ColdOptions = { runs: number; output: string; base?: string };
 export type BrowserOptions = {
   /** `--startup` hands every argument to startup-browser.ts. */
   startup: boolean;
@@ -53,21 +53,24 @@ export function browserOptions(args: readonly string[]): BrowserOptions {
 function coldOptions(args: readonly string[]): ColdOptions {
   let runs = 3;
   let output: string | undefined;
+  let base: string | undefined;
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
     if (arg === '--' || arg === '--cold') continue;
     const [key, inline] = arg.split('=', 2);
-    if (key !== '--runs' && key !== '--output') throw new Error(`Unknown --cold argument: ${arg}`);
+    if (key !== '--runs' && key !== '--output' && key !== '--base')
+      throw new Error(`Unknown --cold argument: ${arg}`);
     const value = inline ?? args[++i];
     if (!value || value.startsWith('--')) throw new Error(`Invalid ${key}`);
     if (key === '--runs') {
       runs = Number(value);
       if (!Number.isInteger(runs) || runs < 1) throw new Error('--runs must be a positive integer');
-    } else output = value;
+    } else if (key === '--base') base = value.replace(/\/$/, '');
+    else output = value;
   }
   if (!output || !isAbsolute(output))
     throw new Error('--cold requires --output with an absolute task-folder path');
-  return { runs, output };
+  return { runs, output, ...(base !== undefined && { base }) };
 }
 
 export type ShaderRecord = {
@@ -77,17 +80,40 @@ export type ShaderRecord = {
   readyMs: number | null;
   blockedMs: number | null;
 };
-export type ColdRun = {
-  run: number;
+/** Ms during which at least one program was compiling: the union of the link intervals. */
+export function compileBusy(shaders: readonly ShaderRecord[]) {
+  const spans = shaders
+    .filter((shader) => shader.readyMs !== null)
+    .map((shader) => [shader.submittedMs, shader.submittedMs + shader.readyMs!] as const)
+    .sort((a, b) => a[0] - b[0]);
+  let busy = 0;
+  let end = -Infinity;
+  for (const [from, to] of spans) {
+    busy += Math.max(0, to - Math.max(from, end));
+    end = Math.max(end, to);
+  }
+  return busy;
+}
+
+export type ColdLoad = {
   /** Navigation to the first tile frame, ms. */
   readyMs: number | null;
   /** Navigation to the first tile frame from the full shaders, ms. */
   detailMs: number | null;
   /** The longest main-thread task of the load, ms. */
   longestTaskMs: number;
+  /** Main-thread tasks of 200 ms or more, to set against the link times. */
+  longTasks?: readonly LongTask[];
+  /** Ms with a program compiling, through the idle warm-up (`compileBusy`). */
+  compileBusyMs: number;
   shaders: readonly ShaderRecord[];
   parallelCompile: boolean | null;
   gpuBackend: string | null;
+};
+export type ColdRun = ColdLoad & {
+  run: number;
+  /** The same profile loaded a second time. */
+  warm?: ColdLoad;
 };
 
 const medianOf = (values: readonly (number | null)[]) => {
@@ -104,6 +130,9 @@ export function coldSummary(runs: readonly ColdRun[]) {
     readyMedianMs: medianOf(runs.map((run) => run.readyMs)),
     detailMedianMs: medianOf(runs.map((run) => run.detailMs)),
     longestTaskMedianMs: medianOf(runs.map((run) => run.longestTaskMs)),
+    compileBusyMedianMs: medianOf(runs.map((run) => run.compileBusyMs)),
+    warmDetailMedianMs: medianOf(runs.map((run) => run.warm?.detailMs ?? null)),
+    warmCompileBusyMedianMs: medianOf(runs.map((run) => run.warm?.compileBusyMs ?? null)),
     programs: Object.fromEntries(
       names.map((name) => [
         name,

@@ -1,7 +1,7 @@
 import type { FireworksConfig } from '@atlas/shared';
 import * as twgl from 'twgl.js';
-import { createProgram, type CellTargets, type GL } from './gpu';
-import type { Programs, ThemeResources } from './gpu-context';
+import type { CellTargets, GL } from './gpu';
+import { effectProgram, type Programs, type ThemeResources } from './gpu-context';
 import type { Grid, View } from './grid';
 import type { WindNow } from './life/wind';
 import { NO_FIREWORK_SITES, type FireworkSiteSampler } from './fireworks-sites';
@@ -31,15 +31,9 @@ export type FireworksResources = {
 };
 
 /** Created lazily for a pack that opts in; one static upload for the entire context lifetime. */
-function createFireworks(gl: GL, programs: Programs): FireworksResources {
-  const pending = programs.glyphWarmup?.pending;
-  let program = programs.fireworksProgram;
-  if (!program && pending?.key === 8) {
-    program = pending.program.finish();
-    programs.glyphWarmup!.pending = undefined;
-  }
-  program ??= createProgram(gl, fireworksVertex, fireworksFragment);
-  programs.fireworksProgram = undefined;
+function createFireworks(gl: GL, programs: Programs): FireworksResources | undefined {
+  const program = effectProgram(gl, programs, 8, fireworksVertex, fireworksFragment);
+  if (!program) return undefined;
   const vao = gl.createVertexArray(),
     buffer = gl.createBuffer();
   gl.bindVertexArray(vao);
@@ -99,6 +93,8 @@ export function fireworksPass(
   )
     return;
   const resources = (programs.fireworks ??= createFireworks(gl, programs));
+  // Still linking: the display starts a moment later instead of holding the frame.
+  if (!resources) return;
   if (resources.config !== config) {
     if (resources.config) clearRequestedFireworks(resources.display);
     resources.variants.fill(0);

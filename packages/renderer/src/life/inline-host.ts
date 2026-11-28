@@ -53,6 +53,7 @@ export function createInlineHost(
   const preparation = new LifePreparation(world, profiler, preparationClock);
   let disposed = false;
   let acceptedPost: number | undefined;
+  let tookMs = 0;
   let generation = allocateLifeGeneration();
   let liveIdentity: { id?: string; occurrence?: string } = {};
   return {
@@ -85,6 +86,7 @@ export function createInlineHost(
     },
     request(input) {
       if (disposed) return false;
+      const asked = performance.now();
       acceptedPost = profiler?.time();
       preparation.camera(
         input.step.bounds,
@@ -123,8 +125,10 @@ export function createInlineHost(
           ),
       };
       preparation.schedule();
+      tookMs = performance.now() - asked;
       return true;
     },
+    tookMs: () => tookMs,
     latest: () => {
       if (acceptedPost !== undefined)
         profiler!.gauge('acceptedFrameAge', profiler!.time() - acceptedPost);
